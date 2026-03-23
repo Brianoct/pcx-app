@@ -1,0 +1,774 @@
+const express = require('express');
+const { Pool } = require('pg');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+require('dotenv').config();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const pool = new Pool({
+  host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+});
+
+// Middleware: Verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'No token provided' });
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token' });
+    req.user = user;
+    next();
+  });
+};
+
+// Middleware: Require specific role (case-insensitive + accent-insensitive)
+const requireRole = (roles) => (req, res, next) => {
+  const userRole = (req.user.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const allowed = roles.map(r => r.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  if (!allowed.includes(userRole)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  next();
+};
+
+// ─── REGISTER new user (admin only) ────────────────────────────────────────
+app.post('/api/register', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const { email, password, role, city, phone } = req.body;
+  if (!email || !password || !role) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Validate phone (optional, but if provided must be 8 digits)
+  if (phone && !/^\d{8}$/.test(phone)) {
+    return res.status(400).json({ error: 'Teléfono debe tener exactamente 8 dígitos numéricos' });
+  }
+
+  try {
+    const hashedPass = await bcrypt.hash(password, 10);
+    await pool.query(
+      'INSERT INTO users (email, password_hash, role, city, phone) VALUES ($1, $2, $3, $4, $5)',
+      [email, hashedPass, role, city || null, phone || null]
+    );
+    res.status(201).json({ message: 'User created' });
+  } catch (err) {
+    console.error(err);
+    if (err.code === '23505') return res.status(409).json({ error: 'Email already exists' });
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// ─── LOGIN ──────────────────────────────────────────────────────────────────
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Missing email or password' });
+
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+    const user = result.rows[0];
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role, city: user.city, phone: user.phone },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        city: user.city,
+        phone: user.phone
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// ─── SAVE new quote ─────────────────────────────────────────────────────────
+app.post('/api/quotes', authenticateToken, async (req, res) => {
+  const { 
+    customer_name, 
+    customer_phone, 
+    department, 
+    provincia, 
+    shipping_notes, 
+    store_location, 
+    vendor, 
+    venta_type, 
+    discount_percent, 
+    rows, 
+    subtotal, 
+    total,
+    status = 'Cotizado'
+  } = req.body;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const lineItemsWithDisplay = rows.map(row => ({
+      ...row,
+      displayName: row.displayName || row.sku || 'Producto desconocido'
+    }));
+
+    const quoteResult = await client.query(
+      `INSERT INTO quotes (
+        user_id, customer_name, customer_phone, department, provincia, shipping_notes,
+        store_location, vendor, venta_type, discount_percent, line_items, subtotal, 
+        total, status, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+      RETURNING id`,
+      [
+        req.user.id,
+        customer_name,
+        customer_phone,
+        department,
+        provincia,
+        shipping_notes,
+        store_location,
+        vendor,
+        venta_type,
+        discount_percent,
+        JSON.stringify(lineItemsWithDisplay),
+        subtotal,
+        total,
+        status
+      ]
+    );
+
+    const quoteId = quoteResult.rows[0].id;
+
+    // Only deduct stock if initial status is NOT 'Cotizado'
+    if (status !== 'Cotizado') {
+      await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay);
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ id: quoteId, message: 'Cotización guardada' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: err.message || 'Error al guardar cotización' });
+  } finally {
+    client.release();
+  }
+});
+
+// ─── GET quotes (personal or team) ──────────────────────────────────────────
+app.get('/api/quotes', authenticateToken, async (req, res) => {
+  const { team } = req.query;
+  const isTeamView = team === 'true';
+
+  const allowedTeamRoles = ['ventas lider', 'admin', 'almacen lider'];
+  const userRoleNormalized = (req.user.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  if (isTeamView && !allowedTeamRoles.includes(userRoleNormalized)) {
+    return res.status(403).json({ error: 'Solo Ventas Líder, Admin o Almacén Líder pueden ver cotizaciones del equipo' });
+  }
+
+  try {
+    const result = await pool.query(
+      isTeamView 
+        ? `SELECT id, user_id, customer_name, customer_phone, department, provincia, shipping_notes,
+                  store_location, vendor, venta_type, discount_percent, line_items, subtotal, 
+                  total, status, created_at 
+           FROM quotes 
+           ORDER BY created_at DESC`
+        : `SELECT id, user_id, customer_name, customer_phone, department, provincia, shipping_notes,
+                  store_location, vendor, venta_type, discount_percent, line_items, subtotal, 
+                  total, status, created_at 
+           FROM quotes 
+           WHERE user_id = $1 
+           ORDER BY created_at DESC`,
+      isTeamView ? [] : [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener historial' });
+  }
+});
+
+// ─── GET single quote for checklist with displayName ────────────────────────
+app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `SELECT id, customer_name, customer_phone, department, provincia, store_location, 
+              vendor, status, line_items, created_at
+       FROM quotes WHERE id = $1`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+
+    const quote = result.rows[0];
+
+    const items = quote.line_items.map(row => ({
+      displayName: row.displayName || row.sku || 'Producto desconocido',
+      qty: row.qty || 1
+    }));
+
+    res.json({
+      id: quote.id,
+      customer_name: quote.customer_name,
+      customer_phone: quote.customer_phone,
+      department: quote.department,
+      provincia: quote.provincia,
+      store_location: quote.store_location,
+      vendor: quote.vendor,
+      status: quote.status,
+      created_at: quote.created_at,
+      items
+    });
+  } catch (err) {
+    console.error('Error fetching checklist:', err);
+    res.status(500).json({ error: 'Error al obtener checklist' });
+  }
+});
+
+// ─── UPDATE quote status (deduct stock only from Cotizado → other) ──────────
+app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
+  const { status } = req.body;
+  const validStatuses = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
+
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: `Estado inválido. Usa: ${validStatuses.join(', ')}` });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const currentRes = await client.query(
+      'SELECT status, store_location, line_items FROM quotes WHERE id = $1',
+      [req.params.id]
+    );
+
+    if (currentRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Cotización no encontrada' });
+    }
+
+    const currentStatus = currentRes.rows[0].status;
+    const storeLocation = currentRes.rows[0].store_location;
+    const lineItems = currentRes.rows[0].line_items;
+
+    // Deduct stock only if moving FROM Cotizado to something else
+    if (currentStatus === 'Cotizado' && status !== 'Cotizado') {
+      await deductStockForQuote(client, req.params.id, storeLocation, lineItems);
+    }
+
+    const updateRes = await client.query(
+      'UPDATE quotes SET status = $1 WHERE id = $2 RETURNING status',
+      [status, req.params.id]
+    );
+
+    await client.query('COMMIT');
+
+    res.json({ message: 'Estado actualizado', status: updateRes.rows[0].status });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: err.message || 'Error al actualizar estado' });
+  } finally {
+    client.release();
+  }
+});
+
+// ─── Helper: Deduct stock for a quote ───────────────────────────────────────
+async function deductStockForQuote(client, quoteId, storeLocation, lineItems) {
+  const warehouseField = {
+    'Cochabamba': 'stock_cochabamba',
+    'Santa Cruz': 'stock_santacruz',
+    'Lima': 'stock_lima'
+  }[storeLocation];
+
+  if (!warehouseField) throw new Error('Almacén no válido');
+
+  for (const row of lineItems) {
+    if (row.isCombo) {
+      for (const comboItem of row.comboItems || []) {
+        const sku = comboItem.sku;
+        const qty = comboItem.quantity * (row.qty || 1);
+
+        const stockCheck = await client.query(
+          `SELECT ${warehouseField} FROM products WHERE sku = $1 FOR UPDATE`,
+          [sku]
+        );
+
+        if (stockCheck.rowCount === 0) throw new Error(`Producto ${sku} no encontrado`);
+        const currentStock = stockCheck.rows[0][warehouseField];
+
+        if (currentStock < qty) throw new Error(`Stock insuficiente para ${sku}`);
+
+        await client.query(
+          `UPDATE products SET ${warehouseField} = ${warehouseField} - $1, last_updated = NOW() WHERE sku = $2`,
+          [qty, sku]
+        );
+      }
+    } else {
+      const sku = row.sku;
+      const qty = row.qty;
+
+      const stockCheck = await client.query(
+        `SELECT ${warehouseField} FROM products WHERE sku = $1 FOR UPDATE`,
+        [sku]
+      );
+
+      if (stockCheck.rowCount === 0) throw new Error(`Producto ${sku} no encontrado`);
+      const currentStock = stockCheck.rows[0][warehouseField];
+
+      if (currentStock < qty) throw new Error(`Stock insuficiente para ${sku}`);
+
+      await client.query(
+        `UPDATE products SET ${warehouseField} = ${warehouseField} - $1, last_updated = NOW() WHERE sku = $2`,
+        [qty, sku]
+      );
+    }
+  }
+}
+
+// ─── GET stock for a SKU in a specific store ───────────────────────────────
+app.get('/api/stock', authenticateToken, async (req, res) => {
+  const { sku, store_location } = req.query;
+
+  if (!sku || !store_location) {
+    return res.status(400).json({ error: 'SKU y store_location son requeridos' });
+  }
+
+  const warehouseField = {
+    'Cochabamba': 'stock_cochabamba',
+    'Santa Cruz': 'stock_santacruz',
+    'Lima': 'stock_lima'
+  }[store_location];
+
+  if (!warehouseField) return res.status(400).json({ error: 'Almacén no válido' });
+
+  try {
+    const result = await pool.query(
+      `SELECT ${warehouseField} AS stock FROM products WHERE sku = $1`,
+      [sku.toUpperCase()]
+    );
+
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+
+    res.json({ stock: result.rows[0].stock });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener stock' });
+  }
+});
+
+// ─── UPDATE stock for a specific SKU in a warehouse ────────────────────────
+app.patch('/api/products/:sku/stock', authenticateToken, requireRole(['Almacen Lider', 'Almacen']), async (req, res) => {
+  const { sku } = req.params;
+  const { store_location, new_stock } = req.body;
+
+  if (!store_location || new_stock === undefined || isNaN(new_stock) || new_stock < 0) {
+    return res.status(400).json({ error: 'store_location y new_stock (número >= 0) son requeridos' });
+  }
+
+  const warehouseField = {
+    'Cochabamba': 'stock_cochabamba',
+    'Santa Cruz': 'stock_santacruz',
+    'Lima': 'stock_lima'
+  }[store_location];
+
+  if (!warehouseField) return res.status(400).json({ error: 'Almacén no válido' });
+
+  try {
+    const result = await pool.query(
+      `UPDATE products 
+       SET ${warehouseField} = $1, last_updated = NOW() 
+       WHERE sku = $2 
+       RETURNING sku, ${warehouseField} AS stock`,
+      [new_stock, sku.toUpperCase()]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+
+    res.json({ 
+      message: 'Stock actualizado', 
+      sku: result.rows[0].sku, 
+      stock: result.rows[0].stock 
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al actualizar stock' });
+  }
+});
+
+// ─── MARKETING: Combos ──────────────────────────────────────────────────────
+
+// GET all combos with items
+app.get('/api/combos', authenticateToken, async (req, res) => {
+  try {
+    const combosResult = await pool.query(`
+      SELECT 
+        c.id, c.name, c.sf_price, c.cf_price, c.created_at,
+        u.email as created_by_email
+      FROM combos c
+      LEFT JOIN users u ON c.created_by = u.id
+      ORDER BY c.created_at DESC
+    `);
+
+    const combos = combosResult.rows;
+
+    for (let combo of combos) {
+      const itemsResult = await pool.query(`
+        SELECT sku, quantity
+        FROM combo_items
+        WHERE combo_id = $1
+      `, [combo.id]);
+      combo.items = itemsResult.rows;
+    }
+
+    res.json(combos);
+  } catch (err) {
+    console.error('Error fetching combos:', err);
+    res.status(500).json({ error: 'Failed to load combos' });
+  }
+});
+
+// POST create new combo
+app.post('/api/combos', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
+  const { name, sf, cf, products } = req.body;
+
+  if (!name || !sf || !cf || !Array.isArray(products) || products.length === 0) {
+    return res.status(400).json({ error: 'Missing required fields or empty products' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const comboRes = await client.query(
+      'INSERT INTO combos (name, sf_price, cf_price, created_by) VALUES ($1, $2, $3, $4) RETURNING id',
+      [name, sf, cf, req.user.id]
+    );
+    const comboId = comboRes.rows[0].id;
+
+    for (const item of products) {
+      const { sku, quantity = 1 } = item;
+      await client.query(
+        'INSERT INTO combo_items (combo_id, sku, quantity) VALUES ($1, $2, $3)',
+        [comboId, sku, quantity]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ id: comboId, message: 'Combo created' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error creating combo:', err);
+    res.status(500).json({ error: 'Failed to create combo' });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE combo
+app.delete('/api/combos/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const comboRes = await pool.query('SELECT created_by FROM combos WHERE id = $1', [id]);
+    if (comboRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Combo not found' });
+    }
+
+    const creatorId = comboRes.rows[0].created_by;
+    const isAdmin = req.user.role.toLowerCase() === 'admin';
+    if (creatorId !== req.user.id && !isAdmin) {
+      return res.status(403).json({ error: 'Not authorized to delete this combo' });
+    }
+
+    await pool.query('DELETE FROM combos WHERE id = $1', [id]);
+    res.json({ message: 'Combo deleted' });
+  } catch (err) {
+    console.error('Error deleting combo:', err);
+    res.status(500).json({ error: 'Failed to delete combo' });
+  }
+});
+
+// ─── CUPONES ────────────────────────────────────────────────────────────────
+
+// GET all coupons
+app.get('/api/cupones', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, code, discount_percent, valid_until, created_at FROM cupones ORDER BY created_at DESC'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching cupones:', err);
+    res.status(500).json({ error: 'Failed to load cupones' });
+  }
+});
+
+// POST create new coupon
+app.post('/api/cupones', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
+  const { code, discount_percent, valid_until } = req.body;
+
+  if (!code || !discount_percent || !valid_until) {
+    return res.status(400).json({ error: 'Faltan campos requeridos: code, discount_percent, valid_until' });
+  }
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO cupones (code, discount_percent, valid_until, created_by) VALUES ($1, $2, $3, $4) RETURNING id',
+      [code.toUpperCase(), discount_percent, valid_until, req.user.id]
+    );
+    res.status(201).json({ id: result.rows[0].id, message: 'Cupón creado' });
+  } catch (err) {
+    console.error('Error creating cupón:', err);
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'El código ya existe' });
+    }
+    res.status(500).json({ error: 'Error al crear cupón' });
+  }
+});
+
+// DELETE coupon
+app.delete('/api/cupones/:id', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query('DELETE FROM cupones WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Cupón no encontrado' });
+    }
+    res.json({ message: 'Cupón eliminado' });
+  } catch (err) {
+    console.error('Error deleting cupón:', err);
+    res.status(500).json({ error: 'Error al eliminar cupón' });
+  }
+});
+
+// ─── USER MANAGEMENT (admin only) ────────────────────────────────────────────
+app.get('/api/users', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, role, city, phone, created_at FROM users ORDER BY created_at DESC'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const { email, password, role, city, phone } = req.body;
+  if (!email || !password || !role) return res.status(400).json({ error: 'Missing required fields' });
+
+  // Validate phone (optional, but if provided must be 8 digits)
+  if (phone && !/^\d{8}$/.test(phone)) {
+    return res.status(400).json({ error: 'Teléfono debe tener exactamente 8 dígitos numéricos' });
+  }
+
+  try {
+    const hashedPass = await bcrypt.hash(password, 10);
+    await pool.query(
+      'INSERT INTO users (email, password_hash, role, city, phone) VALUES ($1, $2, $3, $4, $5)',
+      [email, hashedPass, role, city || null, phone || null]
+    );
+    res.status(201).json({ message: 'User created' });
+  } catch (err) {
+    console.error(err);
+    if (err.code === '23505') return res.status(409).json({ error: 'Email already exists' });
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+app.patch('/api/users/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const { role, city } = req.body;
+  if (!role) return res.status(400).json({ error: 'Role is required' });
+
+  try {
+    const result = await pool.query(
+      'UPDATE users SET role = $1, city = $2 WHERE id = $3 RETURNING id',
+      [role, city || null, req.params.id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ message: 'User updated' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+app.delete('/api/users/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ message: 'User deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+// ─── Performance ────────────────────────────────────────────────────────────
+app.get('/api/performance', authenticateToken, async (req, res) => {
+  const { team, month, year } = req.query;
+  const isTeamView = team === 'true';
+
+  if (isTeamView && !['Ventas Lider', 'Admin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Solo Ventas Líder o Admin pueden ver rendimiento del equipo' });
+  }
+
+  const monthNum = month ? parseInt(month) : null;
+  const yearNum = year ? parseInt(year) : null;
+
+  const monthFilter = monthNum ? `AND EXTRACT(MONTH FROM q.created_at) = ${monthNum}` : '';
+  const yearFilter = yearNum ? `AND EXTRACT(YEAR FROM q.created_at) = ${yearNum}` : '';
+
+  try {
+    if (isTeamView) {
+      const queryText = `
+        SELECT 
+          u.email as usuario,
+          COUNT(q.id) FILTER (WHERE q.status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado') ${monthFilter} ${yearFilter}) as cotizaciones_confirmadas,
+          COALESCE(SUM(q.total) FILTER (WHERE q.status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado') ${monthFilter} ${yearFilter}), 0) as ventas_totales
+        FROM users u
+        LEFT JOIN quotes q ON u.id = q.user_id
+        WHERE u.role ILIKE '%ventas%' OR u.role ILIKE '%sales%' OR u.role ILIKE '%vendedor%'
+        GROUP BY u.id, u.email
+        ORDER BY ventas_totales DESC
+      `;
+
+      const result = await pool.query(queryText);
+      res.json(result.rows || []);
+    } else {
+      const result = await pool.query(
+        `SELECT 
+          COUNT(id) FILTER (WHERE status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado') ${monthFilter} ${yearFilter}) as cotizaciones_confirmadas,
+          COALESCE(SUM(total) FILTER (WHERE status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado') ${monthFilter} ${yearFilter}), 0) as ventas_totales
+        FROM quotes q
+        WHERE user_id = $1`,
+        [req.user.id]
+      );
+      res.json(result.rows[0] || { cotizaciones_confirmadas: 0, ventas_totales: 0 });
+    }
+  } catch (err) {
+    console.error('Performance endpoint error:', err.stack);
+    res.status(500).json({ error: 'Error interno al obtener rendimiento: ' + err.message });
+  }
+});
+
+// ─── INVENTORY ──────────────────────────────────────────────────────────────
+app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almacen']), async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT sku, name, stock_cochabamba, stock_santacruz, stock_lima, last_updated 
+      FROM products 
+      ORDER BY sku
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener inventario' });
+  }
+});
+
+// ─── ADMIN DASHBOARD STATISTICS ─────────────────────────────────────────────
+app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const { month, year } = req.query;
+
+  const monthFilter = month ? `EXTRACT(MONTH FROM created_at) = ${month}` : 'TRUE';
+  const yearFilter = year ? `EXTRACT(YEAR FROM created_at) = ${year}` : 'TRUE';
+
+  try {
+    // 1. Most popular products
+    const popularRes = await pool.query(`
+      SELECT 
+        li->>'sku' as sku,
+        li->>'displayName' as name,
+        SUM(CAST(li->>'qty' AS INTEGER)) as total_quantity
+      FROM quotes q,
+      LATERAL jsonb_array_elements(q.line_items) li
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        AND ${monthFilter} AND ${yearFilter}
+      GROUP BY sku, name
+      ORDER BY total_quantity DESC
+      LIMIT 10
+    `);
+
+    // 2. Top salespeople
+    const salesRes = await pool.query(`
+      SELECT 
+        vendor,
+        COUNT(*) as order_count,
+        SUM(total) as total_sales
+      FROM quotes
+      WHERE status IN ('Pagado', 'Embalado', 'Enviado')
+        AND ${monthFilter} AND ${yearFilter}
+      GROUP BY vendor
+      ORDER BY total_sales DESC
+      LIMIT 10
+    `);
+
+    // 3. Top locations (departamento/provincia)
+    const locRes = await pool.query(`
+      SELECT 
+        COALESCE(provincia, department, 'Sin ubicación') as location,
+        COUNT(*) as order_count,
+        SUM(total) as total_sales
+      FROM quotes
+      WHERE status IN ('Pagado', 'Embalado', 'Enviado')
+        AND ${monthFilter} AND ${yearFilter}
+      GROUP BY location
+      ORDER BY total_sales DESC
+    `);
+
+    // 4. Top almacenes by traffic (order count)
+    const whRes = await pool.query(`
+      SELECT 
+        store_location,
+        COUNT(*) as order_count,
+        SUM(total) as total_sales
+      FROM quotes
+      WHERE status IN ('Pagado', 'Embalado', 'Enviado')
+        AND ${monthFilter} AND ${yearFilter}
+      GROUP BY store_location
+      ORDER BY order_count DESC
+    `);
+
+    res.json({
+      popularProducts: popularRes.rows,
+      topSalespeople: salesRes.rows,
+      topLocations: locRes.rows,
+      topWarehouses: whRes.rows
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener estadísticas' });
+  }
+});
+
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
