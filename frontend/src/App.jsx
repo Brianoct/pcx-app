@@ -349,11 +349,8 @@ function App() {
 
   const displayName = user ? user.email.split('@')[0] : 'Usuario';
 
-  const isAdmin = role?.toLowerCase() === 'admin';
-  const isAlmacenRole = role?.toLowerCase().includes('almacen');
   const isAlmacenLider = role?.toLowerCase().includes('almacen lider');
   const isMarketingLider = role?.toLowerCase().includes('marketing lider');
-  const isVentasLider = role?.toLowerCase().includes('ventas lider');
 
   const defaultPath = isAlmacenLider ? '/pedidos' : isMarketingLider ? '/combos' : '/';
 
@@ -374,6 +371,7 @@ function App() {
           element={
             <PerformanceDashboard 
               token={token} 
+              user={user}
               role={role} 
               onTopSellerChange={handleTopSellerUpdate} 
             />

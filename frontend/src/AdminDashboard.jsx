@@ -6,6 +6,7 @@ function AdminDashboard({ token }) {
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
   useEffect(() => {
     fetchStats();
@@ -15,7 +16,7 @@ function AdminDashboard({ token }) {
     setLoading(true);
     try {
       const res = await fetch(
-        `http://192.168.100.15:4000/api/admin/stats?month=${selectedMonth}&year=${selectedYear}`,
+        `${API_BASE}/api/admin/stats?month=${selectedMonth}&year=${selectedYear}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
       if (!res.ok) throw new Error('Error al cargar estadísticas');

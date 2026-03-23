@@ -47,7 +47,7 @@ function InventoryPanel({ token }) {
       for (const store of stores) {
         const new_stock = product[store.field] ?? 0;
 
-        await fetch(`http://localhost:4000/api/products/${product.sku}/stock`, {
+        const res = await fetch(`http://localhost:4000/api/products/${product.sku}/stock`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -58,6 +58,11 @@ function InventoryPanel({ token }) {
             new_stock
           })
         });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `No se pudo actualizar stock en ${store.location}`);
+        }
       }
 
       alert(`Stock actualizado correctamente para ${product.name}`);

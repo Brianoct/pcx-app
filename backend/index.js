@@ -17,6 +17,9 @@ const pool = new Pool({
   password: process.env.DB_PASS,
 });
 
+const normalizeRole = (value = '') =>
+  value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 // Middleware: Verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -32,8 +35,8 @@ const authenticateToken = (req, res, next) => {
 
 // Middleware: Require specific role (case-insensitive + accent-insensitive)
 const requireRole = (roles) => (req, res, next) => {
-  const userRole = (req.user.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  const allowed = roles.map(r => r.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  const userRole = normalizeRole(req.user.role || '');
+  const allowed = roles.map((r) => normalizeRole(r));
   if (!allowed.includes(userRole)) {
     return res.status(403).json({ error: 'Insufficient permissions' });
   }
@@ -175,8 +178,8 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
   const { team } = req.query;
   const isTeamView = team === 'true';
 
-  const allowedTeamRoles = ['ventas lider', 'admin', 'almacen lider'];
-  const userRoleNormalized = (req.user.role || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const allowedTeamRoles = ['ventas lider', 'admin', 'almacen lider', 'almacen'];
+  const userRoleNormalized = normalizeRole(req.user.role || '');
 
   if (isTeamView && !allowedTeamRoles.includes(userRoleNormalized)) {
     return res.status(403).json({ error: 'Solo Ventas Líder, Admin o Almacén Líder pueden ver cotizaciones del equipo' });
@@ -208,10 +211,12 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
 // ─── GET single quote for checklist with displayName ────────────────────────
 app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
   const { id } = req.params;
+  const userRoleNormalized = normalizeRole(req.user.role || '');
+  const canAccessAllQuotes = ['ventas lider', 'admin', 'almacen lider', 'almacen'].includes(userRoleNormalized);
 
   try {
     const result = await pool.query(
-      `SELECT id, customer_name, customer_phone, department, provincia, store_location, 
+      `SELECT id, user_id, customer_name, customer_phone, department, provincia, store_location, 
               vendor, status, line_items, created_at
        FROM quotes WHERE id = $1`,
       [id]
@@ -222,6 +227,9 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
     }
 
     const quote = result.rows[0];
+    if (!canAccessAllQuotes && quote.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'No autorizado para ver este pedido' });
+    }
 
     const items = quote.line_items.map(row => ({
       displayName: row.displayName || row.sku || 'Producto desconocido',
@@ -250,6 +258,8 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
 app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
   const { status } = req.body;
   const validStatuses = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
+  const userRoleNormalized = normalizeRole(req.user.role || '');
+  const canManageAnyQuote = ['ventas lider', 'admin', 'almacen lider', 'almacen'].includes(userRoleNormalized);
 
   if (!validStatuses.includes(status)) {
     return res.status(400).json({ error: `Estado inválido. Usa: ${validStatuses.join(', ')}` });
@@ -260,12 +270,16 @@ app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
     await client.query('BEGIN');
 
     const currentRes = await client.query(
-      'SELECT status, store_location, line_items FROM quotes WHERE id = $1',
+      'SELECT user_id, status, store_location, line_items FROM quotes WHERE id = $1',
       [req.params.id]
     );
 
     if (currentRes.rowCount === 0) {
       return res.status(404).json({ error: 'Cotización no encontrada' });
+    }
+
+    if (!canManageAnyQuote && currentRes.rows[0].user_id !== req.user.id) {
+      return res.status(403).json({ error: 'No autorizado para actualizar este pedido' });
     }
 
     const currentStatus = currentRes.rows[0].status;
@@ -603,13 +617,27 @@ app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, re
 });
 
 app.patch('/api/users/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
-  const { role, city } = req.body;
+  const { role, city, phone } = req.body;
   if (!role) return res.status(400).json({ error: 'Role is required' });
+
+  if (phone !== undefined && phone !== null && phone !== '' && !/^\d{8}$/.test(phone)) {
+    return res.status(400).json({ error: 'Teléfono debe tener exactamente 8 dígitos numéricos' });
+  }
+
+  const cityProvided = Object.prototype.hasOwnProperty.call(req.body, 'city');
+  const phoneProvided = Object.prototype.hasOwnProperty.call(req.body, 'phone');
+  const cityValue = city === '' ? null : city;
+  const phoneValue = phone === '' ? null : phone;
 
   try {
     const result = await pool.query(
-      'UPDATE users SET role = $1, city = $2 WHERE id = $3 RETURNING id',
-      [role, city || null, req.params.id]
+      `UPDATE users
+       SET role = $1,
+           city = CASE WHEN $2::boolean THEN $3 ELSE city END,
+           phone = CASE WHEN $4::boolean THEN $5 ELSE phone END
+       WHERE id = $6
+       RETURNING id`,
+      [role, cityProvided, cityValue, phoneProvided, phoneValue, req.params.id]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ message: 'User updated' });
@@ -634,41 +662,72 @@ app.delete('/api/users/:id', authenticateToken, requireRole(['admin']), async (r
 app.get('/api/performance', authenticateToken, async (req, res) => {
   const { team, month, year } = req.query;
   const isTeamView = team === 'true';
+  const userRoleNormalized = normalizeRole(req.user.role || '');
 
-  if (isTeamView && !['Ventas Lider', 'Admin'].includes(req.user.role)) {
+  if (isTeamView && !['ventas lider', 'admin'].includes(userRoleNormalized)) {
     return res.status(403).json({ error: 'Solo Ventas Líder o Admin pueden ver rendimiento del equipo' });
   }
 
-  const monthNum = month ? parseInt(month) : null;
-  const yearNum = year ? parseInt(year) : null;
+  const monthNum = month !== undefined ? Number.parseInt(month, 10) : null;
+  const yearNum = year !== undefined ? Number.parseInt(year, 10) : null;
 
-  const monthFilter = monthNum ? `AND EXTRACT(MONTH FROM q.created_at) = ${monthNum}` : '';
-  const yearFilter = yearNum ? `AND EXTRACT(YEAR FROM q.created_at) = ${yearNum}` : '';
+  if (month !== undefined && (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12)) {
+    return res.status(400).json({ error: 'Mes inválido. Debe estar entre 1 y 12' });
+  }
+  if (year !== undefined && (!Number.isInteger(yearNum) || yearNum < 2000 || yearNum > 3000)) {
+    return res.status(400).json({ error: 'Año inválido' });
+  }
 
   try {
     if (isTeamView) {
+      const teamParams = [];
+      const teamDateClauses = [];
+
+      if (monthNum !== null) {
+        teamParams.push(monthNum);
+        teamDateClauses.push(`EXTRACT(MONTH FROM q.created_at) = $${teamParams.length}`);
+      }
+      if (yearNum !== null) {
+        teamParams.push(yearNum);
+        teamDateClauses.push(`EXTRACT(YEAR FROM q.created_at) = $${teamParams.length}`);
+      }
+
+      const teamDateFilter = teamDateClauses.length ? ` AND ${teamDateClauses.join(' AND ')}` : '';
       const queryText = `
         SELECT 
           u.email as usuario,
-          COUNT(q.id) FILTER (WHERE q.status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado') ${monthFilter} ${yearFilter}) as cotizaciones_confirmadas,
-          COALESCE(SUM(q.total) FILTER (WHERE q.status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado') ${monthFilter} ${yearFilter}), 0) as ventas_totales
+          COUNT(q.id) FILTER (WHERE q.status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado')) as cotizaciones_confirmadas,
+          COALESCE(SUM(q.total) FILTER (WHERE q.status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado')), 0) as ventas_totales
         FROM users u
-        LEFT JOIN quotes q ON u.id = q.user_id
+        LEFT JOIN quotes q ON u.id = q.user_id${teamDateFilter}
         WHERE u.role ILIKE '%ventas%' OR u.role ILIKE '%sales%' OR u.role ILIKE '%vendedor%'
         GROUP BY u.id, u.email
         ORDER BY ventas_totales DESC
       `;
 
-      const result = await pool.query(queryText);
+      const result = await pool.query(queryText, teamParams);
       res.json(result.rows || []);
     } else {
+      const personalParams = [req.user.id];
+      const personalDateClauses = [];
+
+      if (monthNum !== null) {
+        personalParams.push(monthNum);
+        personalDateClauses.push(`EXTRACT(MONTH FROM q.created_at) = $${personalParams.length}`);
+      }
+      if (yearNum !== null) {
+        personalParams.push(yearNum);
+        personalDateClauses.push(`EXTRACT(YEAR FROM q.created_at) = $${personalParams.length}`);
+      }
+
+      const personalDateFilter = personalDateClauses.length ? ` AND ${personalDateClauses.join(' AND ')}` : '';
       const result = await pool.query(
         `SELECT 
-          COUNT(id) FILTER (WHERE status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado') ${monthFilter} ${yearFilter}) as cotizaciones_confirmadas,
-          COALESCE(SUM(total) FILTER (WHERE status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado') ${monthFilter} ${yearFilter}), 0) as ventas_totales
+          COUNT(id) FILTER (WHERE status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado')) as cotizaciones_confirmadas,
+          COALESCE(SUM(total) FILTER (WHERE status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado')), 0) as ventas_totales
         FROM quotes q
-        WHERE user_id = $1`,
-        [req.user.id]
+        WHERE user_id = $1${personalDateFilter}`,
+        personalParams
       );
       res.json(result.rows[0] || { cotizaciones_confirmadas: 0, ventas_totales: 0 });
     }
@@ -696,9 +755,27 @@ app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almac
 // ─── ADMIN DASHBOARD STATISTICS ─────────────────────────────────────────────
 app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (req, res) => {
   const { month, year } = req.query;
+  const monthNum = month !== undefined ? Number.parseInt(month, 10) : null;
+  const yearNum = year !== undefined ? Number.parseInt(year, 10) : null;
 
-  const monthFilter = month ? `EXTRACT(MONTH FROM created_at) = ${month}` : 'TRUE';
-  const yearFilter = year ? `EXTRACT(YEAR FROM created_at) = ${year}` : 'TRUE';
+  if (month !== undefined && (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12)) {
+    return res.status(400).json({ error: 'Mes inválido. Debe estar entre 1 y 12' });
+  }
+  if (year !== undefined && (!Number.isInteger(yearNum) || yearNum < 2000 || yearNum > 3000)) {
+    return res.status(400).json({ error: 'Año inválido' });
+  }
+
+  const params = [];
+  const dateClauses = [];
+  if (monthNum !== null) {
+    params.push(monthNum);
+    dateClauses.push(`EXTRACT(MONTH FROM q.created_at) = $${params.length}`);
+  }
+  if (yearNum !== null) {
+    params.push(yearNum);
+    dateClauses.push(`EXTRACT(YEAR FROM q.created_at) = $${params.length}`);
+  }
+  const dateFilter = dateClauses.length ? ` AND ${dateClauses.join(' AND ')}` : '';
 
   try {
     // 1. Most popular products
@@ -710,51 +787,51 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
       FROM quotes q,
       LATERAL jsonb_array_elements(q.line_items) li
       WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
-        AND ${monthFilter} AND ${yearFilter}
+        ${dateFilter}
       GROUP BY sku, name
       ORDER BY total_quantity DESC
       LIMIT 10
-    `);
+    `, params);
 
     // 2. Top salespeople
     const salesRes = await pool.query(`
       SELECT 
-        vendor,
+        q.vendor,
         COUNT(*) as order_count,
-        SUM(total) as total_sales
-      FROM quotes
-      WHERE status IN ('Pagado', 'Embalado', 'Enviado')
-        AND ${monthFilter} AND ${yearFilter}
-      GROUP BY vendor
+        SUM(q.total) as total_sales
+      FROM quotes q
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        ${dateFilter}
+      GROUP BY q.vendor
       ORDER BY total_sales DESC
       LIMIT 10
-    `);
+    `, params);
 
     // 3. Top locations (departamento/provincia)
     const locRes = await pool.query(`
       SELECT 
-        COALESCE(provincia, department, 'Sin ubicación') as location,
+        COALESCE(q.provincia, q.department, 'Sin ubicación') as location,
         COUNT(*) as order_count,
-        SUM(total) as total_sales
-      FROM quotes
-      WHERE status IN ('Pagado', 'Embalado', 'Enviado')
-        AND ${monthFilter} AND ${yearFilter}
+        SUM(q.total) as total_sales
+      FROM quotes q
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        ${dateFilter}
       GROUP BY location
       ORDER BY total_sales DESC
-    `);
+    `, params);
 
     // 4. Top almacenes by traffic (order count)
     const whRes = await pool.query(`
       SELECT 
-        store_location,
+        q.store_location,
         COUNT(*) as order_count,
-        SUM(total) as total_sales
-      FROM quotes
-      WHERE status IN ('Pagado', 'Embalado', 'Enviado')
-        AND ${monthFilter} AND ${yearFilter}
-      GROUP BY store_location
+        SUM(q.total) as total_sales
+      FROM quotes q
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        ${dateFilter}
+      GROUP BY q.store_location
       ORDER BY order_count DESC
-    `);
+    `, params);
 
     res.json({
       popularProducts: popularRes.rows,

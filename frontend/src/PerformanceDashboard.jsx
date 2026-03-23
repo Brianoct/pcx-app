@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 
-function PerformanceDashboard({ token, role, onTopSellerChange }) {
+function PerformanceDashboard({ token, user, role, onTopSellerChange }) {
   const [stats, setStats] = useState([]);
   const [leaderSales, setLeaderSales] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [teamView, setTeamView] = useState(role?.toLowerCase().includes('ventas lider'));
-
   const isVentasLider = role?.toLowerCase().includes('ventas lider');
+  const isAdmin = role?.toLowerCase().includes('admin');
+  const canViewTeam = isVentasLider || isAdmin;
+  const [teamView, setTeamView] = useState(canViewTeam);
 
   useEffect(() => {
     fetchPerformance();
@@ -34,14 +35,38 @@ function PerformanceDashboard({ token, role, onTopSellerChange }) {
         throw new Error(errData.error || 'No se pudo cargar rendimiento');
       }
 
-      let data = await res.json();
-      if (!Array.isArray(data)) data = [];
+      const data = await res.json();
 
-      const totalTeamVentas = data.reduce((sum, item) => sum + Number(item.ventas_totales || 0), 0);
+      if (!teamView) {
+        const personal = Array.isArray(data) ? data[0] : data;
+        const personalVentas = Number(personal?.ventas_totales || 0);
+        const personalCotizaciones = Number(personal?.cotizaciones_confirmadas || 0);
+        const personalComision = personalVentas * 0.08;
+
+        setLeaderSales(0);
+        setStats([{
+          vendor: user?.email || 'Mi usuario',
+          cotizaciones: personalCotizaciones,
+          totalVentas: personalVentas,
+          comision: personalComision
+        }]);
+
+        if (onTopSellerChange) {
+          onTopSellerChange({
+            vendor: null,
+            comision: personalComision,
+            liderOverride: 0
+          });
+        }
+        return;
+      }
+
+      const dataRows = Array.isArray(data) ? data : [];
+      const totalTeamVentas = dataRows.reduce((sum, item) => sum + Number(item.ventas_totales || 0), 0);
       const liderOverride = isVentasLider ? totalTeamVentas * 0.05 : 0;
 
       // Capture leader's own sales for table total
-      const leaderRow = data.find(item => {
+      const leaderRow = dataRows.find(item => {
         const email = (item.usuario || item.vendedor || '').toLowerCase();
         return email.includes('raissa') || email.includes('ventas lider');
       });
@@ -49,7 +74,7 @@ function PerformanceDashboard({ token, role, onTopSellerChange }) {
       setLeaderSales(leaderVentas);
 
       // Regular sellers only for ranking/table
-      let processed = data
+      let processed = dataRows
         .filter(item => {
           const email = (item.usuario || item.vendedor || '').toLowerCase();
           return !email.includes('raissa') && !email.includes('ventas lider');
@@ -78,9 +103,8 @@ function PerformanceDashboard({ token, role, onTopSellerChange }) {
           });
         } else if (processed.length > 0) {
           const topVendor = processed[0].vendor || '';
-          const myEmail = role?.email || ''; // fallback if email not in role
-          const isLoggedInTop = topVendor.toLowerCase().includes(myEmail.toLowerCase()) ||
-                               topVendor.toLowerCase().includes(user?.email?.toLowerCase?.() || '');
+          const myEmail = user?.email || '';
+          const isLoggedInTop = topVendor.toLowerCase().includes(myEmail.toLowerCase());
 
           if (isLoggedInTop) {
             onTopSellerChange({
@@ -114,8 +138,6 @@ function PerformanceDashboard({ token, role, onTopSellerChange }) {
   const regularVentas = stats.reduce((sum, row) => sum + row.totalVentas, 0);
   const regularComision = stats.reduce((sum, row) => sum + row.comision, 0);
   const totalVentas = regularVentas + leaderSales;
-  const totalComision = regularComision;
-
   let liderOverride = 0;
   if (teamView && isVentasLider) {
     liderOverride = totalVentas * 0.05;
@@ -136,7 +158,7 @@ function PerformanceDashboard({ token, role, onTopSellerChange }) {
         </select>
       </div>
 
-      {isVentasLider && (
+      {canViewTeam && (
         <div style={{ textAlign: 'center', marginBottom: '30px' }}>
           <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', color: '#94a3b8', fontSize: '1.1rem' }}>
             <input type="checkbox" checked={teamView} onChange={e => setTeamView(e.target.checked)} style={{ width: '20px', height: '20px', accentColor: '#e11d48' }} />
