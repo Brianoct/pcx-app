@@ -1,5 +1,6 @@
 // src/AdminPanel.jsx
 import { useState, useEffect } from 'react';
+import AdminDashboard from './AdminDashboard';
 
 // User management component
 function UserManagement({ token }) {
@@ -390,12 +391,10 @@ function UserManagement({ token }) {
   );
 }
 
-// Dashboard component (unchanged)
 function StatisticsDashboard({ token }) {
-  // ... same as before ...
+  return <AdminDashboard token={token} />;
 }
 
-// Main Admin Panel with tabs (unchanged)
 function AdminPanel({ token }) {
   const [activeTab, setActiveTab] = useState('usuarios');
 

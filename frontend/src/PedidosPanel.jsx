@@ -157,7 +157,6 @@ function PedidosPanel({ token, role }) {
     });
 
     const pageWidth = 70;
-    const pageHeight = 40;
     const margin = 4;
 
     const logoWidth = 20;

@@ -1,5 +1,5 @@
 // QuoteTool.jsx
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import logo from './assets/logo.png'; // Adjust path if needed
 
@@ -49,10 +49,7 @@ export default function QuoteTool({ token, user }) {
   const [isProvincia, setIsProvincia] = useState(false);
   const [almacen, setAlmacen] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
-  const summaryRef = useRef(null);
   const [currentDateTime, setCurrentDateTime] = useState('');
-
-  const vendedorName = user ? user.email.split('@')[0] : 'Usuario';
 
   useEffect(() => {
     if (step === 2) {

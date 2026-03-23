@@ -12,7 +12,7 @@ function Login({ onLogin }) {
     try {
       const res = await axios.post('http://localhost:4000/api/login', { email, password });
       onLogin(res.data.token, res.data.user);
-    } catch (err) {
+    } catch (_err) {
       setError('Invalid email or password');
     }
   };
