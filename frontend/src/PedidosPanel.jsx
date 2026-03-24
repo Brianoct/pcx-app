@@ -11,6 +11,9 @@ function PedidosPanel({ token, role }) {
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
   const [checklistModal, setChecklistModal] = useState(null);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
 
   // Pagination
   const pedidosPerPage = 10;
@@ -22,6 +25,12 @@ function PedidosPanel({ token, role }) {
   useEffect(() => {
     fetchPedidos();
   }, [token, role]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const fetchPedidos = async () => {
     setLoading(true);
@@ -219,43 +228,19 @@ function PedidosPanel({ token, role }) {
       </h2>
 
       {/* Filter Bar - exact same style as QuoteHistory */}
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '16px',
-        marginBottom: '24px',
-        justifyContent: 'center',
-        alignItems: 'center'
-      }}>
+      <div className="filter-bar">
         <input
+          className="filter-input"
           type="text"
           placeholder="Buscar por cliente, teléfono, provincia/departamento, vendedor o estado..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: '250px',
-            padding: '12px',
-            fontSize: '1rem',
-            border: '1px solid #334155',
-            borderRadius: '8px',
-            background: '#0f172a',
-            color: 'white'
-          }}
         />
 
         <select
+          className="filter-select"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          style={{
-            padding: '12px',
-            fontSize: '1rem',
-            border: '1px solid #334155',
-            borderRadius: '8px',
-            background: '#0f172a',
-            color: 'white',
-            minWidth: '160px'
-          }}
         >
           <option value="">Todos los estados</option>
           <option value="Confirmado">Confirmado</option>
@@ -265,16 +250,8 @@ function PedidosPanel({ token, role }) {
         </select>
 
         <button
+          className="btn btn-danger"
           onClick={clearFilters}
-          style={{
-            padding: '12px 20px',
-            background: '#ef4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '0.95rem'
-          }}
         >
           Limpiar filtros
         </button>
@@ -284,151 +261,223 @@ function PedidosPanel({ token, role }) {
         <p style={{ textAlign: 'center', color: '#94a3b8' }}>No hay pedidos pendientes que coincidan con la búsqueda.</p>
       ) : (
         <>
-          <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
-            <table style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              minWidth: '900px',
-              tableLayout: 'fixed'
-            }}>
-              <thead>
-                <tr style={{ background: '#0f172a' }}>
-                  <th style={{ padding: '12px 8px', width: '60px', textAlign: 'center' }}>ID</th>
-                  <th style={{ padding: '12px 8px', width: '120px', textAlign: 'center' }}>Vendedor</th>
-                  <th style={{ padding: '12px 8px', width: '180px', textAlign: 'center' }}>Cliente</th>
-                  <th style={{ padding: '12px 8px', width: '130px', textAlign: 'center' }}>Teléfono</th>
-                  <th style={{ padding: '12px 8px', width: '160px', textAlign: 'center' }}>Provincia / Depto</th>
-                  <th style={{ padding: '12px 8px', width: '160px', textAlign: 'center' }}>Almacén</th>
-                  <th style={{ padding: '12px 8px', width: '120px', textAlign: 'center' }}>Estado</th>
-                  <th style={{ padding: '12px 8px', width: '150px', textAlign: 'center' }}>Fecha</th>
-                  <th style={{ padding: '12px 8px', width: '140px', textAlign: 'center' }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentPedidos.map(quote => (
-                  <tr key={quote.id} style={{ borderBottom: '1px solid #334155' }}>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>{quote.id}</td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>{quote.vendor || '—'}</td>
-                    <td style={{
-                      padding: '12px 8px',
-                      textAlign: 'center',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'break-word'
-                    }}>
-                      {quote.customer_name || '—'}
-                    </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                      {quote.customer_phone || '—'}
-                    </td>
-                    <td style={{
-                      padding: '12px 8px',
-                      textAlign: 'center',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'break-word'
-                    }}>
-                      {quote.provincia || quote.department || '—'}
-                    </td>
-                    <td style={{
-                      padding: '12px 8px',
-                      textAlign: 'center',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'break-word'
-                    }}>
-                      {quote.store_location || '—'}
-                    </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                      <select
-                        value={quote.status}
-                        onChange={(e) => handleStatusChange(quote.id, e.target.value)}
-                        disabled={updatingId === quote.id}
-                        style={{
-                          padding: '6px 10px',
-                          background: quote.status === 'Enviado' ? '#10b981' :
-                                      quote.status === 'Embalado' ? '#8b5cf6' :
-                                      quote.status === 'Pagado' ? '#3b82f6' :
-                                      quote.status === 'Confirmado' ? '#f59e0b' :
-                                      '#64748b',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: updatingId === quote.id ? 'not-allowed' : 'pointer',
-                          fontSize: '0.85rem',
-                          minWidth: '100px'
-                        }}
-                      >
-                        {isWarehouse ? (
-                          <>
-                            <option value="Confirmado">Confirmado</option>
-                            <option value="Pagado">Pagado</option>
-                            <option value="Embalado">Embalado</option>
-                            <option value="Enviado">Enviado</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="Cotizado">Cotizado</option>
-                            <option value="Confirmado">Confirmado</option>
-                            <option value="Pagado">Pagado</option>
-                            <option value="Embalado">Embalado</option>
-                            <option value="Enviado">Enviado</option>
-                          </>
-                        )}
-                      </select>
-                    </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                      {new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}
-                    </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => openChecklist(quote)}
-                          title="Lista de Empaque"
-                          style={{
-                            padding: '6px 12px',
-                            background: '#10b981',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '1.1rem',
-                            minWidth: '40px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#059669'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = '#10b981'}
-                        >
-                          ✅
-                        </button>
-                        <button
-                          onClick={() => printLabel(quote)}
-                          style={{
-                            padding: '6px 12px',
-                            background: '#f59e0b',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            minWidth: '90px',
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#d97706'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = '#f59e0b'}
-                        >
-                          Etiqueta
-                        </button>
-                      </div>
-                    </td>
+          {isMobile ? (
+            <div className="mobile-cards-list" style={{ marginBottom: '16px' }}>
+              {currentPedidos.map((quote) => (
+                <div key={quote.id} className="mobile-card">
+                  <div className="mobile-card-header">
+                    <span className="mobile-card-id">Pedido #{quote.id}</span>
+                    <span className="mobile-card-total">{quote.status}</span>
+                  </div>
+
+                  <div className="mobile-card-body">
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Vendedor</span>
+                      <span>{quote.vendor || '—'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Cliente</span>
+                      <span>{quote.customer_name || '—'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Teléfono</span>
+                      <span>{quote.customer_phone || '—'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Ubicación</span>
+                      <span>{quote.provincia || quote.department || '—'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Almacén</span>
+                      <span>{quote.store_location || '—'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Fecha</span>
+                      <span>{new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    </div>
+                  </div>
+
+                  <div className="mobile-card-actions">
+                    <select
+                      className="mobile-select"
+                      value={quote.status}
+                      onChange={(e) => handleStatusChange(quote.id, e.target.value)}
+                      disabled={updatingId === quote.id}
+                    >
+                      {isWarehouse ? (
+                        <>
+                          <option value="Confirmado">Confirmado</option>
+                          <option value="Pagado">Pagado</option>
+                          <option value="Embalado">Embalado</option>
+                          <option value="Enviado">Enviado</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="Cotizado">Cotizado</option>
+                          <option value="Confirmado">Confirmado</option>
+                          <option value="Pagado">Pagado</option>
+                          <option value="Embalado">Embalado</option>
+                          <option value="Enviado">Enviado</option>
+                        </>
+                      )}
+                    </select>
+                    <button className="btn" style={{ background: '#10b981', color: 'white' }} onClick={() => openChecklist(quote)}>
+                      Empaque
+                    </button>
+                    <button className="btn" style={{ background: '#f59e0b', color: 'white' }} onClick={() => printLabel(quote)}>
+                      Etiqueta
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
+              <table style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                minWidth: '900px',
+                tableLayout: 'fixed'
+              }}>
+                <thead>
+                  <tr style={{ background: '#0f172a' }}>
+                    <th style={{ padding: '12px 8px', width: '60px', textAlign: 'center' }}>ID</th>
+                    <th style={{ padding: '12px 8px', width: '120px', textAlign: 'center' }}>Vendedor</th>
+                    <th style={{ padding: '12px 8px', width: '180px', textAlign: 'center' }}>Cliente</th>
+                    <th style={{ padding: '12px 8px', width: '130px', textAlign: 'center' }}>Teléfono</th>
+                    <th style={{ padding: '12px 8px', width: '160px', textAlign: 'center' }}>Provincia / Depto</th>
+                    <th style={{ padding: '12px 8px', width: '160px', textAlign: 'center' }}>Almacén</th>
+                    <th style={{ padding: '12px 8px', width: '120px', textAlign: 'center' }}>Estado</th>
+                    <th style={{ padding: '12px 8px', width: '150px', textAlign: 'center' }}>Fecha</th>
+                    <th style={{ padding: '12px 8px', width: '140px', textAlign: 'center' }}>Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {currentPedidos.map(quote => (
+                    <tr key={quote.id} style={{ borderBottom: '1px solid #334155' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>{quote.id}</td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>{quote.vendor || '—'}</td>
+                      <td style={{
+                        padding: '12px 8px',
+                        textAlign: 'center',
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word'
+                      }}>
+                        {quote.customer_name || '—'}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        {quote.customer_phone || '—'}
+                      </td>
+                      <td style={{
+                        padding: '12px 8px',
+                        textAlign: 'center',
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word'
+                      }}>
+                        {quote.provincia || quote.department || '—'}
+                      </td>
+                      <td style={{
+                        padding: '12px 8px',
+                        textAlign: 'center',
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word'
+                      }}>
+                        {quote.store_location || '—'}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        <select
+                          value={quote.status}
+                          onChange={(e) => handleStatusChange(quote.id, e.target.value)}
+                          disabled={updatingId === quote.id}
+                          style={{
+                            padding: '6px 10px',
+                            background: quote.status === 'Enviado' ? '#10b981' :
+                                        quote.status === 'Embalado' ? '#8b5cf6' :
+                                        quote.status === 'Pagado' ? '#3b82f6' :
+                                        quote.status === 'Confirmado' ? '#f59e0b' :
+                                        '#64748b',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: updatingId === quote.id ? 'not-allowed' : 'pointer',
+                            fontSize: '0.85rem',
+                            minWidth: '100px'
+                          }}
+                        >
+                          {isWarehouse ? (
+                            <>
+                              <option value="Confirmado">Confirmado</option>
+                              <option value="Pagado">Pagado</option>
+                              <option value="Embalado">Embalado</option>
+                              <option value="Enviado">Enviado</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="Cotizado">Cotizado</option>
+                              <option value="Confirmado">Confirmado</option>
+                              <option value="Pagado">Pagado</option>
+                              <option value="Embalado">Embalado</option>
+                              <option value="Enviado">Enviado</option>
+                            </>
+                          )}
+                        </select>
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        {new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => openChecklist(quote)}
+                            title="Lista de Empaque"
+                            style={{
+                              padding: '6px 12px',
+                              background: '#10b981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '1.1rem',
+                              minWidth: '40px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#059669'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = '#10b981'}
+                          >
+                            ✅
+                          </button>
+                          <button
+                            onClick={() => printLabel(quote)}
+                            style={{
+                              padding: '6px 12px',
+                              background: '#f59e0b',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '0.85rem',
+                              minWidth: '90px',
+                              transition: 'background 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#d97706'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = '#f59e0b'}
+                          >
+                            Etiqueta
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Pagination - exact same as QuoteHistory */}
           {totalPages > 1 && (

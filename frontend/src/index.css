@@ -111,6 +111,90 @@ button, .btn {
   background: #2d3748;
 }
 
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+.filter-input,
+.filter-select,
+.mobile-select {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: white;
+  font-size: 0.95rem;
+}
+
+.filter-input {
+  flex: 1;
+  min-width: 220px;
+}
+
+.filter-select {
+  min-width: 160px;
+}
+
+.mobile-cards-list {
+  display: grid;
+  gap: 12px;
+}
+
+.mobile-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.mobile-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.mobile-card-id {
+  color: #f1f5f9;
+  font-weight: 700;
+}
+
+.mobile-card-total {
+  color: #10b981;
+  font-weight: 700;
+}
+
+.mobile-card-body {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mobile-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  color: #e2e8f0;
+  font-size: 0.92rem;
+}
+
+.mobile-card-label {
+  color: #94a3b8;
+  min-width: 92px;
+}
+
+.mobile-card-actions {
+  display: grid;
+  gap: 8px;
+}
+
 .nav-link {
   color: var(--text-secondary);
   text-decoration: none;
@@ -239,12 +323,30 @@ nav {
     display: block;
   }
 
+  .container {
+    padding: 84px 12px 28px;
+  }
+
   nav .nav-links:not(.mobile) {
     display: none !important;
   }
 
   .desktop-user {
     display: none;
+  }
+
+  .filter-bar {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .filter-input,
+  .filter-select,
+  .filter-bar .btn,
+  .mobile-card-actions .btn,
+  .mobile-select {
+    width: 100%;
   }
 }
 
@@ -271,5 +373,23 @@ nav {
 
   nav {
     padding: 8px 10px;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: 10px;
+  }
+
+  .mobile-card {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .mobile-card-row {
+    font-size: 0.88rem;
+  }
+
+  .mobile-card-label {
+    min-width: 84px;
   }
 }
