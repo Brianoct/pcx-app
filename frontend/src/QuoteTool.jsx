@@ -1,7 +1,7 @@
 // QuoteTool.jsx
 import { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
-import logo from './assets/PCX.png';
+import logo from './assets/logo.png';
 
 export default function QuoteTool({ token, user }) {
   const regularProducts = [
@@ -298,7 +298,7 @@ export default function QuoteTool({ token, user }) {
       doc.addImage(logo, 'PNG', 15, 10, 50, 20);
       doc.setFontSize(22);
       doc.setTextColor(225, 29, 72);
-      doc.text("Cotización", 105, 35, { align: "center" });
+      doc.text("Cotizacion", 105, 35, { align: "center" });
 
       doc.setFontSize(11);
       doc.setTextColor(100);

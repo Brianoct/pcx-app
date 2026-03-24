@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
+import logo from './assets/logo.png';
 
 function QuoteHistory({ token, role }) {
   const [quotes, setQuotes] = useState([]);
@@ -122,41 +123,42 @@ function QuoteHistory({ token, role }) {
   const regeneratePDF = (quote) => {
     const doc = new jsPDF();
 
+    doc.addImage(logo, 'PNG', 15, 10, 42, 16);
     doc.setFontSize(20);
     doc.setTextColor(244, 63, 94);
-    doc.text("PCX - Cotización", 105, 18, { align: "center" });
+    doc.text("Cotizacion", 105, 20, { align: "center" });
 
     doc.setFontSize(11);
     doc.setTextColor(80);
-    doc.text(`Vendedor: ${quote.vendor || '—'}   •   Almacén: ${quote.store_location || '—'}`, 20, 30);
-    doc.text(`Fecha: ${new Date(quote.created_at).toLocaleString('es-BO')}`, 20, 37);
+    doc.text(`Vendedor: ${quote.vendor || '—'}   •   Almacén: ${quote.store_location || '—'}`, 20, 34);
+    doc.text(`Fecha: ${new Date(quote.created_at).toLocaleString('es-BO')}`, 20, 41);
 
     doc.setFontSize(12);
     doc.setTextColor(0);
-    doc.text(`Cliente: ${quote.customer_name || '—'}`, 20, 47);
-    doc.text(`Teléfono: ${quote.customer_phone || '—'}`, 20, 54);
+    doc.text(`Cliente: ${quote.customer_name || '—'}`, 20, 51);
+    doc.text(`Teléfono: ${quote.customer_phone || '—'}`, 20, 58);
     const location = quote.provincia ? `Provincia: ${quote.provincia}` : `Departamento: ${quote.department || '—'}`;
-    doc.text(location, 20, 61);
+    doc.text(location, 20, 65);
 
     if (quote.shipping_notes && quote.shipping_notes.trim()) {
       doc.setFontSize(10);
-      doc.text('Notas de envío:', 20, 68);
+      doc.text('Notas de envío:', 20, 72);
       const splitNotes = doc.splitTextToSize(quote.shipping_notes, 170);
-      doc.text(splitNotes, 20, 75);
+      doc.text(splitNotes, 20, 79);
     }
 
     doc.setFillColor(30, 41, 59);
-    doc.rect(15, 85, 180, 10, 'F');
+    doc.rect(15, 89, 180, 10, 'F');
     doc.setTextColor(255);
     doc.setFontSize(11);
-    doc.text("Descripción", 22, 92);
-    doc.text("Cant.", 100, 92, { align: "center" });
-    doc.text("P. Unit.", 138, 92, { align: "right" });
-    doc.text("Subtotal", 178, 92, { align: "right" });
+    doc.text("Descripción", 22, 96);
+    doc.text("Cant.", 100, 96, { align: "center" });
+    doc.text("P. Unit.", 138, 96, { align: "right" });
+    doc.text("Subtotal", 178, 96, { align: "right" });
 
     doc.setTextColor(0);
     doc.setFontSize(10);
-    let y = 102;
+    let y = 106;
 
     (quote.line_items || []).forEach(row => {
       let desc = row.skuDisplay || row.sku || '—';
