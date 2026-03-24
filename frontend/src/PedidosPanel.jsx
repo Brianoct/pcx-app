@@ -22,6 +22,14 @@ function PedidosPanel({ token, role }) {
   // Determine user type
   const isWarehouse = role?.toLowerCase().includes('almacen');
 
+  const normalizePhone = (phone = '') => String(phone).replace(/\D/g, '');
+  const buildWhatsAppLink = (phone = '') => {
+    const digits = normalizePhone(phone);
+    if (!digits) return null;
+    const withCountry = digits.startsWith('591') ? digits : `591${digits}`;
+    return `https://wa.me/${withCountry}`;
+  };
+
   useEffect(() => {
     fetchPedidos();
   }, [token, role]);
@@ -273,7 +281,18 @@ function PedidosPanel({ token, role }) {
                   <div className="mobile-card-body">
                     <div className="mobile-card-row">
                       <span className="mobile-card-label">Vendedor</span>
-                      <span>{quote.vendor || '—'}</span>
+                      {quote.vendor_phone ? (
+                        <a
+                          href={buildWhatsAppLink(quote.vendor_phone)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#25D366', textDecoration: 'none', fontWeight: '600' }}
+                        >
+                          {quote.vendor || '—'}
+                        </a>
+                      ) : (
+                        <span>{quote.vendor || '—'}</span>
+                      )}
                     </div>
                     <div className="mobile-card-row">
                       <span className="mobile-card-label">Cliente</span>
@@ -356,7 +375,20 @@ function PedidosPanel({ token, role }) {
                   {currentPedidos.map(quote => (
                     <tr key={quote.id} style={{ borderBottom: '1px solid #334155' }}>
                       <td style={{ padding: '12px 8px', textAlign: 'center' }}>{quote.id}</td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>{quote.vendor || '—'}</td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        {quote.vendor_phone ? (
+                          <a
+                            href={buildWhatsAppLink(quote.vendor_phone)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: '#25D366', textDecoration: 'none', fontWeight: '600' }}
+                          >
+                            {quote.vendor || '—'}
+                          </a>
+                        ) : (
+                          quote.vendor || '—'
+                        )}
+                      </td>
                       <td style={{
                         padding: '12px 8px',
                         textAlign: 'center',

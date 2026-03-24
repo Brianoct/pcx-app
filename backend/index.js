@@ -216,23 +216,58 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       isTeamView 
-        ? `SELECT id, user_id, customer_name, customer_phone, department, provincia, shipping_notes,
-                  store_location, vendor, venta_type, discount_percent, line_items, subtotal, 
-                  total, status, created_at 
-           FROM quotes 
-           ORDER BY created_at DESC`
-        : `SELECT id, user_id, customer_name, customer_phone, department, provincia, shipping_notes,
-                  store_location, vendor, venta_type, discount_percent, line_items, subtotal, 
-                  total, status, created_at 
-           FROM quotes 
-           WHERE user_id = $1 
-           ORDER BY created_at DESC`,
+        ? `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
+                  q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
+                  q.total, q.status, q.created_at, u.phone AS seller_phone
+           FROM quotes q
+           LEFT JOIN users u ON u.id = q.user_id
+           ORDER BY q.created_at DESC`
+        : `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
+                  q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
+                  q.total, q.status, q.created_at, u.phone AS seller_phone
+           FROM quotes q
+           LEFT JOIN users u ON u.id = q.user_id
+           WHERE q.user_id = $1
+           ORDER BY q.created_at DESC`,
       isTeamView ? [] : [req.user.id]
     );
     res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener historial' });
+  }
+});
+
+// ─── GET seller contact by quote id (team roles) ───────────────────────────
+app.get('/api/quotes/:id/seller-contact', authenticateToken, async (req, res) => {
+  const userRoleNormalized = normalizeRole(req.user.role || '');
+  const canAccessAllQuotes = ['ventas lider', 'admin', 'almacen lider', 'almacen'].includes(userRoleNormalized);
+
+  try {
+    const result = await pool.query(
+      `SELECT q.user_id, u.email AS seller_email, u.phone AS seller_phone
+       FROM quotes q
+       LEFT JOIN users u ON u.id = q.user_id
+       WHERE q.id = $1`,
+      [req.params.id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Cotización no encontrada' });
+    }
+
+    const row = result.rows[0];
+    if (!canAccessAllQuotes && row.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'No autorizado para ver este contacto' });
+    }
+
+    res.json({
+      seller_email: row.seller_email,
+      seller_phone: row.seller_phone
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener contacto del vendedor' });
   }
 });
 
