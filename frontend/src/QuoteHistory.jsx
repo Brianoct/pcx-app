@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import jsPDF from 'jspdf';
 import logo from './assets/logo.png';
+import { generateModernQuotePdf } from './quotePdf';
 
 function QuoteHistory({ token, role }) {
   const [quotes, setQuotes] = useState([]);
@@ -121,80 +121,42 @@ function QuoteHistory({ token, role }) {
   };
 
   const regeneratePDF = (quote) => {
-    const doc = new jsPDF();
+    const subtotal = Number(quote.subtotal || 0);
+    const discountPercent = Number(quote.discount_percent || 0);
+    const discountAmount = subtotal * (discountPercent / 100);
+    const rawRows = Array.isArray(quote.line_items) ? quote.line_items : [];
 
-    doc.addImage(logo, 'PNG', 15, 10, 42, 16);
-    doc.setFontSize(20);
-    doc.setTextColor(244, 63, 94);
-    doc.text("Cotizacion", 105, 20, { align: "center" });
+    const rows = rawRows.map((row) => ({
+      sku: row.sku,
+      skuDisplay: row.skuDisplay || row.displayName || row.sku || '—',
+      qty: Number(row.qty || 0),
+      unitPrice: Number(row.unitPrice || row.unit_price || 0),
+      lineTotal: Number(row.lineTotal || row.line_total || 0),
+      isComboHeader: Boolean(row.isComboHeader),
+      isIndented: Boolean(row.isIndented)
+    }));
 
-    doc.setFontSize(11);
-    doc.setTextColor(80);
-    doc.text(`Vendedor: ${quote.vendor || '—'}   •   Almacén: ${quote.store_location || '—'}`, 20, 34);
-    doc.text(`Fecha: ${new Date(quote.created_at).toLocaleString('es-BO')}`, 20, 41);
-
-    doc.setFontSize(12);
-    doc.setTextColor(0);
-    doc.text(`Cliente: ${quote.customer_name || '—'}`, 20, 51);
-    doc.text(`Teléfono: ${quote.customer_phone || '—'}`, 20, 58);
-    const location = quote.provincia ? `Provincia: ${quote.provincia}` : `Departamento: ${quote.department || '—'}`;
-    doc.text(location, 20, 65);
-
-    if (quote.shipping_notes && quote.shipping_notes.trim()) {
-      doc.setFontSize(10);
-      doc.text('Notas de envío:', 20, 72);
-      const splitNotes = doc.splitTextToSize(quote.shipping_notes, 170);
-      doc.text(splitNotes, 20, 79);
-    }
-
-    doc.setFillColor(30, 41, 59);
-    doc.rect(15, 89, 180, 10, 'F');
-    doc.setTextColor(255);
-    doc.setFontSize(11);
-    doc.text("Descripción", 22, 96);
-    doc.text("Cant.", 100, 96, { align: "center" });
-    doc.text("P. Unit.", 138, 96, { align: "right" });
-    doc.text("Subtotal", 178, 96, { align: "right" });
-
-    doc.setTextColor(0);
-    doc.setFontSize(10);
-    let y = 106;
-
-    (quote.line_items || []).forEach(row => {
-      let desc = row.skuDisplay || row.sku || '—';
-      if (desc.length > 48) desc = desc.substring(0, 45) + "...";
-
-      doc.text(desc, 22, y);
-      doc.text((row.qty || 0).toString(), 100, y, { align: "center" });
-      doc.text(Number(row.unitPrice || 0).toFixed(2), 138, y, { align: "right" });
-      doc.text(Number(row.lineTotal || 0).toFixed(2), 178, y, { align: "right" });
-
-      y += 10;
+    generateModernQuotePdf({
+      logo,
+      filename: `cotizacion_${quote.id}_${quote.customer_name?.replace(/\s+/g, '_') || 'anon'}.pdf`,
+      quoteNumber: quote.id,
+      customerName: quote.customer_name,
+      customerPhone: quote.customer_phone,
+      vendorName: quote.vendor,
+      storeLocation: quote.store_location,
+      dateText: new Date(quote.created_at).toLocaleString('es-BO'),
+      cityText: 'Cochabamba, Bolivia.',
+      department: quote.department,
+      provincia: quote.provincia,
+      shippingNotes: quote.shipping_notes,
+      alternativeName: quote.alternative_name,
+      rows,
+      subtotal,
+      discountPercent,
+      discountAmount,
+      roundTotal: Boolean(quote.round_total),
+      total: Number(quote.total || 0)
     });
-
-    y += 10;
-    doc.setFontSize(12);
-    doc.text(`Subtotal: ${Number(quote.subtotal || 0).toFixed(2)} Bs`, 150, y, { align: "right" });
-    y += 8;
-
-    if (quote.discount_percent > 0) {
-      const discAmt = Number(quote.subtotal || 0) * (quote.discount_percent / 100);
-      doc.text(`Descuento (${quote.discount_percent}%): ${discAmt.toFixed(2)} Bs`, 150, y, { align: "right" });
-      y += 8;
-    }
-
-    doc.setFontSize(14);
-    doc.setTextColor(244, 63, 94);
-    doc.text(`TOTAL: ${Number(quote.total || 0).toFixed(2)} Bs`, 150, y, { align: "right" });
-
-    y += 22;
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text("Cotización válida por 7 días", 105, y, { align: "center" });
-    y += 7;
-    doc.text("PCX - ¡Esperamos servirle nuevamente!", 105, y, { align: "center" });
-
-    doc.save(`cotizacion_${quote.id}_${quote.customer_name?.replace(/\s+/g, '_') || 'anon'}.pdf`);
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando historial...</div>;

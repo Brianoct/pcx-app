@@ -1,7 +1,7 @@
 // QuoteTool.jsx
 import { useState, useEffect } from 'react';
-import jsPDF from 'jspdf';
 import logo from './assets/logo.png';
+import { generateModernQuotePdf } from './quotePdf';
 
 export default function QuoteTool({ token, user }) {
   const regularProducts = [
@@ -293,115 +293,38 @@ export default function QuoteTool({ token, user }) {
         throw new Error(errData.error || 'No se pudo guardar la cotización');
       }
 
-      const doc = new jsPDF();
-
-      doc.addImage(logo, 'PNG', 15, 10, 50, 20);
-      doc.setFontSize(22);
-      doc.setTextColor(225, 29, 72);
-      doc.text("Cotizacion", 105, 35, { align: "center" });
-
-      doc.setFontSize(11);
-      doc.setTextColor(100);
-      doc.text(`Vendedor: ${vendedorName}   •   Almacén: ${almacen}`, 20, 50);
-      doc.text(`Fecha: ${currentDateTime.split(', ')[1]}`, 20, 57);
-      doc.text("Cochabamba, Bolivia.", 20, 64);
-
-      doc.setLineWidth(0.5);
-      doc.setDrawColor(225, 29, 72);
-      doc.line(20, 68, 190, 68);
-
-      doc.setFontSize(12);
-      doc.setTextColor(0);
-      doc.text(`Cliente: ${customerName}`, 20, 78);
-      doc.text(`Teléfono: ${customerPhone}`, 20, 85);
-
-      if (useAlternativeName && alternativeName.trim()) {
-        doc.text(`Enviar a nombre de: ${alternativeName}`, 20, 92);
+      let savedData = null;
+      try {
+        savedData = await saveRes.json();
+      } catch {
+        savedData = null;
       }
 
-      const location = isProvincia ? `Provincia: ${provincia || '—'}` : `Departamento: ${department || '—'}`;
-      doc.text(location, 20, useAlternativeName ? 99 : 92);
+      const quoteNumber = savedData?.id || savedData?.quote?.id || null;
+      const dateParts = currentDateTime?.split(', ') || [];
+      const dateText = dateParts.length > 1 ? dateParts.slice(1).join(', ') : currentDateTime;
 
-      if (shippingNotes.trim()) {
-        doc.setFontSize(10);
-        doc.text('Notas de envío:', 20, useAlternativeName ? 106 : 99);
-        const splitNotes = doc.splitTextToSize(shippingNotes, 170);
-        doc.text(splitNotes, 20, useAlternativeName ? 113 : 106);
-      }
-
-      doc.setFillColor(30, 41, 59);
-      doc.rect(15, 105, 180, 10, 'F');
-      doc.setTextColor(255);
-      doc.setFontSize(11);
-      doc.text("Descripción", 22, 112);
-      doc.text("Cant.", 100, 112, { align: "center" });
-      doc.text("P. Unit.", 138, 112, { align: "right" });
-      doc.text("Subtotal", 178, 112, { align: "right" });
-
-      doc.setTextColor(0);
-      doc.setFontSize(10);
-      let y = 122;
-
-      expandedRows.forEach((row) => {
-        let desc = row.skuDisplay || row.sku || '—';
-        if (desc.length > 48) desc = desc.substring(0, 45) + "...";
-
-        const indent = row.isIndented ? '      ' : '';
-        desc = indent + desc;
-
-        if (row.isComboHeader) {
-          doc.setFontSize(11);
-          doc.setTextColor(225, 29, 72);
-        } else if (row.isIndented) {
-          doc.setFontSize(9);
-          doc.setTextColor(100);
-        } else {
-          doc.setFontSize(10);
-          doc.setTextColor(0);
-        }
-
-        doc.text(desc, 22, y);
-        doc.text((row.qty || 0).toString(), 100, y, { align: "center" });
-        const price = row.unitPrice != null ? Number(row.unitPrice).toFixed(2) : '-';
-        doc.text(price, 138, y, { align: "right" });
-        const lineTotal = row.lineTotal != null ? Number(row.lineTotal).toFixed(2) : '-';
-        doc.text(lineTotal, 178, y, { align: "right" });
-
-        y += row.isIndented ? 7 : 9;
+      generateModernQuotePdf({
+        logo,
+        filename: `cotizacion_${customerName.replace(/\s+/g, '_') || 'sin_nombre'}_${Date.now()}.pdf`,
+        quoteNumber,
+        customerName,
+        customerPhone,
+        vendorName: vendedorName,
+        storeLocation: almacen,
+        dateText,
+        cityText: 'Cochabamba, Bolivia.',
+        department: isProvincia ? null : department,
+        provincia: isProvincia ? provincia : null,
+        shippingNotes,
+        alternativeName: useAlternativeName ? alternativeName.trim() : null,
+        rows: expandedRows,
+        subtotal,
+        discountPercent,
+        discountAmount: discountPercentApplied,
+        roundTotal,
+        total
       });
-
-      y += 8;
-      doc.setFontSize(12);
-      doc.text(`Subtotal: ${subtotal.toFixed(2)} Bs`, 150, y, { align: "right" });
-      y += 8;
-
-      if (discountPercentApplied > 0) {
-        doc.text(`Descuento (${discountPercent}%): ${discountPercentApplied.toFixed(2)} Bs`, 150, y, { align: "right" });
-        y += 8;
-      }
-
-      if (roundTotal) {
-        doc.text(`Redondeo aplicado`, 150, y, { align: "right" });
-        y += 8;
-      }
-
-      doc.setLineWidth(0.5);
-      doc.setDrawColor(0);
-      doc.line(150, y, 190, y);
-      y += 8;
-
-      doc.setFontSize(14);
-      doc.setTextColor(225, 29, 72);
-      doc.text(`TOTAL: ${total.toFixed(2)} Bs`, 150, y, { align: "right" });
-
-      y += 20;
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text("Cotización válida por 7 días", 105, y, { align: "center" });
-      y += 7;
-      doc.text("PCX - ¡Esperamos servirle nuevamente!", 105, y, { align: "center" });
-
-      doc.save(`cotizacion_${customerName.replace(/\s+/g, '_') || 'sin_nombre'}_${Date.now()}.pdf`);
 
       alert('Cotización guardada y PDF generado');
     } catch (err) {
