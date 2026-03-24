@@ -496,6 +496,46 @@ app.patch('/api/products/:sku/stock', authenticateToken, requireRole(['Almacen L
   }
 });
 
+// ─── UPDATE minimum stock thresholds for a SKU ──────────────────────────────
+app.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Almacen Lider', 'Almacen']), async (req, res) => {
+  const { sku } = req.params;
+  const {
+    min_stock_cochabamba,
+    min_stock_santacruz,
+    min_stock_lima
+  } = req.body;
+
+  const values = [min_stock_cochabamba, min_stock_santacruz, min_stock_lima];
+  if (values.some((v) => v === undefined || v === null || Number.isNaN(Number(v)) || Number(v) < 0)) {
+    return res.status(400).json({ error: 'Los mínimos por almacén son requeridos y deben ser números >= 0' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE products
+       SET min_stock_cochabamba = $1,
+           min_stock_santacruz = $2,
+           min_stock_lima = $3,
+           last_updated = NOW()
+       WHERE sku = $4
+       RETURNING sku, min_stock_cochabamba, min_stock_santacruz, min_stock_lima`,
+      [min_stock_cochabamba, min_stock_santacruz, min_stock_lima, sku.toUpperCase()]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+
+    res.json({
+      message: 'Mínimos actualizados',
+      ...result.rows[0]
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al actualizar mínimos' });
+  }
+});
+
 // ─── MARKETING: Combos ──────────────────────────────────────────────────────
 
 // GET all combos with items
@@ -891,7 +931,9 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
 app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almacen']), async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT sku, name, stock_cochabamba, stock_santacruz, stock_lima, last_updated 
+      SELECT sku, name, stock_cochabamba, stock_santacruz, stock_lima,
+             min_stock_cochabamba, min_stock_santacruz, min_stock_lima,
+             last_updated
       FROM products 
       ORDER BY sku
     `);
