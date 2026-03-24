@@ -7,6 +7,9 @@ function InventoryPanel({ token }) {
   const [saving, setSaving] = useState(false);
   const [originalStocks, setOriginalStocks] = useState({});
   const [saveMessage, setSaveMessage] = useState('');
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -37,6 +40,12 @@ function InventoryPanel({ token }) {
     };
     fetchInventory();
   }, [token]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const handleStockChange = (sku, field, value) => {
     const numValue = value === '' ? 0 : Math.max(0, Number(value));
@@ -120,6 +129,7 @@ function InventoryPanel({ token }) {
     if (changed) acc.push(product.sku);
     return acc;
   }, []);
+  const changedSkuSet = new Set(changedSkus);
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando inventario...</div>;
   if (error) return <div style={{ color: '#f87171', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
@@ -127,7 +137,7 @@ function InventoryPanel({ token }) {
   return (
     <div className="container">
       <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
-        Panel de Inventario
+        Inventario
       </h2>
 
       <div style={{
@@ -180,106 +190,191 @@ function InventoryPanel({ token }) {
         </div>
       )}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{
-          width: '100%',
-          borderCollapse: 'collapse',
-          minWidth: '1100px',
-          tableLayout: 'fixed'
-        }}>
-          <thead>
-            <tr style={{ background: '#0f172a' }}>
-              <th style={{ padding: '14px 12px', width: '100px', textAlign: 'center' }}>SKU</th>
-              <th style={{ padding: '14px 12px', width: '280px', textAlign: 'center' }}>Producto</th>
-              <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Cochabamba</th>
-              <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Santa Cruz</th>
-              <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Lima</th>
-              <th style={{ padding: '14px 12px', width: '180px', textAlign: 'center' }}>Última actualización</th>
-              <th style={{ padding: '14px 12px', width: '120px', textAlign: 'center' }}>Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                  No hay productos registrados.
-                </td>
+      {isMobile ? (
+        <div className="mobile-cards-list">
+          {products.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px 0' }}>
+              No hay productos registrados.
+            </p>
+          ) : (
+            products.map((product) => {
+              const changed = changedSkuSet.has(product.sku);
+              const inputStyle = {
+                width: '110px',
+                padding: '8px',
+                textAlign: 'center',
+                borderRadius: '6px',
+                border: changed ? '1px solid #f59e0b' : '1px solid #334155',
+                background: '#0f172a',
+                color: 'white'
+              };
+              return (
+                <div
+                  key={product.sku}
+                  className="mobile-card"
+                  style={{ borderColor: changed ? '#f59e0b' : '#334155' }}
+                >
+                  <div className="mobile-card-header">
+                    <span className="mobile-card-id">{product.sku}</span>
+                    <span
+                      className="mobile-card-total"
+                      style={{ color: changed ? '#f59e0b' : '#10b981' }}
+                    >
+                      {changed ? 'Pendiente' : 'Guardado'}
+                    </span>
+                  </div>
+
+                  <div className="mobile-card-body">
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Producto</span>
+                      <span style={{ textAlign: 'right' }}>{product.name}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Cochabamba</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={product.stock_cochabamba ?? 0}
+                        onChange={(e) => handleStockChange(product.sku, 'stock_cochabamba', e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Santa Cruz</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={product.stock_santacruz ?? 0}
+                        onChange={(e) => handleStockChange(product.sku, 'stock_santacruz', e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Lima</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={product.stock_lima ?? 0}
+                        onChange={(e) => handleStockChange(product.sku, 'stock_lima', e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Actualizado</span>
+                      <span>
+                        {product.last_updated
+                          ? new Date(product.last_updated).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })
+                          : '—'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            minWidth: '1100px',
+            tableLayout: 'fixed'
+          }}>
+            <thead>
+              <tr style={{ background: '#0f172a' }}>
+                <th style={{ padding: '14px 12px', width: '100px', textAlign: 'center' }}>SKU</th>
+                <th style={{ padding: '14px 12px', width: '280px', textAlign: 'center' }}>Producto</th>
+                <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Cochabamba</th>
+                <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Santa Cruz</th>
+                <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Lima</th>
+                <th style={{ padding: '14px 12px', width: '180px', textAlign: 'center' }}>Última actualización</th>
+                <th style={{ padding: '14px 12px', width: '120px', textAlign: 'center' }}>Estado</th>
               </tr>
-            ) : (
-              products.map(product => (
-                <tr key={product.sku} style={{ borderBottom: '1px solid #334155' }}>
-                  <td style={{ padding: '14px 12px', textAlign: 'center' }}>{product.sku}</td>
-                  <td style={{ padding: '14px 12px' }}>{product.name}</td>
-
-                  <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                    <input
-                      type="number"
-                      min="0"
-                      value={product.stock_cochabamba ?? 0}
-                      onChange={(e) => handleStockChange(product.sku, 'stock_cochabamba', e.target.value)}
-                      style={{
-                        width: '90px',
-                        padding: '8px',
-                        textAlign: 'center',
-                        borderRadius: '6px',
-                        border: changedSkus.includes(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
-                        background: '#0f172a',
-                        color: 'white'
-                      }}
-                    />
-                  </td>
-
-                  <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                    <input
-                      type="number"
-                      min="0"
-                      value={product.stock_santacruz ?? 0}
-                      onChange={(e) => handleStockChange(product.sku, 'stock_santacruz', e.target.value)}
-                      style={{
-                        width: '90px',
-                        padding: '8px',
-                        textAlign: 'center',
-                        borderRadius: '6px',
-                        border: changedSkus.includes(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
-                        background: '#0f172a',
-                        color: 'white'
-                      }}
-                    />
-                  </td>
-
-                  <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                    <input
-                      type="number"
-                      min="0"
-                      value={product.stock_lima ?? 0}
-                      onChange={(e) => handleStockChange(product.sku, 'stock_lima', e.target.value)}
-                      style={{
-                        width: '90px',
-                        padding: '8px',
-                        textAlign: 'center',
-                        borderRadius: '6px',
-                        border: changedSkus.includes(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
-                        background: '#0f172a',
-                        color: 'white'
-                      }}
-                    />
-                  </td>
-
-                  <td style={{ padding: '14px 12px', textAlign: 'center', color: '#94a3b8' }}>
-                    {product.last_updated 
-                      ? new Date(product.last_updated).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })
-                      : '—'}
-                  </td>
-
-                  <td style={{ padding: '14px 12px', textAlign: 'center', color: changedSkus.includes(product.sku) ? '#f59e0b' : '#10b981', fontWeight: '700' }}>
-                    {changedSkus.includes(product.sku) ? 'Pendiente' : 'Guardado'}
+            </thead>
+            <tbody>
+              {products.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                    No hay productos registrados.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : (
+                products.map(product => (
+                  <tr key={product.sku} style={{ borderBottom: '1px solid #334155' }}>
+                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>{product.sku}</td>
+                    <td style={{ padding: '14px 12px' }}>{product.name}</td>
+
+                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        value={product.stock_cochabamba ?? 0}
+                        onChange={(e) => handleStockChange(product.sku, 'stock_cochabamba', e.target.value)}
+                        style={{
+                          width: '90px',
+                          padding: '8px',
+                          textAlign: 'center',
+                          borderRadius: '6px',
+                          border: changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
+                          background: '#0f172a',
+                          color: 'white'
+                        }}
+                      />
+                    </td>
+
+                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        value={product.stock_santacruz ?? 0}
+                        onChange={(e) => handleStockChange(product.sku, 'stock_santacruz', e.target.value)}
+                        style={{
+                          width: '90px',
+                          padding: '8px',
+                          textAlign: 'center',
+                          borderRadius: '6px',
+                          border: changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
+                          background: '#0f172a',
+                          color: 'white'
+                        }}
+                      />
+                    </td>
+
+                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        value={product.stock_lima ?? 0}
+                        onChange={(e) => handleStockChange(product.sku, 'stock_lima', e.target.value)}
+                        style={{
+                          width: '90px',
+                          padding: '8px',
+                          textAlign: 'center',
+                          borderRadius: '6px',
+                          border: changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
+                          background: '#0f172a',
+                          color: 'white'
+                        }}
+                      />
+                    </td>
+
+                    <td style={{ padding: '14px 12px', textAlign: 'center', color: '#94a3b8' }}>
+                      {product.last_updated 
+                        ? new Date(product.last_updated).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })
+                        : '—'}
+                    </td>
+
+                    <td style={{ padding: '14px 12px', textAlign: 'center', color: changedSkuSet.has(product.sku) ? '#f59e0b' : '#10b981', fontWeight: '700' }}>
+                      {changedSkuSet.has(product.sku) ? 'Pendiente' : 'Guardado'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
