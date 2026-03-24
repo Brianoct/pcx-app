@@ -4,7 +4,9 @@ function InventoryPanel({ token }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [savingRows, setSavingRows] = useState({}); // track which rows are saving
+  const [saving, setSaving] = useState(false);
+  const [originalStocks, setOriginalStocks] = useState({});
+  const [saveMessage, setSaveMessage] = useState('');
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -18,6 +20,15 @@ function InventoryPanel({ token }) {
         }
         const data = await res.json();
         setProducts(data);
+        const baseline = {};
+        for (const p of data) {
+          baseline[p.sku] = {
+            stock_cochabamba: Number(p.stock_cochabamba ?? 0),
+            stock_santacruz: Number(p.stock_santacruz ?? 0),
+            stock_lima: Number(p.stock_lima ?? 0)
+          };
+        }
+        setOriginalStocks(baseline);
       } catch (err) {
         setError(err.message);
       } finally {
@@ -29,50 +40,86 @@ function InventoryPanel({ token }) {
 
   const handleStockChange = (sku, field, value) => {
     const numValue = value === '' ? 0 : Math.max(0, Number(value));
+    setSaveMessage('');
     setProducts(prev => prev.map(p => 
       p.sku === sku ? { ...p, [field]: numValue } : p
     ));
   };
 
-  const saveAllStocks = async (product) => {
-    setSavingRows(prev => ({ ...prev, [product.sku]: true }));
+  const saveAllChanges = async () => {
+    const stores = [
+      { field: 'stock_cochabamba', location: 'Cochabamba' },
+      { field: 'stock_santacruz', location: 'Santa Cruz' },
+      { field: 'stock_lima', location: 'Lima' }
+    ];
 
+    const changedProducts = products.filter((product) => {
+      const base = originalStocks[product.sku];
+      if (!base) return false;
+      return stores.some((store) => Number(product[store.field] ?? 0) !== Number(base[store.field] ?? 0));
+    });
+
+    if (changedProducts.length === 0) return;
+
+    setSaving(true);
+    setSaveMessage('');
     try {
-      const stores = [
-        { field: 'stock_cochabamba', location: 'Cochabamba' },
-        { field: 'stock_santacruz', location: 'Santa Cruz' },
-        { field: 'stock_lima', location: 'Lima' }
-      ];
+      for (const product of changedProducts) {
+        for (const store of stores) {
+          const new_stock = product[store.field] ?? 0;
+          const base = originalStocks[product.sku];
+          if (!base || Number(new_stock) === Number(base[store.field] ?? 0)) continue;
 
-      for (const store of stores) {
-        const new_stock = product[store.field] ?? 0;
+          const res = await fetch(`http://localhost:4000/api/products/${product.sku}/stock`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              store_location: store.location,
+              new_stock
+            })
+          });
 
-        const res = await fetch(`http://localhost:4000/api/products/${product.sku}/stock`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            store_location: store.location,
-            new_stock
-          })
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || `No se pudo actualizar stock en ${store.location}`);
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || `No se pudo actualizar ${product.sku} en ${store.location}`);
+          }
         }
       }
 
-      alert(`Stock actualizado correctamente para ${product.name}`);
+      const refreshedBaseline = {};
+      for (const p of products) {
+        refreshedBaseline[p.sku] = {
+          stock_cochabamba: Number(p.stock_cochabamba ?? 0),
+          stock_santacruz: Number(p.stock_santacruz ?? 0),
+          stock_lima: Number(p.stock_lima ?? 0)
+        };
+      }
+      setOriginalStocks(refreshedBaseline);
+      setSaveMessage(`Se guardaron cambios de ${changedProducts.length} producto(s).`);
     } catch (err) {
-      alert('Error al guardar: ' + err.message);
       console.error(err);
+      setSaveMessage(`Error al guardar: ${err.message}`);
     } finally {
-      setSavingRows(prev => ({ ...prev, [product.sku]: false }));
+      setSaving(false);
     }
   };
+
+  const stores = [
+    { field: 'stock_cochabamba', location: 'Cochabamba' },
+    { field: 'stock_santacruz', location: 'Santa Cruz' },
+    { field: 'stock_lima', location: 'Lima' }
+  ];
+
+  const changedSkus = products.reduce((acc, product) => {
+    const base = originalStocks[product.sku];
+    if (!base) return acc;
+    const changed = stores.some((store) => Number(product[store.field] ?? 0) !== Number(base[store.field] ?? 0));
+    if (changed) acc.push(product.sku);
+    return acc;
+  }, []);
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando inventario...</div>;
   if (error) return <div style={{ color: '#f87171', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
@@ -82,6 +129,56 @@ function InventoryPanel({ token }) {
       <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
         Panel de Inventario
       </h2>
+
+      <div style={{
+        position: 'sticky',
+        top: '70px',
+        zIndex: 20,
+        background: '#0f172a',
+        border: '1px solid #334155',
+        borderRadius: '12px',
+        padding: '12px',
+        marginBottom: '16px',
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px'
+      }}>
+        <div style={{ color: '#94a3b8', fontSize: '0.95rem' }}>
+          Cambios pendientes: <strong style={{ color: changedSkus.length > 0 ? '#f59e0b' : '#10b981' }}>{changedSkus.length}</strong>
+        </div>
+        <button
+          onClick={saveAllChanges}
+          disabled={saving || changedSkus.length === 0}
+          className="btn"
+          style={{
+            padding: '10px 18px',
+            background: saving || changedSkus.length === 0 ? '#475569' : '#10b981',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: saving || changedSkus.length === 0 ? 'not-allowed' : 'pointer',
+            minWidth: '190px',
+            fontWeight: '700'
+          }}
+        >
+          {saving ? 'Guardando cambios...' : 'Guardar cambios de inventario'}
+        </button>
+      </div>
+
+      {saveMessage && (
+        <div style={{
+          marginBottom: '12px',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          color: saveMessage.startsWith('Error') ? '#fecaca' : '#bbf7d0',
+          background: saveMessage.startsWith('Error') ? 'rgba(127, 29, 29, 0.35)' : 'rgba(6, 78, 59, 0.35)',
+          border: saveMessage.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981'
+        }}>
+          {saveMessage}
+        </div>
+      )}
 
       <div style={{ overflowX: 'auto' }}>
         <table style={{
@@ -98,7 +195,7 @@ function InventoryPanel({ token }) {
               <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Santa Cruz</th>
               <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Lima</th>
               <th style={{ padding: '14px 12px', width: '180px', textAlign: 'center' }}>Última actualización</th>
-              <th style={{ padding: '14px 12px', width: '120px', textAlign: 'center' }}>Acción</th>
+              <th style={{ padding: '14px 12px', width: '120px', textAlign: 'center' }}>Estado</th>
             </tr>
           </thead>
           <tbody>
@@ -120,7 +217,15 @@ function InventoryPanel({ token }) {
                       min="0"
                       value={product.stock_cochabamba ?? 0}
                       onChange={(e) => handleStockChange(product.sku, 'stock_cochabamba', e.target.value)}
-                      style={{ width: '90px', padding: '8px', textAlign: 'center', borderRadius: '6px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      style={{
+                        width: '90px',
+                        padding: '8px',
+                        textAlign: 'center',
+                        borderRadius: '6px',
+                        border: changedSkus.includes(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
+                        background: '#0f172a',
+                        color: 'white'
+                      }}
                     />
                   </td>
 
@@ -130,7 +235,15 @@ function InventoryPanel({ token }) {
                       min="0"
                       value={product.stock_santacruz ?? 0}
                       onChange={(e) => handleStockChange(product.sku, 'stock_santacruz', e.target.value)}
-                      style={{ width: '90px', padding: '8px', textAlign: 'center', borderRadius: '6px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      style={{
+                        width: '90px',
+                        padding: '8px',
+                        textAlign: 'center',
+                        borderRadius: '6px',
+                        border: changedSkus.includes(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
+                        background: '#0f172a',
+                        color: 'white'
+                      }}
                     />
                   </td>
 
@@ -140,7 +253,15 @@ function InventoryPanel({ token }) {
                       min="0"
                       value={product.stock_lima ?? 0}
                       onChange={(e) => handleStockChange(product.sku, 'stock_lima', e.target.value)}
-                      style={{ width: '90px', padding: '8px', textAlign: 'center', borderRadius: '6px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      style={{
+                        width: '90px',
+                        padding: '8px',
+                        textAlign: 'center',
+                        borderRadius: '6px',
+                        border: changedSkus.includes(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
+                        background: '#0f172a',
+                        color: 'white'
+                      }}
                     />
                   </td>
 
@@ -150,24 +271,8 @@ function InventoryPanel({ token }) {
                       : '—'}
                   </td>
 
-                  <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                    <button
-                      onClick={() => saveAllStocks(product)}
-                      disabled={savingRows[product.sku]}
-                      style={{
-                        padding: '10px 20px',
-                        background: savingRows[product.sku] ? '#6b7280' : '#10b981',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '8px',
-                        cursor: savingRows[product.sku] ? 'not-allowed' : 'pointer',
-                        fontSize: '0.95rem',
-                        fontWeight: '600',
-                        minWidth: '100px'
-                      }}
-                    >
-                      {savingRows[product.sku] ? 'Guardando...' : 'Guardar Todo'}
-                    </button>
+                  <td style={{ padding: '14px 12px', textAlign: 'center', color: changedSkus.includes(product.sku) ? '#f59e0b' : '#10b981', fontWeight: '700' }}>
+                    {changedSkus.includes(product.sku) ? 'Pendiente' : 'Guardado'}
                   </td>
                 </tr>
               ))
