@@ -9,6 +9,7 @@ import InventoryPanel from './InventoryPanel';
 import PedidosPanel from './PedidosPanel';
 import Combos from './Combos';
 import Cupones from './Cupones';
+import logo from './assets/logo.png';
 import './index.css';
 
 // ─── Login Component ────────────────────────────────────────────────────────
@@ -167,9 +168,15 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
         boxShadow: '0 2px 10px rgba(0,0,0,0.5)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ fontSize: '1.3rem', fontWeight: '700', color: '#e11d48' }}>
-            PCX
-          </span>
+          <img
+            src={logo}
+            alt="PCX"
+            style={{
+              height: '34px',
+              width: 'auto',
+              objectFit: 'contain'
+            }}
+          />
 
           <button 
             className="hamburger"
