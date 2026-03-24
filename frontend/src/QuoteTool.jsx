@@ -50,12 +50,22 @@ export default function QuoteTool({ token, user }) {
   const [almacen, setAlmacen] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
   const [currentDateTime, setCurrentDateTime] = useState('');
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     if (step === 2) {
       const fetchCombos = async () => {
         try {
-          const res = await fetch('http://localhost:4000/api/combos', {
+          const res = await fetch(`${API_BASE}/api/combos`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (res.ok) {
@@ -70,7 +80,7 @@ export default function QuoteTool({ token, user }) {
       };
       fetchCombos();
     }
-  }, [step, token]);
+  }, [step, token, API_BASE]);
 
   useEffect(() => {
     if (step === 2 && rows.length === 0) {
@@ -110,7 +120,7 @@ export default function QuoteTool({ token, user }) {
   const fetchStock = async (sku, store) => {
     if (!sku || !store || sku.startsWith('COMBO_')) return null;
     try {
-      const res = await fetch(`http://localhost:4000/api/stock?sku=${encodeURIComponent(sku)}&store_location=${encodeURIComponent(store)}`, {
+      const res = await fetch(`${API_BASE}/api/stock?sku=${encodeURIComponent(sku)}&store_location=${encodeURIComponent(store)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return null;
@@ -269,7 +279,7 @@ export default function QuoteTool({ token, user }) {
     };
 
     try {
-      const saveRes = await fetch('http://localhost:4000/api/quotes', {
+      const saveRes = await fetch(`${API_BASE}/api/quotes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -400,6 +410,9 @@ export default function QuoteTool({ token, user }) {
     }
   };
 
+  const selectedItemsCount = rows.filter((row) => row.sku).length;
+  const totalUnits = rows.reduce((sum, row) => sum + (Number(row.qty) || 0), 0);
+
   return (
     <div className="container" style={{ paddingTop: '90px' }}>
       <header style={{ textAlign: 'center', marginBottom: '24px' }}>
@@ -410,41 +423,23 @@ export default function QuoteTool({ token, user }) {
         )}
       </header>
 
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+      <div className="quote-stepper">
         <button
           onClick={() => setStep(1)}
-          style={{
-            padding: '12px 24px',
-            background: step === 1 ? '#e11d48' : '#374151',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px 0 0 8px',
-            fontSize: '1rem',
-            cursor: 'pointer',
-            minWidth: '120px'
-          }}
+          className={`quote-step-btn ${step === 1 ? 'active' : ''}`}
         >
-          Cliente
+          1. Cliente
         </button>
         <button
           onClick={() => setStep(2)}
-          style={{
-            padding: '12px 24px',
-            background: step === 2 ? '#e11d48' : '#374151',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0 8px 8px 0',
-            fontSize: '1rem',
-            cursor: 'pointer',
-            minWidth: '120px'
-          }}
+          className={`quote-step-btn ${step === 2 ? 'active' : ''}`}
         >
-          Productos
+          2. Productos
         </button>
       </div>
 
       {step === 1 && (
-        <div className="card">
+        <div className="card quote-client-card">
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
@@ -632,113 +627,183 @@ export default function QuoteTool({ token, user }) {
       )}
 
       {step === 2 && (
-        <div className="card">
-          <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af' }}>
-              <input type="radio" name="venta-type" value="sf" checked={ventaType === 'sf'} onChange={() => setVentaType('sf')} />
-              Sin Factura
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af' }}>
-              <input type="radio" name="venta-type" value="cf" checked={ventaType === 'cf'} onChange={() => setVentaType('cf')} />
-              Con Factura
-            </label>
+        <div className="card quote-products-card">
+          <div className="quote-products-toolbar">
+            <div className="quote-sale-type-group">
+              <button
+                type="button"
+                className={`quote-sale-type-btn ${ventaType === 'sf' ? 'active' : ''}`}
+                onClick={() => setVentaType('sf')}
+              >
+                Sin Factura
+              </button>
+              <button
+                type="button"
+                className={`quote-sale-type-btn ${ventaType === 'cf' ? 'active' : ''}`}
+                onClick={() => setVentaType('cf')}
+              >
+                Con Factura
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={addRow}
+              className="btn btn-secondary"
+            >
+              + Agregar línea
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={addRow}
-            style={{
-              display: 'block',
-              margin: '0 auto 24px',
-              padding: '12px 24px',
-              background: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '1rem',
-              cursor: 'pointer'
-            }}
-          >
-            + Agregar línea
-          </button>
+          <div className="quote-products-meta">
+            <span>Líneas: <strong>{rows.length}</strong></span>
+            <span>Productos: <strong>{selectedItemsCount}</strong></span>
+            <span>Unidades: <strong>{totalUnits}</strong></span>
+          </div>
 
-          <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
-              <thead>
-                <tr style={{ background: '#111827' }}>
-                  <th style={{ padding: '12px', textAlign: 'left' }}>Producto / Combo</th>
-                  <th style={{ padding: '12px', width: '80px' }}>Cant.</th>
-                  <th style={{ padding: '12px', width: '80px', textAlign: 'center' }}>Disp.</th>
-                  <th style={{ padding: '12px', width: '100px', textAlign: 'right' }}>Unit.</th>
-                  <th style={{ padding: '12px', width: '120px', textAlign: 'right' }}>Subt.</th>
-                  <th style={{ padding: '12px', width: '60px' }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
-                      Agrega líneas arriba
-                    </td>
+          {isMobile ? (
+            <div className="mobile-cards-list" style={{ marginBottom: '20px' }}>
+              {rows.map((row) => {
+                const stock = row.availableStock;
+                const stockDisplay = row.isCombo ? 'Combo' : (stock === null ? 'Cargando...' : stock);
+                const stockColor = row.isCombo ? '#e11d48' : (stock === null ? '#9ca3af' : Number(stock) > 0 ? '#10b981' : '#ef4444');
+
+                return (
+                  <div key={row.id} className="mobile-card">
+                    <div className="mobile-card-header">
+                      <span className="mobile-card-id">Línea #{rows.indexOf(row) + 1}</span>
+                      <span className="mobile-card-total">{(row.lineTotal || 0).toFixed(2)} Bs</span>
+                    </div>
+
+                    <div className="mobile-card-body">
+                      <div>
+                        <label className="mobile-card-label">Producto / Combo</label>
+                        <select
+                          value={row.sku || ''}
+                          onChange={(e) => handleProductSelect(row.id, e.target.value)}
+                          className="mobile-select"
+                          style={{ width: '100%', marginTop: '6px' }}
+                        >
+                          <option value="">Seleccionar producto / combo...</option>
+                          {allItems.map((item) => (
+                            <option key={item.sku} value={item.sku}>
+                              {item.displayName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Cantidad</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={row.qty}
+                          onChange={(e) => handleQtyChange(row.id, e.target.value)}
+                          className="mobile-select"
+                          style={{ width: '90px', textAlign: 'center', flex: '0 0 90px' }}
+                        />
+                      </div>
+
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Disponibilidad</span>
+                        <span style={{ color: stockColor, fontWeight: 700 }}>{stockDisplay}</span>
+                      </div>
+
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Precio unitario</span>
+                        <span>{(row.unitPrice || 0).toFixed(2)} Bs</span>
+                      </div>
+                    </div>
+
+                    <div className="mobile-card-actions">
+                      <button className="btn btn-danger" onClick={() => confirmAndDeleteRow(row.id)}>
+                        Eliminar línea
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                <thead>
+                  <tr style={{ background: '#111827' }}>
+                    <th style={{ padding: '12px', textAlign: 'left' }}>Producto / Combo</th>
+                    <th style={{ padding: '12px', width: '80px' }}>Cant.</th>
+                    <th style={{ padding: '12px', width: '80px', textAlign: 'center' }}>Disp.</th>
+                    <th style={{ padding: '12px', width: '100px', textAlign: 'right' }}>Unit.</th>
+                    <th style={{ padding: '12px', width: '120px', textAlign: 'right' }}>Subt.</th>
+                    <th style={{ padding: '12px', width: '60px' }}></th>
                   </tr>
-                ) : (
-                  rows.map((row) => {
-                    const stock = row.availableStock;
-                    let stockDisplay = row.isCombo ? 'Combo' : (stock === null ? 'Cargando...' : stock);
-                    let stockColor = row.isCombo ? '#e11d48' : (stock === null ? '#9ca3af' : '#10b981');
+                </thead>
+                <tbody>
+                  {rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
+                        Agrega líneas arriba
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((row) => {
+                      const stock = row.availableStock;
+                      const stockDisplay = row.isCombo ? 'Combo' : (stock === null ? 'Cargando...' : stock);
+                      const stockColor = row.isCombo ? '#e11d48' : (stock === null ? '#9ca3af' : '#10b981');
 
-                    return (
-                      <tr key={row.id} style={{ borderBottom: '1px solid #374151' }}>
-                        <td style={{ padding: '12px' }}>
-                          <select
-                            value={row.sku || ''}
-                            onChange={(e) => handleProductSelect(row.id, e.target.value)}
-                            style={{ width: '100%', padding: '10px', fontSize: '0.95rem', borderRadius: '6px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
-                          >
-                            <option value="">Seleccionar producto / combo...</option>
-                            {allItems.map(item => (
-                              <option key={item.sku} value={item.sku}>
-                                {item.displayName}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <input
-                            type="number"
-                            min="1"
-                            value={row.qty}
-                            onChange={(e) => handleQtyChange(row.id, e.target.value)}
-                            style={{ width: '100%', padding: '10px', fontSize: '0.95rem', textAlign: 'center', borderRadius: '6px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
-                          />
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center', color: stockColor, fontWeight: '600' }}>
-                          {stockDisplay}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'right' }}>
-                          {(row.unitPrice || 0).toFixed(2)}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>
-                          {(row.lineTotal || 0).toFixed(2)}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          <button
-                            onClick={() => confirmAndDeleteRow(row.id)}
-                            style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '1.4rem', cursor: 'pointer' }}
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                      return (
+                        <tr key={row.id} style={{ borderBottom: '1px solid #374151' }}>
+                          <td style={{ padding: '12px' }}>
+                            <select
+                              value={row.sku || ''}
+                              onChange={(e) => handleProductSelect(row.id, e.target.value)}
+                              style={{ width: '100%', padding: '10px', fontSize: '0.95rem', borderRadius: '6px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                            >
+                              <option value="">Seleccionar producto / combo...</option>
+                              {allItems.map(item => (
+                                <option key={item.sku} value={item.sku}>
+                                  {item.displayName}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <input
+                              type="number"
+                              min="1"
+                              value={row.qty}
+                              onChange={(e) => handleQtyChange(row.id, e.target.value)}
+                              style={{ width: '100%', padding: '10px', fontSize: '0.95rem', textAlign: 'center', borderRadius: '6px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                            />
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center', color: stockColor, fontWeight: '600' }}>
+                            {stockDisplay}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'right' }}>
+                            {(row.unitPrice || 0).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>
+                            {(row.lineTotal || 0).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => confirmAndDeleteRow(row.id)}
+                              style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '1.4rem', cursor: 'pointer' }}
+                            >
+                              ×
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Summary - only % discount and rounding */}
-          <div style={{
+          <div className="quote-summary-panel" style={{
             position: 'sticky',
             bottom: 0,
             left: 0,
@@ -791,20 +856,17 @@ export default function QuoteTool({ token, user }) {
               type="button"
               disabled={!canSave}
               onClick={saveAndGeneratePDF}
+              className="btn btn-primary"
               style={{
                 width: '100%',
                 marginTop: '16px',
-                padding: '14px',
-                background: canSave ? '#e11d48' : '#374151',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
                 fontSize: '1.1rem',
                 fontWeight: '600',
+                opacity: canSave ? 1 : 0.6,
                 cursor: canSave ? 'pointer' : 'not-allowed'
               }}
             >
-              Guardar / Generar PDF
+              Guardar y generar PDF
             </button>
           </div>
         </div>
