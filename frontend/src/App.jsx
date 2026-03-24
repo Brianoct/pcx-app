@@ -109,10 +109,18 @@ function Login({ onLogin }) {
   );
 }
 
+const normalizeRole = (value = '') =>
+  value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 // ─── NavMenu Component ──────────────────────────────────────────────────────
-function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller }) {
+function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, role }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
+  const roleNormalized = normalizeRole(role || '');
+  const isAdmin = roleNormalized === 'admin';
+  const canSeeInventory = isAdmin || roleNormalized.includes('almacen');
+  const canSeePedidos = isAdmin || roleNormalized.includes('almacen') || roleNormalized.includes('ventas lider');
+  const canSeeMarketing = isAdmin || roleNormalized.includes('marketing');
 
   useEffect(() => {
     setMenuOpen(false);
@@ -175,6 +183,15 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller }) 
             <NavLink to="/" label="Cotizar" />
             <NavLink to="/history" label="Historial" />
             <NavLink to="/performance" label="Rendimiento" />
+            {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
+            {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
+            {canSeeMarketing && (
+              <>
+                <NavLink to="/combos" label="Combos" />
+                <NavLink to="/cupones" label="Cupones" />
+              </>
+            )}
+            {isAdmin && <NavLink to="/admin" label="Admin" />}
           </div>
         </div>
 
@@ -220,6 +237,15 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller }) 
         <NavLink to="/" label="Cotizar" />
         <NavLink to="/history" label="Historial" />
         <NavLink to="/performance" label="Rendimiento" />
+        {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
+        {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
+        {canSeeMarketing && (
+          <>
+            <NavLink to="/combos" label="Combos" />
+            <NavLink to="/cupones" label="Cupones" />
+          </>
+        )}
+        {isAdmin && <NavLink to="/admin" label="Admin" />}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px' }}>
           <span style={{ color: '#9ca3af', fontWeight: '500' }}>
@@ -348,11 +374,11 @@ function App() {
   }
 
   const displayName = user ? user.email.split('@')[0] : 'Usuario';
-
-  const isAlmacenLider = role?.toLowerCase().includes('almacen lider');
-  const isMarketingLider = role?.toLowerCase().includes('marketing lider');
-
-  const defaultPath = isAlmacenLider ? '/pedidos' : isMarketingLider ? '/combos' : '/';
+  const roleNormalized = normalizeRole(role || '');
+  const isAdmin = roleNormalized === 'admin';
+  const isAlmacenLider = roleNormalized.includes('almacen lider');
+  const isMarketingLider = roleNormalized.includes('marketing lider');
+  const defaultPath = isAdmin ? '/admin' : isAlmacenLider ? '/pedidos' : isMarketingLider ? '/combos' : '/';
 
   return (
     <Router>
@@ -361,6 +387,7 @@ function App() {
         handleLogout={handleLogout}
         currentCommission={currentCommission}
         isTopSeller={isTopSeller}
+        role={role}
       />
 
       <Routes>
