@@ -218,13 +218,13 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
       isTeamView 
         ? `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                   q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                  q.total, q.status, q.created_at, u.phone AS seller_phone
+                  q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
            FROM quotes q
            LEFT JOIN users u ON u.id = q.user_id
            ORDER BY q.created_at DESC`
         : `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                   q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                  q.total, q.status, q.created_at, u.phone AS seller_phone
+                  q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
            FROM quotes q
            LEFT JOIN users u ON u.id = q.user_id
            WHERE q.user_id = $1
