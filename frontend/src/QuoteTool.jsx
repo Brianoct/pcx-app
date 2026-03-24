@@ -1,7 +1,7 @@
 // QuoteTool.jsx
 import { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
-import logo from './assets/logo.png'; // Adjust path if needed
+import logo from './assets/PCX.png';
 
 export default function QuoteTool({ token, user }) {
   const regularProducts = [

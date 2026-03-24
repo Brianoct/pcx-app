@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
-import logo from './assets/logo.png';
+import logo from './assets/PCX.png';
 
 function PedidosPanel({ token, role }) {
   const [pedidos, setPedidos] = useState([]);

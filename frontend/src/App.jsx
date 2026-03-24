@@ -9,7 +9,7 @@ import InventoryPanel from './InventoryPanel';
 import PedidosPanel from './PedidosPanel';
 import Combos from './Combos';
 import Cupones from './Cupones';
-import logo from './assets/logo.png';
+import logo from './assets/PCX.png';
 import './index.css';
 
 // ─── Login Component ────────────────────────────────────────────────────────
