@@ -287,6 +287,7 @@ function App() {
   const [role, setRole] = useState(() => localStorage.getItem('role'));
   const [currentCommission, setCurrentCommission] = useState(0);
   const [isTopSeller, setIsTopSeller] = useState(false);
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
   const handleLogin = (newToken, userData) => {
     localStorage.setItem('token', newToken);
@@ -308,60 +309,30 @@ function App() {
     setIsTopSeller(false);
   };
 
-  const handleTopSellerUpdate = (topInfo) => {
-    if (!topInfo || !user) return;
-
-    if (topInfo.comision !== null && topInfo.comision !== undefined) {
-      const isMeTop = topInfo.vendor && topInfo.vendor.toLowerCase().includes(user.email.toLowerCase());
-      setIsTopSeller(isMeTop);
-      setCurrentCommission(topInfo.comision);
-    }
-  };
+  const handleTopSellerUpdate = () => {};
 
   useEffect(() => {
     if (token && user) {
       fetchPersonalCommission();
     }
-  }, [token, user]);
+  }, [token, user, role]);
 
   const fetchPersonalCommission = async () => {
     try {
       const params = new URLSearchParams({
-        team: 'false',
         month: new Date().getMonth() + 1,
         year: new Date().getFullYear()
       });
 
-      const res = await fetch(`http://localhost:4000/api/performance?${params.toString()}`, {
+      const res = await fetch(`${API_BASE}/api/commission/current?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to fetch personal data');
+      if (!res.ok) throw new Error('Failed to fetch personal commission');
 
       const data = await res.json();
-
-      let commission = 0;
-      let topSeller = false;
-
-      if (role?.toLowerCase().includes('ventas lider') || role?.toLowerCase() === 'admin') {
-        // Leader: 5% override
-        const teamRes = await fetch(`http://localhost:4000/api/performance?team=true&month=${params.get('month')}&year=${params.get('year')}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (teamRes.ok) {
-          const teamData = await teamRes.json();
-          const totalTeam = Array.isArray(teamData) ? teamData.reduce((sum, item) => sum + Number(item.ventas_totales || 0), 0) : 0;
-          commission = totalTeam * 0.05;
-        }
-      } else {
-        // Regular seller: personal commission (8% default)
-        const mySales = Number(data.ventas_totales || 0);
-        commission = mySales * 0.08;
-        topSeller = false; // Regular users cannot see team ranking
-      }
-
-      setCurrentCommission(commission);
-      setIsTopSeller(topSeller);
+      setCurrentCommission(Number(data?.commission || 0));
+      setIsTopSeller(Boolean(data?.isTopSeller));
     } catch (err) {
       console.error('Error fetching personal commission:', err);
       setCurrentCommission(0);

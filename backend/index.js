@@ -18,7 +18,35 @@ const pool = new Pool({
 });
 
 const normalizeRole = (value = '') =>
-  value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const COMPLETED_STATUSES = ['Confirmado', 'Pagado', 'Embalado', 'Enviado'];
+
+const buildDateFilter = (month, year, tableAlias = 'q', startIndex = 1) => {
+  const params = [];
+  const clauses = [];
+
+  const monthNum = month !== undefined ? Number.parseInt(month, 10) : null;
+  const yearNum = year !== undefined ? Number.parseInt(year, 10) : null;
+
+  if (month !== undefined && (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12)) {
+    return { error: 'Mes inválido. Debe estar entre 1 y 12' };
+  }
+  if (year !== undefined && (!Number.isInteger(yearNum) || yearNum < 2000 || yearNum > 3000)) {
+    return { error: 'Año inválido' };
+  }
+
+  if (monthNum !== null) {
+    params.push(monthNum);
+    clauses.push(`EXTRACT(MONTH FROM ${tableAlias}.created_at) = $${startIndex + params.length - 1}`);
+  }
+  if (yearNum !== null) {
+    params.push(yearNum);
+    clauses.push(`EXTRACT(YEAR FROM ${tableAlias}.created_at) = $${startIndex + params.length - 1}`);
+  }
+
+  const sql = clauses.length ? ` AND ${clauses.join(' AND ')}` : '';
+  return { params, sql };
+};
 
 // Middleware: Verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -667,66 +695,36 @@ app.get('/api/performance', authenticateToken, async (req, res) => {
   if (isTeamView && !['ventas lider', 'admin'].includes(userRoleNormalized)) {
     return res.status(403).json({ error: 'Solo Ventas Líder o Admin pueden ver rendimiento del equipo' });
   }
-
-  const monthNum = month !== undefined ? Number.parseInt(month, 10) : null;
-  const yearNum = year !== undefined ? Number.parseInt(year, 10) : null;
-
-  if (month !== undefined && (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12)) {
-    return res.status(400).json({ error: 'Mes inválido. Debe estar entre 1 y 12' });
-  }
-  if (year !== undefined && (!Number.isInteger(yearNum) || yearNum < 2000 || yearNum > 3000)) {
-    return res.status(400).json({ error: 'Año inválido' });
-  }
+  const dateFilter = buildDateFilter(month, year, 'q', 2);
+  if (dateFilter.error) return res.status(400).json({ error: dateFilter.error });
 
   try {
     if (isTeamView) {
-      const teamParams = [];
-      const teamDateClauses = [];
-
-      if (monthNum !== null) {
-        teamParams.push(monthNum);
-        teamDateClauses.push(`EXTRACT(MONTH FROM q.created_at) = $${teamParams.length}`);
-      }
-      if (yearNum !== null) {
-        teamParams.push(yearNum);
-        teamDateClauses.push(`EXTRACT(YEAR FROM q.created_at) = $${teamParams.length}`);
-      }
-
-      const teamDateFilter = teamDateClauses.length ? ` AND ${teamDateClauses.join(' AND ')}` : '';
       const queryText = `
         SELECT 
+          u.id as user_id,
           u.email as usuario,
-          COUNT(q.id) FILTER (WHERE q.status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado')) as cotizaciones_confirmadas,
-          COALESCE(SUM(q.total) FILTER (WHERE q.status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado')), 0) as ventas_totales
+          u.role as rol,
+          COUNT(q.id) FILTER (WHERE q.status = ANY($1::text[])) as cotizaciones_confirmadas,
+          COALESCE(SUM(q.total) FILTER (WHERE q.status = ANY($1::text[])), 0) as ventas_totales
         FROM users u
-        LEFT JOIN quotes q ON u.id = q.user_id${teamDateFilter}
+        LEFT JOIN quotes q ON u.id = q.user_id${dateFilter.sql}
         WHERE u.role ILIKE '%ventas%' OR u.role ILIKE '%sales%' OR u.role ILIKE '%vendedor%'
-        GROUP BY u.id, u.email
+        GROUP BY u.id, u.email, u.role
         ORDER BY ventas_totales DESC
       `;
-
-      const result = await pool.query(queryText, teamParams);
+      const result = await pool.query(queryText, [COMPLETED_STATUSES, ...dateFilter.params]);
       res.json(result.rows || []);
     } else {
-      const personalParams = [req.user.id];
-      const personalDateClauses = [];
-
-      if (monthNum !== null) {
-        personalParams.push(monthNum);
-        personalDateClauses.push(`EXTRACT(MONTH FROM q.created_at) = $${personalParams.length}`);
-      }
-      if (yearNum !== null) {
-        personalParams.push(yearNum);
-        personalDateClauses.push(`EXTRACT(YEAR FROM q.created_at) = $${personalParams.length}`);
-      }
-
-      const personalDateFilter = personalDateClauses.length ? ` AND ${personalDateClauses.join(' AND ')}` : '';
+      const personalDateFilter = buildDateFilter(month, year, 'q', 3);
+      if (personalDateFilter.error) return res.status(400).json({ error: personalDateFilter.error });
+      const personalParams = [req.user.id, COMPLETED_STATUSES, ...personalDateFilter.params];
       const result = await pool.query(
         `SELECT 
-          COUNT(id) FILTER (WHERE status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado')) as cotizaciones_confirmadas,
-          COALESCE(SUM(total) FILTER (WHERE status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado')), 0) as ventas_totales
+          COUNT(id) FILTER (WHERE status = ANY($2::text[])) as cotizaciones_confirmadas,
+          COALESCE(SUM(total) FILTER (WHERE status = ANY($2::text[])), 0) as ventas_totales
         FROM quotes q
-        WHERE user_id = $1${personalDateFilter}`,
+        WHERE user_id = $1${personalDateFilter.sql}`,
         personalParams
       );
       res.json(result.rows[0] || { cotizaciones_confirmadas: 0, ventas_totales: 0 });
@@ -734,6 +732,123 @@ app.get('/api/performance', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Performance endpoint error:', err.stack);
     res.status(500).json({ error: 'Error interno al obtener rendimiento: ' + err.message });
+  }
+});
+
+// ─── Current user commission (nav box) ──────────────────────────────────────
+app.get('/api/commission/current', authenticateToken, async (req, res) => {
+  const { month, year } = req.query;
+  const userRoleNormalized = normalizeRole(req.user.role || '');
+  const isAdmin = userRoleNormalized === 'admin';
+  const isVentasLider = userRoleNormalized.includes('ventas lider');
+  const isMarketingLider = userRoleNormalized.includes('marketing lider');
+  const isSalesSeller = ['ventas', 'sales', 'vendedor'].includes(userRoleNormalized);
+
+  const allSalesDateFilter = buildDateFilter(month, year, 'q', 2);
+  if (allSalesDateFilter.error) return res.status(400).json({ error: allSalesDateFilter.error });
+  const teamDateFilter = buildDateFilter(month, year, 'q', 3);
+  if (teamDateFilter.error) return res.status(400).json({ error: teamDateFilter.error });
+  const ownDateFilter = buildDateFilter(month, year, 'q', 3);
+  if (ownDateFilter.error) return res.status(400).json({ error: ownDateFilter.error });
+
+  try {
+    // Admins do not receive commission.
+    if (isAdmin) {
+      return res.json({
+        commission: 0,
+        isTopSeller: false,
+        topSellerEmail: null,
+        breakdown: { role: req.user.role || 'Admin', rate: 0, source: 'No aplica para Admin' }
+      });
+    }
+
+    // Total completed sales in period (used by leader/marketing rules).
+    const allSalesRes = await pool.query(
+      `SELECT COALESCE(SUM(q.total), 0) AS total_sales
+       FROM quotes q
+       WHERE q.status = ANY($1::text[])${allSalesDateFilter.sql}`,
+      [COMPLETED_STATUSES, ...allSalesDateFilter.params]
+    );
+    const allSales = Number(allSalesRes.rows[0]?.total_sales || 0);
+
+    if (isMarketingLider) {
+      return res.json({
+        commission: allSales * 0.05,
+        isTopSeller: false,
+        topSellerEmail: null,
+        breakdown: { role: req.user.role, rate: 0.05, source: '5% de todas las ventas' }
+      });
+    }
+
+    if (isVentasLider) {
+      // Ventas Lider: 5% on own sales + all users with exactly Ventas role.
+      const teamSalesRes = await pool.query(
+        `SELECT COALESCE(SUM(q.total), 0) AS total_sales
+         FROM quotes q
+         JOIN users u ON u.id = q.user_id
+         WHERE q.status = ANY($1::text[])
+           AND (LOWER(u.role) = 'ventas' OR u.id = $2)${teamDateFilter.sql}`,
+        [COMPLETED_STATUSES, req.user.id, ...teamDateFilter.params]
+      );
+      const teamSales = Number(teamSalesRes.rows[0]?.total_sales || 0);
+      return res.json({
+        commission: teamSales * 0.05,
+        isTopSeller: false,
+        topSellerEmail: null,
+        breakdown: { role: req.user.role, rate: 0.05, source: '5% ventas equipo + propias' }
+      });
+    }
+
+    // Sales users: top seller gets 12%, all others 8%.
+    if (isSalesSeller) {
+      const ownSalesRes = await pool.query(
+        `SELECT COALESCE(SUM(q.total), 0) AS total_sales
+         FROM quotes q
+         WHERE q.user_id = $1
+           AND q.status = ANY($2::text[])${ownDateFilter.sql}`,
+        [req.user.id, COMPLETED_STATUSES, ...ownDateFilter.params]
+      );
+      const ownSales = Number(ownSalesRes.rows[0]?.total_sales || 0);
+
+      const rankingRes = await pool.query(
+        `SELECT
+           u.id AS user_id,
+           u.email AS email,
+           COALESCE(SUM(q.total), 0) AS total_sales
+         FROM users u
+         LEFT JOIN quotes q
+           ON q.user_id = u.id
+           AND q.status = ANY($1::text[])${allSalesDateFilter.sql}
+         WHERE LOWER(u.role) IN ('ventas', 'sales', 'vendedor')
+         GROUP BY u.id, u.email
+         ORDER BY total_sales DESC, u.id ASC
+         LIMIT 1`,
+        [COMPLETED_STATUSES, ...allSalesDateFilter.params]
+      );
+
+      const topSeller = rankingRes.rows[0] || null;
+      const topSellerId = topSeller ? Number(topSeller.user_id) : null;
+      const isTopSeller = topSellerId === Number(req.user.id) && Number(topSeller.total_sales || 0) > 0;
+      const rate = isTopSeller ? 0.12 : 0.08;
+
+      return res.json({
+        commission: ownSales * rate,
+        isTopSeller,
+        topSellerEmail: topSeller?.email || null,
+        breakdown: { role: req.user.role, rate, source: '12% top seller / 8% resto' }
+      });
+    }
+
+    // Non-sales roles without explicit commission rule.
+    return res.json({
+      commission: 0,
+      isTopSeller: false,
+      topSellerEmail: null,
+      breakdown: { role: req.user.role || 'Sin rol', rate: 0, source: 'Rol sin comisión configurada' }
+    });
+  } catch (err) {
+    console.error('Commission endpoint error:', err.stack);
+    res.status(500).json({ error: 'Error interno al calcular comisión: ' + err.message });
   }
 });
 
