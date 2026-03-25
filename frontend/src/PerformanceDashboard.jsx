@@ -112,7 +112,7 @@ function PerformanceDashboard({ token, user, role, access }) {
                 ...row,
                 rate,
                 commission: row.totalVentas * rate,
-                rule: isTop ? 'Top seller (12%)' : 'Vendedor (8%)',
+                rule: isTop ? 'Mejor en ventas (12%)' : 'Vendedor (8%)',
                 isTopSeller: isTop
               };
             }
@@ -199,7 +199,7 @@ function PerformanceDashboard({ token, user, role, access }) {
             <KpiCard
               label="Tasa aplicada"
               value={`${(personal.rate * 100).toFixed(0)}%`}
-              hint={personal.isTopSeller ? 'Top seller actual' : 'Tasa regular'}
+              hint={personal.isTopSeller ? 'Mejor en ventas actual' : 'Tasa regular'}
               accent={personal.isTopSeller ? '#facc15' : '#cbd5e1'}
             />
           </div>
@@ -211,7 +211,7 @@ function PerformanceDashboard({ token, user, role, access }) {
             </p>
             {commissionInfo?.isTopSeller && (
               <div style={{ color: '#facc15', fontWeight: 700 }}>
-                Eres top seller del período. Se aplica 12%.
+                Eres quien lidera las ventas del período. Se aplica 12%.
               </div>
             )}
           </div>
@@ -224,7 +224,7 @@ function PerformanceDashboard({ token, user, role, access }) {
             <KpiCard label="Ventas equipo" value={formatMoney(totalTeamVentas)} accent="#60a5fa" />
             <KpiCard label="Cotizaciones confirmadas" value={String(totalTeamCotizaciones)} accent="#f59e0b" />
             <KpiCard label="Comisiones estimadas" value={formatMoney(totalTeamCommissions)} accent="#10b981" hint="Suma de reglas por rol" />
-            <KpiCard label="Top seller" value={topSeller ? topSeller.vendor : 'Sin datos'} hint={topSeller ? formatMoney(topSeller.totalVentas) : ''} accent="#facc15" />
+            <KpiCard label="Mejor en ventas" value={topSeller ? topSeller.vendor : 'Sin datos'} hint={topSeller ? formatMoney(topSeller.totalVentas) : ''} accent="#facc15" />
             {isVentasLider && <KpiCard label="Comisión líder" value={formatMoney(leaderCommission)} hint="5% equipo + propias" accent="#22c55e" />}
           </div>
 

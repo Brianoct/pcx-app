@@ -1185,7 +1185,7 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
       });
     }
 
-    // Sales users: top seller gets 12%, all others 8%.
+    // Usuarios de ventas: quien lidera ventas recibe 12%, los demás 8%.
     if (isSalesSeller) {
       const ownSalesRes = await pool.query(
         `SELECT COALESCE(SUM(q.total), 0) AS total_sales
@@ -1221,7 +1221,7 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
         commission: ownSales * rate,
         isTopSeller,
         topSellerEmail: topSeller?.email || null,
-        breakdown: { role: req.user.role, rate, source: '12% top seller / 8% resto' }
+        breakdown: { role: req.user.role, rate, source: '12% líder en ventas / 8% resto' }
       });
     }
 
