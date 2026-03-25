@@ -141,7 +141,7 @@ function PerformanceDashboard({ token, user, role, access }) {
         setRows(enriched);
         setPersonal(null);
       } catch (err) {
-        console.error('Error fetching performance dashboard:', err);
+        console.error('Error al cargar el panel de rendimiento:', err);
         setError(err.message || 'Error al cargar rendimiento');
       } finally {
         setLoading(false);
@@ -175,7 +175,7 @@ function PerformanceDashboard({ token, user, role, access }) {
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
       <h2 style={{ textAlign: 'center', color: '#f87171', marginBottom: '8px' }}>
-        Dashboard de Rendimiento
+        Panel de Rendimiento
       </h2>
       <p style={{ textAlign: 'center', color: '#94a3b8', marginBottom: '22px' }}>
         {viewMode === 'global' ? 'Vista global del equipo de ventas' : 'Vista individual de vendedor'}

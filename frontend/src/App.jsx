@@ -30,7 +30,7 @@ function Login({ onLogin }) {
       });
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.error || 'Login failed');
+        throw new Error(errData.error || 'No se pudo iniciar sesión');
       }
       const data = await res.json();
       onLogin(data.token, data.user);
@@ -277,7 +277,7 @@ function App() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to fetch personal commission');
+      if (!res.ok) throw new Error('No se pudo cargar la comisión');
 
       const data = await res.json();
       setCurrentCommission(Number(data?.commission || 0));

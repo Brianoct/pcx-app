@@ -30,7 +30,7 @@ function AdminDashboard({ token }) {
     }
   };
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando dashboard...</div>;
+  if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando panel...</div>;
   if (!stats) return <div style={{ textAlign: 'center', padding: '50px', color: '#f87171' }}>No hay datos disponibles</div>;
 
   const maxQty = Math.max(...stats.popularProducts.map(p => p.total_quantity || 0), 1);
@@ -38,7 +38,7 @@ function AdminDashboard({ token }) {
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
       <h1 style={{ textAlign: 'center', color: '#f87171', marginBottom: '30px' }}>
-        Dashboard - Estadísticas Mensuales
+        Panel de Estadísticas Mensuales
       </h1>
 
       {/* Month/Year Selector */}

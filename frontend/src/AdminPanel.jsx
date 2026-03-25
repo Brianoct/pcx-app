@@ -481,7 +481,7 @@ function UserManagement({ token }) {
   );
 }
 
-function StatisticsDashboard({ token }) {
+function StatisticsPanel({ token }) {
   return <AdminDashboard token={token} />;
 }
 
@@ -666,15 +666,15 @@ function AdminPanel({ token }) {
         <button onClick={() => setActiveTab('roles')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'roles' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'roles' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'roles' ? '600' : '500', cursor: 'pointer' }}>
           Configuración de Roles
         </button>
-        <button onClick={() => setActiveTab('dashboard')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'dashboard' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'dashboard' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'dashboard' ? '600' : '500', cursor: 'pointer' }}>
-          Dashboard
+        <button onClick={() => setActiveTab('estadisticas')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'estadisticas' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'estadisticas' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'estadisticas' ? '600' : '500', cursor: 'pointer' }}>
+          Estadísticas
         </button>
       </div>
 
       <div>
         {activeTab === 'usuarios' && <UserManagement token={token} />}
         {activeTab === 'roles' && <RoleConfiguration token={token} />}
-        {activeTab === 'dashboard' && <StatisticsDashboard token={token} />}
+        {activeTab === 'estadisticas' && <StatisticsPanel token={token} />}
       </div>
     </div>
   );

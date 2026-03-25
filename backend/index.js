@@ -211,10 +211,10 @@ const buildDateFilter = (month, year, tableAlias = 'q', startIndex = 1) => {
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token provided' });
+  if (!token) return res.status(401).json({ error: 'No se proporcionó token' });
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid token' });
+    if (err) return res.status(403).json({ error: 'Token inválido' });
     req.user = user;
     next();
   });
@@ -225,7 +225,7 @@ const requireRole = (roles) => (req, res, next) => {
   const userRole = normalizeRole(req.user.role || '');
   const allowed = roles.map((r) => normalizeRole(r));
   if (!allowed.includes(userRole)) {
-    return res.status(403).json({ error: 'Insufficient permissions' });
+    return res.status(403).json({ error: 'Permisos insuficientes' });
   }
   next();
 };
@@ -234,7 +234,7 @@ const requireRole = (roles) => (req, res, next) => {
 app.post('/api/register', authenticateToken, requireRole(['admin']), async (req, res) => {
   const { email, password, role, city, phone } = req.body;
   if (!email || !password || !role) {
-    return res.status(400).json({ error: 'Missing required fields' });
+    return res.status(400).json({ error: 'Faltan campos requeridos' });
   }
 
   // Validate phone (optional, but if provided must be 8 digits)
@@ -251,21 +251,21 @@ app.post('/api/register', authenticateToken, requireRole(['admin']), async (req,
     res.status(201).json({ message: 'User created' });
   } catch (err) {
     console.error(err);
-    if (err.code === '23505') return res.status(409).json({ error: 'Email already exists' });
-    res.status(500).json({ error: 'Registration failed' });
+    if (err.code === '23505') return res.status(409).json({ error: 'El correo ya existe' });
+    res.status(500).json({ error: 'Registro fallido' });
   }
 });
 
 // ─── LOGIN ──────────────────────────────────────────────────────────────────
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Missing email or password' });
+  if (!email || !password) return res.status(400).json({ error: 'Faltan correo o contraseña' });
 
   try {
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     const user = result.rows[0];
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Credenciales inválidas' });
     }
 
     const tokenUser = buildUserPayload(user);
@@ -288,7 +288,7 @@ app.post('/api/login', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Inicio de sesión fallido' });
   }
 });
 
@@ -755,7 +755,7 @@ app.get('/api/combos', authenticateToken, async (req, res) => {
     res.json(combos);
   } catch (err) {
     console.error('Error fetching combos:', err);
-    res.status(500).json({ error: 'Failed to load combos' });
+    res.status(500).json({ error: 'No se pudieron cargar combos' });
   }
 });
 
@@ -764,7 +764,7 @@ app.post('/api/combos', authenticateToken, requireRole(['Marketing Lider', 'Admi
   const { name, sf, cf, products } = req.body;
 
   if (!name || !sf || !cf || !Array.isArray(products) || products.length === 0) {
-    return res.status(400).json({ error: 'Missing required fields or empty products' });
+    return res.status(400).json({ error: 'Faltan campos requeridos o productos vacíos' });
   }
 
   const client = await pool.connect();
@@ -790,7 +790,7 @@ app.post('/api/combos', authenticateToken, requireRole(['Marketing Lider', 'Admi
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error creating combo:', err);
-    res.status(500).json({ error: 'Failed to create combo' });
+    res.status(500).json({ error: 'No se pudo crear combo' });
   } finally {
     client.release();
   }
@@ -803,20 +803,20 @@ app.delete('/api/combos/:id', authenticateToken, async (req, res) => {
   try {
     const comboRes = await pool.query('SELECT created_by FROM combos WHERE id = $1', [id]);
     if (comboRes.rowCount === 0) {
-      return res.status(404).json({ error: 'Combo not found' });
+      return res.status(404).json({ error: 'Combo no encontrado' });
     }
 
     const creatorId = comboRes.rows[0].created_by;
     const isAdmin = req.user.role.toLowerCase() === 'admin';
     if (creatorId !== req.user.id && !isAdmin) {
-      return res.status(403).json({ error: 'Not authorized to delete this combo' });
+      return res.status(403).json({ error: 'No autorizado para eliminar este combo' });
     }
 
     await pool.query('DELETE FROM combos WHERE id = $1', [id]);
     res.json({ message: 'Combo deleted' });
   } catch (err) {
     console.error('Error deleting combo:', err);
-    res.status(500).json({ error: 'Failed to delete combo' });
+    res.status(500).json({ error: 'No se pudo eliminar combo' });
   }
 });
 
@@ -831,7 +831,7 @@ app.get('/api/cupones', authenticateToken, async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error('Error fetching cupones:', err);
-    res.status(500).json({ error: 'Failed to load cupones' });
+    res.status(500).json({ error: 'No se pudieron cargar cupones' });
   }
 });
 
@@ -883,7 +883,7 @@ app.get('/api/users', authenticateToken, requireRole(['admin']), async (req, res
     res.json(result.rows.map((u) => ({ ...u, panel_access: sanitizePanelAccess(u.panel_access, u.role) })));
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to fetch users' });
+    res.status(500).json({ error: 'No se pudieron obtener usuarios' });
   }
 });
 
@@ -920,7 +920,7 @@ app.put('/api/role-access-defaults', authenticateToken, requireRole(['admin']), 
 
 app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, res) => {
   const { email, password, role, city, phone, panel_access } = req.body;
-  if (!email || !password || !role) return res.status(400).json({ error: 'Missing required fields' });
+  if (!email || !password || !role) return res.status(400).json({ error: 'Faltan campos requeridos' });
 
   // Validate phone (optional, but if provided must be 8 digits)
   if (phone && !/^\d{8}$/.test(phone)) {
@@ -938,14 +938,14 @@ app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, re
     res.status(201).json({ message: 'User created' });
   } catch (err) {
     console.error(err);
-    if (err.code === '23505') return res.status(409).json({ error: 'Email already exists' });
-    res.status(500).json({ error: 'Failed to create user' });
+    if (err.code === '23505') return res.status(409).json({ error: 'El correo ya existe' });
+    res.status(500).json({ error: 'No se pudo crear usuario' });
   }
 });
 
 app.patch('/api/users/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
   const { role, city, phone, panel_access } = req.body;
-  if (!role) return res.status(400).json({ error: 'Role is required' });
+  if (!role) return res.status(400).json({ error: 'El rol es obligatorio' });
 
   if (phone !== undefined && phone !== null && phone !== '' && !/^\d{8}$/.test(phone)) {
     return res.status(400).json({ error: 'Teléfono debe tener exactamente 8 dígitos numéricos' });
@@ -969,11 +969,11 @@ app.patch('/api/users/:id', authenticateToken, requireRole(['admin']), async (re
        RETURNING id`,
       [role, cityProvided, cityValue, phoneProvided, phoneValue, panelAccessProvided, panelAccessValue, req.params.id]
     );
-    if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json({ message: 'User updated' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to update user' });
+    res.status(500).json({ error: 'No se pudo actualizar usuario' });
   }
 });
 
@@ -1059,11 +1059,11 @@ app.post('/api/roles/access-defaults/:role/apply', authenticateToken, requireRol
 app.delete('/api/users/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [req.params.id]);
-    if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json({ message: 'User deleted' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to delete user' });
+    res.status(500).json({ error: 'No se pudo eliminar usuario' });
   }
 });
 
