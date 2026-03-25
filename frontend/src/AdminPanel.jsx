@@ -646,8 +646,20 @@ function AdminPanel({ token }) {
   const [activeTab, setActiveTab] = useState('usuarios');
 
   return (
-    <div style={{ padding: '16px', maxWidth: '1400px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '32px', borderBottom: '2px solid #334155' }}>
+    <div style={{ padding: '24px 16px 16px', maxWidth: '1400px', margin: '0 auto' }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        flexWrap: 'wrap',
+        gap: '8px',
+        marginBottom: '24px',
+        borderBottom: '2px solid #334155',
+        paddingBottom: '4px',
+        position: 'sticky',
+        top: '68px',
+        zIndex: 15,
+        background: '#0f172a'
+      }}>
         <button onClick={() => setActiveTab('usuarios')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'usuarios' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'usuarios' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'usuarios' ? '600' : '500', cursor: 'pointer' }}>
           Usuarios
         </button>
