@@ -11,6 +11,7 @@ import Combos from './Combos';
 import Cupones from './Cupones';
 import logo from './assets/PCX.png';
 import './index.css';
+import { buildAccessForUser, canAccessPanel } from './roleAccess';
 
 // ─── Login Component ────────────────────────────────────────────────────────
 function Login({ onLogin }) {
@@ -76,18 +77,17 @@ function Login({ onLogin }) {
   );
 }
 
-const normalizeRole = (value = '') =>
-  value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
 // ─── NavMenu Component ──────────────────────────────────────────────────────
-function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, role }) {
+function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, role, access }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
-  const roleNormalized = normalizeRole(role || '');
-  const isAdmin = roleNormalized === 'admin';
-  const canSeeInventory = isAdmin || roleNormalized.includes('almacen');
-  const canSeePedidos = isAdmin || roleNormalized.includes('almacen') || roleNormalized.includes('ventas lider');
-  const canSeeMarketing = isAdmin || roleNormalized.includes('marketing');
+  const canQuote = canAccessPanel(access, 'cotizar');
+  const canSeeHistory = canAccessPanel(access, 'historialGlobal') || canAccessPanel(access, 'historialIndividual');
+  const canSeePerformance = canAccessPanel(access, 'rendimientoGlobal') || canAccessPanel(access, 'rendimientoIndividual');
+  const canSeePedidos = canAccessPanel(access, 'pedidosGlobal') || canAccessPanel(access, 'pedidosIndividual');
+  const canSeeInventory = canAccessPanel(access, 'inventarioGlobal') || canAccessPanel(access, 'inventarioIndividual');
+  const canSeeMarketing = canAccessPanel(access, 'marketingCombos') || canAccessPanel(access, 'marketingCupones');
+  const canSeeAdmin = canAccessPanel(access, 'admin');
 
   useEffect(() => {
     setMenuOpen(false);
@@ -136,18 +136,18 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
           </button>
 
           <div className="nav-links desktop">
-            <NavLink to="/" label="Cotizar" />
-            <NavLink to="/history" label="Historial" />
-            <NavLink to="/performance" label="Rendimiento" />
+            {canQuote && <NavLink to="/" label="Cotizar" />}
+            {canSeeHistory && <NavLink to="/history" label="Historial" />}
+            {canSeePerformance && <NavLink to="/performance" label="Rendimiento" />}
             {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
             {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
             {canSeeMarketing && (
               <>
-                <NavLink to="/combos" label="Combos" />
-                <NavLink to="/cupones" label="Cupones" />
+                {canAccessPanel(access, 'marketingCombos') && <NavLink to="/combos" label="Combos" />}
+                {canAccessPanel(access, 'marketingCupones') && <NavLink to="/cupones" label="Cupones" />}
               </>
             )}
-            {isAdmin && <NavLink to="/admin" label="Admin" />}
+            {canSeeAdmin && <NavLink to="/admin" label="Admin" />}
           </div>
         </div>
 
@@ -167,18 +167,18 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
       {menuOpen && <div className="mobile-menu-overlay active" onClick={() => setMenuOpen(false)} />}
 
       <div className={`nav-links mobile ${menuOpen ? 'active' : ''}`}>
-        <NavLink to="/" label="Cotizar" />
-        <NavLink to="/history" label="Historial" />
-        <NavLink to="/performance" label="Rendimiento" />
+        {canQuote && <NavLink to="/" label="Cotizar" />}
+        {canSeeHistory && <NavLink to="/history" label="Historial" />}
+        {canSeePerformance && <NavLink to="/performance" label="Rendimiento" />}
         {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
         {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
         {canSeeMarketing && (
           <>
-            <NavLink to="/combos" label="Combos" />
-            <NavLink to="/cupones" label="Cupones" />
+            {canAccessPanel(access, 'marketingCombos') && <NavLink to="/combos" label="Combos" />}
+            {canAccessPanel(access, 'marketingCupones') && <NavLink to="/cupones" label="Cupones" />}
           </>
         )}
-        {isAdmin && <NavLink to="/admin" label="Admin" />}
+        {canSeeAdmin && <NavLink to="/admin" label="Admin" />}
 
         <div className="mobile-user-panel">
           <span className="desktop-user-name">
@@ -206,26 +206,34 @@ function App() {
   const [role, setRole] = useState(() => localStorage.getItem('role'));
   const [currentCommission, setCurrentCommission] = useState(0);
   const [isTopSeller, setIsTopSeller] = useState(false);
+  const [access, setAccess] = useState(() => {
+    const saved = localStorage.getItem('panel_access');
+    return saved ? JSON.parse(saved) : null;
+  });
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
   const handleLogin = (newToken, userData) => {
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('role', userData.role);
+    localStorage.setItem('panel_access', JSON.stringify(userData.panel_access || null));
     setToken(newToken);
     setUser(userData);
     setRole(userData.role);
+    setAccess(userData.panel_access || null);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('role');
+    localStorage.removeItem('panel_access');
     setToken(null);
     setUser(null);
     setRole(null);
     setCurrentCommission(0);
     setIsTopSeller(false);
+    setAccess(null);
   };
 
   const handleTopSellerUpdate = () => {};
@@ -235,6 +243,28 @@ function App() {
       fetchPersonalCommission();
     }
   }, [token, user, role]);
+
+  useEffect(() => {
+    const syncSession = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/me`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const me = await res.json();
+        localStorage.setItem('user', JSON.stringify(me));
+        localStorage.setItem('role', me.role);
+        localStorage.setItem('panel_access', JSON.stringify(me.panel_access || null));
+        setUser(me);
+        setRole(me.role);
+        setAccess(me.panel_access || null);
+      } catch {
+        // no-op; keep cached session
+      }
+    };
+    syncSession();
+  }, [token, API_BASE]);
 
   const fetchPersonalCommission = async () => {
     try {
@@ -264,11 +294,14 @@ function App() {
   }
 
   const displayName = user ? user.email.split('@')[0] : 'Usuario';
-  const roleNormalized = normalizeRole(role || '');
-  const isAdmin = roleNormalized === 'admin';
-  const isAlmacenLider = roleNormalized.includes('almacen lider');
-  const isMarketingLider = roleNormalized.includes('marketing lider');
-  const defaultPath = isAdmin ? '/admin' : isAlmacenLider ? '/pedidos' : isMarketingLider ? '/combos' : '/';
+  const effectiveAccess = buildAccessForUser(role, access);
+  const defaultPath = canAccessPanel(effectiveAccess, 'admin')
+    ? '/admin'
+    : canAccessPanel(effectiveAccess, 'pedidos_global') || canAccessPanel(effectiveAccess, 'pedidos_individual')
+      ? '/pedidos'
+      : canAccessPanel(effectiveAccess, 'marketing_combos')
+        ? '/combos'
+        : '/';
 
   return (
     <Router>
@@ -278,27 +311,66 @@ function App() {
         currentCommission={currentCommission}
         isTopSeller={isTopSeller}
         role={role}
+        access={effectiveAccess}
       />
 
       <Routes>
-        <Route path="/" element={<QuoteTool token={token} user={user} />} />
-        <Route path="/history" element={<QuoteHistory token={token} role={role} />} />
+        <Route
+          path="/"
+          element={canAccessPanel(effectiveAccess, 'cotizar') ? <QuoteTool token={token} user={user} /> : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/history"
+          element={
+            canAccessPanel(effectiveAccess, 'historial_global') || canAccessPanel(effectiveAccess, 'historial_individual')
+              ? <QuoteHistory token={token} role={role} access={effectiveAccess} />
+              : <Navigate to={defaultPath} replace />
+          }
+        />
         <Route 
           path="/performance" 
           element={
-            <PerformanceDashboard 
-              token={token} 
-              user={user}
-              role={role} 
-              onTopSellerChange={handleTopSellerUpdate} 
-            />
+            canAccessPanel(effectiveAccess, 'rendimiento_global') || canAccessPanel(effectiveAccess, 'rendimiento_individual')
+              ? (
+                <PerformanceDashboard 
+                  token={token} 
+                  user={user}
+                  role={role}
+                  access={effectiveAccess}
+                  onTopSellerChange={handleTopSellerUpdate} 
+                />
+              )
+              : <Navigate to={defaultPath} replace />
           } 
         />
-        <Route path="/combos" element={<Combos token={token} />} />
-        <Route path="/cupones" element={<Cupones token={token} />} />
-        <Route path="/admin" element={<AdminPanel token={token} />} />
-        <Route path="/inventory" element={<InventoryPanel token={token} />} />
-        <Route path="/pedidos" element={<PedidosPanel token={token} role={role} />} />
+        <Route
+          path="/combos"
+          element={canAccessPanel(effectiveAccess, 'marketing_combos') ? <Combos token={token} /> : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/cupones"
+          element={canAccessPanel(effectiveAccess, 'marketing_cupones') ? <Cupones token={token} /> : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/admin"
+          element={canAccessPanel(effectiveAccess, 'admin') ? <AdminPanel token={token} /> : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/inventory"
+          element={
+            canAccessPanel(effectiveAccess, 'inventario_global') || canAccessPanel(effectiveAccess, 'inventario_individual')
+              ? <InventoryPanel token={token} role={role} access={effectiveAccess} />
+              : <Navigate to={defaultPath} replace />
+          }
+        />
+        <Route
+          path="/pedidos"
+          element={
+            canAccessPanel(effectiveAccess, 'pedidos_global') || canAccessPanel(effectiveAccess, 'pedidos_individual')
+              ? <PedidosPanel token={token} role={role} access={effectiveAccess} />
+              : <Navigate to={defaultPath} replace />
+          }
+        />
         <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Routes>
     </Router>

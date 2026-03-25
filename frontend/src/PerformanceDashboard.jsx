@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { canAccessPanel } from './roleAccess';
 
-function PerformanceDashboard({ token, user, role, onTopSellerChange }) {
+function PerformanceDashboard({ token, user, role, onTopSellerChange, access }) {
   const [stats, setStats] = useState([]);
   const [leaderSales, setLeaderSales] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -9,7 +10,7 @@ function PerformanceDashboard({ token, user, role, onTopSellerChange }) {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const isVentasLider = role?.toLowerCase().includes('ventas lider');
   const isAdmin = role?.toLowerCase().includes('admin');
-  const canViewTeam = isVentasLider || isAdmin;
+  const canViewTeam = canAccessPanel(access, 'rendimientoGlobal');
   const [teamView, setTeamView] = useState(canViewTeam);
 
   useEffect(() => {

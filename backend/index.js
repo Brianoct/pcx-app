@@ -20,6 +20,131 @@ const pool = new Pool({
 const normalizeRole = (value = '') =>
   value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const COMPLETED_STATUSES = ['Confirmado', 'Pagado', 'Embalado', 'Enviado'];
+const PANEL_KEYS = [
+  'cotizar',
+  'historial_individual',
+  'historial_global',
+  'rendimiento_individual',
+  'rendimiento_global',
+  'pedidos_individual',
+  'pedidos_global',
+  'inventario_individual',
+  'inventario_global',
+  'marketing_combos',
+  'marketing_cupones',
+  'admin'
+];
+
+const getDefaultPanelAccessForRole = (roleValue = '') => {
+  const role = normalizeRole(roleValue);
+  const base = {
+    cotizar: false,
+    historial_individual: false,
+    historial_global: false,
+    rendimiento_individual: false,
+    rendimiento_global: false,
+    pedidos_individual: false,
+    pedidos_global: false,
+    inventario_individual: false,
+    inventario_global: false,
+    marketing_combos: false,
+    marketing_cupones: false,
+    admin: false
+  };
+
+  if (role === 'admin') {
+    return Object.fromEntries(Object.keys(base).map((key) => [key, true]));
+  }
+
+  if (role === 'ventas') {
+    return {
+      ...base,
+      cotizar: true,
+      historial_individual: true,
+      rendimiento_individual: true
+    };
+  }
+
+  if (role === 'ventas lider') {
+    return {
+      ...base,
+      cotizar: true,
+      historial_global: true,
+      rendimiento_global: true
+    };
+  }
+
+  if (role === 'almacen') {
+    return {
+      ...base,
+      pedidos_individual: true,
+      inventario_individual: true
+    };
+  }
+
+  if (role === 'almacen lider') {
+    return {
+      ...base,
+      pedidos_global: true,
+      inventario_global: true
+    };
+  }
+
+  if (role === 'marketing') {
+    return {
+      ...base,
+      marketing_combos: true,
+      marketing_cupones: true
+    };
+  }
+
+  if (role === 'marketing lider') {
+    return {
+      ...base,
+      marketing_combos: true,
+      marketing_cupones: true
+    };
+  }
+
+  return base;
+};
+
+const sanitizePanelAccess = (panelAccess, roleValue = '') => {
+  const defaults = getDefaultPanelAccessForRole(roleValue);
+  if (!panelAccess || typeof panelAccess !== 'object' || Array.isArray(panelAccess)) {
+    return defaults;
+  }
+
+  return Object.fromEntries(
+    PANEL_KEYS.map((key) => [key, Boolean(panelAccess[key] ?? defaults[key])])
+  );
+};
+
+const canAccessPanel = (panelAccess, roleValue, key) => {
+  const effective = sanitizePanelAccess(panelAccess, roleValue);
+  return Boolean(effective[key]);
+};
+
+const buildUserPayload = (userRow) => {
+  const panel_access = sanitizePanelAccess(userRow.panel_access, userRow.role);
+  return {
+    id: userRow.id,
+    email: userRow.email,
+    role: userRow.role,
+    city: userRow.city,
+    phone: userRow.phone,
+    panel_access
+  };
+};
+
+const loadUserContext = async (userId) => {
+  const result = await pool.query(
+    'SELECT id, email, role, city, phone, panel_access FROM users WHERE id = $1',
+    [userId]
+  );
+  if (result.rowCount === 0) return null;
+  return result.rows[0];
+};
 
 const buildDateFilter = (month, year, tableAlias = 'q', startIndex = 1) => {
   const params = [];
@@ -109,21 +234,23 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    const tokenUser = buildUserPayload(user);
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, city: user.city, phone: user.phone },
+      {
+        id: tokenUser.id,
+        email: tokenUser.email,
+        role: tokenUser.role,
+        city: tokenUser.city,
+        phone: tokenUser.phone,
+        panel_access: tokenUser.panel_access
+      },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
     res.json({
       token,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        city: user.city,
-        phone: user.phone
-      }
+      user: tokenUser
     });
   } catch (err) {
     console.error(err);
@@ -148,6 +275,12 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     total,
     status = 'Cotizado'
   } = req.body;
+
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  if (!canAccessPanel(userContext.panel_access, userContext.role, 'cotizar')) {
+    return res.status(403).json({ error: 'No tienes permiso para cotizar' });
+  }
 
   const client = await pool.connect();
   try {
@@ -205,12 +338,20 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
 app.get('/api/quotes', authenticateToken, async (req, res) => {
   const { team } = req.query;
   const isTeamView = team === 'true';
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
 
-  const allowedTeamRoles = ['ventas lider', 'admin', 'almacen lider', 'almacen'];
-  const userRoleNormalized = normalizeRole(req.user.role || '');
-
-  if (isTeamView && !allowedTeamRoles.includes(userRoleNormalized)) {
-    return res.status(403).json({ error: 'Solo Ventas Líder, Admin o Almacén Líder pueden ver cotizaciones del equipo' });
+  if (isTeamView) {
+    const canSeeGlobalHistory = access.historial_global || access.pedidos_global;
+    if (!canSeeGlobalHistory) {
+      return res.status(403).json({ error: 'No tienes permiso para historial/pedidos global' });
+    }
+  } else {
+    const canSeeOwnHistory = access.historial_individual || access.pedidos_individual;
+    if (!canSeeOwnHistory) {
+      return res.status(403).json({ error: 'No tienes permiso para historial/pedidos individual' });
+    }
   }
 
   try {
@@ -274,8 +415,10 @@ app.get('/api/quotes/:id/seller-contact', authenticateToken, async (req, res) =>
 // ─── GET single quote for checklist with displayName ────────────────────────
 app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const userRoleNormalized = normalizeRole(req.user.role || '');
-  const canAccessAllQuotes = ['ventas lider', 'admin', 'almacen lider', 'almacen'].includes(userRoleNormalized);
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const canAccessAllQuotes = access.pedidos_global || access.historial_global;
 
   try {
     const result = await pool.query(
@@ -321,8 +464,10 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
 app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
   const { status } = req.body;
   const validStatuses = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
-  const userRoleNormalized = normalizeRole(req.user.role || '');
-  const canManageAnyQuote = ['ventas lider', 'admin', 'almacen lider', 'almacen'].includes(userRoleNormalized);
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const canManageAnyQuote = access.pedidos_global || access.historial_global;
 
   if (!validStatuses.includes(status)) {
     return res.status(400).json({ error: `Estado inválido. Usa: ${validStatuses.join(', ')}` });
@@ -457,6 +602,12 @@ app.get('/api/stock', authenticateToken, async (req, res) => {
 
 // ─── UPDATE stock for a specific SKU in a warehouse ────────────────────────
 app.patch('/api/products/:sku/stock', authenticateToken, requireRole(['Almacen Lider', 'Almacen']), async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const canInventory = access.inventario_individual || access.inventario_global;
+  if (!canInventory) return res.status(403).json({ error: 'No tienes permiso de inventario' });
+
   const { sku } = req.params;
   const { store_location, new_stock } = req.body;
 
@@ -498,6 +649,12 @@ app.patch('/api/products/:sku/stock', authenticateToken, requireRole(['Almacen L
 
 // ─── UPDATE minimum stock thresholds for a SKU ──────────────────────────────
 app.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Almacen Lider', 'Almacen']), async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const canInventory = access.inventario_individual || access.inventario_global;
+  if (!canInventory) return res.status(403).json({ error: 'No tienes permiso de inventario' });
+
   const { sku } = req.params;
   const {
     min_stock_cochabamba,
@@ -687,9 +844,9 @@ app.delete('/api/cupones/:id', authenticateToken, requireRole(['Marketing Lider'
 app.get('/api/users', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, role, city, phone, created_at FROM users ORDER BY created_at DESC'
+      'SELECT id, email, role, city, phone, panel_access, created_at FROM users ORDER BY created_at DESC'
     );
-    res.json(result.rows);
+    res.json(result.rows.map((u) => ({ ...u, panel_access: sanitizePanelAccess(u.panel_access, u.role) })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch users' });
@@ -697,7 +854,7 @@ app.get('/api/users', authenticateToken, requireRole(['admin']), async (req, res
 });
 
 app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, res) => {
-  const { email, password, role, city, phone } = req.body;
+  const { email, password, role, city, phone, panel_access } = req.body;
   if (!email || !password || !role) return res.status(400).json({ error: 'Missing required fields' });
 
   // Validate phone (optional, but if provided must be 8 digits)
@@ -705,11 +862,13 @@ app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, re
     return res.status(400).json({ error: 'Teléfono debe tener exactamente 8 dígitos numéricos' });
   }
 
+  const effectivePanelAccess = sanitizePanelAccess(panel_access, role);
+
   try {
     const hashedPass = await bcrypt.hash(password, 10);
     await pool.query(
-      'INSERT INTO users (email, password_hash, role, city, phone) VALUES ($1, $2, $3, $4, $5)',
-      [email, hashedPass, role, city || null, phone || null]
+      'INSERT INTO users (email, password_hash, role, city, phone, panel_access) VALUES ($1, $2, $3, $4, $5, $6::jsonb)',
+      [email, hashedPass, role, city || null, phone || null, JSON.stringify(effectivePanelAccess)]
     );
     res.status(201).json({ message: 'User created' });
   } catch (err) {
@@ -720,7 +879,7 @@ app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, re
 });
 
 app.patch('/api/users/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
-  const { role, city, phone } = req.body;
+  const { role, city, phone, panel_access } = req.body;
   if (!role) return res.status(400).json({ error: 'Role is required' });
 
   if (phone !== undefined && phone !== null && phone !== '' && !/^\d{8}$/.test(phone)) {
@@ -729,18 +888,21 @@ app.patch('/api/users/:id', authenticateToken, requireRole(['admin']), async (re
 
   const cityProvided = Object.prototype.hasOwnProperty.call(req.body, 'city');
   const phoneProvided = Object.prototype.hasOwnProperty.call(req.body, 'phone');
+  const panelAccessProvided = Object.prototype.hasOwnProperty.call(req.body, 'panel_access');
   const cityValue = city === '' ? null : city;
   const phoneValue = phone === '' ? null : phone;
+  const panelAccessValue = panelAccessProvided ? JSON.stringify(sanitizePanelAccess(panel_access, role)) : null;
 
   try {
     const result = await pool.query(
       `UPDATE users
        SET role = $1,
            city = CASE WHEN $2::boolean THEN $3 ELSE city END,
-           phone = CASE WHEN $4::boolean THEN $5 ELSE phone END
-       WHERE id = $6
+           phone = CASE WHEN $4::boolean THEN $5 ELSE phone END,
+           panel_access = CASE WHEN $6::boolean THEN $7::jsonb ELSE panel_access END
+       WHERE id = $8
        RETURNING id`,
-      [role, cityProvided, cityValue, phoneProvided, phoneValue, req.params.id]
+      [role, cityProvided, cityValue, phoneProvided, phoneValue, panelAccessProvided, panelAccessValue, req.params.id]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ message: 'User updated' });
@@ -765,10 +927,15 @@ app.delete('/api/users/:id', authenticateToken, requireRole(['admin']), async (r
 app.get('/api/performance', authenticateToken, async (req, res) => {
   const { team, month, year } = req.query;
   const isTeamView = team === 'true';
-  const userRoleNormalized = normalizeRole(req.user.role || '');
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
 
-  if (isTeamView && !['ventas lider', 'admin'].includes(userRoleNormalized)) {
-    return res.status(403).json({ error: 'Solo Ventas Líder o Admin pueden ver rendimiento del equipo' });
+  if (isTeamView && !access.rendimiento_global) {
+    return res.status(403).json({ error: 'No tienes permiso para rendimiento global' });
+  }
+  if (!isTeamView && !access.rendimiento_individual) {
+    return res.status(403).json({ error: 'No tienes permiso para rendimiento individual' });
   }
   const dateFilter = buildDateFilter(month, year, 'q', 2);
   if (dateFilter.error) return res.status(400).json({ error: dateFilter.error });
@@ -929,6 +1096,13 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
 
 // ─── INVENTORY ──────────────────────────────────────────────────────────────
 app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almacen']), async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  if (!(access.inventario_individual || access.inventario_global)) {
+    return res.status(403).json({ error: 'No tienes permiso de inventario' });
+  }
+
   try {
     const result = await pool.query(`
       SELECT sku, name, stock_cochabamba, stock_santacruz, stock_lima,
@@ -1034,6 +1208,17 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener estadísticas' });
+  }
+});
+
+app.get('/api/me', authenticateToken, async (req, res) => {
+  try {
+    const userRow = await loadUserContext(req.user.id);
+    if (!userRow) return res.status(404).json({ error: 'Usuario no encontrado' });
+    res.json(buildUserPayload(userRow));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar sesión' });
   }
 });
 

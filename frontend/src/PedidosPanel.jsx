@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import jsPDF from 'jspdf';
 import logo from './assets/PCX.png';
+import { buildAccessForUser, canAccessPanel } from './roleAccess';
 
-function PedidosPanel({ token, role }) {
+function PedidosPanel({ token, role, access }) {
   const [pedidos, setPedidos] = useState([]);
   const [filteredPedidos, setFilteredPedidos] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,8 +20,9 @@ function PedidosPanel({ token, role }) {
   const pedidosPerPage = 10;
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Determine user type
-  const isWarehouse = role?.toLowerCase().includes('almacen');
+  const panelAccess = useMemo(() => buildAccessForUser(role, access), [role, access]);
+  const canViewPedidosGlobal = canAccessPanel(panelAccess, 'pedidosGlobal');
+  const canManageStatus = canAccessPanel(panelAccess, 'pedidosIndividual') || canViewPedidosGlobal;
 
   const normalizePhone = (phone = '') => String(phone).replace(/\D/g, '');
   const buildWhatsAppLink = (phone = '') => {
@@ -43,8 +45,7 @@ function PedidosPanel({ token, role }) {
   const fetchPedidos = async () => {
     setLoading(true);
     try {
-      const useTeamView = isWarehouse || 
-                         ['Ventas Lider', 'Admin'].some(r => role?.toLowerCase().includes(r.toLowerCase()));
+      const useTeamView = canViewPedidosGlobal;
       
       const url = `http://localhost:4000/api/quotes${useTeamView ? '?team=true' : ''}`;
       
@@ -323,7 +324,7 @@ function PedidosPanel({ token, role }) {
                       onChange={(e) => handleStatusChange(quote.id, e.target.value)}
                       disabled={updatingId === quote.id}
                     >
-                      {isWarehouse ? (
+                      {canManageStatus ? (
                         <>
                           <option value="Confirmado">Confirmado</option>
                           <option value="Pagado">Pagado</option>
@@ -439,7 +440,7 @@ function PedidosPanel({ token, role }) {
                             minWidth: '100px'
                           }}
                         >
-                          {isWarehouse ? (
+                          {canManageStatus ? (
                             <>
                               <option value="Confirmado">Confirmado</option>
                               <option value="Pagado">Pagado</option>

@@ -1,0 +1,2 @@
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS panel_access JSONB NOT NULL DEFAULT '{}'::jsonb;

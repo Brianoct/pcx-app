@@ -1,14 +1,22 @@
 // src/AdminPanel.jsx
 import { useState, useEffect } from 'react';
 import AdminDashboard from './AdminDashboard';
+import { ACCESS_LABELS, buildAccessForUser } from './roleAccess';
 
 // User management component
 function UserManagement({ token }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [newUser, setNewUser] = useState({ email: '', password: '', role: 'Ventas', city: 'Santa Cruz', phone: '' });
-  const [editModal, setEditModal] = useState(null); // { userId, email, role, city, phone }
+  const [newUser, setNewUser] = useState({
+    email: '',
+    password: '',
+    role: 'Ventas',
+    city: 'Santa Cruz',
+    phone: '',
+    panel_access: buildAccessForUser('Ventas')
+  });
+  const [editModal, setEditModal] = useState(null); // { userId, email, role, city, phone, panel_access }
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -48,7 +56,14 @@ function UserManagement({ token }) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       setUsers(await refreshRes.json());
-      setNewUser({ email: '', password: '', role: 'Ventas', city: 'Santa Cruz', phone: '' });
+      setNewUser({
+        email: '',
+        password: '',
+        role: 'Ventas',
+        city: 'Santa Cruz',
+        phone: '',
+        panel_access: buildAccessForUser('Ventas')
+      });
     } catch (err) {
       alert('Error: ' + err.message);
     }
@@ -59,7 +74,10 @@ function UserManagement({ token }) {
       const res = await fetch(`http://localhost:4000/api/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ role: newRole })
+        body: JSON.stringify({
+          role: newRole,
+          panel_access: buildAccessForUser(newRole)
+        })
       });
       if (!res.ok) throw new Error('No se pudo actualizar rol');
       alert('Rol actualizado');
@@ -96,7 +114,8 @@ function UserManagement({ token }) {
       email: user.email,
       role: user.role,
       city: user.city || '',
-      phone: user.phone || ''
+      phone: user.phone || '',
+      panel_access: buildAccessForUser(user.role, user.panel_access)
     });
   };
 
@@ -115,7 +134,8 @@ function UserManagement({ token }) {
         body: JSON.stringify({
           role: editModal.role,
           city: editModal.city,
-          phone: editModal.phone
+          phone: editModal.phone,
+          panel_access: editModal.panel_access
         })
       });
       if (!res.ok) throw new Error('No se pudo actualizar usuario');
@@ -143,6 +163,42 @@ function UserManagement({ token }) {
     if (value.length <= 8) {
       setEditModal({ ...editModal, phone: value });
     }
+  };
+
+  const handleNewRoleChange = (role) => {
+    setNewUser({
+      ...newUser,
+      role,
+      panel_access: buildAccessForUser(role)
+    });
+  };
+
+  const handleNewAccessToggle = (field) => {
+    setNewUser((prev) => ({
+      ...prev,
+      panel_access: {
+        ...(prev.panel_access || buildAccessForUser(prev.role)),
+        [field]: !(prev.panel_access || buildAccessForUser(prev.role))[field]
+      }
+    }));
+  };
+
+  const handleEditRoleChange = (role) => {
+    setEditModal((prev) => ({
+      ...prev,
+      role,
+      panel_access: buildAccessForUser(role)
+    }));
+  };
+
+  const handleEditAccessToggle = (field) => {
+    setEditModal((prev) => ({
+      ...prev,
+      panel_access: {
+        ...(prev.panel_access || buildAccessForUser(prev.role)),
+        [field]: !(prev.panel_access || buildAccessForUser(prev.role))[field]
+      }
+    }));
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px' }}>Cargando usuarios...</div>;
@@ -192,7 +248,7 @@ function UserManagement({ token }) {
               <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Rol</label>
               <select
                 value={newUser.role}
-                onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                onChange={(e) => handleNewRoleChange(e.target.value)}
                 style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
               >
                 <option value="Ventas">Ventas</option>
@@ -214,6 +270,23 @@ function UserManagement({ token }) {
               />
             </div>
           </div>
+
+          <div style={{ marginTop: '20px' }}>
+            <h4 style={{ marginBottom: '10px', color: '#f1f5f9' }}>Acceso por panel</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+              {ACCESS_LABELS.map((field) => (
+                <label key={field.key} style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#cbd5e1' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(newUser.panel_access?.[field.key])}
+                    onChange={() => handleNewAccessToggle(field.key)}
+                  />
+                  {field.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
           <button type="submit" style={{ width: '100%', padding: '14px', background: '#f87171', color: 'white', border: 'none', borderRadius: '8px', marginTop: '24px', fontWeight: '600' }}>
             Agregar Usuario
           </button>
@@ -329,7 +402,7 @@ function UserManagement({ token }) {
                   <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Rol</label>
                   <select
                     value={editModal.role}
-                    onChange={(e) => setEditModal({ ...editModal, role: e.target.value })}
+                    onChange={(e) => handleEditRoleChange(e.target.value)}
                     style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
                   >
                     <option value="Ventas">Ventas</option>
@@ -349,6 +422,21 @@ function UserManagement({ token }) {
                     onChange={(e) => setEditModal({ ...editModal, city: e.target.value })}
                     style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
                   />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Acceso por panel</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '8px' }}>
+                    {ACCESS_LABELS.map((field) => (
+                      <label key={field.key} style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#cbd5e1' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editModal.panel_access?.[field.key])}
+                          onChange={() => handleEditAccessToggle(field.key)}
+                        />
+                        {field.label}
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
 

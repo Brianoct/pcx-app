@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { buildAccessForUser, canAccessPanel } from './roleAccess';
 
-function InventoryPanel({ token }) {
+function InventoryPanel({ token, role, access }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -12,6 +13,9 @@ function InventoryPanel({ token }) {
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
+
+  const effectiveAccess = buildAccessForUser(role, access);
+  const canViewGlobalInventory = canAccessPanel(effectiveAccess, 'inventarioGlobal');
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -158,7 +162,7 @@ function InventoryPanel({ token }) {
           min_stock_lima: Number(product.min_stock_lima ?? 0)
         };
 
-        const res = await fetch(`http://localhost:4000/api/products/${product.sku}/mins`, {
+        const res = await fetch(`http://localhost:4000/api/products/${product.sku}/min-stock`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -241,6 +245,9 @@ function InventoryPanel({ token }) {
       <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
         Inventario
       </h2>
+      <p style={{ textAlign: 'center', color: '#94a3b8', marginBottom: '14px' }}>
+        Vista: {canViewGlobalInventory ? 'Global' : 'Individual'}
+      </p>
 
       <div style={{
         position: 'sticky',

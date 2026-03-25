@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
+import { canAccessPanel } from './roleAccess';
 
-function QuoteHistory({ token, role }) {
+function QuoteHistory({ token, role, access }) {
   const [quotes, setQuotes] = useState([]);
   const [filteredQuotes, setFilteredQuotes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -13,6 +14,9 @@ function QuoteHistory({ token, role }) {
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
 
+  const canViewGlobalHistory = canAccessPanel(access, 'historialGlobal');
+  const canViewHistory = canAccessPanel(access, 'historialIndividual');
+
   // Pagination
   const quotesPerPage = 10;
   const [currentPage, setCurrentPage] = useState(1);
@@ -21,9 +25,7 @@ function QuoteHistory({ token, role }) {
     const fetchQuotes = async () => {
       setLoading(true);
       try {
-        const isTeamAllowed = ['Ventas Lider', 'Admin', 'Almacén Lider'].some(r => 
-          role?.toLowerCase().includes(r.toLowerCase())
-        );
+        const isTeamAllowed = canViewGlobalHistory;
         const url = `http://localhost:4000/api/quotes${isTeamAllowed ? '?team=true' : ''}`;
 
         const res = await fetch(url, {
@@ -55,7 +57,7 @@ function QuoteHistory({ token, role }) {
       }
     };
     fetchQuotes();
-  }, [token, role]);
+  }, [token, canViewGlobalHistory]);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
@@ -69,9 +71,7 @@ function QuoteHistory({ token, role }) {
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      const isLeader = ['Ventas Lider', 'Admin', 'Almacén Lider'].some(r => 
-        role?.toLowerCase().includes(r.toLowerCase())
-      );
+      const isLeader = canViewGlobalHistory;
 
       filtered = filtered.filter(q => 
         q.customer_name?.toLowerCase().includes(term) ||
@@ -86,7 +86,7 @@ function QuoteHistory({ token, role }) {
 
     setFilteredQuotes(filtered);
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, quotes, role]);
+  }, [searchTerm, statusFilter, quotes, canViewGlobalHistory]);
 
   const clearFilters = () => {
     setSearchTerm('');
@@ -174,9 +174,17 @@ function QuoteHistory({ token, role }) {
     }
   };
 
-  const isLeader = ['Ventas Lider', 'Admin', 'Almacén Lider'].some(r => 
-    role?.toLowerCase().includes(r.toLowerCase())
-  );
+  const isLeader = canViewGlobalHistory;
+
+  if (!canViewHistory && !canViewGlobalHistory) {
+    return (
+      <div className="container">
+        <div className="card" style={{ textAlign: 'center', color: '#fca5a5' }}>
+          No tienes acceso al historial.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container">
