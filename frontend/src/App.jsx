@@ -39,73 +39,39 @@ function Login({ onLogin }) {
   };
 
   return (
-    <div style={{ 
-      maxWidth: '420px', 
-      margin: '80px auto', 
-      padding: '32px 16px', 
-      background: '#1e293b', 
-      borderRadius: '12px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
-    }}>
-      <h2 style={{ textAlign: 'center', marginBottom: '24px', color: '#e11d48' }}>
-        PCX
-      </h2>
-      {error && <p style={{ color: '#ef4444', textAlign: 'center', marginBottom: '16px' }}>{error}</p>}
+    <div className="login-shell">
+      <div className="login-card">
+        <h2 className="login-title">
+          PCX
+        </h2>
+        {error && <p className="login-error">{error}</p>}
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af' }}>Email</label>
+        <div className="login-field">
+          <label className="login-label">Email</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="ejemplo@sales.com"
             required
-            style={{ 
-              width: '100%', 
-              padding: '12px', 
-              fontSize: '1rem', 
-              border: '1px solid #374151', 
-              borderRadius: '8px', 
-              background: '#0f172a', 
-              color: 'white' 
-            }}
+            className="login-input"
           />
         </div>
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af' }}>Contraseña</label>
+        <div className="login-field">
+          <label className="login-label">Contraseña</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            style={{ 
-              width: '100%', 
-              padding: '12px', 
-              fontSize: '1rem', 
-              border: '1px solid #374151', 
-              borderRadius: '8px', 
-              background: '#0f172a', 
-              color: 'white' 
-            }}
+            className="login-input"
           />
         </div>
-        <button 
-          type="submit" 
-          style={{ 
-            width: '100%', 
-            padding: '14px', 
-            background: '#e11d48', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '8px', 
-            fontSize: '1.1rem', 
-            fontWeight: '600', 
-            cursor: 'pointer' 
-          }}
-        >
+        <button type="submit" className="btn btn-primary login-submit">
           Iniciar Sesión
         </button>
       </form>
+      </div>
     </div>
   );
 }
@@ -153,40 +119,23 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
 
   return (
     <>
-      <nav style={{ 
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1000,
-        background: '#0f172a',
-        borderBottom: '1px solid #374151',
-        padding: '10px 12px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.5)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <nav className="app-nav">
+        <div className="app-nav-left">
           <img
             src={logo}
             alt="PCX"
-            style={{
-              height: '34px',
-              width: 'auto',
-              objectFit: 'contain'
-            }}
+            className="app-logo"
           />
 
           <button 
             className="hamburger"
             onClick={() => setMenuOpen(!menuOpen)}
-            style={{ fontSize: '1.8rem', background: 'none', border: 'none', color: '#e11d48', cursor: 'pointer' }}
+            aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
           >
             {menuOpen ? '✕' : '☰'}
           </button>
 
-          <div className="nav-links" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <div className="nav-links desktop">
             <NavLink to="/" label="Cotizar" />
             <NavLink to="/history" label="Historial" />
             <NavLink to="/performance" label="Rendimiento" />
@@ -202,37 +151,14 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
           </div>
         </div>
 
-        <div className="desktop-user" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ color: '#9ca3af', fontWeight: '500', fontSize: '0.95rem' }}>
+        <div className="desktop-user">
+          <span className="desktop-user-name">
             {displayName}
           </span>
-          <span 
-            style={{ 
-              color: '#10b981', 
-              fontWeight: '600', 
-              fontSize: '1rem',
-              background: 'rgba(16, 185, 129, 0.1)',
-              padding: '6px 14px',
-              borderRadius: '10px',
-              border: isTopSeller ? '2px solid gold' : '1px solid #374151',
-              boxShadow: isTopSeller ? '0 0 15px rgba(255, 215, 0, 0.7)' : 'none',
-              transition: 'all 0.3s ease'
-            }}
-          >
+          <span className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}>
             +{(currentCommission || 0).toFixed(2)} Bs
           </span>
-          <button 
-            onClick={handleLogout}
-            style={{ 
-              padding: '8px 14px', 
-              background: '#374151', 
-              color: '#ef4444', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer',
-              fontSize: '0.9rem'
-            }}
-          >
+          <button onClick={handleLogout} className="btn app-logout-btn">
             Cerrar
           </button>
         </div>
@@ -254,30 +180,16 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
         )}
         {isAdmin && <NavLink to="/admin" label="Admin" />}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px' }}>
-          <span style={{ color: '#9ca3af', fontWeight: '500' }}>
+        <div className="mobile-user-panel">
+          <span className="desktop-user-name">
             {displayName}
           </span>
-          <span 
-            style={{ 
-              color: '#10b981', 
-              fontWeight: '600',
-              background: 'rgba(16, 185, 129, 0.1)',
-              padding: '6px 14px',
-              borderRadius: '10px',
-              border: isTopSeller ? '2px solid gold' : '1px solid #374151',
-              boxShadow: isTopSeller ? '0 0 15px rgba(255, 215, 0, 0.7)' : 'none',
-              transition: 'all 0.3s ease'
-            }}
-          >
+          <span className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}>
             +{(currentCommission || 0).toFixed(2)} Bs
           </span>
-          <div 
-            onClick={handleLogout}
-            style={{ cursor: 'pointer', color: '#ef4444', fontWeight: '600' }}
-          >
+          <button onClick={handleLogout} className="mobile-logout-btn">
             Cerrar Sesión
-          </div>
+          </button>
         </div>
       </div>
     </>

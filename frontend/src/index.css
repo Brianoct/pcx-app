@@ -4,6 +4,7 @@
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
   --bg-tertiary: #111827;
+  --bg-elevated: #0b1324;
 
   --text-primary: #f1f5f9;
   --text-secondary: #9ca3af;
@@ -16,10 +17,13 @@
   --danger: #ef4444;
 
   --border: #374151;
+  --border-soft: #475569;
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.1);
   --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+  --shadow-lg: 0 12px 26px rgba(2, 6, 23, 0.35);
   --radius-sm: 6px;
   --radius-md: 12px;
+  --radius-lg: 16px;
   --transition: all 0.3s ease;
 }
 
@@ -31,24 +35,32 @@
 
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background: var(--bg-primary);
+  background:
+    radial-gradient(circle at 20% -10%, rgba(59, 130, 246, 0.1), transparent 35%),
+    radial-gradient(circle at 80% -20%, rgba(225, 29, 72, 0.09), transparent 34%),
+    var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
 
+#root {
+  min-height: 100vh;
+}
+
 .container {
-  padding: 90px 16px 40px;
+  padding: 86px 16px 34px;
   max-width: 1440px;
   margin: 0 auto;
 }
 
 .card {
   background: var(--bg-secondary);
-  border-radius: var(--radius-md);
+  border: 1px solid rgba(71, 85, 105, 0.45);
+  border-radius: var(--radius-lg);
   padding: 24px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
   margin-bottom: 24px;
 }
 
@@ -62,13 +74,14 @@ button, .btn {
   cursor: pointer;
   transition: var(--transition);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
   font-weight: 600;
   padding: 12px 20px;
   min-height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  letter-spacing: 0.01em;
 }
 
 .btn-primary {
@@ -146,10 +159,11 @@ button, .btn {
 }
 
 .mobile-card {
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 12px;
+  background: linear-gradient(180deg, #1e293b 0%, #18253a 100%);
+  border: 1px solid rgba(71, 85, 105, 0.55);
+  border-radius: 14px;
   padding: 14px;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.22);
 }
 
 .mobile-card-header {
@@ -157,7 +171,9 @@ button, .btn {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.25);
 }
 
 .mobile-card-id {
@@ -168,6 +184,7 @@ button, .btn {
 .mobile-card-total {
   color: #10b981;
   font-weight: 700;
+  font-size: 0.95rem;
 }
 
 .mobile-card-body {
@@ -182,7 +199,7 @@ button, .btn {
   align-items: flex-start;
   gap: 10px;
   color: #e2e8f0;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
 }
 
 .mobile-card-label {
@@ -206,7 +223,7 @@ button, .btn {
   min-height: 44px;
   border: 1px solid #334155;
   border-radius: 10px;
-  background: #1e293b;
+  background: #172033;
   color: #cbd5e1;
   font-weight: 700;
 }
@@ -232,7 +249,7 @@ button, .btn {
 
 .quote-sale-type-group {
   display: inline-flex;
-  background: #0b1320;
+  background: #101a2d;
   border: 1px solid #334155;
   border-radius: 12px;
   padding: 4px;
@@ -250,7 +267,7 @@ button, .btn {
 }
 
 .quote-sale-type-btn.active {
-  background: #1f2937;
+  background: #243349;
   color: #fff;
 }
 
@@ -273,7 +290,8 @@ button, .btn {
   font-weight: 600;
   transition: var(--transition);
   position: relative;
-  padding-bottom: 4px;
+  padding: 6px 2px;
+  border-radius: 8px;
 }
 
 .nav-link.active {
@@ -284,10 +302,10 @@ button, .btn {
 .nav-link.active::after {
   content: '';
   position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 3px;
+  bottom: -1px;
+  left: 8%;
+  width: 84%;
+  height: 2.5px;
   background: var(--accent-primary);
   border-radius: 3px 3px 0 0;
 }
@@ -299,13 +317,14 @@ nav {
   left: 0;
   right: 0;
   z-index: 1000;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border);
-  padding: 12px 16px;
+  background: rgba(15, 23, 42, 0.86);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.55);
+  padding: 10px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35);
+  backdrop-filter: blur(10px);
 }
 
 /* Hamburger Menu */
@@ -342,7 +361,7 @@ nav {
   bottom: 0;
   width: 80%; /* or 300px for fixed width */
   max-width: 320px;
-  background: var(--bg-primary);
+  background: #101a2d;
   border-right: 1px solid var(--border);
   transform: translateX(-100%);
   transition: transform 0.3s ease;
@@ -350,7 +369,7 @@ nav {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding-top: 70px; /* space below fixed nav */
+  padding-top: 72px; /* space below fixed nav */
 }
 
 .nav-links.mobile.active {
@@ -361,11 +380,11 @@ nav {
 .nav-links.mobile .mobile-logout {
   display: block;
   color: var(--text-primary);
-  font-size: 1.1rem;
+  font-size: 1.02rem;
   font-weight: 500;
-  padding: 16px 24px;
+  padding: 14px 20px;
   text-decoration: none;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.35);
   transition: background 0.2s ease;
 }
 
@@ -396,7 +415,7 @@ nav {
   }
 
   .container {
-    padding: 84px 12px 28px;
+    padding: 82px 12px 26px;
   }
 
   nav .nav-links:not(.mobile) {
@@ -411,6 +430,7 @@ nav {
     display: grid;
     grid-template-columns: 1fr;
     gap: 10px;
+    margin-bottom: 14px;
   }
 
   .filter-input,
@@ -426,7 +446,7 @@ nav {
   }
 
   .quote-step-btn {
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     min-height: 40px;
   }
 
@@ -447,6 +467,7 @@ nav {
   .quote-summary-panel {
     margin: 0 -16px -16px;
     border-radius: 0;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
   }
 }
 
@@ -460,7 +481,8 @@ nav {
 
 @media (max-width: 480px) {
   h1, h2 {
-    font-size: 1.5rem;
+    font-size: 1.32rem;
+    margin-bottom: 1rem;
   }
 
   .table {
@@ -476,13 +498,13 @@ nav {
   }
 
   .card {
-    padding: 16px;
-    border-radius: 10px;
+    padding: 14px;
+    border-radius: 12px;
   }
 
   .mobile-card {
     padding: 12px;
-    border-radius: 10px;
+    border-radius: 12px;
   }
 
   .mobile-card-row {
