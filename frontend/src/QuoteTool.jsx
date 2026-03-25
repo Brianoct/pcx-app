@@ -363,12 +363,7 @@ export default function QuoteTool({ token, user }) {
 
       {step === 1 && (
         <div className="card quote-client-card">
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: '20px',
-            marginBottom: '24px'
-          }}>
+          <div className="quote-client-grid">
             <div>
               <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>Cliente</label>
               <input
