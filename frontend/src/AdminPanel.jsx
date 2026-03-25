@@ -1,7 +1,9 @@
 // src/AdminPanel.jsx
 import { useState, useEffect } from 'react';
 import AdminDashboard from './AdminDashboard';
-import { ACCESS_LABELS, buildAccessForUser } from './roleAccess';
+import { ACCESS_LABELS, buildAccessForUser, ROLE_LABELS } from './roleAccess';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 // User management component
 function UserManagement({ token }) {
@@ -483,14 +485,174 @@ function StatisticsDashboard({ token }) {
   return <AdminDashboard token={token} />;
 }
 
+function RoleConfiguration({ token }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [savingRole, setSavingRole] = useState(null);
+  const [applyingRole, setApplyingRole] = useState(null);
+  const [message, setMessage] = useState('');
+
+  const loadDefaults = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/roles/access-defaults`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('No se pudo cargar configuración de roles');
+      const data = await res.json();
+      setRows(data);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDefaults();
+  }, [token]);
+
+  const toggleRoleAccess = (role, key) => {
+    setRows((prev) => prev.map((row) => (
+      row.role === role
+        ? {
+            ...row,
+            panel_access: {
+              ...(row.panel_access || {}),
+              [key]: !row.panel_access?.[key]
+            }
+          }
+        : row
+    )));
+  };
+
+  const saveRole = async (role) => {
+    const row = rows.find((r) => r.role === role);
+    if (!row) return;
+    setSavingRole(role);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/roles/access-defaults/${encodeURIComponent(role)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ panel_access: row.panel_access })
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo guardar configuración del rol');
+      }
+      setMessage(`Configuración guardada para rol ${role}.`);
+      await loadDefaults();
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSavingRole(null);
+    }
+  };
+
+  const applyRoleDefaultsToUsers = async (role) => {
+    if (!window.confirm(`¿Aplicar la configuración por defecto del rol "${role}" a todos los usuarios con ese rol?`)) return;
+    setApplyingRole(role);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/roles/access-defaults/${encodeURIComponent(role)}/apply`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo aplicar configuración a usuarios');
+      }
+      const data = await res.json();
+      setMessage(`Aplicado a ${data.updated_users ?? 0} usuario(s) del rol ${role}.`);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setApplyingRole(null);
+    }
+  };
+
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: '40px' }}>Cargando configuración de roles...</div>;
+  }
+
+  return (
+    <div style={{ background: '#1e293b', borderRadius: '12px', padding: '20px' }}>
+      <h3 style={{ marginBottom: '12px' }}>Configuración de Roles</h3>
+      <p style={{ color: '#94a3b8', marginBottom: '16px' }}>
+        Edita los paneles por defecto por rol. Luego puedes aplicar esa configuración a todos los usuarios del rol.
+      </p>
+
+      {message && (
+        <div style={{
+          marginBottom: '14px',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
+          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+        }}>
+          {message}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: '12px' }}>
+        {rows.map((row) => (
+          <div key={row.role} style={{ border: '1px solid #334155', borderRadius: '10px', padding: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+              <strong>{row.role}</strong>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => saveRole(row.role)}
+                  disabled={savingRole === row.role}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#3b82f6', color: 'white', cursor: 'pointer' }}
+                >
+                  {savingRole === row.role ? 'Guardando...' : 'Guardar rol'}
+                </button>
+                <button
+                  onClick={() => applyRoleDefaultsToUsers(row.role)}
+                  disabled={applyingRole === row.role}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#10b981', color: 'white', cursor: 'pointer' }}
+                >
+                  {applyingRole === row.role ? 'Aplicando...' : 'Aplicar a usuarios'}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+              {ACCESS_LABELS.map((field) => (
+                <label key={`${row.role}-${field.key}`} style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#cbd5e1' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(row.panel_access?.[field.key])}
+                    onChange={() => toggleRoleAccess(row.role, field.key)}
+                  />
+                  {field.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AdminPanel({ token }) {
   const [activeTab, setActiveTab] = useState('usuarios');
 
   return (
     <div style={{ padding: '16px', maxWidth: '1400px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '32px', borderBottom: '2px solid #334155' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '32px', borderBottom: '2px solid #334155' }}>
         <button onClick={() => setActiveTab('usuarios')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'usuarios' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'usuarios' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'usuarios' ? '600' : '500', cursor: 'pointer' }}>
           Usuarios
+        </button>
+        <button onClick={() => setActiveTab('roles')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'roles' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'roles' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'roles' ? '600' : '500', cursor: 'pointer' }}>
+          Configuración de Roles
         </button>
         <button onClick={() => setActiveTab('dashboard')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'dashboard' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'dashboard' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'dashboard' ? '600' : '500', cursor: 'pointer' }}>
           Dashboard
@@ -499,6 +661,7 @@ function AdminPanel({ token }) {
 
       <div>
         {activeTab === 'usuarios' && <UserManagement token={token} />}
+        {activeTab === 'roles' && <RoleConfiguration token={token} />}
         {activeTab === 'dashboard' && <StatisticsDashboard token={token} />}
       </div>
     </div>

@@ -55,6 +55,16 @@ const ROLE_DEFAULTS = {
   }
 };
 
+export const ROLE_OPTIONS = [
+  'Ventas',
+  'Ventas Lider',
+  'Marketing',
+  'Marketing Lider',
+  'Admin',
+  'Almacen Lider',
+  'Almacen'
+];
+
 const PANEL_KEY_ALIASES = {
   cotizar: 'cotizar',
   quote: 'cotizar',
@@ -130,6 +140,18 @@ export function buildAccessForUser(role = '', panelAccess = null) {
   return merged;
 }
 
+export function roleDefaultsFromApi(rows = []) {
+  const map = {};
+  for (const role of ROLE_OPTIONS) {
+    map[role] = buildAccessForUser(role);
+  }
+  for (const row of rows || []) {
+    if (!row?.role_name) continue;
+    map[row.role_name] = buildAccessForUser(row.role_name, row.panel_access);
+  }
+  return map;
+}
+
 export function canAccessPanel(accessOrRole, maybeAccessOrKey, maybeKey) {
   let access;
   let key;
@@ -163,4 +185,14 @@ export const ACCESS_LABELS = [
   { key: 'marketing_combos', label: 'Combos (Marketing)' },
   { key: 'marketing_cupones', label: 'Cupones (Marketing)' },
   { key: 'admin', label: 'Panel Admin' }
+];
+
+export const ROLE_LABELS = [
+  { role: 'Ventas', key: 'ventas' },
+  { role: 'Ventas Lider', key: 'ventas lider' },
+  { role: 'Almacen', key: 'almacen' },
+  { role: 'Almacen Lider', key: 'almacen lider' },
+  { role: 'Marketing', key: 'marketing' },
+  { role: 'Marketing Lider', key: 'marketing lider' },
+  { role: 'Admin', key: 'admin' }
 ];

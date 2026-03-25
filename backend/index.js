@@ -109,6 +109,16 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
   return base;
 };
 
+const DEFAULT_ROLE_ACCESS = {
+  Ventas: getDefaultPanelAccessForRole('Ventas'),
+  'Ventas Lider': getDefaultPanelAccessForRole('Ventas Lider'),
+  Almacen: getDefaultPanelAccessForRole('Almacen'),
+  'Almacen Lider': getDefaultPanelAccessForRole('Almacen Lider'),
+  Marketing: getDefaultPanelAccessForRole('Marketing'),
+  'Marketing Lider': getDefaultPanelAccessForRole('Marketing Lider'),
+  Admin: getDefaultPanelAccessForRole('Admin')
+};
+
 const sanitizePanelAccess = (panelAccess, roleValue = '') => {
   const defaults = getDefaultPanelAccessForRole(roleValue);
   if (!panelAccess || typeof panelAccess !== 'object' || Array.isArray(panelAccess)) {
@@ -123,6 +133,30 @@ const sanitizePanelAccess = (panelAccess, roleValue = '') => {
 const canAccessPanel = (panelAccess, roleValue, key) => {
   const effective = sanitizePanelAccess(panelAccess, roleValue);
   return Boolean(effective[key]);
+};
+
+const ROLE_DEFAULT_ROLES = [
+  'Ventas',
+  'Ventas Lider',
+  'Almacen',
+  'Almacen Lider',
+  'Marketing',
+  'Marketing Lider',
+  'Admin'
+];
+
+const mergeAccessWithDefaults = (baseRole, panelAccess) => {
+  const defaults = getDefaultPanelAccessForRole(baseRole);
+  const merged = { ...defaults };
+  if (!panelAccess || typeof panelAccess !== 'object' || Array.isArray(panelAccess)) {
+    return merged;
+  }
+  for (const key of PANEL_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(panelAccess, key)) {
+      merged[key] = Boolean(panelAccess[key]);
+    }
+  }
+  return merged;
 };
 
 const buildUserPayload = (userRow) => {
@@ -853,6 +887,37 @@ app.get('/api/users', authenticateToken, requireRole(['admin']), async (req, res
   }
 });
 
+app.get('/api/role-access-defaults', authenticateToken, requireRole(['admin']), async (_req, res) => {
+  res.json(DEFAULT_ROLE_ACCESS);
+});
+
+app.put('/api/role-access-defaults', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const roleEntries = Object.entries(req.body || {});
+  if (roleEntries.length === 0) {
+    return res.status(400).json({ error: 'No se enviaron roles para actualizar' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const [roleLabel, accessValue] of roleEntries) {
+      const sanitized = sanitizePanelAccess(accessValue, roleLabel);
+      await client.query(
+        'UPDATE users SET panel_access = $1::jsonb WHERE role = $2',
+        [JSON.stringify(sanitized), roleLabel]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ message: 'Configuración de roles actualizada' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo actualizar configuración de roles' });
+  } finally {
+    client.release();
+  }
+});
+
 app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, res) => {
   const { email, password, role, city, phone, panel_access } = req.body;
   if (!email || !password || !role) return res.status(400).json({ error: 'Missing required fields' });
@@ -909,6 +974,85 @@ app.patch('/api/users/:id', authenticateToken, requireRole(['admin']), async (re
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// ─── ROLE ACCESS DEFAULTS (admin only) ──────────────────────────────────────
+app.get('/api/roles/access-defaults', authenticateToken, requireRole(['admin']), async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT role, panel_access
+       FROM role_panel_defaults
+       ORDER BY role ASC`
+    );
+    const map = new Map(result.rows.map((row) => [normalizeRole(row.role), row.panel_access || {}]));
+    const rows = ROLE_DEFAULT_ROLES.map((role) => {
+      const dbAccess = map.get(normalizeRole(role));
+      return {
+        role,
+        panel_access: sanitizePanelAccess(dbAccess, role)
+      };
+    });
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar configuración de roles' });
+  }
+});
+
+app.patch('/api/roles/access-defaults/:role', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const rawRole = req.params.role;
+  const matchedRole = ROLE_DEFAULT_ROLES.find((r) => normalizeRole(r) === normalizeRole(rawRole));
+  if (!matchedRole) {
+    return res.status(400).json({ error: 'Rol inválido para configuración por defecto' });
+  }
+  const panelAccess = sanitizePanelAccess(req.body?.panel_access, matchedRole);
+  try {
+    await pool.query(
+      `INSERT INTO role_panel_defaults (role, panel_access)
+       VALUES ($1, $2::jsonb)
+       ON CONFLICT (role)
+       DO UPDATE SET panel_access = EXCLUDED.panel_access, updated_at = NOW()`,
+      [matchedRole, JSON.stringify(panelAccess)]
+    );
+    res.json({ message: 'Configuración del rol guardada', role: matchedRole, panel_access: panelAccess });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo guardar configuración del rol' });
+  }
+});
+
+app.post('/api/roles/access-defaults/:role/apply', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const rawRole = req.params.role;
+  const matchedRole = ROLE_DEFAULT_ROLES.find((r) => normalizeRole(r) === normalizeRole(rawRole));
+  if (!matchedRole) {
+    return res.status(400).json({ error: 'Rol inválido para aplicar configuración' });
+  }
+  try {
+    const defaultsResult = await pool.query(
+      'SELECT panel_access FROM role_panel_defaults WHERE role = $1',
+      [matchedRole]
+    );
+    const defaultAccess = defaultsResult.rowCount > 0
+      ? defaultsResult.rows[0].panel_access
+      : null;
+    const effectiveAccess = sanitizePanelAccess(defaultAccess, matchedRole);
+
+    const updateResult = await pool.query(
+      `UPDATE users
+       SET panel_access = $1::jsonb
+       WHERE LOWER(role) = LOWER($2)`,
+      [JSON.stringify(effectiveAccess), matchedRole]
+    );
+
+    res.json({
+      message: 'Configuración aplicada a usuarios del rol',
+      role: matchedRole,
+      updated_users: updateResult.rowCount
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo aplicar configuración a usuarios' });
   }
 });
 
