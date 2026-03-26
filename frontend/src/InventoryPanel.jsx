@@ -16,10 +16,62 @@ function InventoryPanel({ token, role, access }) {
 
   const effectiveAccess = buildAccessForUser(role, access);
   const canViewGlobalInventory = canAccessPanel(effectiveAccess, 'inventarioGlobal');
+  const [userCity, setUserCity] = useState('');
+  const cityToKey = {
+    cochabamba: {
+      location: 'Cochabamba',
+      stockField: 'stock_cochabamba',
+      minField: 'min_stock_cochabamba',
+      minLabel: 'Min Cbba'
+    },
+    'santa cruz': {
+      location: 'Santa Cruz',
+      stockField: 'stock_santacruz',
+      minField: 'min_stock_santacruz',
+      minLabel: 'Min Scz'
+    },
+    santacruz: {
+      location: 'Santa Cruz',
+      stockField: 'stock_santacruz',
+      minField: 'min_stock_santacruz',
+      minLabel: 'Min Scz'
+    },
+    lima: {
+      location: 'Lima',
+      stockField: 'stock_lima',
+      minField: 'min_stock_lima',
+      minLabel: 'Min Lima'
+    }
+  };
+
+  const normalizedCity = String(userCity || '').trim().toLowerCase();
+  const individualStore = cityToKey[normalizedCity] || null;
+  const visibleStores = canViewGlobalInventory
+    ? [
+        { field: 'stock_cochabamba', location: 'Cochabamba', minField: 'min_stock_cochabamba', minLabel: 'Min Cbba' },
+        { field: 'stock_santacruz', location: 'Santa Cruz', minField: 'min_stock_santacruz', minLabel: 'Min Scz' },
+        { field: 'stock_lima', location: 'Lima', minField: 'min_stock_lima', minLabel: 'Min Lima' }
+      ]
+    : (individualStore ? [{
+      field: individualStore.stockField,
+      location: individualStore.location,
+      minField: individualStore.minField,
+      minLabel: individualStore.minLabel
+    }] : []);
 
   useEffect(() => {
     const fetchInventory = async () => {
       try {
+        const meRes = await fetch('http://localhost:4000/api/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!meRes.ok) {
+          const meErr = await meRes.json().catch(() => ({}));
+          throw new Error(meErr.error || 'No se pudo cargar sesión');
+        }
+        const me = await meRes.json();
+        setUserCity(me.city || '');
+
         const res = await fetch('http://localhost:4000/api/products', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -77,16 +129,10 @@ function InventoryPanel({ token, role, access }) {
   };
 
   const saveAllChanges = async () => {
-    const stores = [
-      { field: 'stock_cochabamba', location: 'Cochabamba' },
-      { field: 'stock_santacruz', location: 'Santa Cruz' },
-      { field: 'stock_lima', location: 'Lima' }
-    ];
-
     const changedProducts = products.filter((product) => {
       const base = originalStocks[product.sku];
       if (!base) return false;
-      return stores.some((store) => Number(product[store.field] ?? 0) !== Number(base[store.field] ?? 0));
+      return visibleStores.some((store) => Number(product[store.field] ?? 0) !== Number(base[store.field] ?? 0));
     });
 
     if (changedProducts.length === 0) return;
@@ -95,7 +141,7 @@ function InventoryPanel({ token, role, access }) {
     setSaveMessage('');
     try {
       for (const product of changedProducts) {
-        for (const store of stores) {
+        for (const store of visibleStores) {
           const new_stock = product[store.field] ?? 0;
           const base = originalStocks[product.sku];
           if (!base || Number(new_stock) === Number(base[store.field] ?? 0)) continue;
@@ -138,11 +184,7 @@ function InventoryPanel({ token, role, access }) {
   };
 
   const saveMinimums = async () => {
-    const minFields = [
-      'min_stock_cochabamba',
-      'min_stock_santacruz',
-      'min_stock_lima'
-    ];
+    const minFields = visibleStores.map((store) => store.minField);
 
     const changedMinProducts = products.filter((product) => {
       const base = originalMins[product.sku];
@@ -156,11 +198,10 @@ function InventoryPanel({ token, role, access }) {
     setSaveMessage('');
     try {
       for (const product of changedMinProducts) {
-        const payload = {
-          min_stock_cochabamba: Number(product.min_stock_cochabamba ?? 0),
-          min_stock_santacruz: Number(product.min_stock_santacruz ?? 0),
-          min_stock_lima: Number(product.min_stock_lima ?? 0)
-        };
+        const payload = {};
+        visibleStores.forEach((store) => {
+          payload[store.minField] = Number(product[store.minField] ?? 0);
+        });
 
         const res = await fetch(`http://localhost:4000/api/products/${product.sku}/min-stock`, {
           method: 'PATCH',
@@ -195,16 +236,10 @@ function InventoryPanel({ token, role, access }) {
     }
   };
 
-  const stores = [
-    { field: 'stock_cochabamba', location: 'Cochabamba' },
-    { field: 'stock_santacruz', location: 'Santa Cruz' },
-    { field: 'stock_lima', location: 'Lima' }
-  ];
-
   const changedSkus = products.reduce((acc, product) => {
     const base = originalStocks[product.sku];
     if (!base) return acc;
-    const changed = stores.some((store) => Number(product[store.field] ?? 0) !== Number(base[store.field] ?? 0));
+    const changed = visibleStores.some((store) => Number(product[store.field] ?? 0) !== Number(base[store.field] ?? 0));
     if (changed) acc.push(product.sku);
     return acc;
   }, []);
@@ -213,7 +248,7 @@ function InventoryPanel({ token, role, access }) {
   const changedMinSkus = products.reduce((acc, product) => {
     const base = originalMins[product.sku];
     if (!base) return acc;
-    const changed = ['min_stock_cochabamba', 'min_stock_santacruz', 'min_stock_lima']
+    const changed = visibleStores.map((store) => store.minField)
       .some((field) => Number(product[field] ?? 0) !== Number(base[field] ?? 0));
     if (changed) acc.push(product.sku);
     return acc;
@@ -229,16 +264,26 @@ function InventoryPanel({ token, role, access }) {
   };
 
   const lowOrCriticalCount = products.reduce((sum, product) => {
-    const hasAlert = [
-      ['stock_cochabamba', 'min_stock_cochabamba'],
-      ['stock_santacruz', 'min_stock_santacruz'],
-      ['stock_lima', 'min_stock_lima']
-    ].some(([stockField, minField]) => getStockLevel(product, stockField, minField) !== 'ok');
+    const hasAlert = visibleStores
+      .map((store) => [store.field, store.minField])
+      .some(([stockField, minField]) => getStockLevel(product, stockField, minField) !== 'ok');
     return sum + (hasAlert ? 1 : 0);
   }, 0);
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando inventario...</div>;
   if (error) return <div style={{ color: '#f87171', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
+  if (!canViewGlobalInventory && !individualStore) {
+    return (
+      <div className="container">
+        <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
+          Inventario
+        </h2>
+        <div className="card" style={{ textAlign: 'center', color: '#fca5a5' }}>
+          Tu usuario no tiene una ciudad válida configurada para el panel de inventario individual.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container">
@@ -246,7 +291,7 @@ function InventoryPanel({ token, role, access }) {
         Inventario
       </h2>
       <p style={{ textAlign: 'center', color: '#94a3b8', marginBottom: '14px' }}>
-        Vista: {canViewGlobalInventory ? 'Global' : 'Individual'}
+        Vista: {canViewGlobalInventory ? 'Global' : `Individual (${individualStore?.location || 'Ciudad no configurada'})`}
       </p>
 
       <div style={{
@@ -371,72 +416,24 @@ function InventoryPanel({ token, role, access }) {
                       <span style={{ textAlign: 'right' }}>{product.name}</span>
                     </div>
                     <div className="mobile-card-row">
-                      <span className="mobile-card-label">Cochabamba</span>
+                      <span className="mobile-card-label">{visibleStores[0]?.location || '—'}</span>
                       <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
                         <input
                           type="number"
                           min="0"
-                          value={product.stock_cochabamba ?? 0}
-                          onChange={(e) => handleStockChange(product.sku, 'stock_cochabamba', e.target.value)}
+                          value={product[visibleStores[0]?.field] ?? 0}
+                          onChange={(e) => handleStockChange(product.sku, visibleStores[0]?.field, e.target.value)}
                           style={{
                             ...inputStyle,
-                            borderColor: getStockLevel(product, 'stock_cochabamba', 'min_stock_cochabamba') === 'ok' ? inputStyle.border : '#ef4444',
-                            color: getStockLevel(product, 'stock_cochabamba', 'min_stock_cochabamba') === 'ok' ? 'white' : '#fecaca'
+                            borderColor: getStockLevel(product, visibleStores[0]?.field, visibleStores[0]?.minField) === 'ok' ? inputStyle.border : '#ef4444',
+                            color: getStockLevel(product, visibleStores[0]?.field, visibleStores[0]?.minField) === 'ok' ? 'white' : '#fecaca'
                           }}
                         />
                         <input
                           type="number"
                           min="0"
-                          value={product.min_stock_cochabamba ?? 0}
-                          onChange={(e) => handleMinChange(product.sku, 'min_stock_cochabamba', e.target.value)}
-                          style={minInputStyle}
-                          placeholder="Mín"
-                        />
-                      </div>
-                    </div>
-                    <div className="mobile-card-row">
-                      <span className="mobile-card-label">Santa Cruz</span>
-                      <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
-                        <input
-                          type="number"
-                          min="0"
-                          value={product.stock_santacruz ?? 0}
-                          onChange={(e) => handleStockChange(product.sku, 'stock_santacruz', e.target.value)}
-                          style={{
-                            ...inputStyle,
-                            borderColor: getStockLevel(product, 'stock_santacruz', 'min_stock_santacruz') === 'ok' ? inputStyle.border : '#ef4444',
-                            color: getStockLevel(product, 'stock_santacruz', 'min_stock_santacruz') === 'ok' ? 'white' : '#fecaca'
-                          }}
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          value={product.min_stock_santacruz ?? 0}
-                          onChange={(e) => handleMinChange(product.sku, 'min_stock_santacruz', e.target.value)}
-                          style={minInputStyle}
-                          placeholder="Mín"
-                        />
-                      </div>
-                    </div>
-                    <div className="mobile-card-row">
-                      <span className="mobile-card-label">Lima</span>
-                      <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
-                        <input
-                          type="number"
-                          min="0"
-                          value={product.stock_lima ?? 0}
-                          onChange={(e) => handleStockChange(product.sku, 'stock_lima', e.target.value)}
-                          style={{
-                            ...inputStyle,
-                            borderColor: getStockLevel(product, 'stock_lima', 'min_stock_lima') === 'ok' ? inputStyle.border : '#ef4444',
-                            color: getStockLevel(product, 'stock_lima', 'min_stock_lima') === 'ok' ? 'white' : '#fecaca'
-                          }}
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          value={product.min_stock_lima ?? 0}
-                          onChange={(e) => handleMinChange(product.sku, 'min_stock_lima', e.target.value)}
+                          value={product[visibleStores[0]?.minField] ?? 0}
+                          onChange={(e) => handleMinChange(product.sku, visibleStores[0]?.minField, e.target.value)}
                           style={minInputStyle}
                           placeholder="Mín"
                         />
@@ -468,12 +465,12 @@ function InventoryPanel({ token, role, access }) {
               <tr style={{ background: '#0f172a' }}>
                 <th style={{ padding: '14px 12px', width: '100px', textAlign: 'center' }}>SKU</th>
                 <th style={{ padding: '14px 12px', width: '280px', textAlign: 'center' }}>Producto</th>
-                <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Cochabamba</th>
-                <th style={{ padding: '14px 12px', width: '120px', textAlign: 'center' }}>Min Cbba</th>
-                <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Santa Cruz</th>
-                <th style={{ padding: '14px 12px', width: '120px', textAlign: 'center' }}>Min Scz</th>
-                <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Lima</th>
-                <th style={{ padding: '14px 12px', width: '120px', textAlign: 'center' }}>Min Lima</th>
+                {visibleStores.map((store) => (
+                  <th key={`${store.location}-stock`} style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>{store.location}</th>
+                ))}
+                {visibleStores.map((store) => (
+                  <th key={`${store.location}-min`} style={{ padding: '14px 12px', width: '120px', textAlign: 'center' }}>{store.minLabel}</th>
+                ))}
                 <th style={{ padding: '14px 12px', width: '180px', textAlign: 'center' }}>Última actualización</th>
                 <th style={{ padding: '14px 12px', width: '120px', textAlign: 'center' }}>Estado</th>
               </tr>
@@ -481,7 +478,7 @@ function InventoryPanel({ token, role, access }) {
             <tbody>
               {products.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                  <td colSpan={2 + (visibleStores.length * 2) + 2} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
                     No hay productos registrados.
                   </td>
                 </tr>
@@ -491,116 +488,46 @@ function InventoryPanel({ token, role, access }) {
                     <td style={{ padding: '14px 12px', textAlign: 'center' }}>{product.sku}</td>
                     <td style={{ padding: '14px 12px' }}>{product.name}</td>
 
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={product.stock_cochabamba ?? 0}
-                        onChange={(e) => handleStockChange(product.sku, 'stock_cochabamba', e.target.value)}
-                        style={{
-                          width: '90px',
-                          padding: '8px',
-                          textAlign: 'center',
-                          borderRadius: '6px',
-                          border: getStockLevel(product, 'stock_cochabamba', 'min_stock_cochabamba') === 'ok'
-                            ? (changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155')
-                            : '1px solid #ef4444',
-                          background: '#0f172a',
-                          color: getStockLevel(product, 'stock_cochabamba', 'min_stock_cochabamba') === 'ok' ? 'white' : '#fecaca'
-                        }}
-                      />
-                    </td>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={product.min_stock_cochabamba ?? 0}
-                        onChange={(e) => handleMinChange(product.sku, 'min_stock_cochabamba', e.target.value)}
-                        style={{
-                          width: '90px',
-                          padding: '8px',
-                          textAlign: 'center',
-                          borderRadius: '6px',
-                          border: changedMinSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
-                          background: '#0f172a',
-                          color: '#fbbf24'
-                        }}
-                      />
-                    </td>
-
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={product.stock_santacruz ?? 0}
-                        onChange={(e) => handleStockChange(product.sku, 'stock_santacruz', e.target.value)}
-                        style={{
-                          width: '90px',
-                          padding: '8px',
-                          textAlign: 'center',
-                          borderRadius: '6px',
-                          border: getStockLevel(product, 'stock_santacruz', 'min_stock_santacruz') === 'ok'
-                            ? (changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155')
-                            : '1px solid #ef4444',
-                          background: '#0f172a',
-                          color: getStockLevel(product, 'stock_santacruz', 'min_stock_santacruz') === 'ok' ? 'white' : '#fecaca'
-                        }}
-                      />
-                    </td>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={product.min_stock_santacruz ?? 0}
-                        onChange={(e) => handleMinChange(product.sku, 'min_stock_santacruz', e.target.value)}
-                        style={{
-                          width: '90px',
-                          padding: '8px',
-                          textAlign: 'center',
-                          borderRadius: '6px',
-                          border: changedMinSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
-                          background: '#0f172a',
-                          color: '#fbbf24'
-                        }}
-                      />
-                    </td>
-
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={product.stock_lima ?? 0}
-                        onChange={(e) => handleStockChange(product.sku, 'stock_lima', e.target.value)}
-                        style={{
-                          width: '90px',
-                          padding: '8px',
-                          textAlign: 'center',
-                          borderRadius: '6px',
-                          border: getStockLevel(product, 'stock_lima', 'min_stock_lima') === 'ok'
-                            ? (changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155')
-                            : '1px solid #ef4444',
-                          background: '#0f172a',
-                          color: getStockLevel(product, 'stock_lima', 'min_stock_lima') === 'ok' ? 'white' : '#fecaca'
-                        }}
-                      />
-                    </td>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={product.min_stock_lima ?? 0}
-                        onChange={(e) => handleMinChange(product.sku, 'min_stock_lima', e.target.value)}
-                        style={{
-                          width: '90px',
-                          padding: '8px',
-                          textAlign: 'center',
-                          borderRadius: '6px',
-                          border: changedMinSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
-                          background: '#0f172a',
-                          color: '#fbbf24'
-                        }}
-                      />
-                    </td>
+                    {visibleStores.map((store) => (
+                      <td key={`${product.sku}-${store.location}-stock`} style={{ padding: '14px 12px', textAlign: 'center' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          value={product[store.field] ?? 0}
+                          onChange={(e) => handleStockChange(product.sku, store.field, e.target.value)}
+                          style={{
+                            width: '90px',
+                            padding: '8px',
+                            textAlign: 'center',
+                            borderRadius: '6px',
+                            border: getStockLevel(product, store.field, store.minField) === 'ok'
+                              ? (changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155')
+                              : '1px solid #ef4444',
+                            background: '#0f172a',
+                            color: getStockLevel(product, store.field, store.minField) === 'ok' ? 'white' : '#fecaca'
+                          }}
+                        />
+                      </td>
+                    ))}
+                    {visibleStores.map((store) => (
+                      <td key={`${product.sku}-${store.location}-min`} style={{ padding: '14px 12px', textAlign: 'center' }}>
+                        <input
+                          type="number"
+                          min="0"
+                          value={product[store.minField] ?? 0}
+                          onChange={(e) => handleMinChange(product.sku, store.minField, e.target.value)}
+                          style={{
+                            width: '90px',
+                            padding: '8px',
+                            textAlign: 'center',
+                            borderRadius: '6px',
+                            border: changedMinSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
+                            background: '#0f172a',
+                            color: '#fbbf24'
+                          }}
+                        />
+                      </td>
+                    ))}
 
                     <td style={{ padding: '14px 12px', textAlign: 'center', color: '#94a3b8' }}>
                       {product.last_updated 

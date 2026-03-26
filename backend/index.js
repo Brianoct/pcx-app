@@ -17,8 +17,14 @@ const pool = new Pool({
   password: process.env.DB_PASS,
 });
 
-const normalizeRole = (value = '') =>
-  value.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const normalizeText = (value = '') =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+const normalizeRole = (value = '') => normalizeText(value);
 const COMPLETED_STATUSES = ['Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const PANEL_KEYS = [
   'cotizar',
@@ -144,6 +150,49 @@ const ROLE_DEFAULT_ROLES = [
   'Marketing Lider',
   'Admin'
 ];
+
+const INVENTORY_CITY_SCOPE = {
+  cochabamba: {
+    canonical: 'Cochabamba',
+    stockField: 'stock_cochabamba',
+    minField: 'min_stock_cochabamba',
+    aliases: ['cochabamba', 'cbba']
+  },
+  'santa cruz': {
+    canonical: 'Santa Cruz',
+    stockField: 'stock_santacruz',
+    minField: 'min_stock_santacruz',
+    aliases: ['santa cruz', 'santacruz', 'scz']
+  },
+  lima: {
+    canonical: 'Lima',
+    stockField: 'stock_lima',
+    minField: 'min_stock_lima',
+    aliases: ['lima']
+  }
+};
+
+const resolveInventoryScopeByCity = (cityValue = '') => {
+  const normalized = normalizeText(cityValue);
+  if (!normalized) return null;
+  return Object.values(INVENTORY_CITY_SCOPE).find((entry) => entry.aliases.includes(normalized)) || null;
+};
+
+const getInventoryAccessScope = (userContext, access) => {
+  const hasGlobalInventory = Boolean(access?.inventario_global);
+  const hasIndividualInventory = Boolean(access?.inventario_individual);
+  if (!hasGlobalInventory && !hasIndividualInventory) {
+    return { error: 'No tienes permiso de inventario' };
+  }
+  if (hasGlobalInventory) {
+    return { isGlobal: true, scope: null };
+  }
+  const scope = resolveInventoryScopeByCity(userContext?.city || '');
+  if (!scope) {
+    return { error: 'Tu usuario no tiene ciudad válida configurada para inventario individual' };
+  }
+  return { isGlobal: false, scope };
+};
 
 const mergeAccessWithDefaults = (baseRole, panelAccess) => {
   const defaults = getDefaultPanelAccessForRole(baseRole);
@@ -647,8 +696,8 @@ app.patch('/api/products/:sku/stock', authenticateToken, requireRole(['Almacen L
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
-  const canInventory = access.inventario_individual || access.inventario_global;
-  if (!canInventory) return res.status(403).json({ error: 'No tienes permiso de inventario' });
+  const inventoryScope = getInventoryAccessScope(userContext, access);
+  if (inventoryScope.error) return res.status(403).json({ error: inventoryScope.error });
 
   const { sku } = req.params;
   const { store_location, new_stock } = req.body;
@@ -664,6 +713,9 @@ app.patch('/api/products/:sku/stock', authenticateToken, requireRole(['Almacen L
   }[store_location];
 
   if (!warehouseField) return res.status(400).json({ error: 'Almacén no válido' });
+  if (!inventoryScope.isGlobal && store_location !== inventoryScope.scope.canonical) {
+    return res.status(403).json({ error: 'No puedes actualizar inventario de otro almacén' });
+  }
 
   try {
     const result = await pool.query(
@@ -694,22 +746,58 @@ app.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Almac
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
-  const canInventory = access.inventario_individual || access.inventario_global;
-  if (!canInventory) return res.status(403).json({ error: 'No tienes permiso de inventario' });
+  const inventoryScope = getInventoryAccessScope(userContext, access);
+  if (inventoryScope.error) return res.status(403).json({ error: inventoryScope.error });
 
   const { sku } = req.params;
-  const {
-    min_stock_cochabamba,
-    min_stock_santacruz,
-    min_stock_lima
-  } = req.body;
-
-  const values = [min_stock_cochabamba, min_stock_santacruz, min_stock_lima];
-  if (values.some((v) => v === undefined || v === null || Number.isNaN(Number(v)) || Number(v) < 0)) {
-    return res.status(400).json({ error: 'Los mínimos por almacén son requeridos y deben ser números >= 0' });
-  }
+  const minFields = ['min_stock_cochabamba', 'min_stock_santacruz', 'min_stock_lima'];
 
   try {
+    if (!inventoryScope.isGlobal) {
+      const allowedMinField = inventoryScope.scope.minField;
+      const providedFields = minFields.filter((field) => Object.prototype.hasOwnProperty.call(req.body, field));
+      if (providedFields.length === 0) {
+        return res.status(400).json({ error: `Debes enviar ${allowedMinField}` });
+      }
+      if (providedFields.some((field) => field !== allowedMinField)) {
+        return res.status(403).json({ error: 'No puedes actualizar mínimos de otro almacén' });
+      }
+
+      const minValue = req.body[allowedMinField];
+      if (minValue === undefined || minValue === null || Number.isNaN(Number(minValue)) || Number(minValue) < 0) {
+        return res.status(400).json({ error: 'El mínimo debe ser un número >= 0' });
+      }
+
+      const result = await pool.query(
+        `UPDATE products
+         SET ${allowedMinField} = $1,
+             last_updated = NOW()
+         WHERE sku = $2
+         RETURNING sku, ${allowedMinField}`,
+        [Number(minValue), sku.toUpperCase()]
+      );
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+
+      return res.json({
+        message: 'Mínimo actualizado',
+        ...result.rows[0]
+      });
+    }
+
+    const {
+      min_stock_cochabamba,
+      min_stock_santacruz,
+      min_stock_lima
+    } = req.body;
+
+    const values = [min_stock_cochabamba, min_stock_santacruz, min_stock_lima];
+    if (values.some((v) => v === undefined || v === null || Number.isNaN(Number(v)) || Number(v) < 0)) {
+      return res.status(400).json({ error: 'Los mínimos por almacén son requeridos y deben ser números >= 0' });
+    }
+
     const result = await pool.query(
       `UPDATE products
        SET min_stock_cochabamba = $1,
@@ -1251,11 +1339,21 @@ app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almac
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
-  if (!(access.inventario_individual || access.inventario_global)) {
-    return res.status(403).json({ error: 'No tienes permiso de inventario' });
-  }
+  const inventoryScope = getInventoryAccessScope(userContext, access);
+  if (inventoryScope.error) return res.status(403).json({ error: inventoryScope.error });
 
   try {
+    if (!inventoryScope.isGlobal) {
+      const stockField = inventoryScope.scope.stockField;
+      const minField = inventoryScope.scope.minField;
+      const result = await pool.query(`
+        SELECT sku, name, ${stockField}, ${minField}, last_updated
+        FROM products 
+        ORDER BY sku
+      `);
+      return res.json(result.rows);
+    }
+
     const result = await pool.query(`
       SELECT sku, name, stock_cochabamba, stock_santacruz, stock_lima,
              min_stock_cochabamba, min_stock_santacruz, min_stock_lima,
