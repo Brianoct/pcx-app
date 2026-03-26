@@ -212,9 +212,10 @@ function PedidosPanel({ token, role, access }) {
     const logoX = (pageWidth - logoW) / 2;
     const logoY = margin + 1;
     doc.addImage(logo, 'PNG', logoX, logoY, logoW, logoH);
-    doc.line(contentX + 1.5, logoY + logoH + 1.2, contentX + contentW - 1.5, logoY + logoH + 1.2);
+    const separatorY = logoY + logoH + 1.2;
+    doc.line(contentX + 1.5, separatorY, contentX + contentW - 1.5, separatorY);
 
-    let y = logoY + logoH + 4.2;
+    let y = separatorY + 6;
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10.5);
