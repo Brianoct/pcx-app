@@ -133,7 +133,7 @@ export function generateModernQuotePdf({
   if (altName || altPhone) {
     doc.setFillColor(255, 247, 237);
     doc.setDrawColor(253, 186, 116);
-    doc.roundedRect(left, cursorY, tableW, 13, 2, 2, 'FD');
+    doc.roundedRect(left, cursorY, tableW, 9, 2, 2, 'FD');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(154, 52, 18);
@@ -141,9 +141,12 @@ export function generateModernQuotePdf({
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
-    doc.text(truncate(altName || customerName || '—', 54), left + 40, cursorY + 5.2);
-    doc.text(`Tel: ${truncate(altPhone || customerPhone || '—', 38)}`, left + 4, cursorY + 10.2);
-    cursorY += 15;
+    const recipient = truncate(altName || customerName || '—', 36);
+    const recipientX = left + 34;
+    doc.text(recipient, recipientX, cursorY + 5.2);
+    const telX = Math.min(recipientX + doc.getTextWidth(recipient) + 5, right - 52);
+    doc.text(`Tel: ${truncate(altPhone || customerPhone || '—', 20)}`, telX, cursorY + 5.2);
+    cursorY += 11;
   }
 
   if (shippingNotes && shippingNotes.trim()) {
