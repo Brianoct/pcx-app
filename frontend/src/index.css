@@ -573,7 +573,7 @@ nav {
   .mobile-user-inline {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 16px;
     margin-left: auto;
     min-width: 0;
   }
@@ -581,6 +581,7 @@ nav {
   .mobile-user-inline .desktop-user-name {
     font-size: 0.85rem;
     max-width: 82px;
+    margin-right: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -673,12 +674,13 @@ nav {
   }
 
   .mobile-user-inline {
-    gap: 10px;
+    gap: 14px;
   }
 
   .mobile-user-inline .desktop-user-name {
     max-width: 64px;
     font-size: 0.78rem;
+    margin-right: 2px;
   }
 
   .mobile-user-inline .commission-chip {
