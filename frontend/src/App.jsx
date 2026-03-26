@@ -151,11 +151,11 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
           </div>
         </div>
 
-        <div className="mobile-nav-user">
-          <span className="mobile-nav-name">
+        <div className="mobile-user-inline">
+          <span className="desktop-user-name">
             {displayName}
           </span>
-          <span className={`commission-chip mobile-commission-chip ${isTopSeller ? 'is-top' : ''}`}>
+          <span className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}>
             +{(currentCommission || 0).toFixed(2)} Bs
           </span>
         </div>
