@@ -289,6 +289,10 @@ function App() {
     }
   };
 
+  const handleQuoteStatusChanged = () => {
+    fetchPersonalCommission();
+  };
+
   if (!token) {
     return <Login onLogin={handleLogin} />;
   }
@@ -323,7 +327,7 @@ function App() {
           path="/history"
           element={
             canAccessPanel(effectiveAccess, 'historial_global') || canAccessPanel(effectiveAccess, 'historial_individual')
-              ? <QuoteHistory token={token} role={role} access={effectiveAccess} />
+              ? <QuoteHistory token={token} role={role} access={effectiveAccess} onStatusUpdated={handleQuoteStatusChanged} />
               : <Navigate to={defaultPath} replace />
           }
         />

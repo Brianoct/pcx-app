@@ -3,7 +3,7 @@ import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { canAccessPanel } from './roleAccess';
 
-function QuoteHistory({ token, role, access }) {
+function QuoteHistory({ token, role, access, onStatusUpdated }) {
   const [quotes, setQuotes] = useState([]);
   const [filteredQuotes, setFilteredQuotes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -112,6 +112,10 @@ function QuoteHistory({ token, role, access }) {
       setQuotes(quotes.map(q =>
         q.id === quoteId ? { ...q, status: newStatus } : q
       ));
+
+      if (typeof onStatusUpdated === 'function') {
+        onStatusUpdated();
+      }
 
       alert('Estado actualizado a: ' + newStatus);
     } catch (err) {
