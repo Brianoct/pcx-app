@@ -315,7 +315,6 @@ export default function QuoteTool({ token, user }) {
         vendorName: vendedorName,
         storeLocation: almacen,
         dateText,
-        cityText: 'Cochabamba, Bolivia.',
         department: isProvincia ? null : department,
         provincia: isProvincia ? provincia : null,
         shippingNotes,

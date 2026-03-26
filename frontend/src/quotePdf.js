@@ -22,7 +22,7 @@ export function generateModernQuotePdf({
   vendorName,
   storeLocation,
   dateText,
-  cityText = 'Cochabamba, Bolivia.',
+  cityText,
   department,
   provincia,
   shippingNotes,
@@ -104,6 +104,7 @@ export function generateModernQuotePdf({
   });
 
   const locationText = provincia ? `Provincia: ${provincia}` : `Departamento: ${department || '—'}`;
+  const dispatchSourceText = storeLocation ? `Almacén: ${storeLocation}` : (cityText || '—');
 
   let cursorY = chipY + 8;
   doc.setFillColor(...BG_SOFT);
@@ -124,7 +125,7 @@ export function generateModernQuotePdf({
   doc.text(truncate(customerName || '—', 28), left + 4, cursorY + 11);
   doc.text(truncate(customerPhone || '—', 24), 106, cursorY + 11);
   doc.text(truncate(locationText, 30), left + 4, cursorY + 21);
-  doc.text(truncate(cityText, 30), 106, cursorY + 21);
+  doc.text(truncate(dispatchSourceText, 30), 106, cursorY + 21);
 
   cursorY += 28;
 

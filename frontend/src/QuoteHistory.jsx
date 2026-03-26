@@ -149,7 +149,7 @@ function QuoteHistory({ token, role, access, onStatusUpdated }) {
       vendorName: quote.vendor,
       storeLocation: quote.store_location,
       dateText: new Date(quote.created_at).toLocaleString('es-BO'),
-      cityText: 'Cochabamba, Bolivia.',
+      sourceText: quote.store_location ? `Despacho: ${quote.store_location}` : 'Origen no especificado',
       department: quote.department,
       provincia: quote.provincia,
       shippingNotes: quote.shipping_notes,
