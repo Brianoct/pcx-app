@@ -573,7 +573,7 @@ nav {
   .mobile-user-inline {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 8px;
     margin-left: auto;
     min-width: 0;
   }
@@ -581,7 +581,6 @@ nav {
   .mobile-user-inline .desktop-user-name {
     font-size: 0.85rem;
     max-width: 82px;
-    margin-right: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -646,7 +645,7 @@ nav {
   .desktop-user {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
   }
 }
 
@@ -674,13 +673,12 @@ nav {
   }
 
   .mobile-user-inline {
-    gap: 14px;
+    gap: 8px;
   }
 
   .mobile-user-inline .desktop-user-name {
     max-width: 64px;
     font-size: 0.78rem;
-    margin-right: 2px;
   }
 
   .mobile-user-inline .commission-chip {
