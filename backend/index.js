@@ -194,6 +194,22 @@ const getInventoryAccessScope = (userContext, access) => {
   return { isGlobal: false, scope };
 };
 
+const getPedidosAccessScope = (userContext, access) => {
+  const hasGlobalPedidos = Boolean(access?.pedidos_global || access?.historial_global);
+  const hasIndividualPedidos = Boolean(access?.pedidos_individual);
+  if (!hasGlobalPedidos && !hasIndividualPedidos) {
+    return { error: 'No tienes permiso de pedidos' };
+  }
+  if (hasGlobalPedidos) {
+    return { isGlobal: true, city: null };
+  }
+  const scope = resolveInventoryScopeByCity(userContext?.city || '');
+  if (!scope) {
+    return { error: 'Tu usuario no tiene ciudad válida configurada para pedidos individuales' };
+  }
+  return { isGlobal: false, city: scope.canonical };
+};
+
 const mergeAccessWithDefaults = (baseRole, panelAccess) => {
   const defaults = getDefaultPanelAccessForRole(baseRole);
   const merged = { ...defaults };
@@ -428,6 +444,8 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const pedidosScope = getPedidosAccessScope(userContext, access);
+  if (pedidosScope.error) return res.status(403).json({ error: pedidosScope.error });
 
   if (isTeamView) {
     const canSeeGlobalHistory = access.historial_global || access.pedidos_global;
@@ -442,25 +460,43 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
   }
 
   try {
-    const result = await pool.query(
-      isTeamView 
-        ? `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
-                  q.alternative_name, q.alternative_phone,
-                  q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                  q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
-           FROM quotes q
-           LEFT JOIN users u ON u.id = q.user_id
-           ORDER BY q.created_at DESC`
-        : `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
-                  q.alternative_name, q.alternative_phone,
-                  q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                  q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
-           FROM quotes q
-           LEFT JOIN users u ON u.id = q.user_id
-           WHERE q.user_id = $1
-           ORDER BY q.created_at DESC`,
-      isTeamView ? [] : [req.user.id]
-    );
+    let query = '';
+    let params = [];
+
+    if (isTeamView) {
+      query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
+                      q.alternative_name, q.alternative_phone,
+                      q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
+                      q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+               FROM quotes q
+               LEFT JOIN users u ON u.id = q.user_id
+               ORDER BY q.created_at DESC`;
+      params = [];
+    } else if (access.pedidos_individual && !access.historial_individual && !pedidosScope.isGlobal) {
+      // Pedidos individual: scope by assigned city/store.
+      query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
+                      q.alternative_name, q.alternative_phone,
+                      q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
+                      q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+               FROM quotes q
+               LEFT JOIN users u ON u.id = q.user_id
+               WHERE q.store_location = $1
+               ORDER BY q.created_at DESC`;
+      params = [pedidosScope.city];
+    } else {
+      // Historial individual: own quotes only.
+      query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
+                      q.alternative_name, q.alternative_phone,
+                      q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
+                      q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+               FROM quotes q
+               LEFT JOIN users u ON u.id = q.user_id
+               WHERE q.user_id = $1
+               ORDER BY q.created_at DESC`;
+      params = [req.user.id];
+    }
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -508,6 +544,8 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
   const canAccessAllQuotes = access.pedidos_global || access.historial_global;
+  const pedidosScope = getPedidosAccessScope(userContext, access);
+  if (pedidosScope.error) return res.status(403).json({ error: pedidosScope.error });
 
   try {
     const result = await pool.query(
@@ -524,6 +562,9 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
     const quote = result.rows[0];
     if (!canAccessAllQuotes && quote.user_id !== req.user.id) {
       return res.status(403).json({ error: 'No autorizado para ver este pedido' });
+    }
+    if (!canAccessAllQuotes && access.pedidos_individual && !access.historial_individual && !pedidosScope.isGlobal && quote.store_location !== pedidosScope.city) {
+      return res.status(403).json({ error: 'No autorizado para ver pedidos de otra ciudad' });
     }
 
     const items = quote.line_items.map(row => ({
@@ -559,6 +600,8 @@ app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
   const canManageAnyQuote = access.pedidos_global || access.historial_global;
+  const pedidosScope = getPedidosAccessScope(userContext, access);
+  if (pedidosScope.error) return res.status(403).json({ error: pedidosScope.error });
 
   if (!validStatuses.includes(status)) {
     return res.status(400).json({ error: `Estado inválido. Usa: ${validStatuses.join(', ')}` });
@@ -579,6 +622,9 @@ app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
 
     if (!canManageAnyQuote && currentRes.rows[0].user_id !== req.user.id) {
       return res.status(403).json({ error: 'No autorizado para actualizar este pedido' });
+    }
+    if (!canManageAnyQuote && access.pedidos_individual && !pedidosScope.isGlobal && currentRes.rows[0].store_location !== pedidosScope.city) {
+      return res.status(403).json({ error: 'No autorizado para actualizar pedidos de otra ciudad' });
     }
 
     const currentStatus = currentRes.rows[0].status;
