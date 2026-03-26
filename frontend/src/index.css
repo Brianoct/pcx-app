@@ -573,7 +573,7 @@ nav {
   .mobile-user-inline {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     margin-left: auto;
     min-width: 0;
   }
@@ -673,7 +673,7 @@ nav {
   }
 
   .mobile-user-inline {
-    gap: 6px;
+    gap: 10px;
   }
 
   .mobile-user-inline .desktop-user-name {
