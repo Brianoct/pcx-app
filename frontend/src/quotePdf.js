@@ -27,6 +27,7 @@ export function generateModernQuotePdf({
   provincia,
   shippingNotes,
   alternativeName,
+  alternativePhone,
   rows = [],
   subtotal = 0,
   discountPercent = 0,
@@ -127,17 +128,22 @@ export function generateModernQuotePdf({
 
   cursorY += 28;
 
-  if (alternativeName && alternativeName.trim()) {
+  const altName = String(alternativeName || '').trim();
+  const altPhone = String(alternativePhone || '').trim();
+  if (altName || altPhone) {
     doc.setFillColor(255, 247, 237);
     doc.setDrawColor(253, 186, 116);
-    doc.roundedRect(left, cursorY, tableW, 8, 2, 2, 'FD');
+    doc.roundedRect(left, cursorY, tableW, 13, 2, 2, 'FD');
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(154, 52, 18);
-    doc.text('ENVIAR A NOMBRE DE', left + 4, cursorY + 5.5);
+    doc.text('DESTINATARIO', left + 4, cursorY + 5.2);
+
     doc.setFont('helvetica', 'normal');
-    doc.text(truncate(alternativeName.trim(), 48), 68, cursorY + 5.5);
-    cursorY += 10;
+    doc.setFontSize(9);
+    doc.text(truncate(altName || customerName || '—', 54), left + 40, cursorY + 5.2);
+    doc.text(`Tel: ${truncate(altPhone || customerPhone || '—', 38)}`, left + 4, cursorY + 10.2);
+    cursorY += 15;
   }
 
   if (shippingNotes && shippingNotes.trim()) {

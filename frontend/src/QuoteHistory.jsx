@@ -154,6 +154,7 @@ function QuoteHistory({ token, role, access, onStatusUpdated }) {
       provincia: quote.provincia,
       shippingNotes: quote.shipping_notes,
       alternativeName: quote.alternative_name,
+      alternativePhone: quote.alternative_phone,
       rows,
       subtotal,
       discountPercent,

@@ -320,6 +320,7 @@ export default function QuoteTool({ token, user }) {
         provincia: isProvincia ? provincia : null,
         shippingNotes,
         alternativeName: useAlternativeName ? alternativeName.trim() : null,
+        alternativePhone: useAlternativeName ? alternativePhone.trim() : null,
         rows: expandedRows,
         subtotal,
         discountPercent,
