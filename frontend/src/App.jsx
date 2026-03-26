@@ -151,6 +151,15 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
           </div>
         </div>
 
+        <div className="mobile-nav-user">
+          <span className="mobile-nav-name">
+            {displayName}
+          </span>
+          <span className={`commission-chip mobile-commission-chip ${isTopSeller ? 'is-top' : ''}`}>
+            +{(currentCommission || 0).toFixed(2)} Bs
+          </span>
+        </div>
+
         <div className="desktop-user">
           <span className="desktop-user-name">
             {displayName}
@@ -181,12 +190,6 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
         {canSeeAdmin && <NavLink to="/admin" label="Admin" />}
 
         <div className="mobile-user-panel">
-          <span className="desktop-user-name">
-            {displayName}
-          </span>
-          <span className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}>
-            +{(currentCommission || 0).toFixed(2)} Bs
-          </span>
           <button onClick={handleLogout} className="mobile-logout-btn">
             Cerrar Sesión
           </button>

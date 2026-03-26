@@ -352,6 +352,10 @@ button, .btn {
   gap: 10px;
 }
 
+.mobile-user-inline {
+  display: none;
+}
+
 .mobile-logout-btn {
   min-height: 42px;
   border: 1px solid rgba(239, 68, 68, 0.4);
@@ -566,6 +570,27 @@ nav {
     display: none;
   }
 
+  .mobile-user-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    min-width: 0;
+  }
+
+  .mobile-user-inline .desktop-user-name {
+    font-size: 0.85rem;
+    max-width: 82px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-user-inline .commission-chip {
+    font-size: 0.84rem;
+    padding: 4px 9px;
+  }
+
   .filter-bar {
     display: grid;
     grid-template-columns: 1fr;
@@ -645,6 +670,20 @@ nav {
   .app-logo {
     height: 22px;
     max-width: 92px;
+  }
+
+  .mobile-user-inline {
+    gap: 6px;
+  }
+
+  .mobile-user-inline .desktop-user-name {
+    max-width: 64px;
+    font-size: 0.78rem;
+  }
+
+  .mobile-user-inline .commission-chip {
+    font-size: 0.76rem;
+    padding: 3px 7px;
   }
 
   .card {
