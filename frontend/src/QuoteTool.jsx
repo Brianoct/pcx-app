@@ -42,6 +42,7 @@ export default function QuoteTool({ token, user }) {
   const [roundTotal, setRoundTotal] = useState(false);
   const [useAlternativeName, setUseAlternativeName] = useState(false);
   const [alternativeName, setAlternativeName] = useState('');
+  const [alternativePhone, setAlternativePhone] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [department, setDepartment] = useState('');
@@ -213,7 +214,7 @@ export default function QuoteTool({ token, user }) {
     rows.every(r => r.sku && r.unitPrice > 0 && r.qty > 0) &&
     (!isProvincia || provincia.trim()) &&
     (isProvincia || department) &&
-    (!useAlternativeName || alternativeName.trim());
+    (!useAlternativeName || (alternativeName.trim() && alternativePhone.trim()));
 
   const saveAndGeneratePDF = async () => {
     if (!canSave) {
@@ -267,6 +268,7 @@ export default function QuoteTool({ token, user }) {
       provincia: isProvincia ? provincia : null,
       shipping_notes: shippingNotes,
       alternative_name: useAlternativeName ? alternativeName.trim() : null,
+      alternative_phone: useAlternativeName ? alternativePhone.trim() : null,
       store_location: almacen,
       vendor: vendedorName,
       venta_type: ventaType,
@@ -488,14 +490,24 @@ export default function QuoteTool({ token, user }) {
                 Enviar a nombre diferente
               </label>
               {useAlternativeName && (
-                <input
-                  type="text"
-                  maxLength={26}
-                  placeholder="Nombre alternativo para envío"
-                  value={alternativeName}
-                  onChange={(e) => setAlternativeName(e.target.value)}
-                  style={{ width: '100%', padding: '12px', marginTop: '8px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
-                />
+                <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                  <input
+                    type="text"
+                    maxLength={26}
+                    placeholder="Nombre alternativo para envío"
+                    value={alternativeName}
+                    onChange={(e) => setAlternativeName(e.target.value)}
+                    style={{ width: '100%', padding: '12px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                  />
+                  <input
+                    type="tel"
+                    maxLength={26}
+                    placeholder="Teléfono alternativo para envío"
+                    value={alternativePhone}
+                    onChange={(e) => setAlternativePhone(e.target.value)}
+                    style={{ width: '100%', padding: '12px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                  />
+                </div>
               )}
             </div>
           </div>

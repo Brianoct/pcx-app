@@ -300,6 +300,8 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     department, 
     provincia, 
     shipping_notes, 
+    alternative_name,
+    alternative_phone,
     store_location, 
     vendor, 
     venta_type, 
@@ -328,9 +330,9 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     const quoteResult = await client.query(
       `INSERT INTO quotes (
         user_id, customer_name, customer_phone, department, provincia, shipping_notes,
-        store_location, vendor, venta_type, discount_percent, line_items, subtotal, 
+        alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent, line_items, subtotal, 
         total, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
       RETURNING id`,
       [
         req.user.id,
@@ -339,6 +341,8 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
         department,
         provincia,
         shipping_notes,
+        alternative_name || null,
+        alternative_phone || null,
         store_location,
         vendor,
         venta_type,
@@ -392,12 +396,14 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
     const result = await pool.query(
       isTeamView 
         ? `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
+                  q.alternative_name, q.alternative_phone,
                   q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                   q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
            FROM quotes q
            LEFT JOIN users u ON u.id = q.user_id
            ORDER BY q.created_at DESC`
         : `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
+                  q.alternative_name, q.alternative_phone,
                   q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                   q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
            FROM quotes q
@@ -457,7 +463,7 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, user_id, customer_name, customer_phone, department, provincia, store_location, 
-              vendor, status, line_items, created_at
+              vendor, status, line_items, created_at, alternative_name, alternative_phone
        FROM quotes WHERE id = $1`,
       [id]
     );
@@ -480,6 +486,8 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       id: quote.id,
       customer_name: quote.customer_name,
       customer_phone: quote.customer_phone,
+      alternative_name: quote.alternative_name,
+      alternative_phone: quote.alternative_phone,
       department: quote.department,
       provincia: quote.provincia,
       store_location: quote.store_location,

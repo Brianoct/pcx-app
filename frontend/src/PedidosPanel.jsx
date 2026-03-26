@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import jsPDF from 'jspdf';
-import logo from './assets/PCX.png';
+import logo from './assets/logo.png';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
 
 function PedidosPanel({ token, role, access }) {
@@ -25,6 +25,17 @@ function PedidosPanel({ token, role, access }) {
   const canManageStatus = canAccessPanel(panelAccess, 'pedidosIndividual') || canViewPedidosGlobal;
 
   const normalizePhone = (phone = '') => String(phone).replace(/\D/g, '');
+  const fitTextByWidth = (doc, text = '', maxWidth = 0, suffix = '...') => {
+    const safe = String(text || '').trim();
+    if (!safe) return '—';
+    if (doc.getTextWidth(safe) <= maxWidth) return safe;
+    const suffixW = doc.getTextWidth(suffix);
+    let out = safe;
+    while (out.length > 0 && (doc.getTextWidth(out) + suffixW) > maxWidth) {
+      out = out.slice(0, -1);
+    }
+    return `${out}${suffix}`;
+  };
   const buildWhatsAppLink = (phone = '') => {
     const digits = normalizePhone(phone);
     if (!digits) return null;
@@ -175,43 +186,62 @@ function PedidosPanel({ token, role, access }) {
     });
 
     const pageWidth = 70;
-    const margin = 4;
+    const pageHeight = 40;
+    const margin = 2.5;
+    const contentX = margin;
+    const contentW = pageWidth - margin * 2;
+    const lineH = 3.8;
+    const maxCenterWidth = contentW - 3;
 
-    const logoWidth = 20;
-    const logoHeight = 8;
-    const logoX = (pageWidth - logoWidth) / 2;
-    const logoY = margin + 4;
-
-    doc.addImage(logo, 'PNG', logoX, logoY, logoWidth, logoHeight);
-
-    const textStartY = logoY + logoHeight + 5.5;
-    const lineHeight = 5.8;
-
-    doc.setFontSize(11);
-    doc.setTextColor(0);
-
-    doc.setFont("helvetica", "bold");
-    const customerName = quote.customer_name || '—';
-    const nameWidth = doc.getTextWidth(customerName);
-    doc.text(customerName, (pageWidth - nameWidth) / 2, textStartY);
-
-    doc.setFont("helvetica", "normal");
-    const celText = `Cel: ${quote.customer_phone || '—'}`;
-    const celWidth = doc.getTextWidth(celText);
-    doc.text(celText, (pageWidth - celWidth) / 2, textStartY + lineHeight);
-
+    const recipientName = (quote.alternative_name && String(quote.alternative_name).trim())
+      ? quote.alternative_name.trim()
+      : (quote.customer_name || '—');
+    const recipientPhone = (quote.alternative_phone && String(quote.alternative_phone).trim())
+      ? quote.alternative_phone.trim()
+      : (quote.customer_phone || '—');
     const locationText = quote.provincia || quote.department || '—';
-    const locationWidth = doc.getTextWidth(locationText);
-    doc.text(locationText, (pageWidth - locationWidth) / 2, textStartY + lineHeight * 2);
+    const notesText = quote.shipping_notes ? String(quote.shipping_notes).trim() : '';
 
-    if (quote.shipping_notes && quote.shipping_notes.trim()) {
-      doc.setFontSize(9.5);
-      const notes = quote.shipping_notes.trim();
-      const splitNotes = doc.splitTextToSize(notes, 60);
-      doc.text(splitNotes, (pageWidth - doc.getTextWidth(splitNotes[0])) / 2, textStartY + lineHeight * 3);
+    // Border and header separator for cleaner thermal print look
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.2);
+    doc.rect(contentX, margin, contentW, pageHeight - margin * 2);
+
+    const logoW = 18;
+    const logoH = 7;
+    const logoX = (pageWidth - logoW) / 2;
+    const logoY = margin + 1;
+    doc.addImage(logo, 'PNG', logoX, logoY, logoW, logoH);
+    doc.line(contentX + 1.5, logoY + logoH + 1.2, contentX + contentW - 1.5, logoY + logoH + 1.2);
+
+    let y = logoY + logoH + 4.2;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    const namePrint = fitTextByWidth(doc, recipientName, maxCenterWidth);
+    doc.text(namePrint, pageWidth / 2, y, { align: 'center' });
+    y += lineH + 0.2;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    const phonePrint = fitTextByWidth(doc, `Cel: ${recipientPhone}`, maxCenterWidth);
+    doc.text(phonePrint, pageWidth / 2, y, { align: 'center' });
+    y += lineH;
+
+    const locationPrint = fitTextByWidth(doc, locationText, maxCenterWidth);
+    doc.text(locationPrint, pageWidth / 2, y, { align: 'center' });
+
+    if (notesText) {
+      y += lineH;
+      doc.setFontSize(7.7);
+      const noteLines = doc.splitTextToSize(`Nota: ${notesText}`, contentW - 4).slice(0, 2);
+      noteLines.forEach((line, idx) => {
+        const fitted = fitTextByWidth(doc, line, maxCenterWidth);
+        doc.text(fitted, pageWidth / 2, y + (idx * 3.2), { align: 'center' });
+      });
     }
 
-    doc.save(`etiqueta_${quote.id}_${customerName.replace(/\s+/g, '_') || 'cliente'}.pdf`);
+    doc.save(`etiqueta_${quote.id}_${recipientName.replace(/\s+/g, '_') || 'cliente'}.pdf`);
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando pedidos...</div>;
