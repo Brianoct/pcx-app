@@ -1519,7 +1519,7 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
         `SELECT COALESCE(SUM(q.total), 0) AS total_sales
          FROM quotes q
          WHERE q.status = $1
-           AND LOWER(TRIM(q.store_location)) = LOWER(TRIM($2))${allSalesDateFilter.sql}`,
+           AND LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '\\s+', '', 'g')) = LOWER(REGEXP_REPLACE($2, '\\s+', '', 'g'))${allSalesDateFilter.sql}`,
         ['Enviado', localStore, ...allSalesDateFilter.params]
       );
       const localSales = Number(localSalesRes.rows[0]?.total_sales || 0);
