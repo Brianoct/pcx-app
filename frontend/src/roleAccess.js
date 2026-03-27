@@ -62,7 +62,9 @@ export const ROLE_OPTIONS = [
   'Marketing Lider',
   'Admin',
   'Almacen Lider',
-  'Almacen'
+  'Almacen',
+  'Microfabrica Lider',
+  'Microfabrica'
 ];
 
 const PANEL_KEY_ALIASES = {
@@ -192,6 +194,8 @@ export const ROLE_LABELS = [
   { role: 'Ventas Lider', key: 'ventas lider' },
   { role: 'Almacen', key: 'almacen' },
   { role: 'Almacen Lider', key: 'almacen lider' },
+  { role: 'Microfabrica Lider', key: 'microfabrica lider' },
+  { role: 'Microfabrica', key: 'microfabrica' },
   { role: 'Marketing', key: 'marketing' },
   { role: 'Marketing Lider', key: 'marketing lider' },
   { role: 'Admin', key: 'admin' }

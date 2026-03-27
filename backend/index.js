@@ -112,6 +112,12 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     };
   }
 
+  if (role === 'microfabrica lider' || role === 'microfabrica') {
+    return {
+      ...base
+    };
+  }
+
   return base;
 };
 
@@ -120,6 +126,8 @@ const DEFAULT_ROLE_ACCESS = {
   'Ventas Lider': getDefaultPanelAccessForRole('Ventas Lider'),
   Almacen: getDefaultPanelAccessForRole('Almacen'),
   'Almacen Lider': getDefaultPanelAccessForRole('Almacen Lider'),
+  'Microfabrica Lider': getDefaultPanelAccessForRole('Microfabrica Lider'),
+  Microfabrica: getDefaultPanelAccessForRole('Microfabrica'),
   Marketing: getDefaultPanelAccessForRole('Marketing'),
   'Marketing Lider': getDefaultPanelAccessForRole('Marketing Lider'),
   Admin: getDefaultPanelAccessForRole('Admin')
@@ -146,10 +154,64 @@ const ROLE_DEFAULT_ROLES = [
   'Ventas Lider',
   'Almacen',
   'Almacen Lider',
+  'Microfabrica Lider',
+  'Microfabrica',
   'Marketing',
   'Marketing Lider',
   'Admin'
 ];
+
+const ROLE_KEYS = {
+  admin: 'admin',
+  ventasLider: 'ventas lider',
+  ventas: 'ventas',
+  almacenLider: 'almacen lider',
+  almacen: 'almacen',
+  marketingLider: 'marketing lider',
+  marketing: 'marketing',
+  microfabricaLider: 'microfabrica lider',
+  microfabrica: 'microfabrica'
+};
+
+const COMMISSION_SETTINGS_DEFAULT = {
+  ventas_lider_percent: 5,
+  ventas_top_percent: 12,
+  ventas_regular_percent: 8,
+  almacen_percent: 5,
+  marketing_lider_percent: 5
+};
+
+const clampPercent = (value, fallback) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  if (n < 0) return 0;
+  if (n > 100) return 100;
+  return n;
+};
+
+const sanitizeCommissionSettings = (raw = {}) => {
+  const src = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+  return {
+    ventas_lider_percent: clampPercent(src.ventas_lider_percent, COMMISSION_SETTINGS_DEFAULT.ventas_lider_percent),
+    ventas_top_percent: clampPercent(src.ventas_top_percent, COMMISSION_SETTINGS_DEFAULT.ventas_top_percent),
+    ventas_regular_percent: clampPercent(src.ventas_regular_percent, COMMISSION_SETTINGS_DEFAULT.ventas_regular_percent),
+    almacen_percent: clampPercent(src.almacen_percent, COMMISSION_SETTINGS_DEFAULT.almacen_percent),
+    marketing_lider_percent: clampPercent(src.marketing_lider_percent, COMMISSION_SETTINGS_DEFAULT.marketing_lider_percent)
+  };
+};
+
+const loadCommissionSettings = async () => {
+  const result = await pool.query(
+    `SELECT settings
+     FROM commission_settings
+     ORDER BY id DESC
+     LIMIT 1`
+  );
+  if (result.rowCount === 0) {
+    return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
+  }
+  return sanitizeCommissionSettings(result.rows[0]?.settings || {});
+};
 
 const INVENTORY_CITY_SCOPE = {
   cochabamba: {
@@ -1198,6 +1260,59 @@ app.post('/api/roles/access-defaults/:role/apply', authenticateToken, requireRol
   }
 });
 
+// ─── COMMISSION SETTINGS (admin only) ────────────────────────────────────────
+app.get('/api/commission/settings', authenticateToken, requireRole(['admin']), async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT settings
+       FROM commission_settings
+       ORDER BY id DESC
+       LIMIT 1`
+    );
+    const dbSettings = result.rowCount > 0 ? result.rows[0].settings : null;
+    res.json(sanitizeCommissionSettings(dbSettings));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar configuración de comisiones' });
+  }
+});
+
+app.patch('/api/commission/settings', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, settings
+       FROM commission_settings
+       ORDER BY id DESC
+       LIMIT 1`
+    );
+    const current = sanitizeCommissionSettings(result.rowCount > 0 ? result.rows[0].settings : null);
+    const next = sanitizeCommissionSettings({
+      ...current,
+      ...(req.body?.settings || {})
+    });
+
+    if (result.rowCount > 0) {
+      await pool.query(
+        `UPDATE commission_settings
+         SET settings = $1::jsonb, updated_at = NOW()
+         WHERE id = $2`,
+        [JSON.stringify(next), result.rows[0].id]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO commission_settings (settings)
+         VALUES ($1::jsonb)`,
+        [JSON.stringify(next)]
+      );
+    }
+
+    res.json({ message: 'Configuración de comisiones guardada', settings: next });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo guardar configuración de comisiones' });
+  }
+});
+
 app.delete('/api/users/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [req.params.id]);
@@ -1267,10 +1382,15 @@ app.get('/api/performance', authenticateToken, async (req, res) => {
 app.get('/api/commission/current', authenticateToken, async (req, res) => {
   const { month, year } = req.query;
   const userRoleNormalized = normalizeRole(req.user.role || '');
-  const isAdmin = userRoleNormalized === 'admin';
-  const isVentasLider = userRoleNormalized.includes('ventas lider');
-  const isMarketingLider = userRoleNormalized.includes('marketing lider');
-  const isSalesSeller = ['ventas', 'sales', 'vendedor'].includes(userRoleNormalized);
+  const isAdmin = userRoleNormalized === ROLE_KEYS.admin;
+  const isVentasLider = userRoleNormalized === ROLE_KEYS.ventasLider;
+  const isMarketingLider = userRoleNormalized === ROLE_KEYS.marketingLider;
+  const isSalesSeller = userRoleNormalized === ROLE_KEYS.ventas || userRoleNormalized === 'sales' || userRoleNormalized === 'vendedor';
+  const isAlmacen = userRoleNormalized === ROLE_KEYS.almacen;
+  const isAlmacenLider = userRoleNormalized === ROLE_KEYS.almacenLider;
+  const isMarketing = userRoleNormalized === ROLE_KEYS.marketing;
+  const isMicrofabricaLider = userRoleNormalized === ROLE_KEYS.microfabricaLider;
+  const isMicrofabrica = userRoleNormalized === ROLE_KEYS.microfabrica;
 
   const allSalesDateFilter = buildDateFilter(month, year, 'q', 2);
   if (allSalesDateFilter.error) return res.status(400).json({ error: allSalesDateFilter.error });
@@ -1280,6 +1400,13 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
   if (ownDateFilter.error) return res.status(400).json({ error: ownDateFilter.error });
 
   try {
+    const commissionSettings = await loadCommissionSettings();
+    const rateVentasLider = Number(commissionSettings.ventas_lider_percent || 0) / 100;
+    const rateVentasTop = Number(commissionSettings.ventas_top_percent || 0) / 100;
+    const rateVentasRegular = Number(commissionSettings.ventas_regular_percent || 0) / 100;
+    const rateAlmacen = Number(commissionSettings.almacen_percent || 0) / 100;
+    const rateMarketingLider = Number(commissionSettings.marketing_lider_percent || 0) / 100;
+
     // Admins do not receive commission.
     if (isAdmin) {
       return res.json({
@@ -1301,29 +1428,37 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
 
     if (isMarketingLider) {
       return res.json({
-        commission: allSales * 0.05,
+        commission: allSales * rateMarketingLider,
         isTopSeller: false,
         topSellerEmail: null,
-        breakdown: { role: req.user.role, rate: 0.05, source: '5% de todas las ventas' }
+        breakdown: {
+          role: req.user.role,
+          rate: rateMarketingLider,
+          source: `${Number(commissionSettings.marketing_lider_percent || 0)}% de todas las ventas`
+        }
       });
     }
 
     if (isVentasLider) {
-      // Ventas Lider: 5% on own sales + all users with exactly Ventas role.
+      // Ventas Lider: configurable % on own sales + all users with exactly Ventas role.
       const teamSalesRes = await pool.query(
         `SELECT COALESCE(SUM(q.total), 0) AS total_sales
          FROM quotes q
          JOIN users u ON u.id = q.user_id
          WHERE q.status = ANY($1::text[])
-           AND (LOWER(u.role) = 'ventas' OR u.id = $2)${teamDateFilter.sql}`,
-        [COMPLETED_STATUSES, req.user.id, ...teamDateFilter.params]
+           AND (LOWER(u.role) = $2 OR u.id = $3)${teamDateFilter.sql}`,
+        [COMPLETED_STATUSES, ROLE_KEYS.ventas, req.user.id, ...teamDateFilter.params]
       );
       const teamSales = Number(teamSalesRes.rows[0]?.total_sales || 0);
       return res.json({
-        commission: teamSales * 0.05,
+        commission: teamSales * rateVentasLider,
         isTopSeller: false,
         topSellerEmail: null,
-        breakdown: { role: req.user.role, rate: 0.05, source: '5% ventas equipo + propias' }
+        breakdown: {
+          role: req.user.role,
+          rate: rateVentasLider,
+          source: `${Number(commissionSettings.ventas_lider_percent || 0)}% ventas equipo + propias`
+        }
       });
     }
 
@@ -1357,13 +1492,76 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
       const topSeller = rankingRes.rows[0] || null;
       const topSellerId = topSeller ? Number(topSeller.user_id) : null;
       const isTopSeller = topSellerId === Number(req.user.id) && Number(topSeller.total_sales || 0) > 0;
-      const rate = isTopSeller ? 0.12 : 0.08;
+      const rate = isTopSeller ? rateVentasTop : rateVentasRegular;
 
       return res.json({
         commission: ownSales * rate,
         isTopSeller,
         topSellerEmail: topSeller?.email || null,
-        breakdown: { role: req.user.role, rate, source: '12% líder en ventas / 8% resto' }
+        breakdown: {
+          role: req.user.role,
+          rate,
+          source: `${Number(commissionSettings.ventas_top_percent || 0)}% líder en ventas / ${Number(commissionSettings.ventas_regular_percent || 0)}% regular`
+        }
+      });
+    }
+
+    if (isAlmacen) {
+      const cityScope = resolveInventoryScopeByCity(userContext.city || '');
+      const localStore = cityScope?.canonical || userContext.city || '';
+      const localSalesRes = await pool.query(
+        `SELECT COALESCE(SUM(q.total), 0) AS total_sales
+         FROM quotes q
+         WHERE q.status = ANY($1::text[])
+           AND q.store_location = $2${allSalesDateFilter.sql}`,
+        [COMPLETED_STATUSES, localStore, ...allSalesDateFilter.params]
+      );
+      const localSales = Number(localSalesRes.rows[0]?.total_sales || 0);
+      return res.json({
+        commission: localSales * rateAlmacen,
+        isTopSeller: false,
+        topSellerEmail: null,
+        breakdown: {
+          role: req.user.role,
+          rate: rateAlmacen,
+          source: `${Number(commissionSettings.almacen_percent || 0)}% ventas de almacén local (${localStore || 'sin ciudad'})`
+        }
+      });
+    }
+
+    if (isAlmacenLider) {
+      return res.json({
+        commission: 0,
+        isTopSeller: false,
+        topSellerEmail: null,
+        breakdown: { role: req.user.role, rate: 0, source: 'Compensación por pieza / control de calidad (configurable por contrato)' }
+      });
+    }
+
+    if (isMarketing) {
+      return res.json({
+        commission: 0,
+        isTopSeller: false,
+        topSellerEmail: null,
+        breakdown: { role: req.user.role, rate: 0, source: 'Compensación por contrato' }
+      });
+    }
+
+    if (isMicrofabricaLider) {
+      return res.json({
+        commission: 0,
+        isTopSeller: false,
+        topSellerEmail: null,
+        breakdown: { role: req.user.role, rate: 0, source: 'Compensación por piezas fabricadas por producto (mensual)' }
+      });
+    }
+
+    if (isMicrofabrica) {
+      return res.json({
+        commission: 0,
+        isTopSeller: false,
+        topSellerEmail: null,
+        breakdown: { role: req.user.role, rate: 0, source: 'Ingreso por piezas fabricadas (mensual)' }
       });
     }
 

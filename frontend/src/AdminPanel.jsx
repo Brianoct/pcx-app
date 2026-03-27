@@ -1,7 +1,7 @@
 // src/AdminPanel.jsx
 import { useState, useEffect } from 'react';
 import AdminDashboard from './AdminDashboard';
-import { ACCESS_LABELS, buildAccessForUser, ROLE_LABELS } from './roleAccess';
+import { ACCESS_LABELS, buildAccessForUser, ROLE_LABELS, ROLE_OPTIONS } from './roleAccess';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
