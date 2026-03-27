@@ -802,7 +802,7 @@ app.get('/api/stock', authenticateToken, async (req, res) => {
 });
 
 // ─── UPDATE stock for a specific SKU in a warehouse ────────────────────────
-app.patch('/api/products/:sku/stock', authenticateToken, requireRole(['Almacen Lider', 'Almacen']), async (req, res) => {
+app.patch('/api/products/:sku/stock', authenticateToken, requireRole(['Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
@@ -852,7 +852,7 @@ app.patch('/api/products/:sku/stock', authenticateToken, requireRole(['Almacen L
 });
 
 // ─── UPDATE minimum stock thresholds for a SKU ──────────────────────────────
-app.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Almacen Lider', 'Almacen']), async (req, res) => {
+app.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
@@ -1581,7 +1581,7 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
 });
 
 // ─── INVENTORY ──────────────────────────────────────────────────────────────
-app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almacen']), async (req, res) => {
+app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
