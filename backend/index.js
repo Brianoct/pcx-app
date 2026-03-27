@@ -1588,6 +1588,154 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
   }
 });
 
+// ─── Current user commission orders (debug/details) ─────────────────────────
+app.get('/api/commission/current/orders', authenticateToken, async (req, res) => {
+  const { month, year } = req.query;
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+
+  const userRoleNormalized = normalizeRole(req.user.role || '');
+  const isAdmin = userRoleNormalized === ROLE_KEYS.admin;
+  const isVentasLider = userRoleNormalized === ROLE_KEYS.ventasLider;
+  const isMarketingLider = userRoleNormalized === ROLE_KEYS.marketingLider;
+  const isSalesSeller = userRoleNormalized === ROLE_KEYS.ventas || userRoleNormalized === 'sales' || userRoleNormalized === 'vendedor';
+  const isAlmacen = userRoleNormalized === ROLE_KEYS.almacen;
+
+  try {
+    // Almacén: solo Enviado desde su ciudad/almacén local.
+    if (isAlmacen) {
+      const almacenDateFilter = buildDateFilter(month, year, 'q', 3);
+      if (almacenDateFilter.error) return res.status(400).json({ error: almacenDateFilter.error });
+
+      const cityScope = resolveInventoryScopeByCity(userContext.city || '');
+      const localStore = cityScope?.canonical || userContext.city || '';
+      const result = await pool.query(
+        `SELECT q.id, q.created_at, q.customer_name, q.total, q.status, q.store_location, q.user_id, u.email AS seller_email
+         FROM quotes q
+         LEFT JOIN users u ON u.id = q.user_id
+         WHERE q.status = $1
+           AND LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '[^a-z0-9]+', '', 'g'))
+               LIKE '%' || LOWER(REGEXP_REPLACE($2::text, '[^a-z0-9]+', '', 'g')) || '%'
+           ${almacenDateFilter.sql}
+         ORDER BY q.created_at DESC, q.id DESC`,
+        ['Enviado', localStore, ...almacenDateFilter.params]
+      );
+      const totalSales = result.rows.reduce((acc, row) => acc + Number(row.total || 0), 0);
+      return res.json({
+        role: req.user.role,
+        city: userContext.city || null,
+        criteria: {
+          status: 'Enviado',
+          local_store_match: localStore || null,
+          month: month !== undefined ? Number.parseInt(month, 10) : null,
+          year: year !== undefined ? Number.parseInt(year, 10) : null
+        },
+        total_sales: totalSales,
+        orders_count: result.rows.length,
+        orders: result.rows
+      });
+    }
+
+    // Ventas: ventas propias en estados completados.
+    if (isSalesSeller) {
+      const ownDateFilter = buildDateFilter(month, year, 'q', 3);
+      if (ownDateFilter.error) return res.status(400).json({ error: ownDateFilter.error });
+
+      const result = await pool.query(
+        `SELECT q.id, q.created_at, q.customer_name, q.total, q.status, q.store_location, q.user_id, u.email AS seller_email
+         FROM quotes q
+         LEFT JOIN users u ON u.id = q.user_id
+         WHERE q.user_id = $1
+           AND q.status = ANY($2::text[])${ownDateFilter.sql}
+         ORDER BY q.created_at DESC, q.id DESC`,
+        [req.user.id, COMPLETED_STATUSES, ...ownDateFilter.params]
+      );
+      const totalSales = result.rows.reduce((acc, row) => acc + Number(row.total || 0), 0);
+      return res.json({
+        role: req.user.role,
+        criteria: {
+          user_id: req.user.id,
+          statuses: COMPLETED_STATUSES,
+          month: month !== undefined ? Number.parseInt(month, 10) : null,
+          year: year !== undefined ? Number.parseInt(year, 10) : null
+        },
+        total_sales: totalSales,
+        orders_count: result.rows.length,
+        orders: result.rows
+      });
+    }
+
+    // Ventas Lider: ventas del equipo Ventas + propias en estados completados.
+    if (isVentasLider) {
+      const teamDateFilter = buildDateFilter(month, year, 'q', 4);
+      if (teamDateFilter.error) return res.status(400).json({ error: teamDateFilter.error });
+
+      const result = await pool.query(
+        `SELECT q.id, q.created_at, q.customer_name, q.total, q.status, q.store_location, q.user_id, u.email AS seller_email
+         FROM quotes q
+         JOIN users u ON u.id = q.user_id
+         WHERE q.status = ANY($1::text[])
+           AND (LOWER(u.role) = $2 OR u.id = $3)${teamDateFilter.sql}
+         ORDER BY q.created_at DESC, q.id DESC`,
+        [COMPLETED_STATUSES, ROLE_KEYS.ventas, req.user.id, ...teamDateFilter.params]
+      );
+      const totalSales = result.rows.reduce((acc, row) => acc + Number(row.total || 0), 0);
+      return res.json({
+        role: req.user.role,
+        criteria: {
+          statuses: COMPLETED_STATUSES,
+          team_role: ROLE_KEYS.ventas,
+          include_own_user_id: req.user.id,
+          month: month !== undefined ? Number.parseInt(month, 10) : null,
+          year: year !== undefined ? Number.parseInt(year, 10) : null
+        },
+        total_sales: totalSales,
+        orders_count: result.rows.length,
+        orders: result.rows
+      });
+    }
+
+    // Marketing Lider y Admin: todas las ventas completadas.
+    if (isMarketingLider || isAdmin) {
+      const allSalesDateFilter = buildDateFilter(month, year, 'q', 2);
+      if (allSalesDateFilter.error) return res.status(400).json({ error: allSalesDateFilter.error });
+
+      const result = await pool.query(
+        `SELECT q.id, q.created_at, q.customer_name, q.total, q.status, q.store_location, q.user_id, u.email AS seller_email
+         FROM quotes q
+         LEFT JOIN users u ON u.id = q.user_id
+         WHERE q.status = ANY($1::text[])${allSalesDateFilter.sql}
+         ORDER BY q.created_at DESC, q.id DESC`,
+        [COMPLETED_STATUSES, ...allSalesDateFilter.params]
+      );
+      const totalSales = result.rows.reduce((acc, row) => acc + Number(row.total || 0), 0);
+      return res.json({
+        role: req.user.role,
+        criteria: {
+          statuses: COMPLETED_STATUSES,
+          month: month !== undefined ? Number.parseInt(month, 10) : null,
+          year: year !== undefined ? Number.parseInt(year, 10) : null
+        },
+        total_sales: totalSales,
+        orders_count: result.rows.length,
+        orders: result.rows
+      });
+    }
+
+    return res.json({
+      role: req.user.role,
+      criteria: { month, year },
+      total_sales: 0,
+      orders_count: 0,
+      orders: [],
+      note: 'Este rol no calcula comisión por pedidos en el endpoint actual'
+    });
+  } catch (err) {
+    console.error('Commission orders endpoint error:', err.stack);
+    res.status(500).json({ error: 'Error interno al obtener pedidos de comisión: ' + err.message });
+  }
+});
+
 // ─── INVENTORY ──────────────────────────────────────────────────────────────
 app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
