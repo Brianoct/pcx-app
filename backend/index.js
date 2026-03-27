@@ -1514,9 +1514,9 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
       const localSalesRes = await pool.query(
         `SELECT COALESCE(SUM(q.total), 0) AS total_sales
          FROM quotes q
-         WHERE q.status = ANY($1::text[])
+         WHERE q.status = $1
            AND q.store_location = $2${allSalesDateFilter.sql}`,
-        [COMPLETED_STATUSES, localStore, ...allSalesDateFilter.params]
+        ['Enviado', localStore, ...allSalesDateFilter.params]
       );
       const localSales = Number(localSalesRes.rows[0]?.total_sales || 0);
       return res.json({
@@ -1526,7 +1526,7 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
         breakdown: {
           role: req.user.role,
           rate: rateAlmacen,
-          source: `${Number(commissionSettings.almacen_percent || 0)}% ventas de almacén local (${localStore || 'sin ciudad'})`
+          source: `${Number(commissionSettings.almacen_percent || 0)}% pedidos enviados de almacén local (${localStore || 'sin ciudad'})`
         }
       });
     }
