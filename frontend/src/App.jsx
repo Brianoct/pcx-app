@@ -13,6 +13,8 @@ import logo from './assets/PCX.png';
 import './index.css';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
 // ─── Login Component ────────────────────────────────────────────────────────
 function Login({ onLogin }) {
   const [email, setEmail] = useState('');
@@ -23,7 +25,7 @@ function Login({ onLogin }) {
     e.preventDefault();
     setError('');
     try {
-      const res = await fetch('http://localhost:4000/api/login', {
+      const res = await fetch(`${API_BASE}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -213,7 +215,6 @@ function App() {
     const saved = localStorage.getItem('panel_access');
     return saved ? JSON.parse(saved) : null;
   });
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
   const handleLogin = (newToken, userData) => {
     localStorage.setItem('token', newToken);

@@ -3,6 +3,8 @@ import jsPDF from 'jspdf';
 import logo from './assets/logo.png';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
 function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [pedidos, setPedidos] = useState([]);
   const [filteredPedidos, setFilteredPedidos] = useState([]);
@@ -58,7 +60,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     try {
       const useTeamView = canViewPedidosGlobal;
       
-      const url = `http://localhost:4000/api/quotes${useTeamView ? '?team=true' : ''}`;
+      const url = `${API_BASE}/api/quotes${useTeamView ? '?team=true' : ''}`;
       
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -115,7 +117,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const handleStatusChange = async (quoteId, newStatus) => {
     setUpdatingId(quoteId);
     try {
-      const res = await fetch(`http://localhost:4000/api/quotes/${quoteId}/status`, {
+      const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

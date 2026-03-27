@@ -23,7 +23,7 @@ function UserManagement({ token }) {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/users', {
+        const res = await fetch(`${API_BASE}/api/users`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error('No se pudo cargar usuarios');
@@ -47,14 +47,14 @@ function UserManagement({ token }) {
     }
 
     try {
-      const res = await fetch('http://localhost:4000/api/users', {
+      const res = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(newUser)
       });
       if (!res.ok) throw new Error('No se pudo agregar usuario');
       alert('Usuario agregado con éxito');
-      const refreshRes = await fetch('http://localhost:4000/api/users', {
+      const refreshRes = await fetch(`${API_BASE}/api/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       setUsers(await refreshRes.json());
@@ -73,7 +73,7 @@ function UserManagement({ token }) {
 
   const handleUpdateRole = async (userId, newRole) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/users/${userId}`, {
+      const res = await fetch(`${API_BASE}/api/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
@@ -83,7 +83,7 @@ function UserManagement({ token }) {
       });
       if (!res.ok) throw new Error('No se pudo actualizar rol');
       alert('Rol actualizado');
-      const refreshRes = await fetch('http://localhost:4000/api/users', {
+      const refreshRes = await fetch(`${API_BASE}/api/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       setUsers(await refreshRes.json());
@@ -95,13 +95,13 @@ function UserManagement({ token }) {
   const handleDeleteUser = async (userId) => {
     if (!window.confirm('¿Eliminar este usuario y TODAS sus cotizaciones asociadas? Esto es irreversible.')) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/users/${userId}`, {
+      const res = await fetch(`${API_BASE}/api/users/${userId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('No se pudo eliminar usuario');
       alert('Usuario eliminado');
-      const refreshRes = await fetch('http://localhost:4000/api/users', {
+      const refreshRes = await fetch(`${API_BASE}/api/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       setUsers(await refreshRes.json());
@@ -130,7 +130,7 @@ function UserManagement({ token }) {
     }
 
     try {
-      const res = await fetch(`http://localhost:4000/api/users/${editModal.userId}`, {
+      const res = await fetch(`${API_BASE}/api/users/${editModal.userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
@@ -142,7 +142,7 @@ function UserManagement({ token }) {
       });
       if (!res.ok) throw new Error('No se pudo actualizar usuario');
       alert('Usuario actualizado con éxito');
-      const refreshRes = await fetch('http://localhost:4000/api/users', {
+      const refreshRes = await fetch(`${API_BASE}/api/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       setUsers(await refreshRes.json());

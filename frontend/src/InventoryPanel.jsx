@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
 function InventoryPanel({ token, role, access }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +64,7 @@ function InventoryPanel({ token, role, access }) {
   useEffect(() => {
     const fetchInventory = async () => {
       try {
-        const meRes = await fetch('http://localhost:4000/api/me', {
+        const meRes = await fetch(`${API_BASE}/api/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!meRes.ok) {
@@ -72,7 +74,7 @@ function InventoryPanel({ token, role, access }) {
         const me = await meRes.json();
         setUserCity(me.city || '');
 
-        const res = await fetch('http://localhost:4000/api/products', {
+        const res = await fetch(`${API_BASE}/api/products`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) {
@@ -146,7 +148,7 @@ function InventoryPanel({ token, role, access }) {
           const base = originalStocks[product.sku];
           if (!base || Number(new_stock) === Number(base[store.field] ?? 0)) continue;
 
-          const res = await fetch(`http://localhost:4000/api/products/${product.sku}/stock`, {
+          const res = await fetch(`${API_BASE}/api/products/${product.sku}/stock`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
@@ -203,7 +205,7 @@ function InventoryPanel({ token, role, access }) {
           payload[store.minField] = Number(product[store.minField] ?? 0);
         });
 
-        const res = await fetch(`http://localhost:4000/api/products/${product.sku}/min-stock`, {
+        const res = await fetch(`${API_BASE}/api/products/${product.sku}/min-stock`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',

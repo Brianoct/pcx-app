@@ -3,6 +3,8 @@ import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { canAccessPanel } from './roleAccess';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
 function QuoteHistory({ token, role, access, onStatusUpdated }) {
   const [quotes, setQuotes] = useState([]);
   const [filteredQuotes, setFilteredQuotes] = useState([]);
@@ -26,7 +28,7 @@ function QuoteHistory({ token, role, access, onStatusUpdated }) {
       setLoading(true);
       try {
         const isTeamAllowed = canViewGlobalHistory;
-        const url = `http://localhost:4000/api/quotes${isTeamAllowed ? '?team=true' : ''}`;
+        const url = `${API_BASE}/api/quotes${isTeamAllowed ? '?team=true' : ''}`;
 
         const res = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -95,7 +97,7 @@ function QuoteHistory({ token, role, access, onStatusUpdated }) {
 
   const updateStatus = async (quoteId, newStatus) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/quotes/${quoteId}/status`, {
+      const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
