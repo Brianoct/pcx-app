@@ -1385,6 +1385,8 @@ app.get('/api/performance', authenticateToken, async (req, res) => {
 // ─── Current user commission (nav box) ──────────────────────────────────────
 app.get('/api/commission/current', authenticateToken, async (req, res) => {
   const { month, year } = req.query;
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const userRoleNormalized = normalizeRole(req.user.role || '');
   const isAdmin = userRoleNormalized === ROLE_KEYS.admin;
   const isVentasLider = userRoleNormalized === ROLE_KEYS.ventasLider;
