@@ -374,7 +374,7 @@ function App() {
           path="/pedidos"
           element={
             canAccessPanel(effectiveAccess, 'pedidos_global') || canAccessPanel(effectiveAccess, 'pedidos_individual')
-              ? <PedidosPanel token={token} role={role} access={effectiveAccess} />
+              ? <PedidosPanel token={token} role={role} access={effectiveAccess} onStatusUpdated={handleQuoteStatusChanged} />
               : <Navigate to={defaultPath} replace />
           }
         />

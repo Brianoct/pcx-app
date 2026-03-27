@@ -3,7 +3,7 @@ import jsPDF from 'jspdf';
 import logo from './assets/logo.png';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
 
-function PedidosPanel({ token, role, access }) {
+function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [pedidos, setPedidos] = useState([]);
   const [filteredPedidos, setFilteredPedidos] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -129,6 +129,9 @@ function PedidosPanel({ token, role, access }) {
         throw new Error(errData.error || 'No se pudo actualizar el estado');
       }
 
+      if (typeof onStatusUpdated === 'function') {
+        onStatusUpdated();
+      }
       await fetchPedidos();
       alert('Estado actualizado correctamente');
     } catch (err) {
