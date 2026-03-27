@@ -259,7 +259,8 @@ const getInventoryAccessScope = (userContext, access) => {
 const getPedidosAccessScope = (userContext, access) => {
   const hasGlobalPedidos = Boolean(access?.pedidos_global || access?.historial_global);
   const hasIndividualPedidos = Boolean(access?.pedidos_individual);
-  if (!hasGlobalPedidos && !hasIndividualPedidos) {
+  const hasHistorialIndividual = Boolean(access?.historial_individual);
+  if (!hasGlobalPedidos && !hasIndividualPedidos && !hasHistorialIndividual) {
     return { error: 'No tienes permiso de pedidos' };
   }
   if (hasGlobalPedidos) {
@@ -506,8 +507,9 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
-  const pedidosScope = getPedidosAccessScope(userContext, access);
-  if (pedidosScope.error) return res.status(403).json({ error: pedidosScope.error });
+  const hasAnyPedidosAccess = Boolean(access.pedidos_individual || access.pedidos_global);
+  const pedidosScope = hasAnyPedidosAccess ? getPedidosAccessScope(userContext, access) : null;
+  if (hasAnyPedidosAccess && pedidosScope?.error) return res.status(403).json({ error: pedidosScope.error });
 
   if (isTeamView) {
     const canSeeGlobalHistory = access.historial_global || access.pedidos_global;
