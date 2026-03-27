@@ -67,8 +67,11 @@ function PedidosPanel({ token, role, access }) {
       if (!res.ok) throw new Error((await res.json()).error || 'No se pudieron cargar los pedidos');
       
       const data = await res.json();
-      const filtered = data.filter(q => 
-        q.status === 'Confirmado' || q.status === 'Pagado' || q.status === 'Embalado'
+      const filtered = data.filter((q) =>
+        q.status === 'Confirmado' ||
+        q.status === 'Pagado' ||
+        q.status === 'Embalado' ||
+        q.status === 'Enviado'
       );
       
       setPedidos(filtered);

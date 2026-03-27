@@ -684,11 +684,13 @@ app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Cotización no encontrada' });
     }
 
-    if (!canManageAnyQuote && currentRes.rows[0].user_id !== req.user.id) {
+    const isPedidosIndividualScoped = access.pedidos_individual && !canManageAnyQuote && !pedidosScope.isGlobal;
+    if (isPedidosIndividualScoped) {
+      if (currentRes.rows[0].store_location !== pedidosScope.city) {
+        return res.status(403).json({ error: 'No autorizado para actualizar pedidos de otra ciudad' });
+      }
+    } else if (!canManageAnyQuote && currentRes.rows[0].user_id !== req.user.id) {
       return res.status(403).json({ error: 'No autorizado para actualizar este pedido' });
-    }
-    if (!canManageAnyQuote && access.pedidos_individual && !pedidosScope.isGlobal && currentRes.rows[0].store_location !== pedidosScope.city) {
-      return res.status(403).json({ error: 'No autorizado para actualizar pedidos de otra ciudad' });
     }
 
     const currentStatus = currentRes.rows[0].status;
