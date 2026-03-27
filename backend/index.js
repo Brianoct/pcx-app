@@ -1404,6 +1404,8 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
   if (teamDateFilter.error) return res.status(400).json({ error: teamDateFilter.error });
   const ownDateFilter = buildDateFilter(month, year, 'q', 3);
   if (ownDateFilter.error) return res.status(400).json({ error: ownDateFilter.error });
+  const almacenDateFilter = buildDateFilter(month, year, 'q', 3);
+  if (almacenDateFilter.error) return res.status(400).json({ error: almacenDateFilter.error });
 
   try {
     const commissionSettings = await loadCommissionSettings();
@@ -1519,8 +1521,10 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
         `SELECT COALESCE(SUM(q.total), 0) AS total_sales
          FROM quotes q
          WHERE q.status = $1
-           AND LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '\\s+', '', 'g')) = LOWER(REGEXP_REPLACE($2, '\\s+', '', 'g'))${allSalesDateFilter.sql}`,
-        ['Enviado', localStore, ...allSalesDateFilter.params]
+           AND LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '[^a-z0-9]+', '', 'g'))
+               LIKE '%' || LOWER(REGEXP_REPLACE($2::text, '[^a-z0-9]+', '', 'g')) || '%'
+           ${almacenDateFilter.sql}`,
+        ['Enviado', localStore, ...almacenDateFilter.params]
       );
       const localSales = Number(localSalesRes.rows[0]?.total_sales || 0);
       return res.json({
