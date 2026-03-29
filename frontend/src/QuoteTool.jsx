@@ -24,10 +24,14 @@ export default function QuoteTool({ token, user }) {
   const [almacen, setAlmacen] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
   const [currentDateTime, setCurrentDateTime] = useState('');
+  const [salesUsers, setSalesUsers] = useState([]);
+  const [assignedSellerId, setAssignedSellerId] = useState('');
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+  const normalizedRole = String(user?.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const isAlmacenRole = normalizedRole === 'almacen' || normalizedRole === 'almacen lider';
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
@@ -74,6 +78,27 @@ export default function QuoteTool({ token, user }) {
     const interval = setInterval(updateDateTime, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!token || !isAlmacenRole) return;
+    const fetchSalesUsers = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/sellers/assignable`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('No se pudo cargar lista de vendedores');
+        const data = await res.json();
+        setSalesUsers(Array.isArray(data) ? data : []);
+        if (Array.isArray(data) && data.length > 0) {
+          setAssignedSellerId((prev) => prev || String(data[0].id));
+        }
+      } catch (err) {
+        console.error(err);
+        setSalesUsers([]);
+      }
+    };
+    fetchSalesUsers();
+  }, [token, isAlmacenRole, API_BASE]);
 
   const allItems = [
     ...PRODUCT_CATALOG.map((p) => ({ ...p, displayName: p.name })),
@@ -187,7 +212,8 @@ export default function QuoteTool({ token, user }) {
     rows.every(r => r.sku && r.unitPrice > 0 && r.qty > 0) &&
     (!isProvincia || provincia.trim()) &&
     (isProvincia || department) &&
-    (!useAlternativeName || (alternativeName.trim() && alternativePhone.trim()));
+    (!useAlternativeName || (alternativeName.trim() && alternativePhone.trim())) &&
+    (!isAlmacenRole || assignedSellerId);
 
   const saveAndGeneratePDF = async () => {
     if (!canSave) {
@@ -248,6 +274,7 @@ export default function QuoteTool({ token, user }) {
       discount_percent: discountPercent,
       discount_bs: 0,
       round_total: roundTotal,
+      seller_user_id: isAlmacenRole ? Number(assignedSellerId) : null,
       rows: rowsWithDisplay,
       subtotal,
       total
@@ -456,6 +483,41 @@ export default function QuoteTool({ token, user }) {
                 <option value="Santa Cruz">Santa Cruz</option>
               </select>
             </div>
+
+            {isAlmacenRole && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
+                  Vendedor asignado (comisión)
+                </label>
+                <select
+                  value={assignedSellerId}
+                  onChange={(e) => setAssignedSellerId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '12px 36px 12px 12px',
+                    fontSize: '1rem',
+                    borderRadius: '8px',
+                    border: '1px solid #374151',
+                    background: '#0f172a',
+                    color: 'white',
+                    appearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    backgroundSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="" disabled>Seleccionar vendedor</option>
+                  {salesUsers.map((seller) => (
+                    <option key={seller.id} value={seller.id}>
+                      {String(seller.email || '').split('@')[0]} ({seller.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>

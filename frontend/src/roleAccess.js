@@ -38,10 +38,12 @@ const ROLE_DEFAULTS = {
     admin: true
   },
   almacen: {
+    cotizar: true,
     pedidos_individual: true,
     inventario_individual: true
   },
   'almacen lider': {
+    cotizar: true,
     pedidos_global: true,
     inventario_global: true
   },

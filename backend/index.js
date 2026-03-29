@@ -83,6 +83,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
   if (role === 'almacen') {
     return {
       ...base,
+      cotizar: true,
       pedidos_individual: true,
       inventario_individual: true
     };
@@ -91,6 +92,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
   if (role === 'almacen lider') {
     return {
       ...base,
+      cotizar: true,
       pedidos_global: true,
       inventario_global: true
     };
@@ -135,16 +137,25 @@ const DEFAULT_ROLE_ACCESS = {
 
 const sanitizePanelAccess = (panelAccess, roleValue = '') => {
   const defaults = getDefaultPanelAccessForRole(roleValue);
+  const normalizedRole = normalizeRole(roleValue);
+  const forceWarehouseQuote = normalizedRole === 'almacen' || normalizedRole === 'almacen lider';
   if (!panelAccess || typeof panelAccess !== 'object' || Array.isArray(panelAccess)) {
+    if (forceWarehouseQuote) return { ...defaults, cotizar: true };
     return defaults;
   }
 
-  return Object.fromEntries(
+  const sanitized = Object.fromEntries(
     PANEL_KEYS.map((key) => [key, Boolean(panelAccess[key] ?? defaults[key])])
   );
+  if (forceWarehouseQuote) sanitized.cotizar = true;
+  return sanitized;
 };
 
 const canAccessPanel = (panelAccess, roleValue, key) => {
+  const normalizedRole = normalizeRole(roleValue);
+  if (key === 'cotizar' && (normalizedRole === 'almacen' || normalizedRole === 'almacen lider')) {
+    return true;
+  }
   const effective = sanitizePanelAccess(panelAccess, roleValue);
   return Boolean(effective[key]);
 };
@@ -420,6 +431,56 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// ─── LIST assignable sellers for warehouse quote mode ───────────────────────
+app.get('/api/sellers/assignable', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  if (!canAccessPanel(userContext.panel_access, userContext.role, 'cotizar')) {
+    return res.status(403).json({ error: 'No tienes permiso para cotizar' });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT id, email, role
+       FROM users
+       WHERE role ILIKE '%ventas%' OR role ILIKE '%sales%' OR role ILIKE '%vendedor%'
+       ORDER BY email ASC`
+    );
+    res.json(
+      result.rows.map((row) => ({
+        id: row.id,
+        email: row.email,
+        role: row.role,
+        display_name: String(row.email || '').split('@')[0] || 'Vendedor'
+      }))
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar la lista de vendedores' });
+  }
+});
+
+// Backward compatible alias for legacy frontend calls.
+app.get('/api/users/sales', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  if (!canAccessPanel(userContext.panel_access, userContext.role, 'cotizar')) {
+    return res.status(403).json({ error: 'No tienes permiso para cotizar' });
+  }
+  try {
+    const result = await pool.query(
+      `SELECT id, email, role
+       FROM users
+       WHERE role ILIKE '%ventas%' OR role ILIKE '%sales%' OR role ILIKE '%vendedor%'
+       ORDER BY email ASC`
+    );
+    res.json(result.rows.map((row) => ({ id: row.id, email: row.email, role: row.role })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar la lista de vendedores' });
+  }
+});
+
 // ─── SAVE new quote ─────────────────────────────────────────────────────────
 app.post('/api/quotes', authenticateToken, async (req, res) => {
   const { 
@@ -437,6 +498,7 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     rows, 
     subtotal, 
     total,
+    seller_user_id,
     status = 'Cotizado'
   } = req.body;
 
@@ -449,6 +511,33 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    const creatorRole = normalizeRole(userContext.role || '');
+    const isWarehouseQuoteMode = creatorRole === 'almacen' || creatorRole === 'almacen lider';
+    let quoteOwnerId = req.user.id;
+    let vendorDisplayName = vendor || userContext.email?.split('@')[0] || 'Usuario';
+
+    if (isWarehouseQuoteMode) {
+      const selectedSellerId = Number.parseInt(seller_user_id, 10);
+      if (!Number.isInteger(selectedSellerId)) {
+        return res.status(400).json({ error: 'Selecciona un vendedor válido para asignar la cotización' });
+      }
+      const sellerRes = await client.query(
+        'SELECT id, email, role FROM users WHERE id = $1',
+        [selectedSellerId]
+      );
+      if (sellerRes.rowCount === 0) {
+        return res.status(400).json({ error: 'El vendedor seleccionado no existe' });
+      }
+      const seller = sellerRes.rows[0];
+      const sellerRole = normalizeRole(seller.role || '');
+      const isAssignableSeller = sellerRole === ROLE_KEYS.ventas || sellerRole === ROLE_KEYS.ventasLider || sellerRole === 'sales' || sellerRole === 'vendedor';
+      if (!isAssignableSeller) {
+        return res.status(400).json({ error: 'Solo puedes asignar la cotización a un usuario de ventas' });
+      }
+      quoteOwnerId = seller.id;
+      vendorDisplayName = String(seller.email || '').split('@')[0] || vendorDisplayName;
+    }
 
     const lineItemsWithDisplay = rows.map(row => ({
       ...row,
@@ -463,7 +552,7 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
       RETURNING id`,
       [
-        req.user.id,
+        quoteOwnerId,
         customer_name,
         customer_phone,
         department,
@@ -472,7 +561,7 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
         alternative_name || null,
         alternative_phone || null,
         store_location,
-        vendor,
+        vendorDisplayName,
         venta_type,
         discount_percent,
         JSON.stringify(lineItemsWithDisplay),
