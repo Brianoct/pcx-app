@@ -86,6 +86,12 @@ export const ROLE_OPTIONS = [
 const PANEL_KEY_ALIASES = {
   cotizar: 'cotizar',
   quote: 'cotizar',
+  calendario: 'calendario',
+  calendar: 'calendario',
+  timeoff: 'calendario',
+  time_off: 'calendario',
+  timeoff_calendar: 'calendario',
+  timeoffcalendar: 'calendario',
   historial_individual: 'historial_individual',
   historialindividual: 'historial_individual',
   history_individual: 'historial_individual',
