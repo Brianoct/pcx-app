@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
+import { sortProductsByCatalogOrder } from './productCatalog';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -82,10 +83,11 @@ function InventoryPanel({ token, role, access }) {
           throw new Error(errData.error || 'No se pudo cargar inventario');
         }
         const data = await res.json();
-        setProducts(data);
+        const orderedData = sortProductsByCatalogOrder(data);
+        setProducts(orderedData);
         const baseline = {};
         const minBaseline = {};
-        for (const p of data) {
+        for (const p of orderedData) {
           baseline[p.sku] = {
             stock_cochabamba: Number(p.stock_cochabamba ?? 0),
             stock_santacruz: Number(p.stock_santacruz ?? 0),

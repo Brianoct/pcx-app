@@ -212,6 +212,44 @@ button, .btn {
   gap: 8px;
 }
 
+.pedidos-action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.pedidos-action-btn {
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.pedidos-action-btn--empaque {
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+  border-color: rgba(59, 130, 246, 0.45);
+}
+
+.pedidos-action-btn--empaque:hover {
+  background: rgba(59, 130, 246, 0.28);
+}
+
+.pedidos-action-btn--etiqueta {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fde68a;
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.pedidos-action-btn--etiqueta:hover {
+  background: rgba(245, 158, 11, 0.3);
+}
+
 .quote-stepper {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -601,9 +639,19 @@ nav {
   .filter-input,
   .filter-select,
   .filter-bar .btn,
-  .mobile-card-actions .btn,
   .mobile-select {
     width: 100%;
+  }
+
+  .mobile-card-actions .pedidos-action-buttons {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .mobile-card-actions .pedidos-action-btn {
+    flex: 1 1 0;
+    min-height: 40px;
+    font-size: 0.86rem;
   }
 
   .quote-stepper {

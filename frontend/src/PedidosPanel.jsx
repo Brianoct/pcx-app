@@ -269,6 +269,56 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     }
   };
 
+  const actionButtons = (quote, compact = false) => (
+    <div
+      className="pedidos-actions"
+      style={{
+        display: 'flex',
+        gap: compact ? '8px' : '6px',
+        justifyContent: 'center',
+        flexWrap: 'nowrap'
+      }}
+    >
+      <button
+        type="button"
+        className="btn pedidos-action-btn empaque"
+        onClick={() => openChecklist(quote)}
+        title="Lista de empaque"
+        style={{
+          minHeight: compact ? '36px' : '34px',
+          minWidth: compact ? '96px' : '84px',
+          padding: compact ? '8px 12px' : '6px 10px',
+          fontSize: compact ? '0.85rem' : '0.8rem',
+          borderRadius: '8px',
+          border: '1px solid rgba(16, 185, 129, 0.45)',
+          background: 'rgba(16, 185, 129, 0.15)',
+          color: '#a7f3d0',
+          fontWeight: 700
+        }}
+      >
+        Empaque
+      </button>
+      <button
+        type="button"
+        className="btn pedidos-action-btn etiqueta"
+        onClick={() => printLabel(quote)}
+        style={{
+          minHeight: compact ? '36px' : '34px',
+          minWidth: compact ? '96px' : '84px',
+          padding: compact ? '8px 12px' : '6px 10px',
+          fontSize: compact ? '0.85rem' : '0.8rem',
+          borderRadius: '8px',
+          border: '1px solid rgba(59, 130, 246, 0.45)',
+          background: 'rgba(59, 130, 246, 0.15)',
+          color: '#bfdbfe',
+          fontWeight: 700
+        }}
+      >
+        Etiqueta
+      </button>
+    </div>
+  );
+
   return (
     <div className="container">
       <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
@@ -380,12 +430,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                         </>
                       )}
                     </select>
-                    <button className="btn" style={{ background: '#10b981', color: 'white' }} onClick={() => openChecklist(quote)}>
-                      Empaque
-                    </button>
-                    <button className="btn" style={{ background: '#f59e0b', color: 'white' }} onClick={() => printLabel(quote)}>
-                      Etiqueta
-                    </button>
+                    {actionButtons(quote, true)}
                   </div>
                 </div>
               ))}
@@ -395,20 +440,20 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
               <table style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                minWidth: '900px',
-                tableLayout: 'fixed'
+                minWidth: '100%',
+                tableLayout: 'auto'
               }}>
                 <thead>
                   <tr style={{ background: '#0f172a' }}>
-                    <th style={{ padding: '12px 8px', width: '60px', textAlign: 'center' }}>ID</th>
-                    <th style={{ padding: '12px 8px', width: '120px', textAlign: 'center' }}>Vendedor</th>
-                    <th style={{ padding: '12px 8px', width: '180px', textAlign: 'center' }}>Cliente</th>
-                    <th style={{ padding: '12px 8px', width: '130px', textAlign: 'center' }}>Teléfono</th>
-                    <th style={{ padding: '12px 8px', width: '160px', textAlign: 'center' }}>Provincia / Depto</th>
-                    <th style={{ padding: '12px 8px', width: '160px', textAlign: 'center' }}>Almacén</th>
-                    <th style={{ padding: '12px 8px', width: '120px', textAlign: 'center' }}>Estado</th>
-                    <th style={{ padding: '12px 8px', width: '150px', textAlign: 'center' }}>Fecha</th>
-                    <th style={{ padding: '12px 8px', width: '140px', textAlign: 'center' }}>Acciones</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>ID</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Vendedor</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Cliente</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Teléfono</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Provincia / Depto</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Almacén</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Estado</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Fecha</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -501,48 +546,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                         {new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}
                       </td>
                       <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                          <button
-                            onClick={() => openChecklist(quote)}
-                            title="Lista de Empaque"
-                            style={{
-                              padding: '6px 12px',
-                              background: '#10b981',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontSize: '1.1rem',
-                              minWidth: '40px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              transition: 'background 0.2s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#059669'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = '#10b981'}
-                          >
-                            ✅
-                          </button>
-                          <button
-                            onClick={() => printLabel(quote)}
-                            style={{
-                              padding: '6px 12px',
-                              background: '#f59e0b',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontSize: '0.85rem',
-                              minWidth: '90px',
-                              transition: 'background 0.2s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#d97706'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = '#f59e0b'}
-                          >
-                            Etiqueta
-                          </button>
-                        </div>
+                        {actionButtons(quote, false)}
                       </td>
                     </tr>
                   ))}
