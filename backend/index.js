@@ -348,16 +348,25 @@ const sanitizeCommissionSettings = (raw = {}) => {
 };
 
 const loadCommissionSettings = async () => {
-  const result = await pool.query(
-    `SELECT settings
-     FROM commission_settings
-     ORDER BY id DESC
-     LIMIT 1`
-  );
-  if (result.rowCount === 0) {
-    return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
+  try {
+    const result = await pool.query(
+      `SELECT settings
+       FROM commission_settings
+       ORDER BY id DESC
+       LIMIT 1`
+    );
+    if (result.rowCount === 0) {
+      return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
+    }
+    return sanitizeCommissionSettings(result.rows[0]?.settings || {});
+  } catch (err) {
+    // Fallback if migration was not applied yet in local environments.
+    if (err?.code === '42P01') {
+      console.warn('commission_settings no existe; usando configuración por defecto');
+      return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
+    }
+    throw err;
   }
-  return sanitizeCommissionSettings(result.rows[0]?.settings || {});
 };
 
 const INVENTORY_CITY_SCOPE = {
