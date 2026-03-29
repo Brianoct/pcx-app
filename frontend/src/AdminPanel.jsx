@@ -4,6 +4,14 @@ import AdminDashboard from './AdminDashboard';
 import { ACCESS_LABELS, buildAccessForUser, ROLE_LABELS, ROLE_OPTIONS } from './roleAccess';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
+  value: role,
+  label: role === 'Almacen Lider'
+    ? 'Almacén Líder'
+    : role === 'Almacen'
+      ? 'Almacén'
+      : role
+}));
 
 // User management component
 function UserManagement({ token }) {
@@ -253,13 +261,11 @@ function UserManagement({ token }) {
                 onChange={(e) => handleNewRoleChange(e.target.value)}
                 style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
               >
-                <option value="Ventas">Ventas</option>
-                <option value="Ventas Lider">Ventas Líder</option>
-                <option value="Marketing">Marketing</option>
-                <option value="Marketing Lider">Marketing Líder</option>
-                <option value="Admin">Admin</option>
-                <option value="Almacen Lider">Almacén Líder</option>
-                <option value="Almacen">Almacén</option>
+                {ROLE_SELECT_OPTIONS.map((roleOption) => (
+                  <option key={roleOption.value} value={roleOption.value}>
+                    {roleOption.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -324,13 +330,11 @@ function UserManagement({ token }) {
                     onChange={(e) => handleUpdateRole(user.id, e.target.value)}
                     style={{ padding: '6px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
                   >
-                    <option value="Ventas">Ventas</option>
-                    <option value="Ventas Lider">Ventas Líder</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Marketing Lider">Marketing Líder</option>
-                    <option value="Admin">Admin</option>
-                    <option value="Almacen Lider">Almacén Líder</option>
-                    <option value="Almacen">Almacén</option>
+                    {ROLE_SELECT_OPTIONS.map((roleOption) => (
+                      <option key={roleOption.value} value={roleOption.value}>
+                        {roleOption.label}
+                      </option>
+                    ))}
                   </select>
                 </td>
                 <td style={{ padding: '12px' }}>{user.city || '—'}</td>
@@ -407,13 +411,11 @@ function UserManagement({ token }) {
                     onChange={(e) => handleEditRoleChange(e.target.value)}
                     style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
                   >
-                    <option value="Ventas">Ventas</option>
-                    <option value="Ventas Lider">Ventas Líder</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Marketing Lider">Marketing Líder</option>
-                    <option value="Admin">Admin</option>
-                    <option value="Almacen Lider">Almacén Líder</option>
-                    <option value="Almacen">Almacén</option>
+                    {ROLE_SELECT_OPTIONS.map((roleOption) => (
+                      <option key={roleOption.value} value={roleOption.value}>
+                        {roleOption.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
