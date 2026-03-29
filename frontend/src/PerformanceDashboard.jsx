@@ -35,6 +35,7 @@ function PerformanceDashboard({ token, user, role, access }) {
   const [error, setError] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [commissionSettings, setCommissionSettings] = useState(null);
 
   const canViewGlobal = canAccessPanel(access, 'rendimientoGlobal');
   const canViewIndividual = canAccessPanel(access, 'rendimientoIndividual');
@@ -56,11 +57,14 @@ function PerformanceDashboard({ token, user, role, access }) {
           year: selectedYear
         });
 
-        const [perfRes, commissionRes] = await Promise.all([
+        const [perfRes, commissionRes, settingsRes] = await Promise.all([
           fetch(`${API_BASE}/api/performance?${params.toString()}`, {
             headers: { Authorization: `Bearer ${token}` }
           }),
           fetch(`${API_BASE}/api/commission/current?${commissionParams.toString()}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          fetch(`${API_BASE}/api/commission/settings`, {
             headers: { Authorization: `Bearer ${token}` }
           })
         ]);
@@ -72,7 +76,9 @@ function PerformanceDashboard({ token, user, role, access }) {
 
         const perfData = await perfRes.json();
         const commissionData = commissionRes.ok ? await commissionRes.json() : null;
+        const settingsData = settingsRes.ok ? await settingsRes.json() : null;
         setCommissionInfo(commissionData);
+        setCommissionSettings(settingsData);
 
         if (viewMode === 'individual') {
           const source = Array.isArray(perfData) ? perfData[0] : perfData;
@@ -107,23 +113,26 @@ function PerformanceDashboard({ token, user, role, access }) {
           .map((row) => {
             if (isSalesRole(row.role)) {
               const isTop = topSellerId === row.userId && row.totalVentas > 0;
-              const rate = isTop ? 0.12 : 0.08;
+              const topPercent = Number(settingsData?.ventas_top_percent ?? 12);
+              const regularPercent = Number(settingsData?.ventas_regular_percent ?? 8);
+              const rate = (isTop ? topPercent : regularPercent) / 100;
               return {
                 ...row,
                 rate,
                 commission: row.totalVentas * rate,
-                rule: isTop ? 'Mejor en ventas (12%)' : 'Vendedor (8%)',
+                rule: isTop ? `Mejor en ventas (${topPercent}%)` : `Asesor de ventas (${regularPercent}%)`,
                 isTopSeller: isTop
               };
             }
 
             if (isVentasLiderRole(row.role)) {
               const base = row.totalVentas + salesTeamTotal;
+              const liderPercent = Number(settingsData?.ventas_lider_percent ?? 5);
               return {
                 ...row,
-                rate: 0.05,
-                commission: base * 0.05,
-                rule: 'Líder ventas (5% equipo + propias)',
+                rate: liderPercent / 100,
+                commission: base * (liderPercent / 100),
+                rule: `Mejor en ventas líder (${liderPercent}% equipo + propias)`,
                 isTopSeller: false
               };
             }
@@ -199,7 +208,7 @@ function PerformanceDashboard({ token, user, role, access }) {
             <KpiCard
               label="Tasa aplicada"
               value={`${(personal.rate * 100).toFixed(0)}%`}
-              hint={personal.isTopSeller ? 'Mejor en ventas actual' : 'Tasa asesor de ventas'}
+              hint={personal.isTopSeller ? 'Mejor en ventas actual' : `Tasa asesor de ventas (${Number(commissionSettings?.ventas_regular_percent ?? 8)}%)`}
               accent={personal.isTopSeller ? '#facc15' : '#cbd5e1'}
             />
           </div>
@@ -211,7 +220,7 @@ function PerformanceDashboard({ token, user, role, access }) {
             </p>
             {commissionInfo?.isTopSeller && (
               <div style={{ color: '#facc15', fontWeight: 700 }}>
-                Eres quien va mejor en ventas en el período. Se aplica 12%.
+                Eres quien va mejor en ventas en el período. Se aplica {Number(commissionSettings?.ventas_top_percent ?? 12)}%.
               </div>
             )}
           </div>
@@ -225,7 +234,7 @@ function PerformanceDashboard({ token, user, role, access }) {
             <KpiCard label="Cotizaciones confirmadas" value={String(totalTeamCotizaciones)} accent="#f59e0b" />
             <KpiCard label="Comisiones estimadas" value={formatMoney(totalTeamCommissions)} accent="#10b981" hint="Suma de reglas por rol" />
             <KpiCard label="Mejor en ventas" value={topSeller ? topSeller.vendor : 'Sin datos'} hint={topSeller ? formatMoney(topSeller.totalVentas) : ''} accent="#facc15" />
-            {isVentasLider && <KpiCard label="Comisión líder" value={formatMoney(leaderCommission)} hint="5% equipo + propias" accent="#22c55e" />}
+            {isVentasLider && <KpiCard label="Comisión líder" value={formatMoney(leaderCommission)} hint={`${Number(commissionSettings?.ventas_lider_percent ?? 5)}% equipo + propias`} accent="#22c55e" />}
           </div>
 
           <div style={{ overflowX: 'auto', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px' }}>

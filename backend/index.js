@@ -200,6 +200,7 @@ const COMMISSION_SETTINGS_DEFAULT = {
   almacen_percent: 5,
   marketing_lider_percent: 5
 };
+const COMMISSION_SETTINGS_KEYS = Object.keys(COMMISSION_SETTINGS_DEFAULT);
 
 const TIME_OFF_LIMITS = {
   vacation: 14,
@@ -372,23 +373,108 @@ const sanitizeCommissionSettings = (raw = {}) => {
 
 const loadCommissionSettings = async () => {
   try {
-    const result = await pool.query(
+    // Modern schema with JSON settings.
+    const jsonResult = await pool.query(
       `SELECT settings
        FROM commission_settings
-       ORDER BY id DESC
        LIMIT 1`
     );
-    if (result.rowCount === 0) {
-      return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
+    if (jsonResult.rowCount > 0) {
+      return sanitizeCommissionSettings(jsonResult.rows[0]?.settings || {});
     }
-    return sanitizeCommissionSettings(result.rows[0]?.settings || {});
+    return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
   } catch (err) {
-    // Fallback if migration was not applied yet in local environments.
+    // Missing table: return defaults without breaking nav commission.
     if (err?.code === '42P01') {
       console.warn('commission_settings no existe; usando configuración por defecto');
       return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
     }
-    throw err;
+
+    // Legacy schema without JSON column.
+    if (err?.code === '42703') {
+      try {
+        const legacyResult = await pool.query(
+          `SELECT ventas_lider_percent, ventas_top_percent, ventas_regular_percent, almacen_percent, marketing_lider_percent
+           FROM commission_settings
+           LIMIT 1`
+        );
+        if (legacyResult.rowCount === 0) {
+          return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
+        }
+        return sanitizeCommissionSettings(legacyResult.rows[0] || {});
+      } catch (legacyErr) {
+        if (legacyErr?.code === '42P01') {
+          return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
+        }
+        console.warn('No se pudo leer comisión desde esquema legacy; usando defaults:', legacyErr.message);
+        return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
+      }
+    }
+
+    // Do not block user commission UI on unexpected DB edge cases.
+    console.warn('No se pudo leer commission_settings; usando defaults:', err.message);
+    return sanitizeCommissionSettings(COMMISSION_SETTINGS_DEFAULT);
+  }
+};
+
+const saveCommissionSettings = async (settings) => {
+  const next = sanitizeCommissionSettings(settings);
+  try {
+    // Ensure modern JSON-based shape exists.
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS commission_settings (
+         id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+         settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+         updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+       )`
+    );
+    await pool.query(
+      `ALTER TABLE commission_settings
+       ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}'::jsonb`
+    );
+    await pool.query(
+      `ALTER TABLE commission_settings
+       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()`
+    );
+
+    const upsertResult = await pool.query(
+      `WITH updated AS (
+         UPDATE commission_settings
+         SET settings = $1::jsonb,
+             updated_at = NOW()
+         RETURNING 1
+       )
+       INSERT INTO commission_settings (settings, updated_at)
+       SELECT $1::jsonb, NOW()
+       WHERE NOT EXISTS (SELECT 1 FROM updated)`,
+      [JSON.stringify(next)]
+    );
+    void upsertResult;
+    return next;
+  } catch (err) {
+    // Legacy fallback: update direct percent columns when JSON migration is unavailable.
+    if (err?.code !== '42703' && err?.code !== '42P01') {
+      throw err;
+    }
+    const setParts = COMMISSION_SETTINGS_KEYS.map((key, index) => `${key} = $${index + 1}`);
+    const params = COMMISSION_SETTINGS_KEYS.map((key) => next[key]);
+    try {
+      const updateLegacy = await pool.query(
+        `UPDATE commission_settings
+         SET ${setParts.join(', ')}`,
+        params
+      );
+      if (updateLegacy.rowCount === 0) {
+        await pool.query(
+          `INSERT INTO commission_settings (${COMMISSION_SETTINGS_KEYS.join(', ')})
+           VALUES (${COMMISSION_SETTINGS_KEYS.map((_, index) => `$${index + 1}`).join(', ')})`,
+          params
+        );
+      }
+      return next;
+    } catch (legacyErr) {
+      throw legacyErr;
+    }
   }
 };
 
@@ -1792,16 +1878,10 @@ app.post('/api/roles/access-defaults/:role/apply', authenticateToken, requireRol
 });
 
 // ─── COMMISSION SETTINGS (admin only) ────────────────────────────────────────
-app.get('/api/commission/settings', authenticateToken, requireRole(['admin']), async (_req, res) => {
+app.get('/api/commission/settings', authenticateToken, async (_req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT settings
-       FROM commission_settings
-       ORDER BY id DESC
-       LIMIT 1`
-    );
-    const dbSettings = result.rowCount > 0 ? result.rows[0].settings : null;
-    res.json(sanitizeCommissionSettings(dbSettings));
+    const settings = await loadCommissionSettings();
+    res.json(settings);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo cargar configuración de comisiones' });
@@ -1810,32 +1890,12 @@ app.get('/api/commission/settings', authenticateToken, requireRole(['admin']), a
 
 app.patch('/api/commission/settings', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT id, settings
-       FROM commission_settings
-       ORDER BY id DESC
-       LIMIT 1`
-    );
-    const current = sanitizeCommissionSettings(result.rowCount > 0 ? result.rows[0].settings : null);
+    const current = await loadCommissionSettings();
     const next = sanitizeCommissionSettings({
       ...current,
       ...(req.body?.settings || {})
     });
-
-    if (result.rowCount > 0) {
-      await pool.query(
-        `UPDATE commission_settings
-         SET settings = $1::jsonb, updated_at = NOW()
-         WHERE id = $2`,
-        [JSON.stringify(next), result.rows[0].id]
-      );
-    } else {
-      await pool.query(
-        `INSERT INTO commission_settings (settings)
-         VALUES ($1::jsonb)`,
-        [JSON.stringify(next)]
-      );
-    }
+    await saveCommissionSettings(next);
 
     res.json({ message: 'Configuración de comisiones guardada', settings: next });
   } catch (err) {
