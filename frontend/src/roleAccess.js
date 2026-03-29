@@ -3,6 +3,7 @@ export const normalizeRole = (value = '') =>
 
 const ACCESS_TEMPLATE = {
   cotizar: false,
+  calendario: false,
   historial_individual: false,
   historial_global: false,
   rendimiento_individual: false,
@@ -19,16 +20,19 @@ const ACCESS_TEMPLATE = {
 const ROLE_DEFAULTS = {
   ventas: {
     cotizar: true,
+    calendario: true,
     historial_individual: true,
     rendimiento_individual: true
   },
   'ventas lider': {
     cotizar: true,
+    calendario: true,
     historial_global: true,
     rendimiento_global: true
   },
   admin: {
     cotizar: true,
+    calendario: true,
     historial_global: true,
     rendimiento_global: true,
     pedidos_global: true,
@@ -39,21 +43,31 @@ const ROLE_DEFAULTS = {
   },
   almacen: {
     cotizar: true,
+    calendario: true,
     pedidos_individual: true,
     inventario_individual: true
   },
   'almacen lider': {
     cotizar: true,
+    calendario: true,
     pedidos_global: true,
     inventario_global: true
   },
   marketing: {
+    calendario: true,
     marketing_combos: true,
     marketing_cupones: true
   },
   'marketing lider': {
+    calendario: true,
     marketing_combos: true,
     marketing_cupones: true
+  },
+  microfabrica: {
+    calendario: true
+  },
+  'microfabrica lider': {
+    calendario: true
   }
 };
 
@@ -178,6 +192,7 @@ export function canAccessPanel(accessOrRole, maybeAccessOrKey, maybeKey) {
 
 export const ACCESS_LABELS = [
   { key: 'cotizar', label: 'Cotizar' },
+  { key: 'calendario', label: 'Calendario' },
   { key: 'historial_individual', label: 'Historial individual' },
   { key: 'historial_global', label: 'Historial global' },
   { key: 'rendimiento_individual', label: 'Rendimiento individual' },

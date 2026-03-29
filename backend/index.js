@@ -28,6 +28,7 @@ const normalizeRole = (value = '') => normalizeText(value);
 const COMPLETED_STATUSES = ['Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const PANEL_KEYS = [
   'cotizar',
+  'calendario',
   'historial_individual',
   'historial_global',
   'rendimiento_individual',
@@ -45,6 +46,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
   const role = normalizeRole(roleValue);
   const base = {
     cotizar: false,
+    calendario: false,
     historial_individual: false,
     historial_global: false,
     rendimiento_individual: false,
@@ -66,6 +68,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     return {
       ...base,
       cotizar: true,
+      calendario: true,
       historial_individual: true,
       rendimiento_individual: true
     };
@@ -75,6 +78,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     return {
       ...base,
       cotizar: true,
+      calendario: true,
       historial_global: true,
       rendimiento_global: true
     };
@@ -84,6 +88,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     return {
       ...base,
       cotizar: true,
+      calendario: true,
       pedidos_individual: true,
       inventario_individual: true
     };
@@ -93,6 +98,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     return {
       ...base,
       cotizar: true,
+      calendario: true,
       pedidos_global: true,
       inventario_global: true
     };
@@ -101,6 +107,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
   if (role === 'marketing') {
     return {
       ...base,
+      calendario: true,
       marketing_combos: true,
       marketing_cupones: true
     };
@@ -109,6 +116,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
   if (role === 'marketing lider') {
     return {
       ...base,
+      calendario: true,
       marketing_combos: true,
       marketing_cupones: true
     };
@@ -116,7 +124,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
 
   if (role === 'microfabrica lider' || role === 'microfabrica') {
     return {
-      ...base
+      ...base,
+      calendario: true
     };
   }
 
@@ -190,6 +199,133 @@ const COMMISSION_SETTINGS_DEFAULT = {
   ventas_regular_percent: 8,
   almacen_percent: 5,
   marketing_lider_percent: 5
+};
+
+const TIME_OFF_LIMITS = {
+  vacation: 14,
+  sick_leave: 5
+};
+
+const TIME_OFF_TYPE_LABELS = {
+  vacation: 'Vacaciones',
+  sick_leave: 'Baja médica',
+  early_leave: 'Salida anticipada',
+  other: 'Otro permiso'
+};
+
+const TIME_OFF_STATUS_LABELS = {
+  pending: 'Pendiente',
+  approved: 'Aprobado',
+  rejected: 'Rechazado'
+};
+
+const normalizeTimeOffType = (value = '') => {
+  const normalized = normalizeText(value).replace(/-/g, '_');
+  const map = {
+    vacation: 'vacation',
+    vacaciones: 'vacation',
+    sick_leave: 'sick_leave',
+    sickleave: 'sick_leave',
+    enfermedad: 'sick_leave',
+    'baja medica': 'sick_leave',
+    early_leave: 'early_leave',
+    earlyleave: 'early_leave',
+    'salida anticipada': 'early_leave',
+    other: 'other',
+    permiso: 'other',
+    otro: 'other'
+  };
+  return map[normalized] || null;
+};
+
+const normalizeTimeOffStatus = (value = '') => {
+  const normalized = normalizeText(value).replace(/-/g, '_');
+  const map = {
+    pending: 'pending',
+    pendiente: 'pending',
+    approved: 'approved',
+    aprobado: 'approved',
+    rejected: 'rejected',
+    rechazado: 'rejected'
+  };
+  return map[normalized] || null;
+};
+
+const parseYearOrCurrent = (value) => {
+  if (value === undefined || value === null || value === '') return new Date().getFullYear();
+  const year = Number.parseInt(value, 10);
+  if (!Number.isInteger(year) || year < 2000 || year > 3000) {
+    return null;
+  }
+  return year;
+};
+
+const makeYearWindow = (year) => {
+  const start = `${year}-01-01`;
+  const end = `${year}-12-31`;
+  return { start, end };
+};
+
+const isWeekend = (dateObj) => {
+  const day = dateObj.getDay();
+  return day === 0 || day === 6;
+};
+
+const toUtcDate = (dateValue) => {
+  const [y, m, d] = String(dateValue).split('-').map((v) => Number.parseInt(v, 10));
+  if (!y || !m || !d) return null;
+  return new Date(Date.UTC(y, m - 1, d));
+};
+
+const computeBusinessDaysInclusive = (startDate, endDate) => {
+  const start = toUtcDate(startDate);
+  const end = toUtcDate(endDate);
+  if (!start || !end || end < start) return 0;
+  let days = 0;
+  const cursor = new Date(start.getTime());
+  while (cursor <= end) {
+    if (!isWeekend(cursor)) days += 1;
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return days;
+};
+
+const computeTimeOffSummary = async (userId, year) => {
+  const { start, end } = makeYearWindow(year);
+  const result = await pool.query(
+    `SELECT
+       COALESCE(SUM(CASE
+         WHEN leave_type = 'vacation' AND status = 'approved'
+           THEN business_days
+         ELSE 0
+       END), 0) AS vacation_used,
+       COALESCE(SUM(CASE
+         WHEN leave_type = 'sick_leave' AND status = 'approved'
+           THEN business_days
+         ELSE 0
+       END), 0) AS sick_used,
+       COALESCE(SUM(CASE
+         WHEN leave_type IN ('early_leave', 'other') AND status = 'approved'
+           THEN business_days
+         ELSE 0
+       END), 0) AS other_used
+     FROM time_off_requests
+     WHERE user_id = $1
+       AND start_date <= $3::date
+       AND end_date >= $2::date`,
+    [userId, start, end]
+  );
+  const vacationUsed = Number(result.rows[0]?.vacation_used || 0);
+  const sickUsed = Number(result.rows[0]?.sick_used || 0);
+  const otherUsed = Number(result.rows[0]?.other_used || 0);
+  return {
+    year,
+    vacation_used: vacationUsed,
+    sick_used: sickUsed,
+    other_used: otherUsed,
+    vacation_remaining: Math.max(0, TIME_OFF_LIMITS.vacation - vacationUsed),
+    sick_remaining: Math.max(0, TIME_OFF_LIMITS.sick_leave - sickUsed)
+  };
 };
 
 const clampPercent = (value, fallback) => {
@@ -687,6 +823,174 @@ app.get('/api/quotes/:id/seller-contact', authenticateToken, async (req, res) =>
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener contacto del vendedor' });
+  }
+});
+
+// ─── TIME OFF / CALENDAR (usuario + admin) ──────────────────────────────────
+app.get('/api/time-off/mine', authenticateToken, async (req, res) => {
+  const year = parseYearOrCurrent(req.query.year);
+  if (year === null) return res.status(400).json({ error: 'Año inválido' });
+  const { start, end } = makeYearWindow(year);
+  try {
+    const result = await pool.query(
+      `SELECT id, leave_type, start_date, end_date, business_days AS days_count, notes, status, created_at, updated_at
+       FROM time_off_requests
+       WHERE user_id = $1
+         AND start_date <= $3::date
+         AND end_date >= $2::date
+       ORDER BY start_date DESC, id DESC`,
+      [req.user.id, start, end]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron cargar tus permisos' });
+  }
+});
+
+app.get('/api/time-off/mine/summary', authenticateToken, async (req, res) => {
+  const year = parseYearOrCurrent(req.query.year);
+  if (year === null) return res.status(400).json({ error: 'Año inválido' });
+  try {
+    const summary = await computeTimeOffSummary(req.user.id, year);
+    res.json(summary);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar el resumen de cupos' });
+  }
+});
+
+app.post('/api/time-off', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  if (!canAccessPanel(userContext.panel_access, userContext.role, 'calendario')) {
+    return res.status(403).json({ error: 'No tienes permiso para registrar permisos' });
+  }
+
+  const {
+    request_type,
+    start_date,
+    end_date,
+    notes
+  } = req.body || {};
+
+  const normalizedType = normalizeTimeOffType(request_type);
+  if (!normalizedType) {
+    return res.status(400).json({ error: 'Tipo de permiso inválido' });
+  }
+  if (!start_date || !end_date) {
+    return res.status(400).json({ error: 'Debes indicar fecha de inicio y fin' });
+  }
+  if (String(end_date) < String(start_date)) {
+    return res.status(400).json({ error: 'La fecha fin no puede ser menor a la fecha inicio' });
+  }
+
+  const businessDays = computeBusinessDaysInclusive(start_date, end_date);
+  if (businessDays <= 0) {
+    return res.status(400).json({ error: 'El rango no incluye días laborables' });
+  }
+
+  const year = parseYearOrCurrent(String(start_date).slice(0, 4));
+  if (year === null) return res.status(400).json({ error: 'Año inválido' });
+
+  try {
+    if (normalizedType === 'vacation' || normalizedType === 'sick_leave') {
+      const summary = await computeTimeOffSummary(req.user.id, year);
+      if (normalizedType === 'vacation' && businessDays > summary.vacation_remaining) {
+        return res.status(400).json({ error: `Supera cupo anual de vacaciones. Disponible: ${summary.vacation_remaining} día(s)` });
+      }
+      if (normalizedType === 'sick_leave' && businessDays > summary.sick_remaining) {
+        return res.status(400).json({ error: `Supera cupo anual de baja médica. Disponible: ${summary.sick_remaining} día(s)` });
+      }
+    }
+
+    const result = await pool.query(
+      `INSERT INTO time_off_requests (user_id, leave_type, start_date, end_date, business_days, notes, status)
+       VALUES ($1, $2, $3::date, $4::date, $5, $6, 'pending')
+       RETURNING id, leave_type, start_date, end_date, business_days AS days_count, notes, status, created_at`,
+      [req.user.id, normalizedType, start_date, end_date, businessDays, notes || null]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo registrar el permiso' });
+  }
+});
+
+app.get('/api/timeoff/requests', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const year = parseYearOrCurrent(req.query.year);
+  if (year === null) return res.status(400).json({ error: 'Año inválido' });
+  const { start, end } = makeYearWindow(year);
+  try {
+    const result = await pool.query(
+      `SELECT
+         r.id, r.user_id, u.email AS user_email, r.leave_type, r.start_date, r.end_date,
+         r.business_days AS total_days, r.status, r.notes, r.created_at, r.updated_at,
+         r.approved_by, approver.email AS approved_by_email, r.approved_at
+       FROM time_off_requests r
+       JOIN users u ON u.id = r.user_id
+       LEFT JOIN users approver ON approver.id = r.approved_by
+       WHERE r.start_date <= $2::date
+         AND r.end_date >= $1::date
+       ORDER BY r.start_date DESC, r.id DESC`,
+      [start, end]
+    );
+    const mapped = result.rows.map((row) => ({
+      ...row,
+      leave_type_label: TIME_OFF_TYPE_LABELS[row.leave_type] || row.leave_type,
+      status_label: TIME_OFF_STATUS_LABELS[row.status] || row.status
+    }));
+    res.json(mapped);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron cargar solicitudes de permisos' });
+  }
+});
+
+app.get('/api/timeoff/summary', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const year = parseYearOrCurrent(req.query.year);
+  if (year === null) return res.status(400).json({ error: 'Año inválido' });
+  try {
+    const usersRes = await pool.query(
+      `SELECT id, email
+       FROM users
+       ORDER BY email ASC`
+    );
+    const rows = [];
+    for (const userRow of usersRes.rows) {
+      const summary = await computeTimeOffSummary(userRow.id, year);
+      rows.push({
+        user_id: userRow.id,
+        email: userRow.email,
+        ...summary
+      });
+    }
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar resumen global de permisos' });
+  }
+});
+
+app.patch('/api/timeoff/requests/:id/status', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const status = normalizeTimeOffStatus(req.body?.status);
+  if (!status) return res.status(400).json({ error: 'Estado inválido' });
+  try {
+    const result = await pool.query(
+      `UPDATE time_off_requests
+       SET status = $1,
+           approved_by = CASE WHEN $1 = 'approved' THEN $2 ELSE NULL END,
+           approved_at = CASE WHEN $1 = 'approved' THEN NOW() ELSE NULL END,
+           updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, status`,
+      [status, req.user.id, req.params.id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Solicitud no encontrada' });
+    res.json({ message: 'Estado actualizado', ...result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo actualizar estado de la solicitud' });
   }
 });
 

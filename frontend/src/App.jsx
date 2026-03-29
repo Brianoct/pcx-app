@@ -9,6 +9,7 @@ import InventoryPanel from './InventoryPanel';
 import PedidosPanel from './PedidosPanel';
 import Combos from './Combos';
 import Cupones from './Cupones';
+import TimeOffCalendar from './TimeOffCalendar';
 import logo from './assets/PCX.png';
 import './index.css';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
@@ -80,7 +81,7 @@ function Login({ onLogin }) {
 }
 
 // ─── NavMenu Component ──────────────────────────────────────────────────────
-function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, role, access }) {
+function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, access }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
   const canQuote = canAccessPanel(access, 'cotizar');
@@ -90,6 +91,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
   const canSeeInventory = canAccessPanel(access, 'inventarioGlobal') || canAccessPanel(access, 'inventarioIndividual');
   const canSeeMarketing = canAccessPanel(access, 'marketingCombos') || canAccessPanel(access, 'marketingCupones');
   const canSeeAdmin = canAccessPanel(access, 'admin');
+  const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -143,6 +145,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
             {canSeePerformance && <NavLink to="/performance" label="Rendimiento" />}
             {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
             {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
+            {canSeeCalendar && <NavLink to="/calendario" label="Calendario" />}
             {canSeeMarketing && (
               <>
                 {canAccessPanel(access, 'marketingCombos') && <NavLink to="/combos" label="Combos" />}
@@ -183,6 +186,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ro
         {canSeePerformance && <NavLink to="/performance" label="Rendimiento" />}
         {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
         {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
+        {canSeeCalendar && <NavLink to="/calendario" label="Calendario" />}
         {canSeeMarketing && (
           <>
             {canAccessPanel(access, 'marketingCombos') && <NavLink to="/combos" label="Combos" />}
@@ -378,6 +382,12 @@ function App() {
               ? <PedidosPanel token={token} role={role} access={effectiveAccess} onStatusUpdated={handleQuoteStatusChanged} />
               : <Navigate to={defaultPath} replace />
           }
+        />
+        <Route
+          path="/calendario"
+          element={canAccessPanel(effectiveAccess, 'calendario') || canAccessPanel(effectiveAccess, 'admin')
+            ? <TimeOffCalendar token={token} user={user} />
+            : <Navigate to={defaultPath} replace />}
         />
         <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Routes>
