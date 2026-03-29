@@ -290,31 +290,54 @@ const computeBusinessDaysInclusive = (startDate, endDate) => {
   return days;
 };
 
+const isPgUndefinedTableError = (err) => err?.code === '42P01';
+const isPgUndefinedColumnError = (err) => err?.code === '42703';
+
+const buildTimeOffSummaryQuery = (daysColumn) => (
+  `SELECT
+     COALESCE(SUM(CASE
+       WHEN leave_type IN ('vacation', 'vacaciones') AND status IN ('approved', 'aprobado')
+         THEN ${daysColumn}
+       ELSE 0
+     END), 0) AS vacation_used,
+     COALESCE(SUM(CASE
+       WHEN leave_type IN ('sick_leave', 'enfermedad') AND status IN ('approved', 'aprobado')
+         THEN ${daysColumn}
+       ELSE 0
+     END), 0) AS sick_used,
+     COALESCE(SUM(CASE
+       WHEN leave_type IN ('early_leave', 'other', 'permiso') AND status IN ('approved', 'aprobado')
+         THEN ${daysColumn}
+       ELSE 0
+     END), 0) AS other_used
+   FROM time_off_requests
+   WHERE user_id = $1
+     AND start_date <= $3::date
+     AND end_date >= $2::date`
+);
+
 const computeTimeOffSummary = async (userId, year) => {
   const { start, end } = makeYearWindow(year);
-  const result = await pool.query(
-    `SELECT
-       COALESCE(SUM(CASE
-         WHEN leave_type = 'vacation' AND status = 'approved'
-           THEN business_days
-         ELSE 0
-       END), 0) AS vacation_used,
-       COALESCE(SUM(CASE
-         WHEN leave_type = 'sick_leave' AND status = 'approved'
-           THEN business_days
-         ELSE 0
-       END), 0) AS sick_used,
-       COALESCE(SUM(CASE
-         WHEN leave_type IN ('early_leave', 'other') AND status = 'approved'
-           THEN business_days
-         ELSE 0
-       END), 0) AS other_used
-     FROM time_off_requests
-     WHERE user_id = $1
-       AND start_date <= $3::date
-       AND end_date >= $2::date`,
-    [userId, start, end]
-  );
+  let result;
+  try {
+    result = await pool.query(buildTimeOffSummaryQuery('total_days'), [userId, start, end]);
+  } catch (err) {
+    if (isPgUndefinedTableError(err)) {
+      return {
+        year,
+        vacation_used: 0,
+        sick_used: 0,
+        other_used: 0,
+        vacation_remaining: TIME_OFF_LIMITS.vacation,
+        sick_remaining: TIME_OFF_LIMITS.sick_leave
+      };
+    }
+    if (isPgUndefinedColumnError(err)) {
+      result = await pool.query(buildTimeOffSummaryQuery('business_days'), [userId, start, end]);
+    } else {
+      throw err;
+    }
+  }
   const vacationUsed = Number(result.rows[0]?.vacation_used || 0);
   const sickUsed = Number(result.rows[0]?.sick_used || 0);
   const otherUsed = Number(result.rows[0]?.other_used || 0);
@@ -841,16 +864,46 @@ app.get('/api/time-off/mine', authenticateToken, async (req, res) => {
   if (year === null) return res.status(400).json({ error: 'Año inválido' });
   const { start, end } = makeYearWindow(year);
   try {
-    const result = await pool.query(
-      `SELECT id, leave_type, start_date, end_date, business_days AS days_count, notes, status, created_at, updated_at
-       FROM time_off_requests
-       WHERE user_id = $1
-         AND start_date <= $3::date
-         AND end_date >= $2::date
-       ORDER BY start_date DESC, id DESC`,
-      [req.user.id, start, end]
-    );
-    res.json(result.rows);
+    let result;
+    try {
+      result = await pool.query(
+        `SELECT id, leave_type, start_date, end_date, total_days AS days_count, notes, status, created_at, updated_at
+         FROM time_off_requests
+         WHERE user_id = $1
+           AND start_date <= $3::date
+           AND end_date >= $2::date
+         ORDER BY start_date DESC, id DESC`,
+        [req.user.id, start, end]
+      );
+    } catch (err) {
+      if (isPgUndefinedTableError(err)) {
+        return res.json([]);
+      }
+      if (isPgUndefinedColumnError(err)) {
+        result = await pool.query(
+          `SELECT id, leave_type, start_date, end_date, business_days AS days_count, reason AS notes, status, created_at, updated_at
+           FROM time_off_requests
+           WHERE user_id = $1
+             AND start_date <= $3::date
+             AND end_date >= $2::date
+           ORDER BY start_date DESC, id DESC`,
+          [req.user.id, start, end]
+        );
+      } else {
+        throw err;
+      }
+    }
+    const rows = result.rows.map((row) => {
+      const normalizedType = normalizeTimeOffType(row.leave_type) || 'other';
+      const normalizedStatus = normalizeTimeOffStatus(row.status) || 'pending';
+      return {
+        ...row,
+        leave_type: normalizedType,
+        request_type: normalizedType,
+        status: normalizedStatus
+      };
+    });
+    res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudieron cargar tus permisos' });
@@ -913,13 +966,44 @@ app.post('/api/time-off', authenticateToken, async (req, res) => {
       }
     }
 
-    const result = await pool.query(
-      `INSERT INTO time_off_requests (user_id, leave_type, start_date, end_date, business_days, notes, status)
-       VALUES ($1, $2, $3::date, $4::date, $5, $6, 'pending')
-       RETURNING id, leave_type, start_date, end_date, business_days AS days_count, notes, status, created_at`,
-      [req.user.id, normalizedType, start_date, end_date, businessDays, notes || null]
-    );
-    res.status(201).json(result.rows[0]);
+    let result;
+    try {
+      result = await pool.query(
+        `INSERT INTO time_off_requests (user_id, leave_type, start_date, end_date, total_days, notes, status)
+         VALUES ($1, $2, $3::date, $4::date, $5, $6, 'pending')
+         RETURNING id, leave_type, start_date, end_date, total_days AS days_count, notes, status, created_at`,
+        [req.user.id, normalizedType, start_date, end_date, businessDays, notes || null]
+      );
+    } catch (err) {
+      if (isPgUndefinedTableError(err)) {
+        return res.status(503).json({ error: 'Calendario no inicializado. Falta aplicar migración en base de datos.' });
+      }
+      if (isPgUndefinedColumnError(err)) {
+        const legacyTypeMap = {
+          vacation: 'vacaciones',
+          sick_leave: 'enfermedad',
+          early_leave: 'permiso',
+          other: 'permiso'
+        };
+        result = await pool.query(
+          `INSERT INTO time_off_requests (user_id, leave_type, start_date, end_date, business_days, reason, status)
+           VALUES ($1, $2, $3::date, $4::date, $5, $6, 'pendiente')
+           RETURNING id, leave_type, start_date, end_date, business_days AS days_count, reason AS notes, status, created_at`,
+          [req.user.id, legacyTypeMap[normalizedType] || 'permiso', start_date, end_date, businessDays, notes || null]
+        );
+      } else {
+        throw err;
+      }
+    }
+    const row = result.rows[0] || {};
+    const normalizedInsertedType = normalizeTimeOffType(row.leave_type) || normalizedType;
+    const normalizedInsertedStatus = normalizeTimeOffStatus(row.status) || 'pending';
+    res.status(201).json({
+      ...row,
+      leave_type: normalizedInsertedType,
+      request_type: normalizedInsertedType,
+      status: normalizedInsertedStatus
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo registrar el permiso' });
@@ -931,23 +1015,49 @@ app.get('/api/timeoff/requests', authenticateToken, requireRole(['admin']), asyn
   if (year === null) return res.status(400).json({ error: 'Año inválido' });
   const { start, end } = makeYearWindow(year);
   try {
-    const result = await pool.query(
-      `SELECT
-         r.id, r.user_id, u.email AS user_email, r.leave_type, r.start_date, r.end_date,
-         r.business_days AS total_days, r.status, r.notes, r.created_at, r.updated_at,
-         r.approved_by, approver.email AS approved_by_email, r.approved_at
-       FROM time_off_requests r
-       JOIN users u ON u.id = r.user_id
-       LEFT JOIN users approver ON approver.id = r.approved_by
-       WHERE r.start_date <= $2::date
-         AND r.end_date >= $1::date
-       ORDER BY r.start_date DESC, r.id DESC`,
-      [start, end]
-    );
+    let result;
+    try {
+      result = await pool.query(
+        `SELECT
+           r.id, r.user_id, u.email AS user_email, r.leave_type, r.start_date, r.end_date,
+           r.total_days AS total_days, r.status, r.notes, r.created_at, r.updated_at,
+           r.approved_by, approver.email AS approved_by_email, r.approved_at
+         FROM time_off_requests r
+         JOIN users u ON u.id = r.user_id
+         LEFT JOIN users approver ON approver.id = r.approved_by
+         WHERE r.start_date <= $2::date
+           AND r.end_date >= $1::date
+         ORDER BY r.start_date DESC, r.id DESC`,
+        [start, end]
+      );
+    } catch (err) {
+      if (isPgUndefinedTableError(err)) {
+        return res.json([]);
+      }
+      if (isPgUndefinedColumnError(err)) {
+        result = await pool.query(
+          `SELECT
+             r.id, r.user_id, u.email AS user_email, r.leave_type, r.start_date, r.end_date,
+             r.business_days AS total_days, r.status, r.reason AS notes, r.created_at, r.updated_at,
+             r.approved_by, approver.email AS approved_by_email, r.approved_at
+           FROM time_off_requests r
+           JOIN users u ON u.id = r.user_id
+           LEFT JOIN users approver ON approver.id = r.approved_by
+           WHERE r.start_date <= $2::date
+             AND r.end_date >= $1::date
+           ORDER BY r.start_date DESC, r.id DESC`,
+          [start, end]
+        );
+      } else {
+        throw err;
+      }
+    }
     const mapped = result.rows.map((row) => ({
       ...row,
-      leave_type_label: TIME_OFF_TYPE_LABELS[row.leave_type] || row.leave_type,
-      status_label: TIME_OFF_STATUS_LABELS[row.status] || row.status
+      leave_type: normalizeTimeOffType(row.leave_type) || row.leave_type,
+      status: normalizeTimeOffStatus(row.status) || row.status,
+      leave_type_label: TIME_OFF_TYPE_LABELS[normalizeTimeOffType(row.leave_type)] || row.leave_type,
+      status_label: TIME_OFF_STATUS_LABELS[normalizeTimeOffStatus(row.status)] || row.status
     }));
     res.json(mapped);
   } catch (err) {
@@ -984,19 +1094,34 @@ app.get('/api/timeoff/summary', authenticateToken, requireRole(['admin']), async
 app.patch('/api/timeoff/requests/:id/status', authenticateToken, requireRole(['admin']), async (req, res) => {
   const status = normalizeTimeOffStatus(req.body?.status);
   if (!status) return res.status(400).json({ error: 'Estado inválido' });
+  const legacyStatusMap = {
+    pending: 'pendiente',
+    approved: 'aprobado',
+    rejected: 'rechazado'
+  };
+  const shouldApprove = status === 'approved';
+  const updateSql = `UPDATE time_off_requests
+     SET status = $1,
+         approved_by = CASE WHEN $4 THEN $2 ELSE NULL END,
+         approved_at = CASE WHEN $4 THEN NOW() ELSE NULL END,
+         updated_at = NOW()
+     WHERE id = $3
+     RETURNING id, status`;
+
   try {
-    const result = await pool.query(
-      `UPDATE time_off_requests
-       SET status = $1,
-           approved_by = CASE WHEN $1 = 'approved' THEN $2 ELSE NULL END,
-           approved_at = CASE WHEN $1 = 'approved' THEN NOW() ELSE NULL END,
-           updated_at = NOW()
-       WHERE id = $3
-       RETURNING id, status`,
-      [status, req.user.id, req.params.id]
-    );
+    let result;
+    try {
+      result = await pool.query(updateSql, [status, req.user.id, req.params.id, shouldApprove]);
+    } catch (err) {
+      if (err?.code === '23514') {
+        result = await pool.query(updateSql, [legacyStatusMap[status] || 'pendiente', req.user.id, req.params.id, shouldApprove]);
+      } else {
+        throw err;
+      }
+    }
     if (result.rowCount === 0) return res.status(404).json({ error: 'Solicitud no encontrada' });
-    res.json({ message: 'Estado actualizado', ...result.rows[0] });
+    const normalized = normalizeTimeOffStatus(result.rows[0]?.status) || status;
+    res.json({ message: 'Estado actualizado', id: result.rows[0]?.id, status: normalized });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo actualizar estado de la solicitud' });
