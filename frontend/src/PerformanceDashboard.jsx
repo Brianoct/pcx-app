@@ -211,7 +211,7 @@ function PerformanceDashboard({ token, user, role, access }) {
             </p>
             {commissionInfo?.isTopSeller && (
               <div style={{ color: '#facc15', fontWeight: 700 }}>
-                Eres quien lidera las ventas del período. Se aplica 12%.
+                Eres quien va mejor en ventas en el período. Se aplica 12%.
               </div>
             )}
           </div>
