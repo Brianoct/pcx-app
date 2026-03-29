@@ -37,6 +37,7 @@ const PANEL_KEYS = [
   'pedidos_global',
   'inventario_individual',
   'inventario_global',
+  'control_calidad',
   'marketing_combos',
   'marketing_cupones',
   'admin'
@@ -55,6 +56,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     pedidos_global: false,
     inventario_individual: false,
     inventario_global: false,
+    control_calidad: false,
     marketing_combos: false,
     marketing_cupones: false,
     admin: false
@@ -100,7 +102,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       cotizar: true,
       calendario: true,
       pedidos_global: true,
-      inventario_global: true
+      inventario_global: true,
+      control_calidad: true
     };
   }
 
@@ -476,6 +479,150 @@ const saveCommissionSettings = async (settings) => {
       throw legacyErr;
     }
   }
+};
+
+const normalizeQcResult = (value = '') => {
+  const normalized = normalizeText(value).replace(/-/g, '_');
+  const map = {
+    passed: 'passed',
+    pass: 'passed',
+    aprobado: 'passed',
+    ok: 'passed',
+    accepted: 'passed',
+    rejected: 'rejected',
+    reject: 'rejected',
+    rechazado: 'rejected',
+    fail: 'rejected',
+    failed: 'rejected'
+  };
+  return map[normalized] || null;
+};
+
+const ensureQcTables = async () => {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS quality_control_settings (
+       sku TEXT PRIMARY KEY,
+       base_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+       commission_rate NUMERIC(10,4) NOT NULL DEFAULT 0,
+       updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+     )`
+  );
+  await pool.query(
+    `ALTER TABLE quality_control_settings
+     ADD COLUMN IF NOT EXISTS base_price NUMERIC(12,2) NOT NULL DEFAULT 0`
+  );
+  await pool.query(
+    `ALTER TABLE quality_control_settings
+     ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(10,4) NOT NULL DEFAULT 0`
+  );
+  await pool.query(
+    `ALTER TABLE quality_control_settings
+     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()`
+  );
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS quality_control_records (
+       id BIGSERIAL PRIMARY KEY,
+       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+       sku TEXT NOT NULL,
+       product_name TEXT NOT NULL,
+       quantity INTEGER NOT NULL CHECK (quantity > 0),
+       result TEXT NOT NULL CHECK (result IN ('passed', 'rejected')),
+       created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+     )`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_quality_control_records_created_at
+     ON quality_control_records (created_at)`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_quality_control_records_user_id
+     ON quality_control_records (user_id)`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_quality_control_records_sku
+     ON quality_control_records (sku)`
+  );
+};
+
+const loadQcSettingsMap = async () => {
+  await ensureQcTables();
+  const settingsRes = await pool.query(
+    `SELECT sku, base_price, commission_rate
+     FROM quality_control_settings`
+  );
+  const map = new Map();
+  for (const row of settingsRes.rows) {
+    map.set(String(row.sku || '').toUpperCase(), {
+      base_price: Number(row.base_price || 0),
+      commission_rate: Number(row.commission_rate || 0)
+    });
+  }
+  return map;
+};
+
+const PRODUCT_CATALOG = [
+  { sku: 'T6195R', name: 'Tablero 61x95 Rojo' },
+  { sku: 'T6195N', name: 'Tablero 61x95 Negro' },
+  { sku: 'T6195AM', name: 'Tablero 61x95 Amarillo' },
+  { sku: 'T6195AP', name: 'Tablero 61x95 Azul Petroleo' },
+  { sku: 'T6195PL', name: 'Tablero 61x95 Plomo' },
+  { sku: 'T9495R', name: 'Tablero 94x95 Rojo' },
+  { sku: 'T9495N', name: 'Tablero 94x95 Negro' },
+  { sku: 'T9495AM', name: 'Tablero 94x95 Amarillo' },
+  { sku: 'T9495AP', name: 'Tablero 94x95 Azul Petroleo' },
+  { sku: 'T9495PL', name: 'Tablero 94x95 Plomo' },
+  { sku: 'T1099R', name: 'Tablero 10x99 Rojo' },
+  { sku: 'T1099N', name: 'Tablero 10x99 Negro' },
+  { sku: 'T1099AP', name: 'Tablero 10x99 Azul Petroleo' },
+  { sku: 'R40N', name: 'Repisa Grande Negro' },
+  { sku: 'R25N', name: 'Repisa Pequeña Negro' },
+  { sku: 'D40N', name: 'Desarmador Grande Negro' },
+  { sku: 'D22N', name: 'Desarmador Pequeño Negro' },
+  { sku: 'L40N', name: 'Llave Grande Negro' },
+  { sku: 'L22N', name: 'Llave Pequeño Negro' },
+  { sku: 'C15N', name: 'Caja Negro' },
+  { sku: 'M08N', name: 'Martillo Negro' },
+  { sku: 'A15N', name: 'Amoladora Negro' },
+  { sku: 'RR15N', name: 'Repisa/Rollo Negro' },
+  { sku: 'G05C', name: 'Gancho 5cm Cromo' },
+  { sku: 'G10C', name: 'Gancho 10cm Cromo' }
+];
+
+const PRODUCT_CATALOG_BY_SKU = new Map(
+  PRODUCT_CATALOG.map((item) => [item.sku.toUpperCase(), item.name])
+);
+
+const ensureQcProductSettingsSeeded = async () => {
+  await ensureQcTables();
+  for (const item of PRODUCT_CATALOG) {
+    await pool.query(
+      `INSERT INTO quality_control_settings (sku, base_price, commission_rate)
+       VALUES ($1, $2, 0)
+       ON CONFLICT (sku) DO UPDATE
+       SET base_price = EXCLUDED.base_price`,
+      [item.sku, Number(item.price || 0)]
+    );
+  }
+};
+
+const computeQualityControlCommissionTotal = async (month, year) => {
+  await ensureQcProductSettingsSeeded();
+  const qcDateFilter = buildDateFilter(month, year, 'r', 2);
+  if (qcDateFilter.error) return { error: qcDateFilter.error };
+
+  const result = await pool.query(
+    `SELECT COALESCE(
+       SUM(
+         r.quantity * (COALESCE(s.base_price, 0) * COALESCE(s.commission_rate, 0) / 100.0)
+       ),
+       0
+     ) AS total_commission
+     FROM quality_control_records r
+     LEFT JOIN quality_control_settings s ON UPPER(s.sku) = UPPER(r.sku)
+     WHERE r.result = $1${qcDateFilter.sql}`,
+    ['passed', ...qcDateFilter.params]
+  );
+  return { total: Number(result.rows[0]?.total_commission || 0) };
 };
 
 const INVENTORY_CITY_SCOPE = {
@@ -2447,6 +2594,208 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener estadísticas' });
+  }
+});
+
+// ─── QUALITY CONTROL ─────────────────────────────────────────────────────────
+app.get('/api/qc/products', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  if (!access.control_calidad && normalizeRole(userContext.role || '') !== ROLE_KEYS.admin) {
+    return res.status(403).json({ error: 'No tienes permiso para control de calidad' });
+  }
+
+  try {
+    await ensureQcProductSettingsSeeded();
+    const settingsMap = await loadQcSettingsMap();
+    const rows = PRODUCT_CATALOG.map((item) => {
+      const settings = settingsMap.get(String(item.sku || '').toUpperCase()) || { base_price: 0, commission_rate: 0 };
+      return {
+        sku: item.sku,
+        name: item.name,
+        base_price: Number(settings.base_price || 0),
+        commission_rate: Number(settings.commission_rate || 0)
+      };
+    });
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron cargar productos de control de calidad' });
+  }
+});
+
+app.post('/api/qc/checks', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  if (!access.control_calidad && normalizeRole(userContext.role || '') !== ROLE_KEYS.admin) {
+    return res.status(403).json({ error: 'No tienes permiso para registrar control de calidad' });
+  }
+
+  const sku = String(req.body?.sku || '').toUpperCase().trim();
+  const quantity = Number.parseInt(req.body?.quantity, 10);
+  const resultValue = normalizeQcResult(req.body?.result);
+  if (!sku || !PRODUCT_CATALOG_BY_SKU.has(sku)) {
+    return res.status(400).json({ error: 'Producto inválido para control de calidad' });
+  }
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return res.status(400).json({ error: 'Cantidad inválida. Debe ser un entero mayor a 0' });
+  }
+  if (!resultValue) {
+    return res.status(400).json({ error: 'Resultado inválido. Debe ser Aprobado o Rechazado' });
+  }
+
+  try {
+    await ensureQcProductSettingsSeeded();
+    const productName = PRODUCT_CATALOG_BY_SKU.get(sku) || sku;
+    const insertRes = await pool.query(
+      `INSERT INTO quality_control_records (user_id, sku, product_name, quantity, result)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, user_id, sku, product_name, quantity, result, created_at`,
+      [req.user.id, sku, productName, quantity, resultValue]
+    );
+    res.status(201).json(insertRes.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo registrar control de calidad' });
+  }
+});
+
+app.get('/api/qc/checks', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  if (!access.control_calidad && normalizeRole(userContext.role || '') !== ROLE_KEYS.admin) {
+    return res.status(403).json({ error: 'No tienes permiso para ver control de calidad' });
+  }
+
+  const dateFilter = buildDateFilter(req.query.month, req.query.year, 'r', 1);
+  if (dateFilter.error) return res.status(400).json({ error: dateFilter.error });
+
+  try {
+    await ensureQcProductSettingsSeeded();
+    const result = await pool.query(
+      `SELECT r.id, r.user_id, u.email AS user_email, r.sku, r.product_name, r.quantity, r.result, r.created_at
+       FROM quality_control_records r
+       LEFT JOIN users u ON u.id = r.user_id
+       WHERE 1=1${dateFilter.sql}
+       ORDER BY r.created_at DESC, r.id DESC`,
+      [...dateFilter.params]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron cargar registros de control de calidad' });
+  }
+});
+
+app.get('/api/qc/summary', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  if (!access.control_calidad && normalizeRole(userContext.role || '') !== ROLE_KEYS.admin) {
+    return res.status(403).json({ error: 'No tienes permiso para ver resumen de control de calidad' });
+  }
+
+  const dateFilter = buildDateFilter(req.query.month, req.query.year, 'r', 1);
+  if (dateFilter.error) return res.status(400).json({ error: dateFilter.error });
+
+  try {
+    await ensureQcProductSettingsSeeded();
+    const settingsMap = await loadQcSettingsMap();
+    const summaryRes = await pool.query(
+      `SELECT r.sku, r.product_name,
+              SUM(CASE WHEN r.result = 'passed' THEN r.quantity ELSE 0 END) AS qty_passed,
+              SUM(CASE WHEN r.result = 'rejected' THEN r.quantity ELSE 0 END) AS qty_rejected
+       FROM quality_control_records r
+       WHERE 1=1${dateFilter.sql}
+       GROUP BY r.sku, r.product_name
+       ORDER BY r.sku ASC`,
+      [...dateFilter.params]
+    );
+    const rows = summaryRes.rows.map((row) => {
+      const sku = String(row.sku || '').toUpperCase();
+      const settings = settingsMap.get(sku) || { base_price: 0, commission_rate: 0 };
+      const qtyPassed = Number(row.qty_passed || 0);
+      const qtyRejected = Number(row.qty_rejected || 0);
+      const basePrice = Number(settings.base_price || 0);
+      const commissionRate = Number(settings.commission_rate || 0);
+      return {
+        sku,
+        product_name: row.product_name || PRODUCT_CATALOG_BY_SKU.get(sku) || sku,
+        qty_passed: qtyPassed,
+        qty_rejected: qtyRejected,
+        base_price: basePrice,
+        commission_rate: commissionRate,
+        commission_total: qtyPassed * (basePrice * commissionRate / 100)
+      };
+    });
+    const totalCommission = rows.reduce((sum, row) => sum + Number(row.commission_total || 0), 0);
+    res.json({ rows, total_commission: totalCommission });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar resumen de control de calidad' });
+  }
+});
+
+app.get('/api/qc/commissions', authenticateToken, requireRole(['admin']), async (_req, res) => {
+  try {
+    await ensureQcProductSettingsSeeded();
+    const settingsMap = await loadQcSettingsMap();
+    const rows = PRODUCT_CATALOG.map((item) => {
+      const settings = settingsMap.get(String(item.sku || '').toUpperCase()) || { base_price: 0, commission_rate: 0 };
+      return {
+        sku: item.sku,
+        name: item.name,
+        base_price: Number(settings.base_price || 0),
+        commission_rate: Number(settings.commission_rate || 0)
+      };
+    });
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron cargar comisiones por producto de control de calidad' });
+  }
+});
+
+app.patch('/api/qc/commissions', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  if (rows.length === 0) {
+    return res.status(400).json({ error: 'No se enviaron filas para actualizar' });
+  }
+
+  try {
+    await ensureQcProductSettingsSeeded();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const row of rows) {
+        const sku = String(row?.sku || '').toUpperCase().trim();
+        if (!sku || !PRODUCT_CATALOG_BY_SKU.has(sku)) continue;
+        const rate = Math.max(0, Math.min(100, Number(row?.commission_rate || 0)));
+        const basePrice = Math.max(0, Number(row?.base_price || 0));
+        await client.query(
+          `INSERT INTO quality_control_settings (sku, base_price, commission_rate, updated_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (sku) DO UPDATE
+           SET base_price = EXCLUDED.base_price,
+               commission_rate = EXCLUDED.commission_rate,
+               updated_at = NOW()`,
+          [sku, basePrice, rate]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    res.json({ message: 'Comisiones por producto actualizadas' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron guardar comisiones de control de calidad' });
   }
 });
 

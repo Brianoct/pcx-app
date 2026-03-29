@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import AdminDashboard from './AdminDashboard';
 import { ACCESS_LABELS, buildAccessForUser, ROLE_LABELS, ROLE_OPTIONS } from './roleAccess';
+import { PRODUCT_CATALOG } from './productCatalog';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
@@ -676,6 +677,174 @@ function TimeOffAdminPanel({ token }) {
   );
 }
 
+function QualityControlCommissionConfig({ token }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const loadRows = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/qc/commissions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'No se pudo cargar configuración de control de calidad');
+      }
+      setRows(await res.json());
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRows();
+  }, [token]);
+
+  const updateRate = (sku, value) => {
+    const parsed = Number(value);
+    const safe = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 0;
+    setRows((prev) => prev.map((row) => (
+      row.sku === sku ? { ...row, commission_rate: safe } : row
+    )));
+  };
+
+  const updateBasePrice = (sku, value) => {
+    const parsed = Number(value);
+    const safe = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    setRows((prev) => prev.map((row) => (
+      row.sku === sku ? { ...row, base_price: safe } : row
+    )));
+  };
+
+  const saveRows = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/qc/commissions`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ rows })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'No se pudo guardar configuración');
+      }
+      setMessage('Comisiones por producto guardadas.');
+      await loadRows();
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '30px' }}>Cargando comisiones por producto...</div>;
+
+  return (
+    <div style={{ background: '#1e293b', borderRadius: '12px', padding: '20px' }}>
+      <h3 style={{ marginBottom: '10px' }}>Control de calidad — comisión por producto</h3>
+      <p style={{ color: '#94a3b8', marginBottom: '14px' }}>
+        Define el % por producto para comisión de piezas aprobadas. Aplica a Admin, Almacén Lider, Microfabrica Lider y Microfabrica.
+      </p>
+      {message && (
+        <div style={{
+          marginBottom: '12px',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
+          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+        }}>
+          {message}
+        </div>
+      )}
+      <div style={{ overflowX: 'auto' }}>
+        <table className="table" style={{ minWidth: '940px' }}>
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Producto</th>
+              <th style={{ textAlign: 'right' }}>Base Bs</th>
+              <th style={{ textAlign: 'right' }}>% comisión</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.sku}>
+                <td>{row.sku}</td>
+                <td>{row.name || row.product_name}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={Number(row.base_price || 0)}
+                    onChange={(e) => updateBasePrice(row.sku, e.target.value)}
+                    style={{
+                      width: '110px',
+                      padding: '6px 8px',
+                      borderRadius: '8px',
+                      border: '1px solid #334155',
+                      background: '#0f172a',
+                      color: 'white',
+                      textAlign: 'right'
+                    }}
+                  />
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={Number(row.commission_rate || 0)}
+                    onChange={(e) => updateRate(row.sku, e.target.value)}
+                    style={{
+                      width: '110px',
+                      padding: '6px 8px',
+                      borderRadius: '8px',
+                      border: '1px solid #334155',
+                      background: '#0f172a',
+                      color: 'white',
+                      textAlign: 'right'
+                    }}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ marginTop: '14px' }}>
+        <button
+          onClick={saveRows}
+          disabled={saving}
+          style={{
+            padding: '10px 16px',
+            borderRadius: '8px',
+            border: 'none',
+            background: '#3b82f6',
+            color: 'white',
+            cursor: saving ? 'not-allowed' : 'pointer',
+            fontWeight: 600
+          }}
+        >
+          {saving ? 'Guardando...' : 'Guardar comisión por producto'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CommissionConfig({ token }) {
   const [settings, setSettings] = useState({
     ventas_lider_percent: 5,
@@ -1047,7 +1216,12 @@ function AdminPanel({ token }) {
       <div>
         {activeTab === 'usuarios' && <UserManagement token={token} />}
         {activeTab === 'roles' && <RoleConfiguration token={token} />}
-        {activeTab === 'comisiones' && <CommissionConfig token={token} />}
+        {activeTab === 'comisiones' && (
+          <div style={{ display: 'grid', gap: '14px' }}>
+            <CommissionConfig token={token} />
+            <QualityControlCommissionConfig token={token} />
+          </div>
+        )}
         {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}
         {activeTab === 'estadisticas' && <StatisticsPanel token={token} />}
       </div>

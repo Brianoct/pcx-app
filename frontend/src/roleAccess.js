@@ -12,6 +12,7 @@ const ACCESS_TEMPLATE = {
   pedidos_global: false,
   inventario_individual: false,
   inventario_global: false,
+  control_calidad: false,
   marketing_combos: false,
   marketing_cupones: false,
   admin: false
@@ -51,7 +52,8 @@ const ROLE_DEFAULTS = {
     cotizar: true,
     calendario: true,
     pedidos_global: true,
-    inventario_global: true
+    inventario_global: true,
+    control_calidad: true
   },
   marketing: {
     calendario: true,
@@ -134,6 +136,12 @@ const PANEL_KEY_ALIASES = {
   inventoryglobal: 'inventario_global',
   inventarioGlobal: 'inventario_global',
   inventoryGlobal: 'inventario_global',
+  control_calidad: 'control_calidad',
+  controlcalidad: 'control_calidad',
+  quality_control: 'control_calidad',
+  qualitycontrol: 'control_calidad',
+  qc: 'control_calidad',
+  controlCalidad: 'control_calidad',
   marketing_combos: 'marketing_combos',
   marketingcombos: 'marketing_combos',
   combos: 'marketing_combos',
@@ -207,6 +215,7 @@ export const ACCESS_LABELS = [
   { key: 'pedidos_global', label: 'Pedidos global' },
   { key: 'inventario_individual', label: 'Inventario individual' },
   { key: 'inventario_global', label: 'Inventario global' },
+  { key: 'control_calidad', label: 'Control de calidad' },
   { key: 'marketing_combos', label: 'Combos (Marketing)' },
   { key: 'marketing_cupones', label: 'Cupones (Marketing)' },
   { key: 'admin', label: 'Panel Admin' }

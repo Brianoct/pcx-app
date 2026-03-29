@@ -10,6 +10,7 @@ import PedidosPanel from './PedidosPanel';
 import Combos from './Combos';
 import Cupones from './Cupones';
 import TimeOffCalendar from './TimeOffCalendar';
+import QualityControlPanel from './QualityControlPanel';
 import logo from './assets/PCX.png';
 import './index.css';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
@@ -89,6 +90,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const canSeePerformance = canAccessPanel(access, 'rendimientoGlobal') || canAccessPanel(access, 'rendimientoIndividual');
   const canSeePedidos = canAccessPanel(access, 'pedidosGlobal') || canAccessPanel(access, 'pedidosIndividual');
   const canSeeInventory = canAccessPanel(access, 'inventarioGlobal') || canAccessPanel(access, 'inventarioIndividual');
+  const canSeeQualityControl = canAccessPanel(access, 'control_calidad');
   const canSeeMarketing = canAccessPanel(access, 'marketingCombos') || canAccessPanel(access, 'marketingCupones');
   const canSeeAdmin = canAccessPanel(access, 'admin');
   const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
@@ -145,6 +147,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
             {canSeePerformance && <NavLink to="/performance" label="Rendimiento" />}
             {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
             {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
+            {canSeeQualityControl && <NavLink to="/control-calidad" label="Control Calidad" />}
             {canSeeCalendar && <NavLink to="/calendario" label="Calendario" />}
             {canSeeMarketing && (
               <>
@@ -186,6 +189,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
         {canSeePerformance && <NavLink to="/performance" label="Rendimiento" />}
         {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
         {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
+        {canSeeQualityControl && <NavLink to="/control-calidad" label="Control Calidad" />}
         {canSeeCalendar && <NavLink to="/calendario" label="Calendario" />}
         {canSeeMarketing && (
           <>
@@ -382,6 +386,12 @@ function App() {
               ? <PedidosPanel token={token} role={role} access={effectiveAccess} onStatusUpdated={handleQuoteStatusChanged} />
               : <Navigate to={defaultPath} replace />
           }
+        />
+        <Route
+          path="/control-calidad"
+          element={canAccessPanel(effectiveAccess, 'control_calidad') || canAccessPanel(effectiveAccess, 'admin')
+            ? <QualityControlPanel token={token} />
+            : <Navigate to={defaultPath} replace />}
         />
         <Route
           path="/calendario"
