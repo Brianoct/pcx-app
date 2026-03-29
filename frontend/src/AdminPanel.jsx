@@ -572,7 +572,7 @@ function CommissionConfig({ token }) {
   const rows = [
     { key: 'ventas_lider_percent', label: 'Ventas Lider (% sobre ventas de equipo + propias)' },
     { key: 'ventas_top_percent', label: 'Ventas top (% sobre ventas propias)' },
-    { key: 'ventas_regular_percent', label: 'Ventas regular (% sobre ventas propias)' },
+    { key: 'ventas_regular_percent', label: 'Asesor de ventas (% sobre ventas propias)' },
     { key: 'almacen_percent', label: 'Almacen (% sobre ventas del almacén local)' },
     { key: 'marketing_lider_percent', label: 'Marketing Lider (% sobre total de ventas)' }
   ];

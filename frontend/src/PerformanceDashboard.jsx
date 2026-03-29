@@ -199,7 +199,7 @@ function PerformanceDashboard({ token, user, role, access }) {
             <KpiCard
               label="Tasa aplicada"
               value={`${(personal.rate * 100).toFixed(0)}%`}
-              hint={personal.isTopSeller ? 'Mejor en ventas actual' : 'Tasa regular'}
+              hint={personal.isTopSeller ? 'Mejor en ventas actual' : 'Tasa asesor de ventas'}
               accent={personal.isTopSeller ? '#facc15' : '#cbd5e1'}
             />
           </div>

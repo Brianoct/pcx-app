@@ -1509,7 +1509,7 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
         breakdown: {
           role: req.user.role,
           rate,
-          source: `${Number(commissionSettings.ventas_top_percent || 0)}% mejor en ventas / ${Number(commissionSettings.ventas_regular_percent || 0)}% regular`
+          source: `${Number(commissionSettings.ventas_top_percent || 0)}% mejor en ventas / ${Number(commissionSettings.ventas_regular_percent || 0)}% asesor de ventas`
         }
       });
     }
