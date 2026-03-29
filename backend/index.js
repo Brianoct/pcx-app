@@ -1987,7 +1987,7 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
 
   const allSalesDateFilter = buildDateFilter(month, year, 'q', 2);
   if (allSalesDateFilter.error) return res.status(400).json({ error: allSalesDateFilter.error });
-  const teamDateFilter = buildDateFilter(month, year, 'q', 3);
+  const teamDateFilter = buildDateFilter(month, year, 'q', 4);
   if (teamDateFilter.error) return res.status(400).json({ error: teamDateFilter.error });
   const ownDateFilter = buildDateFilter(month, year, 'q', 3);
   if (ownDateFilter.error) return res.status(400).json({ error: ownDateFilter.error });
