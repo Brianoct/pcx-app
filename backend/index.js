@@ -2694,6 +2694,125 @@ app.get('/api/qc/checks', authenticateToken, async (req, res) => {
   }
 });
 
+app.patch('/api/qc/checks/:id', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const isAdmin = normalizeRole(userContext.role || '') === ROLE_KEYS.admin;
+  if (!access.control_calidad && !isAdmin) {
+    return res.status(403).json({ error: 'No tienes permiso para editar control de calidad' });
+  }
+
+  const recordId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(recordId) || recordId <= 0) {
+    return res.status(400).json({ error: 'ID de registro inválido' });
+  }
+
+  try {
+    await ensureQcProductSettingsSeeded();
+    const existingRes = await pool.query(
+      `SELECT id, user_id, sku, quantity, result
+       FROM quality_control_records
+       WHERE id = $1`,
+      [recordId]
+    );
+    if (existingRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Registro de control de calidad no encontrado' });
+    }
+
+    const existing = existingRes.rows[0];
+    if (!isAdmin && Number(existing.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'Solo puedes editar tus propios registros de control de calidad' });
+    }
+
+    const hasSku = Object.prototype.hasOwnProperty.call(req.body || {}, 'sku');
+    const hasQuantity = Object.prototype.hasOwnProperty.call(req.body || {}, 'quantity');
+    const hasResult = Object.prototype.hasOwnProperty.call(req.body || {}, 'result');
+    if (!hasSku && !hasQuantity && !hasResult) {
+      return res.status(400).json({ error: 'No se enviaron cambios para actualizar' });
+    }
+
+    const sku = hasSku
+      ? String(req.body?.sku || '').toUpperCase().trim()
+      : String(existing.sku || '').toUpperCase().trim();
+    const quantity = hasQuantity
+      ? Number.parseInt(req.body?.quantity, 10)
+      : Number.parseInt(existing.quantity, 10);
+    const resultValue = hasResult
+      ? normalizeQcResult(req.body?.result)
+      : normalizeQcResult(existing.result);
+
+    if (!sku || !PRODUCT_CATALOG_BY_SKU.has(sku)) {
+      return res.status(400).json({ error: 'Producto inválido para control de calidad' });
+    }
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      return res.status(400).json({ error: 'Cantidad inválida. Debe ser un entero mayor a 0' });
+    }
+    if (!resultValue) {
+      return res.status(400).json({ error: 'Resultado inválido. Debe ser Aprobado o Rechazado' });
+    }
+
+    const productName = PRODUCT_CATALOG_BY_SKU.get(sku) || sku;
+    const updateRes = await pool.query(
+      `UPDATE quality_control_records
+       SET sku = $1,
+           product_name = $2,
+           quantity = $3,
+           result = $4
+       WHERE id = $5
+       RETURNING id, user_id, sku, product_name, quantity, result, created_at`,
+      [sku, productName, quantity, resultValue, recordId]
+    );
+
+    res.json(updateRes.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo actualizar el registro de control de calidad' });
+  }
+});
+
+app.delete('/api/qc/checks/:id', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const isAdmin = normalizeRole(userContext.role || '') === ROLE_KEYS.admin;
+  if (!access.control_calidad && !isAdmin) {
+    return res.status(403).json({ error: 'No tienes permiso para eliminar control de calidad' });
+  }
+
+  const recordId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(recordId) || recordId <= 0) {
+    return res.status(400).json({ error: 'ID de registro inválido' });
+  }
+
+  try {
+    await ensureQcProductSettingsSeeded();
+    const existingRes = await pool.query(
+      `SELECT id, user_id
+       FROM quality_control_records
+       WHERE id = $1`,
+      [recordId]
+    );
+    if (existingRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Registro de control de calidad no encontrado' });
+    }
+    const existing = existingRes.rows[0];
+    if (!isAdmin && Number(existing.user_id) !== Number(req.user.id)) {
+      return res.status(403).json({ error: 'Solo puedes eliminar tus propios registros de control de calidad' });
+    }
+
+    await pool.query(
+      `DELETE FROM quality_control_records
+       WHERE id = $1`,
+      [recordId]
+    );
+    res.json({ message: 'Registro de control de calidad eliminado' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo eliminar el registro de control de calidad' });
+  }
+});
+
 app.get('/api/qc/summary', authenticateToken, async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
