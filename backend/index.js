@@ -599,8 +599,12 @@ const ensureQcProductSettingsSeeded = async () => {
       `INSERT INTO quality_control_settings (sku, base_price, commission_rate)
        VALUES ($1, $2, 0)
        ON CONFLICT (sku) DO UPDATE
-       SET base_price = EXCLUDED.base_price`,
-      [item.sku, Number(item.price || 0)]
+       SET base_price = CASE
+         WHEN quality_control_settings.base_price IS NULL OR quality_control_settings.base_price = 0
+           THEN EXCLUDED.base_price
+         ELSE quality_control_settings.base_price
+       END`,
+      [item.sku, Number(item.sf || 0)]
     );
   }
 };
