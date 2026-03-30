@@ -51,6 +51,20 @@ VALUES
     }'::jsonb
   ),
   (
+    'Microfabrica Lider',
+    '{
+      "calendario": true,
+      "microfabrica_panel": true
+    }'::jsonb
+  ),
+  (
+    'Microfabrica',
+    '{
+      "calendario": true,
+      "microfabrica_panel": true
+    }'::jsonb
+  ),
+  (
     'Admin',
     '{
       "cotizar": true,
@@ -62,6 +76,8 @@ VALUES
       "pedidos_global": true,
       "inventario_individual": true,
       "inventario_global": true,
+      "control_calidad": true,
+      "microfabrica_panel": true,
       "marketing_combos": true,
       "marketing_cupones": true,
       "admin": true

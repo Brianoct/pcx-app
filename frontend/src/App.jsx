@@ -11,6 +11,7 @@ import Combos from './Combos';
 import Cupones from './Cupones';
 import TimeOffCalendar from './TimeOffCalendar';
 import QualityControlPanel from './QualityControlPanel';
+import MicrofabricaPanel from './MicrofabricaPanel';
 import logo from './assets/PCX.png';
 import './index.css';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
@@ -91,6 +92,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const canSeePedidos = canAccessPanel(access, 'pedidosGlobal') || canAccessPanel(access, 'pedidosIndividual');
   const canSeeInventory = canAccessPanel(access, 'inventarioGlobal') || canAccessPanel(access, 'inventarioIndividual');
   const canSeeQualityControl = canAccessPanel(access, 'control_calidad');
+  const canSeeMicrofabricaPanel = canAccessPanel(access, 'microfabrica_panel');
   const canSeeMarketing = canAccessPanel(access, 'marketingCombos') || canAccessPanel(access, 'marketingCupones');
   const canSeeAdmin = canAccessPanel(access, 'admin');
   const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
@@ -148,6 +150,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
             {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
             {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
             {canSeeQualityControl && <NavLink to="/control-calidad" label="Control Calidad" />}
+            {canSeeMicrofabricaPanel && <NavLink to="/microfabrica" label="Microfábrica" />}
             {canSeeCalendar && <NavLink to="/calendario" label="Calendario" />}
             {canSeeMarketing && (
               <>
@@ -190,6 +193,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
         {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
         {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
         {canSeeQualityControl && <NavLink to="/control-calidad" label="Control Calidad" />}
+        {canSeeMicrofabricaPanel && <NavLink to="/microfabrica" label="Microfábrica" />}
         {canSeeCalendar && <NavLink to="/calendario" label="Calendario" />}
         {canSeeMarketing && (
           <>
@@ -315,8 +319,12 @@ function App() {
     ? '/admin'
     : canAccessPanel(effectiveAccess, 'pedidos_global') || canAccessPanel(effectiveAccess, 'pedidos_individual')
       ? '/pedidos'
+      : canAccessPanel(effectiveAccess, 'microfabrica_panel')
+        ? '/microfabrica'
       : canAccessPanel(effectiveAccess, 'marketing_combos')
         ? '/combos'
+        : canAccessPanel(effectiveAccess, 'calendario')
+          ? '/calendario'
         : '/';
 
   return (
@@ -391,6 +399,12 @@ function App() {
           path="/control-calidad"
           element={canAccessPanel(effectiveAccess, 'control_calidad') || canAccessPanel(effectiveAccess, 'admin')
             ? <QualityControlPanel token={token} />
+            : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/microfabrica"
+          element={canAccessPanel(effectiveAccess, 'microfabrica_panel') || canAccessPanel(effectiveAccess, 'admin')
+            ? <MicrofabricaPanel token={token} />
             : <Navigate to={defaultPath} replace />}
         />
         <Route

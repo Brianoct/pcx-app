@@ -38,6 +38,7 @@ const PANEL_KEYS = [
   'inventario_individual',
   'inventario_global',
   'control_calidad',
+  'microfabrica_panel',
   'marketing_combos',
   'marketing_cupones',
   'admin'
@@ -57,6 +58,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     inventario_individual: false,
     inventario_global: false,
     control_calidad: false,
+    microfabrica_panel: false,
     marketing_combos: false,
     marketing_cupones: false,
     admin: false
@@ -128,7 +130,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
   if (role === 'microfabrica lider' || role === 'microfabrica') {
     return {
       ...base,
-      calendario: true
+      calendario: true,
+      microfabrica_panel: true
     };
   }
 
@@ -2859,6 +2862,88 @@ app.get('/api/qc/summary', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo cargar resumen de control de calidad' });
+  }
+});
+
+app.get('/api/microfabrica/dashboard', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const isAdmin = normalizeRole(userContext.role || '') === ROLE_KEYS.admin;
+  if (!access.microfabrica_panel && !isAdmin) {
+    return res.status(403).json({ error: 'No tienes permiso para ver el panel de microfabrica' });
+  }
+
+  const dateFilter = buildDateFilter(req.query.month, req.query.year, 'r', 1);
+  if (dateFilter.error) return res.status(400).json({ error: dateFilter.error });
+
+  try {
+    await ensureQcProductSettingsSeeded();
+    const settingsMap = await loadQcSettingsMap();
+    const summaryRes = await pool.query(
+      `SELECT UPPER(r.sku) AS sku,
+              SUM(CASE WHEN r.result = 'passed' THEN r.quantity ELSE 0 END) AS qty_passed,
+              SUM(CASE WHEN r.result = 'rejected' THEN r.quantity ELSE 0 END) AS qty_rejected
+       FROM quality_control_records r
+       WHERE 1=1${dateFilter.sql}
+       GROUP BY UPPER(r.sku)`,
+      [...dateFilter.params]
+    );
+
+    const bySku = new Map(
+      summaryRes.rows.map((row) => [
+        String(row.sku || '').toUpperCase(),
+        {
+          qty_passed: Number(row.qty_passed || 0),
+          qty_rejected: Number(row.qty_rejected || 0)
+        }
+      ])
+    );
+
+    const rows = PRODUCT_CATALOG.map((item) => {
+      const sku = String(item.sku || '').toUpperCase();
+      const totals = bySku.get(sku) || { qty_passed: 0, qty_rejected: 0 };
+      const settings = settingsMap.get(sku) || { base_price: Number(item.sf || 0), commission_rate: 0 };
+      const basePrice = Number(settings.base_price || 0);
+      const commissionRate = Number(settings.commission_rate || 0);
+      const commissionPerPiece = basePrice * commissionRate / 100;
+      const subtotalCommission = Number(totals.qty_passed || 0) * commissionPerPiece;
+      return {
+        sku,
+        product_name: item.name,
+        qty_passed: Number(totals.qty_passed || 0),
+        qty_rejected: Number(totals.qty_rejected || 0),
+        base_price: basePrice,
+        commission_rate: commissionRate,
+        commission_per_piece: commissionPerPiece,
+        subtotal_commission: subtotalCommission
+      };
+    });
+
+    const totals = rows.reduce((acc, row) => {
+      acc.qty_passed += Number(row.qty_passed || 0);
+      acc.qty_rejected += Number(row.qty_rejected || 0);
+      acc.total_commission += Number(row.subtotal_commission || 0);
+      if (Number(row.qty_passed || 0) > 0 || Number(row.qty_rejected || 0) > 0) {
+        acc.products_with_activity += 1;
+      }
+      return acc;
+    }, {
+      qty_passed: 0,
+      qty_rejected: 0,
+      total_commission: 0,
+      products_with_activity: 0
+    });
+
+    res.json({
+      rows,
+      totals,
+      month: req.query.month ? Number.parseInt(req.query.month, 10) : null,
+      year: req.query.year ? Number.parseInt(req.query.year, 10) : null
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar el panel de microfabrica' });
   }
 });
 

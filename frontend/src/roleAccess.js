@@ -13,6 +13,7 @@ const ACCESS_TEMPLATE = {
   inventario_individual: false,
   inventario_global: false,
   control_calidad: false,
+  microfabrica_panel: false,
   marketing_combos: false,
   marketing_cupones: false,
   admin: false
@@ -66,10 +67,12 @@ const ROLE_DEFAULTS = {
     marketing_cupones: true
   },
   microfabrica: {
-    calendario: true
+    calendario: true,
+    microfabrica_panel: true
   },
   'microfabrica lider': {
-    calendario: true
+    calendario: true,
+    microfabrica_panel: true
   }
 };
 
@@ -142,6 +145,12 @@ const PANEL_KEY_ALIASES = {
   qualitycontrol: 'control_calidad',
   qc: 'control_calidad',
   controlCalidad: 'control_calidad',
+  microfabrica_panel: 'microfabrica_panel',
+  microfabricapanel: 'microfabrica_panel',
+  microfabrica: 'microfabrica_panel',
+  microfactory: 'microfabrica_panel',
+  microfactory_panel: 'microfabrica_panel',
+  microfactorypanel: 'microfabrica_panel',
   marketing_combos: 'marketing_combos',
   marketingcombos: 'marketing_combos',
   combos: 'marketing_combos',
@@ -216,6 +225,7 @@ export const ACCESS_LABELS = [
   { key: 'inventario_individual', label: 'Inventario individual' },
   { key: 'inventario_global', label: 'Inventario global' },
   { key: 'control_calidad', label: 'Control de calidad' },
+  { key: 'microfabrica_panel', label: 'Panel Microfábrica' },
   { key: 'marketing_combos', label: 'Combos (Marketing)' },
   { key: 'marketing_cupones', label: 'Cupones (Marketing)' },
   { key: 'admin', label: 'Panel Admin' }
