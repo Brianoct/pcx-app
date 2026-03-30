@@ -218,10 +218,10 @@ function UserManagement({ token }) {
   return (
     <div>
       {/* Add new user form */}
-      <div style={{ background: '#1e293b', padding: '24px', borderRadius: '12px', marginBottom: '32px' }}>
-        <h3 style={{ marginBottom: '20px' }}>Agregar Nuevo Usuario</h3>
+      <div style={{ background: '#1e293b', padding: '24px', borderRadius: '14px', marginBottom: '28px', border: '1px solid rgba(71, 85, 105, 0.5)' }}>
+        <h3 style={{ marginBottom: '16px' }}>Agregar Nuevo Usuario</h3>
         <form onSubmit={handleAddUser}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Email</label>
               <input
@@ -280,11 +280,23 @@ function UserManagement({ token }) {
             </div>
           </div>
 
-          <div style={{ marginTop: '20px' }}>
+          <div style={{ marginTop: '18px' }}>
             <h4 style={{ marginBottom: '10px', color: '#f1f5f9' }}>Acceso por panel</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
               {ACCESS_LABELS.map((field) => (
-                <label key={field.key} style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#cbd5e1' }}>
+                <label
+                  key={field.key}
+                  style={{
+                    display: 'flex',
+                    gap: '9px',
+                    alignItems: 'center',
+                    color: '#e2e8f0',
+                    border: '1px solid #334155',
+                    borderRadius: '10px',
+                    padding: '10px 12px',
+                    background: '#111b2d'
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={Boolean(newUser.panel_access?.[field.key])}
@@ -296,7 +308,7 @@ function UserManagement({ token }) {
             </div>
           </div>
 
-          <button type="submit" style={{ width: '100%', padding: '14px', background: '#f87171', color: 'white', border: 'none', borderRadius: '8px', marginTop: '24px', fontWeight: '600' }}>
+          <button type="submit" style={{ width: '100%', padding: '14px', background: '#f87171', color: 'white', border: 'none', borderRadius: '10px', marginTop: '22px', fontWeight: '700' }}>
             Agregar Usuario
           </button>
         </form>
@@ -307,57 +319,59 @@ function UserManagement({ token }) {
       {users.length === 0 ? (
         <p>No hay usuarios.</p>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
-          <thead>
-            <tr style={{ background: '#0f172a' }}>
-              <th style={{ padding: '12px' }}>Email</th>
-              <th style={{ padding: '12px' }}>Teléfono</th>
-              <th style={{ padding: '12px' }}>Rol</th>
-              <th style={{ padding: '12px' }}>Ciudad</th>
-              <th style={{ padding: '12px' }}>Creado</th>
-              <th style={{ padding: '12px' }}>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(user => (
-              <tr key={user.id} style={{ borderBottom: '1px solid #334155' }}>
-                <td style={{ padding: '12px' }}>{user.email}</td>
-                <td style={{ padding: '12px' }}>
-                  {user.phone ? `+591 ${user.phone}` : '—'}
-                </td>
-                <td style={{ padding: '12px' }}>
-                  <select
-                    value={user.role}
-                    onChange={(e) => handleUpdateRole(user.id, e.target.value)}
-                    style={{ padding: '6px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
-                  >
-                    {ROLE_SELECT_OPTIONS.map((roleOption) => (
-                      <option key={roleOption.value} value={roleOption.value}>
-                        {roleOption.label}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td style={{ padding: '12px' }}>{user.city || '—'}</td>
-                <td style={{ padding: '12px' }}>{new Date(user.created_at).toLocaleString('es-BO')}</td>
-                <td style={{ padding: '12px' }}>
-                  <button
-                    onClick={() => openEditModal(user)}
-                    style={{ padding: '8px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', marginRight: '8px' }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => handleDeleteUser(user.id)}
-                    style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                  >
-                    Eliminar
-                  </button>
-                </td>
+        <div style={{ overflowX: 'auto', border: '1px solid rgba(71, 85, 105, 0.45)', borderRadius: '12px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+            <thead>
+              <tr style={{ background: '#0f172a' }}>
+                <th style={{ padding: '12px' }}>Email</th>
+                <th style={{ padding: '12px' }}>Teléfono</th>
+                <th style={{ padding: '12px' }}>Rol</th>
+                <th style={{ padding: '12px' }}>Ciudad</th>
+                <th style={{ padding: '12px' }}>Creado</th>
+                <th style={{ padding: '12px' }}>Acción</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map(user => (
+                <tr key={user.id} style={{ borderBottom: '1px solid #334155' }}>
+                  <td style={{ padding: '12px' }}>{user.email}</td>
+                  <td style={{ padding: '12px' }}>
+                    {user.phone ? `+591 ${user.phone}` : '—'}
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <select
+                      value={user.role}
+                      onChange={(e) => handleUpdateRole(user.id, e.target.value)}
+                      style={{ padding: '6px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+                    >
+                      {ROLE_SELECT_OPTIONS.map((roleOption) => (
+                        <option key={roleOption.value} value={roleOption.value}>
+                          {roleOption.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td style={{ padding: '12px' }}>{user.city || '—'}</td>
+                  <td style={{ padding: '12px' }}>{new Date(user.created_at).toLocaleString('es-BO')}</td>
+                  <td style={{ padding: '12px' }}>
+                    <button
+                      onClick={() => openEditModal(user)}
+                      style={{ padding: '8px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', marginRight: '8px' }}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => handleDeleteUser(user.id)}
+                      style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Edit User Modal */}
@@ -430,9 +444,21 @@ function UserManagement({ token }) {
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Acceso por panel</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
                     {ACCESS_LABELS.map((field) => (
-                      <label key={field.key} style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#cbd5e1' }}>
+                      <label
+                        key={field.key}
+                        style={{
+                          display: 'flex',
+                          gap: '9px',
+                          alignItems: 'center',
+                          color: '#e2e8f0',
+                          border: '1px solid #334155',
+                          borderRadius: '10px',
+                          padding: '10px 12px',
+                          background: '#111b2d'
+                        }}
+                      >
                         <input
                           type="checkbox"
                           checked={Boolean(editModal.panel_access?.[field.key])}
@@ -1180,37 +1206,50 @@ function RoleConfiguration({ token }) {
 
 function AdminPanel({ token }) {
   const [activeTab, setActiveTab] = useState('usuarios');
+  const tabs = [
+    { key: 'usuarios', label: 'Usuarios' },
+    { key: 'roles', label: 'Configuración de Roles' },
+    { key: 'comisiones', label: 'Comisiones' },
+    { key: 'calendario', label: 'Calendario' },
+    { key: 'estadisticas', label: 'Estadísticas' }
+  ];
 
   return (
     <div style={{ padding: '24px 16px 16px', maxWidth: '1400px', margin: '0 auto' }}>
       <div style={{
         display: 'flex',
-        justifyContent: 'center',
-        flexWrap: 'wrap',
-        gap: '8px',
-        marginBottom: '24px',
-        borderBottom: '2px solid #334155',
-        paddingBottom: '4px',
+        justifyContent: 'flex-start',
+        flexWrap: 'nowrap',
+        gap: '10px',
+        marginBottom: '20px',
+        borderBottom: '1px solid #334155',
+        paddingBottom: '8px',
         position: 'sticky',
         top: '68px',
         zIndex: 15,
-        background: '#0f172a'
+        background: '#0f172a',
+        overflowX: 'auto'
       }}>
-        <button onClick={() => setActiveTab('usuarios')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'usuarios' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'usuarios' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'usuarios' ? '600' : '500', cursor: 'pointer' }}>
-          Usuarios
-        </button>
-        <button onClick={() => setActiveTab('roles')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'roles' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'roles' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'roles' ? '600' : '500', cursor: 'pointer' }}>
-          Configuración de Roles
-        </button>
-        <button onClick={() => setActiveTab('comisiones')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'comisiones' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'comisiones' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'comisiones' ? '600' : '500', cursor: 'pointer' }}>
-          Comisiones
-        </button>
-        <button onClick={() => setActiveTab('calendario')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'calendario' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'calendario' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'calendario' ? '600' : '500', cursor: 'pointer' }}>
-          Calendario
-        </button>
-        <button onClick={() => setActiveTab('estadisticas')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'estadisticas' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'estadisticas' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'estadisticas' ? '600' : '500', cursor: 'pointer' }}>
-          Estadísticas
-        </button>
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              padding: '10px 16px',
+              background: activeTab === tab.key ? 'rgba(248,113,113,0.14)' : 'transparent',
+              color: activeTab === tab.key ? '#fca5a5' : '#94a3b8',
+              border: activeTab === tab.key ? '1px solid rgba(248,113,113,0.45)' : '1px solid transparent',
+              borderRadius: '10px',
+              fontSize: '0.98rem',
+              fontWeight: activeTab === tab.key ? 700 : 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div>

@@ -342,6 +342,8 @@ button, .btn {
   align-items: center;
   gap: 12px;
   min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .app-logo {
@@ -577,8 +579,34 @@ nav {
 /* Desktop nav links */
 .nav-links:not(.mobile) {
   display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.nav-links.desktop {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.6) transparent;
+  padding-bottom: 2px;
+}
+
+.nav-links.desktop::-webkit-scrollbar {
+  height: 6px;
+}
+
+.nav-links.desktop::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.45);
+  border-radius: 999px;
+}
+
+.nav-links.desktop .nav-link {
+  flex: 0 0 auto;
 }
 
 /* Responsive adjustments */
@@ -694,6 +722,7 @@ nav {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex: 0 0 auto;
   }
 }
 
