@@ -346,6 +346,14 @@ button, .btn {
   overflow: hidden;
 }
 
+.desktop-nav-cluster {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 10px;
+}
+
 .app-logo {
   display: block;
   height: 34px;
@@ -586,27 +594,74 @@ nav {
 }
 
 .nav-links.desktop {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   white-space: nowrap;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(100, 116, 139, 0.6) transparent;
-  padding-bottom: 2px;
-}
-
-.nav-links.desktop::-webkit-scrollbar {
-  height: 6px;
-}
-
-.nav-links.desktop::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.45);
-  border-radius: 999px;
+  padding-bottom: 0;
 }
 
 .nav-links.desktop .nav-link {
   flex: 0 0 auto;
+}
+
+.more-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.more-menu-button {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  background: #162238;
+  color: #cbd5e1;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.more-menu-button:hover {
+  background: #1f2d45;
+  color: #f1f5f9;
+}
+
+.more-menu-button.active {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.7);
+}
+
+.more-menu-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 190px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(71, 85, 105, 0.7);
+  background: #0f172a;
+  box-shadow: 0 16px 30px rgba(2, 6, 23, 0.45);
+  display: grid;
+  gap: 4px;
+  z-index: 1100;
+}
+
+.more-menu-item {
+  text-decoration: none;
+  color: #cbd5e1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.more-menu-item:hover {
+  background: #1e293b;
+  color: #f1f5f9;
+}
+
+.more-menu-item.active {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
 }
 
 /* Responsive adjustments */
@@ -723,6 +778,9 @@ nav {
     align-items: center;
     gap: 8px;
     flex: 0 0 auto;
+    margin-left: 22px;
+    padding-left: 16px;
+    border-left: 1px solid rgba(71, 85, 105, 0.45);
   }
 }
 

@@ -85,6 +85,7 @@ function Login({ onLogin }) {
 // ─── NavMenu Component ──────────────────────────────────────────────────────
 function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, access }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [desktopMoreOpen, setDesktopMoreOpen] = useState(false);
   const location = useLocation();
   const canQuote = canAccessPanel(access, 'cotizar');
   const canSeeHistory = canAccessPanel(access, 'historialGlobal') || canAccessPanel(access, 'historialIndividual');
@@ -93,12 +94,12 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const canSeeInventory = canAccessPanel(access, 'inventarioGlobal') || canAccessPanel(access, 'inventarioIndividual');
   const canSeeQualityControl = canAccessPanel(access, 'control_calidad');
   const canSeeMicrofabricaPanel = canAccessPanel(access, 'microfabrica_panel');
-  const canSeeMarketing = canAccessPanel(access, 'marketingCombos') || canAccessPanel(access, 'marketingCupones');
   const canSeeAdmin = canAccessPanel(access, 'admin');
   const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
 
   useEffect(() => {
     setMenuOpen(false);
+    setDesktopMoreOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -106,24 +107,31 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
       if (menuOpen && !event.target.closest('.nav-links.mobile') && !event.target.closest('.hamburger')) {
         setMenuOpen(false);
       }
+      if (desktopMoreOpen && !event.target.closest('.more-menu')) {
+        setDesktopMoreOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [menuOpen]);
+  }, [menuOpen, desktopMoreOpen]);
 
-  const NavLink = ({ to, label }) => {
-    const loc = useLocation();
-    const isActive = loc.pathname === to;
-    return (
-      <Link
-        to={to}
-        className={`nav-link ${isActive ? 'active' : ''}`}
-        onClick={() => setMenuOpen(false)}
-      >
-        {label}
-      </Link>
-    );
-  };
+  const allNavItems = [
+    canQuote ? { to: '/', label: 'Cotizar' } : null,
+    canSeeHistory ? { to: '/history', label: 'Historial' } : null,
+    canSeePerformance ? { to: '/performance', label: 'Rendimiento' } : null,
+    canSeePedidos ? { to: '/pedidos', label: 'Pedidos' } : null,
+    canSeeInventory ? { to: '/inventory', label: 'Inventario' } : null,
+    canSeeQualityControl ? { to: '/control-calidad', label: 'Control Calidad' } : null,
+    canSeeMicrofabricaPanel ? { to: '/microfabrica', label: 'Microfábrica' } : null,
+    canSeeCalendar ? { to: '/calendario', label: 'Calendario' } : null,
+    canAccessPanel(access, 'marketingCombos') ? { to: '/combos', label: 'Combos' } : null,
+    canAccessPanel(access, 'marketingCupones') ? { to: '/cupones', label: 'Cupones' } : null,
+    canSeeAdmin ? { to: '/admin', label: 'Admin' } : null
+  ].filter(Boolean);
+
+  const MAX_DESKTOP_VISIBLE = 7;
+  const desktopPrimaryItems = allNavItems.slice(0, MAX_DESKTOP_VISIBLE);
+  const desktopOverflowItems = allNavItems.slice(MAX_DESKTOP_VISIBLE);
 
   return (
     <>
@@ -143,22 +151,48 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
             {menuOpen ? '✕' : '☰'}
           </button>
 
-          <div className="nav-links desktop">
-            {canQuote && <NavLink to="/" label="Cotizar" />}
-            {canSeeHistory && <NavLink to="/history" label="Historial" />}
-            {canSeePerformance && <NavLink to="/performance" label="Rendimiento" />}
-            {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
-            {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
-            {canSeeQualityControl && <NavLink to="/control-calidad" label="Control Calidad" />}
-            {canSeeMicrofabricaPanel && <NavLink to="/microfabrica" label="Microfábrica" />}
-            {canSeeCalendar && <NavLink to="/calendario" label="Calendario" />}
-            {canSeeMarketing && (
-              <>
-                {canAccessPanel(access, 'marketingCombos') && <NavLink to="/combos" label="Combos" />}
-                {canAccessPanel(access, 'marketingCupones') && <NavLink to="/cupones" label="Cupones" />}
-              </>
+          <div className="desktop-nav-cluster">
+            <div className="nav-links desktop">
+              {desktopPrimaryItems.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`nav-link ${location.pathname === item.to ? 'active' : ''}`}
+                  onClick={() => setDesktopMoreOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+
+            {desktopOverflowItems.length > 0 && (
+              <div className="more-menu">
+                <button
+                  type="button"
+                  className={`more-menu-button ${desktopOverflowItems.some((item) => location.pathname === item.to) ? 'active' : ''}`}
+                  onClick={() => setDesktopMoreOpen((prev) => !prev)}
+                  aria-haspopup="menu"
+                  aria-expanded={desktopMoreOpen}
+                >
+                  Más ▾
+                </button>
+                {desktopMoreOpen && (
+                  <div className="more-menu-list" role="menu">
+                    {desktopOverflowItems.map((item) => (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        className={`more-menu-item ${location.pathname === item.to ? 'active' : ''}`}
+                        onClick={() => setDesktopMoreOpen(false)}
+                        role="menuitem"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
-            {canSeeAdmin && <NavLink to="/admin" label="Admin" />}
           </div>
         </div>
 
@@ -187,21 +221,16 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
       {menuOpen && <div className="mobile-menu-overlay active" onClick={() => setMenuOpen(false)} />}
 
       <div className={`nav-links mobile ${menuOpen ? 'active' : ''}`}>
-        {canQuote && <NavLink to="/" label="Cotizar" />}
-        {canSeeHistory && <NavLink to="/history" label="Historial" />}
-        {canSeePerformance && <NavLink to="/performance" label="Rendimiento" />}
-        {canSeePedidos && <NavLink to="/pedidos" label="Pedidos" />}
-        {canSeeInventory && <NavLink to="/inventory" label="Inventario" />}
-        {canSeeQualityControl && <NavLink to="/control-calidad" label="Control Calidad" />}
-        {canSeeMicrofabricaPanel && <NavLink to="/microfabrica" label="Microfábrica" />}
-        {canSeeCalendar && <NavLink to="/calendario" label="Calendario" />}
-        {canSeeMarketing && (
-          <>
-            {canAccessPanel(access, 'marketingCombos') && <NavLink to="/combos" label="Combos" />}
-            {canAccessPanel(access, 'marketingCupones') && <NavLink to="/cupones" label="Cupones" />}
-          </>
-        )}
-        {canSeeAdmin && <NavLink to="/admin" label="Admin" />}
+        {allNavItems.map((item) => (
+          <Link
+            key={`mobile-${item.to}`}
+            to={item.to}
+            className={`nav-link ${location.pathname === item.to ? 'active' : ''}`}
+            onClick={() => setMenuOpen(false)}
+          >
+            {item.label}
+          </Link>
+        ))}
 
         <div className="mobile-user-panel">
           <button onClick={handleLogout} className="mobile-logout-btn">
