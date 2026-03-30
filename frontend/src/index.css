@@ -343,7 +343,7 @@ button, .btn {
   gap: 12px;
   min-width: 0;
   flex: 1 1 auto;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .desktop-nav-cluster {
@@ -352,6 +352,7 @@ button, .btn {
   min-width: 0;
   flex: 1 1 auto;
   gap: 10px;
+  overflow: visible;
 }
 
 .app-logo {
