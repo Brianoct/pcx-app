@@ -2298,21 +2298,20 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
       });
     }
 
-    if (isMicrofabricaLider) {
+    if (isMicrofabricaLider || isMicrofabrica) {
+      const qcCommissionResult = await computeQualityControlCommissionTotal(month, year);
+      if (qcCommissionResult?.error) {
+        return res.status(400).json({ error: qcCommissionResult.error });
+      }
       return res.json({
-        commission: 0,
+        commission: Number(qcCommissionResult?.total || 0),
         isTopSeller: false,
         topSellerEmail: null,
-        breakdown: { role: req.user.role, rate: 0, source: 'Compensación por piezas fabricadas por producto (mensual)' }
-      });
-    }
-
-    if (isMicrofabrica) {
-      return res.json({
-        commission: 0,
-        isTopSeller: false,
-        topSellerEmail: null,
-        breakdown: { role: req.user.role, rate: 0, source: 'Ingreso por piezas fabricadas (mensual)' }
+        breakdown: {
+          role: req.user.role,
+          rate: 0,
+          source: 'Comisión mensual por piezas aprobadas de Control de Calidad'
+        }
       });
     }
 
