@@ -685,6 +685,60 @@ button, .btn {
   margin-top: 2px;
 }
 
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.profile-form-card h3 {
+  margin-bottom: 10px;
+}
+
+.profile-form-row {
+  display: grid;
+  gap: 6px;
+}
+
+.profile-form-row label {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.profile-form-row input {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #f1f5f9;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+.profile-hint {
+  color: #94a3b8;
+  font-size: 0.86rem;
+  margin-top: 8px;
+}
+
+.profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.profile-success {
+  color: #34d399;
+  font-size: 0.9rem;
+}
+
+.profile-error {
+  color: #f87171;
+  font-size: 0.9rem;
+}
+
 .nav-link {
   color: var(--text-secondary);
   text-decoration: none;
@@ -1008,6 +1062,18 @@ nav {
   }
 
   .quote-edit-actions .btn {
+    flex: 1 1 0;
+  }
+
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-actions {
+    justify-content: stretch;
+  }
+
+  .profile-actions .btn {
     flex: 1 1 0;
   }
 
