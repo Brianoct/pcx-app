@@ -250,6 +250,12 @@ export default function QuoteTool({ token, user }) {
     setIsSaving(true);
 
     const vendedorName = user ? user.email.split('@')[0] : 'Usuario';
+    const selectedSeller = isAlmacenRole
+      ? salesUsers.find((seller) => String(seller.id) === String(assignedSellerId))
+      : null;
+    const assignedSellerName = selectedSeller
+      ? (selectedSeller.display_name || String(selectedSeller.email || '').split('@')[0] || vendedorName)
+      : vendedorName;
 
     const rowsWithDisplay = rows.map(row => {
       const item = findItem(row.sku);
@@ -297,7 +303,7 @@ export default function QuoteTool({ token, user }) {
       alternative_name: useAlternativeName ? alternativeName.trim() : null,
       alternative_phone: useAlternativeName ? alternativePhone.trim() : null,
       store_location: almacen,
-      vendor: vendedorName,
+      vendor: isAlmacenRole ? assignedSellerName : vendedorName,
       venta_type: ventaType,
       discount_percent: discountPercent,
       discount_bs: 0,
@@ -345,7 +351,7 @@ export default function QuoteTool({ token, user }) {
         quoteNumber,
         customerName,
         customerPhone,
-        vendorName: vendedorName,
+        vendorName: isAlmacenRole ? assignedSellerName : vendedorName,
         storeLocation: almacen,
         dateText,
         department: isProvincia ? null : department,
