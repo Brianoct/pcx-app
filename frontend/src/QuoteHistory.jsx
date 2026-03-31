@@ -400,6 +400,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       id: quote.id,
       customer_name: quote.customer_name || '',
       customer_phone: quote.customer_phone || '',
+      vendor: quote.vendor || '',
       department: quote.department || '',
       provincia: quote.provincia || '',
       shipping_notes: quote.shipping_notes || '',
@@ -510,6 +511,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       const payload = {
         customer_name: editingQuote.customer_name.trim(),
         customer_phone: editingQuote.customer_phone.trim(),
+        vendor: editingQuote.vendor ? editingQuote.vendor.trim() : null,
         department: editingQuote.department ? editingQuote.department.trim() : null,
         provincia: editingQuote.provincia ? editingQuote.provincia.trim() : null,
         shipping_notes: editingQuote.shipping_notes ? editingQuote.shipping_notes.trim() : null,
@@ -548,6 +550,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
               ...quote,
               customer_name: payload.customer_name,
               customer_phone: payload.customer_phone,
+              vendor: payload.vendor,
               department: payload.department,
               provincia: payload.provincia,
               shipping_notes: payload.shipping_notes,
@@ -977,6 +980,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                 <input
                   value={editingQuote.customer_phone}
                   onChange={(e) => onEditField('customer_phone', e.target.value)}
+                />
+              </label>
+              <label>
+                Vendedor
+                <input
+                  value={editingQuote.vendor || ''}
+                  onChange={(e) => onEditField('vendor', e.target.value)}
+                  placeholder="Nombre del vendedor"
                 />
               </label>
               <label>
