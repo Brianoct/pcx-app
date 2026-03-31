@@ -1,37 +1,10 @@
 // QuoteTool.jsx
 import { useState, useEffect, useRef } from 'react';
-import jsPDF from 'jspdf';
-import logo from './assets/logo.png'; // Adjust path if needed
+import logo from './assets/logo.png';
+import { generateModernQuotePdf } from './quotePdf';
+import { PRODUCT_CATALOG } from './productCatalog';
 
 export default function QuoteTool({ token, user }) {
-  const regularProducts = [
-    { sku: "T6195R", name: "Tablero 61x95 Rojo", sf: 330, cf: 383, isCombo: false },
-    { sku: "T6195N", name: "Tablero 61x95 Negro", sf: 330, cf: 383, isCombo: false },
-    { sku: "T6195AM", name: "Tablero 61x95 Amarillo", sf: 330, cf: 383, isCombo: false },
-    { sku: "T6195AP", name: "Tablero 61x95 Azul Petroleo", sf: 330, cf: 383, isCombo: false },
-    { sku: "T6195PL", name: "Tablero 61x95 Plomo", sf: 330, cf: 383, isCombo: false },
-    { sku: "T9495R", name: "Tablero 94x95 Rojo", sf: 450, cf: 522, isCombo: false },
-    { sku: "T9495N", name: "Tablero 94x95 Negro", sf: 450, cf: 522, isCombo: false },
-    { sku: "T9495AM", name: "Tablero 94x95 Amarillo", sf: 450, cf: 522, isCombo: false },
-    { sku: "T9495AP", name: "Tablero 94x95 Azul Petroleo", sf: 450, cf: 522, isCombo: false },
-    { sku: "T9495PL", name: "Tablero 94x95 Plomo", sf: 450, cf: 522, isCombo: false },
-    { sku: "T1099R", name: "Tablero 10x99 Rojo", sf: 105, cf: 122, isCombo: false },
-    { sku: "T1099N", name: "Tablero 10x99 Negro", sf: 105, cf: 122, isCombo: false },
-    { sku: "T1099AP", name: "Tablero 10x99 Azul Petroleo", sf: 105, cf: 122, isCombo: false },
-    { sku: "R40N", name: "Repisa Grande Negro", sf: 85, cf: 99, isCombo: false },
-    { sku: "R25N", name: "Repisa Pequeña Negro", sf: 40, cf: 47, isCombo: false },
-    { sku: "D40N", name: "Desarmador Grande Negro", sf: 70, cf: 82, isCombo: false },
-    { sku: "D22N", name: "Desarmador Pequeño Negro", sf: 45, cf: 53, isCombo: false },
-    { sku: "L40N", name: "Llave Grande Negro", sf: 80, cf: 93, isCombo: false },
-    { sku: "L22N", name: "Llave Pequeño Negro", sf: 50, cf: 58, isCombo: false },
-    { sku: "C15N", name: "Caja Negro", sf: 48, cf: 56, isCombo: false },
-    { sku: "M08N", name: "Martillo Negro", sf: 17, cf: 20, isCombo: false },
-    { sku: "A15N", name: "Amoladora Negro", sf: 30, cf: 35, isCombo: false },
-    { sku: "RR15N", name: "Repisa/Rollo Negro", sf: 90, cf: 105, isCombo: false },
-    { sku: "G05C", name: "Gancho 5cm Cromo", sf: 65, cf: 76, isCombo: false },
-    { sku: "G10C", name: "Gancho 10cm Cromo", sf: 84, cf: 98, isCombo: false },
-  ];
-
   const [combos, setCombos] = useState([]);
 
   const [step, setStep] = useState(1);
@@ -42,6 +15,7 @@ export default function QuoteTool({ token, user }) {
   const [roundTotal, setRoundTotal] = useState(false);
   const [useAlternativeName, setUseAlternativeName] = useState(false);
   const [alternativeName, setAlternativeName] = useState('');
+  const [alternativePhone, setAlternativePhone] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [department, setDepartment] = useState('');
@@ -49,16 +23,29 @@ export default function QuoteTool({ token, user }) {
   const [isProvincia, setIsProvincia] = useState(false);
   const [almacen, setAlmacen] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
-  const summaryRef = useRef(null);
   const [currentDateTime, setCurrentDateTime] = useState('');
+  const [salesUsers, setSalesUsers] = useState([]);
+  const [assignedSellerId, setAssignedSellerId] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+  const normalizedRole = String(user?.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const isAlmacenRole = normalizedRole === 'almacen' || normalizedRole === 'almacen lider';
 
-  const vendedorName = user ? user.email.split('@')[0] : 'Usuario';
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     if (step === 2) {
       const fetchCombos = async () => {
         try {
-          const res = await fetch('http://localhost:4000/api/combos', {
+          const res = await fetch(`${API_BASE}/api/combos`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (res.ok) {
@@ -73,7 +60,7 @@ export default function QuoteTool({ token, user }) {
       };
       fetchCombos();
     }
-  }, [step, token]);
+  }, [step, token, API_BASE]);
 
   useEffect(() => {
     if (step === 2 && rows.length === 0) {
@@ -94,8 +81,29 @@ export default function QuoteTool({ token, user }) {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (!token || !isAlmacenRole) return;
+    const fetchSalesUsers = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/sellers/assignable`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('No se pudo cargar lista de vendedores');
+        const data = await res.json();
+        setSalesUsers(Array.isArray(data) ? data : []);
+        if (Array.isArray(data) && data.length > 0) {
+          setAssignedSellerId((prev) => prev || String(data[0].id));
+        }
+      } catch (err) {
+        console.error(err);
+        setSalesUsers([]);
+      }
+    };
+    fetchSalesUsers();
+  }, [token, isAlmacenRole, API_BASE]);
+
   const allItems = [
-    ...regularProducts.map(p => ({ ...p, displayName: p.name })),
+    ...PRODUCT_CATALOG.map((p) => ({ ...p, displayName: p.name })),
     ...combos.map(combo => ({
       sku: `COMBO_${combo.id}`,
       displayName: `${combo.name} (Combo)`,
@@ -113,7 +121,7 @@ export default function QuoteTool({ token, user }) {
   const fetchStock = async (sku, store) => {
     if (!sku || !store || sku.startsWith('COMBO_')) return null;
     try {
-      const res = await fetch(`http://localhost:4000/api/stock?sku=${encodeURIComponent(sku)}&store_location=${encodeURIComponent(store)}`, {
+      const res = await fetch(`${API_BASE}/api/stock?sku=${encodeURIComponent(sku)}&store_location=${encodeURIComponent(store)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) return null;
@@ -206,13 +214,40 @@ export default function QuoteTool({ token, user }) {
     rows.every(r => r.sku && r.unitPrice > 0 && r.qty > 0) &&
     (!isProvincia || provincia.trim()) &&
     (isProvincia || department) &&
-    (!useAlternativeName || alternativeName.trim());
+    (!useAlternativeName || (alternativeName.trim() && alternativePhone.trim())) &&
+    (!isAlmacenRole || assignedSellerId);
+
+  const resetQuoteForm = () => {
+    setStep(1);
+    setRows([]);
+    setVentaType('sf');
+    setDiscountPercent(0);
+    setRoundTotal(false);
+    setUseAlternativeName(false);
+    setAlternativeName('');
+    setAlternativePhone('');
+    setCustomerName('');
+    setCustomerPhone('');
+    setDepartment('');
+    setProvincia('');
+    setIsProvincia(false);
+    setAlmacen('');
+    setShippingNotes('');
+    if (isAlmacenRole && Array.isArray(salesUsers) && salesUsers.length > 0) {
+      setAssignedSellerId(String(salesUsers[0].id));
+    } else {
+      setAssignedSellerId('');
+    }
+  };
 
   const saveAndGeneratePDF = async () => {
+    if (isSavingRef.current) return;
     if (!canSave) {
       alert('Completa todos los campos obligatorios del cliente y verifica que todas las líneas tengan producto y cantidad.');
       return;
     }
+    isSavingRef.current = true;
+    setIsSaving(true);
 
     const vendedorName = user ? user.email.split('@')[0] : 'Usuario';
 
@@ -260,23 +295,30 @@ export default function QuoteTool({ token, user }) {
       provincia: isProvincia ? provincia : null,
       shipping_notes: shippingNotes,
       alternative_name: useAlternativeName ? alternativeName.trim() : null,
+      alternative_phone: useAlternativeName ? alternativePhone.trim() : null,
       store_location: almacen,
       vendor: vendedorName,
       venta_type: ventaType,
       discount_percent: discountPercent,
       discount_bs: 0,
       round_total: roundTotal,
+      seller_user_id: isAlmacenRole ? Number(assignedSellerId) : null,
       rows: rowsWithDisplay,
       subtotal,
       total
     };
 
     try {
-      const saveRes = await fetch('http://localhost:4000/api/quotes', {
+      const idempotencyKey =
+        (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const saveRes = await fetch(`${API_BASE}/api/quotes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'X-Idempotency-Key': idempotencyKey
         },
         body: JSON.stringify(payload)
       });
@@ -286,122 +328,52 @@ export default function QuoteTool({ token, user }) {
         throw new Error(errData.error || 'No se pudo guardar la cotización');
       }
 
-      const doc = new jsPDF();
-
-      doc.addImage(logo, 'PNG', 15, 10, 50, 20);
-      doc.setFontSize(22);
-      doc.setTextColor(225, 29, 72);
-      doc.text("Cotización", 105, 35, { align: "center" });
-
-      doc.setFontSize(11);
-      doc.setTextColor(100);
-      doc.text(`Vendedor: ${vendedorName}   •   Almacén: ${almacen}`, 20, 50);
-      doc.text(`Fecha: ${currentDateTime.split(', ')[1]}`, 20, 57);
-      doc.text("Cochabamba, Bolivia.", 20, 64);
-
-      doc.setLineWidth(0.5);
-      doc.setDrawColor(225, 29, 72);
-      doc.line(20, 68, 190, 68);
-
-      doc.setFontSize(12);
-      doc.setTextColor(0);
-      doc.text(`Cliente: ${customerName}`, 20, 78);
-      doc.text(`Teléfono: ${customerPhone}`, 20, 85);
-
-      if (useAlternativeName && alternativeName.trim()) {
-        doc.text(`Enviar a nombre de: ${alternativeName}`, 20, 92);
+      let savedData = null;
+      try {
+        savedData = await saveRes.json();
+      } catch {
+        savedData = null;
       }
 
-      const location = isProvincia ? `Provincia: ${provincia || '—'}` : `Departamento: ${department || '—'}`;
-      doc.text(location, 20, useAlternativeName ? 99 : 92);
+      const quoteNumber = savedData?.id || savedData?.quote?.id || null;
+      const dateParts = currentDateTime?.split(', ') || [];
+      const dateText = dateParts.length > 1 ? dateParts.slice(1).join(', ') : currentDateTime;
 
-      if (shippingNotes.trim()) {
-        doc.setFontSize(10);
-        doc.text('Notas de envío:', 20, useAlternativeName ? 106 : 99);
-        const splitNotes = doc.splitTextToSize(shippingNotes, 170);
-        doc.text(splitNotes, 20, useAlternativeName ? 113 : 106);
-      }
-
-      doc.setFillColor(30, 41, 59);
-      doc.rect(15, 105, 180, 10, 'F');
-      doc.setTextColor(255);
-      doc.setFontSize(11);
-      doc.text("Descripción", 22, 112);
-      doc.text("Cant.", 100, 112, { align: "center" });
-      doc.text("P. Unit.", 138, 112, { align: "right" });
-      doc.text("Subtotal", 178, 112, { align: "right" });
-
-      doc.setTextColor(0);
-      doc.setFontSize(10);
-      let y = 122;
-
-      expandedRows.forEach((row) => {
-        let desc = row.skuDisplay || row.sku || '—';
-        if (desc.length > 48) desc = desc.substring(0, 45) + "...";
-
-        const indent = row.isIndented ? '      ' : '';
-        desc = indent + desc;
-
-        if (row.isComboHeader) {
-          doc.setFontSize(11);
-          doc.setTextColor(225, 29, 72);
-        } else if (row.isIndented) {
-          doc.setFontSize(9);
-          doc.setTextColor(100);
-        } else {
-          doc.setFontSize(10);
-          doc.setTextColor(0);
-        }
-
-        doc.text(desc, 22, y);
-        doc.text((row.qty || 0).toString(), 100, y, { align: "center" });
-        const price = row.unitPrice != null ? Number(row.unitPrice).toFixed(2) : '-';
-        doc.text(price, 138, y, { align: "right" });
-        const lineTotal = row.lineTotal != null ? Number(row.lineTotal).toFixed(2) : '-';
-        doc.text(lineTotal, 178, y, { align: "right" });
-
-        y += row.isIndented ? 7 : 9;
+      generateModernQuotePdf({
+        logo,
+        filename: `cotizacion_${customerName.replace(/\s+/g, '_') || 'sin_nombre'}_${Date.now()}.pdf`,
+        quoteNumber,
+        customerName,
+        customerPhone,
+        vendorName: vendedorName,
+        storeLocation: almacen,
+        dateText,
+        department: isProvincia ? null : department,
+        provincia: isProvincia ? provincia : null,
+        shippingNotes,
+        alternativeName: useAlternativeName ? alternativeName.trim() : null,
+        alternativePhone: useAlternativeName ? alternativePhone.trim() : null,
+        rows: expandedRows,
+        subtotal,
+        discountPercent,
+        discountAmount: discountPercentApplied,
+        roundTotal,
+        total
       });
 
-      y += 8;
-      doc.setFontSize(12);
-      doc.text(`Subtotal: ${subtotal.toFixed(2)} Bs`, 150, y, { align: "right" });
-      y += 8;
-
-      if (discountPercentApplied > 0) {
-        doc.text(`Descuento (${discountPercent}%): ${discountPercentApplied.toFixed(2)} Bs`, 150, y, { align: "right" });
-        y += 8;
-      }
-
-      if (roundTotal) {
-        doc.text(`Redondeo aplicado`, 150, y, { align: "right" });
-        y += 8;
-      }
-
-      doc.setLineWidth(0.5);
-      doc.setDrawColor(0);
-      doc.line(150, y, 190, y);
-      y += 8;
-
-      doc.setFontSize(14);
-      doc.setTextColor(225, 29, 72);
-      doc.text(`TOTAL: ${total.toFixed(2)} Bs`, 150, y, { align: "right" });
-
-      y += 20;
-      doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text("Cotización válida por 7 días", 105, y, { align: "center" });
-      y += 7;
-      doc.text("PCX - ¡Esperamos servirle nuevamente!", 105, y, { align: "center" });
-
-      doc.save(`cotizacion_${customerName.replace(/\s+/g, '_') || 'sin_nombre'}_${Date.now()}.pdf`);
-
+      resetQuoteForm();
       alert('Cotización guardada y PDF generado');
     } catch (err) {
       console.error('Error completo al guardar:', err);
       alert('Error al guardar: ' + (err.message || 'Error desconocido'));
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
     }
   };
+
+  const selectedItemsCount = rows.filter((row) => row.sku).length;
+  const totalUnits = rows.reduce((sum, row) => sum + (Number(row.qty) || 0), 0);
 
   return (
     <div className="container" style={{ paddingTop: '90px' }}>
@@ -413,47 +385,24 @@ export default function QuoteTool({ token, user }) {
         )}
       </header>
 
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+      <div className="quote-stepper">
         <button
           onClick={() => setStep(1)}
-          style={{
-            padding: '12px 24px',
-            background: step === 1 ? '#e11d48' : '#374151',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px 0 0 8px',
-            fontSize: '1rem',
-            cursor: 'pointer',
-            minWidth: '120px'
-          }}
+          className={`quote-step-btn ${step === 1 ? 'active' : ''}`}
         >
-          Cliente
+          1. Cliente
         </button>
         <button
           onClick={() => setStep(2)}
-          style={{
-            padding: '12px 24px',
-            background: step === 2 ? '#e11d48' : '#374151',
-            color: 'white',
-            border: 'none',
-            borderRadius: '0 8px 8px 0',
-            fontSize: '1rem',
-            cursor: 'pointer',
-            minWidth: '120px'
-          }}
+          className={`quote-step-btn ${step === 2 ? 'active' : ''}`}
         >
-          Productos
+          2. Productos
         </button>
       </div>
 
       {step === 1 && (
-        <div className="card">
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: '20px',
-            marginBottom: '24px'
-          }}>
+        <div className="card quote-client-card">
+          <div className="quote-client-grid">
             <div>
               <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>Cliente</label>
               <input
@@ -572,20 +521,65 @@ export default function QuoteTool({ token, user }) {
               </select>
             </div>
 
+            {isAlmacenRole && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
+                  Vendedor asignado (comisión)
+                </label>
+                <select
+                  value={assignedSellerId}
+                  onChange={(e) => setAssignedSellerId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '12px 36px 12px 12px',
+                    fontSize: '1rem',
+                    borderRadius: '8px',
+                    border: '1px solid #374151',
+                    background: '#0f172a',
+                    color: 'white',
+                    appearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    backgroundSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="" disabled>Seleccionar vendedor</option>
+                  {salesUsers.map((seller) => (
+                    <option key={seller.id} value={seller.id}>
+                      {String(seller.email || '').split('@')[0]} ({seller.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
                 <input type="checkbox" checked={useAlternativeName} onChange={(e) => setUseAlternativeName(e.target.checked)} />
                 Enviar a nombre diferente
               </label>
               {useAlternativeName && (
-                <input
-                  type="text"
-                  maxLength={26}
-                  placeholder="Nombre alternativo para envío"
-                  value={alternativeName}
-                  onChange={(e) => setAlternativeName(e.target.value)}
-                  style={{ width: '100%', padding: '12px', marginTop: '8px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
-                />
+                <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                  <input
+                    type="text"
+                    maxLength={26}
+                    placeholder="Nombre alternativo para envío"
+                    value={alternativeName}
+                    onChange={(e) => setAlternativeName(e.target.value)}
+                    style={{ width: '100%', padding: '12px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                  />
+                  <input
+                    type="tel"
+                    maxLength={26}
+                    placeholder="Teléfono alternativo para envío"
+                    value={alternativePhone}
+                    onChange={(e) => setAlternativePhone(e.target.value)}
+                    style={{ width: '100%', padding: '12px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                  />
+                </div>
               )}
             </div>
           </div>
@@ -635,113 +629,183 @@ export default function QuoteTool({ token, user }) {
       )}
 
       {step === 2 && (
-        <div className="card">
-          <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af' }}>
-              <input type="radio" name="venta-type" value="sf" checked={ventaType === 'sf'} onChange={() => setVentaType('sf')} />
-              Sin Factura
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af' }}>
-              <input type="radio" name="venta-type" value="cf" checked={ventaType === 'cf'} onChange={() => setVentaType('cf')} />
-              Con Factura
-            </label>
+        <div className="card quote-products-card">
+          <div className="quote-products-toolbar">
+            <div className="quote-sale-type-group">
+              <button
+                type="button"
+                className={`quote-sale-type-btn ${ventaType === 'sf' ? 'active' : ''}`}
+                onClick={() => setVentaType('sf')}
+              >
+                Sin Factura
+              </button>
+              <button
+                type="button"
+                className={`quote-sale-type-btn ${ventaType === 'cf' ? 'active' : ''}`}
+                onClick={() => setVentaType('cf')}
+              >
+                Con Factura
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={addRow}
+              className="btn btn-secondary"
+            >
+              + Agregar línea
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={addRow}
-            style={{
-              display: 'block',
-              margin: '0 auto 24px',
-              padding: '12px 24px',
-              background: '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '1rem',
-              cursor: 'pointer'
-            }}
-          >
-            + Agregar línea
-          </button>
+          <div className="quote-products-meta">
+            <span>Líneas: <strong>{rows.length}</strong></span>
+            <span>Productos: <strong>{selectedItemsCount}</strong></span>
+            <span>Unidades: <strong>{totalUnits}</strong></span>
+          </div>
 
-          <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
-              <thead>
-                <tr style={{ background: '#111827' }}>
-                  <th style={{ padding: '12px', textAlign: 'left' }}>Producto / Combo</th>
-                  <th style={{ padding: '12px', width: '80px' }}>Cant.</th>
-                  <th style={{ padding: '12px', width: '80px', textAlign: 'center' }}>Disp.</th>
-                  <th style={{ padding: '12px', width: '100px', textAlign: 'right' }}>Unit.</th>
-                  <th style={{ padding: '12px', width: '120px', textAlign: 'right' }}>Subt.</th>
-                  <th style={{ padding: '12px', width: '60px' }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
-                      Agrega líneas arriba
-                    </td>
+          {isMobile ? (
+            <div className="mobile-cards-list" style={{ marginBottom: '20px' }}>
+              {rows.map((row) => {
+                const stock = row.availableStock;
+                const stockDisplay = row.isCombo ? 'Combo' : (stock === null ? 'Cargando...' : stock);
+                const stockColor = row.isCombo ? '#e11d48' : (stock === null ? '#9ca3af' : Number(stock) > 0 ? '#10b981' : '#ef4444');
+
+                return (
+                  <div key={row.id} className="mobile-card">
+                    <div className="mobile-card-header">
+                      <span className="mobile-card-id">Línea #{rows.indexOf(row) + 1}</span>
+                      <span className="mobile-card-total">{(row.lineTotal || 0).toFixed(2)} Bs</span>
+                    </div>
+
+                    <div className="mobile-card-body">
+                      <div>
+                        <label className="mobile-card-label">Producto / Combo</label>
+                        <select
+                          value={row.sku || ''}
+                          onChange={(e) => handleProductSelect(row.id, e.target.value)}
+                          className="mobile-select"
+                          style={{ width: '100%', marginTop: '6px' }}
+                        >
+                          <option value="">Seleccionar producto / combo...</option>
+                          {allItems.map((item) => (
+                            <option key={item.sku} value={item.sku}>
+                              {item.displayName}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Cantidad</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={row.qty}
+                          onChange={(e) => handleQtyChange(row.id, e.target.value)}
+                          className="mobile-select"
+                          style={{ width: '90px', textAlign: 'center', flex: '0 0 90px' }}
+                        />
+                      </div>
+
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Disponibilidad</span>
+                        <span style={{ color: stockColor, fontWeight: 700 }}>{stockDisplay}</span>
+                      </div>
+
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Precio unitario</span>
+                        <span>{(row.unitPrice || 0).toFixed(2)} Bs</span>
+                      </div>
+                    </div>
+
+                    <div className="mobile-card-actions">
+                      <button className="btn btn-danger" onClick={() => confirmAndDeleteRow(row.id)}>
+                        Eliminar línea
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
+                <thead>
+                  <tr style={{ background: '#111827' }}>
+                    <th style={{ padding: '12px', textAlign: 'left' }}>Producto / Combo</th>
+                    <th style={{ padding: '12px', width: '80px' }}>Cant.</th>
+                    <th style={{ padding: '12px', width: '80px', textAlign: 'center' }}>Disp.</th>
+                    <th style={{ padding: '12px', width: '100px', textAlign: 'right' }}>Unit.</th>
+                    <th style={{ padding: '12px', width: '120px', textAlign: 'right' }}>Subt.</th>
+                    <th style={{ padding: '12px', width: '60px' }}></th>
                   </tr>
-                ) : (
-                  rows.map((row) => {
-                    const stock = row.availableStock;
-                    let stockDisplay = row.isCombo ? 'Combo' : (stock === null ? 'Cargando...' : stock);
-                    let stockColor = row.isCombo ? '#e11d48' : (stock === null ? '#9ca3af' : '#10b981');
+                </thead>
+                <tbody>
+                  {rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
+                        Agrega líneas arriba
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((row) => {
+                      const stock = row.availableStock;
+                      const stockDisplay = row.isCombo ? 'Combo' : (stock === null ? 'Cargando...' : stock);
+                      const stockColor = row.isCombo ? '#e11d48' : (stock === null ? '#9ca3af' : '#10b981');
 
-                    return (
-                      <tr key={row.id} style={{ borderBottom: '1px solid #374151' }}>
-                        <td style={{ padding: '12px' }}>
-                          <select
-                            value={row.sku || ''}
-                            onChange={(e) => handleProductSelect(row.id, e.target.value)}
-                            style={{ width: '100%', padding: '10px', fontSize: '0.95rem', borderRadius: '6px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
-                          >
-                            <option value="">Seleccionar producto / combo...</option>
-                            {allItems.map(item => (
-                              <option key={item.sku} value={item.sku}>
-                                {item.displayName}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <input
-                            type="number"
-                            min="1"
-                            value={row.qty}
-                            onChange={(e) => handleQtyChange(row.id, e.target.value)}
-                            style={{ width: '100%', padding: '10px', fontSize: '0.95rem', textAlign: 'center', borderRadius: '6px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
-                          />
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center', color: stockColor, fontWeight: '600' }}>
-                          {stockDisplay}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'right' }}>
-                          {(row.unitPrice || 0).toFixed(2)}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>
-                          {(row.lineTotal || 0).toFixed(2)}
-                        </td>
-                        <td style={{ padding: '12px', textAlign: 'center' }}>
-                          <button
-                            onClick={() => confirmAndDeleteRow(row.id)}
-                            style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '1.4rem', cursor: 'pointer' }}
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                      return (
+                        <tr key={row.id} style={{ borderBottom: '1px solid #374151' }}>
+                          <td style={{ padding: '12px' }}>
+                            <select
+                              value={row.sku || ''}
+                              onChange={(e) => handleProductSelect(row.id, e.target.value)}
+                              style={{ width: '100%', padding: '10px', fontSize: '0.95rem', borderRadius: '6px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                            >
+                              <option value="">Seleccionar producto / combo...</option>
+                              {allItems.map(item => (
+                                <option key={item.sku} value={item.sku}>
+                                  {item.displayName}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <input
+                              type="number"
+                              min="1"
+                              value={row.qty}
+                              onChange={(e) => handleQtyChange(row.id, e.target.value)}
+                              style={{ width: '100%', padding: '10px', fontSize: '0.95rem', textAlign: 'center', borderRadius: '6px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                            />
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center', color: stockColor, fontWeight: '600' }}>
+                            {stockDisplay}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'right' }}>
+                            {(row.unitPrice || 0).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>
+                            {(row.lineTotal || 0).toFixed(2)}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => confirmAndDeleteRow(row.id)}
+                              style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '1.4rem', cursor: 'pointer' }}
+                            >
+                              ×
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Summary - only % discount and rounding */}
-          <div style={{
+          <div className="quote-summary-panel" style={{
             position: 'sticky',
             bottom: 0,
             left: 0,
@@ -792,22 +856,19 @@ export default function QuoteTool({ token, user }) {
 
             <button
               type="button"
-              disabled={!canSave}
+              disabled={!canSave || isSaving}
               onClick={saveAndGeneratePDF}
+              className="btn btn-primary"
               style={{
                 width: '100%',
                 marginTop: '16px',
-                padding: '14px',
-                background: canSave ? '#e11d48' : '#374151',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
                 fontSize: '1.1rem',
                 fontWeight: '600',
-                cursor: canSave ? 'pointer' : 'not-allowed'
+                opacity: canSave && !isSaving ? 1 : 0.6,
+                cursor: canSave && !isSaving ? 'pointer' : 'not-allowed'
               }}
             >
-              Guardar / Generar PDF
+              {isSaving ? 'Guardando...' : 'Guardar y generar PDF'}
             </button>
           </div>
         </div>

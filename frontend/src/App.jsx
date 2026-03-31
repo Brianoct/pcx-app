@@ -9,7 +9,14 @@ import InventoryPanel from './InventoryPanel';
 import PedidosPanel from './PedidosPanel';
 import Combos from './Combos';
 import Cupones from './Cupones';
+import TimeOffCalendar from './TimeOffCalendar';
+import QualityControlPanel from './QualityControlPanel';
+import MicrofabricaPanel from './MicrofabricaPanel';
+import logo from './assets/PCX.png';
 import './index.css';
+import { buildAccessForUser, canAccessPanel } from './roleAccess';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 // ─── Login Component ────────────────────────────────────────────────────────
 function Login({ onLogin }) {
@@ -21,14 +28,14 @@ function Login({ onLogin }) {
     e.preventDefault();
     setError('');
     try {
-      const res = await fetch('http://localhost:4000/api/login', {
+      const res = await fetch(`${API_BASE}/api/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.error || 'Login failed');
+        throw new Error(errData.error || 'No se pudo iniciar sesión');
       }
       const data = await res.json();
       onLogin(data.token, data.user);
@@ -38,84 +45,61 @@ function Login({ onLogin }) {
   };
 
   return (
-    <div style={{ 
-      maxWidth: '420px', 
-      margin: '80px auto', 
-      padding: '32px 16px', 
-      background: '#1e293b', 
-      borderRadius: '12px',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
-    }}>
-      <h2 style={{ textAlign: 'center', marginBottom: '24px', color: '#e11d48' }}>
-        PCX
-      </h2>
-      {error && <p style={{ color: '#ef4444', textAlign: 'center', marginBottom: '16px' }}>{error}</p>}
+    <div className="login-shell">
+      <div className="login-card">
+        <h2 className="login-title">
+          PCX
+        </h2>
+        {error && <p className="login-error">{error}</p>}
       <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af' }}>Email</label>
+        <div className="login-field">
+          <label className="login-label">Email</label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="ejemplo@sales.com"
             required
-            style={{ 
-              width: '100%', 
-              padding: '12px', 
-              fontSize: '1rem', 
-              border: '1px solid #374151', 
-              borderRadius: '8px', 
-              background: '#0f172a', 
-              color: 'white' 
-            }}
+            className="login-input"
           />
         </div>
-        <div style={{ marginBottom: '24px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af' }}>Contraseña</label>
+        <div className="login-field">
+          <label className="login-label">Contraseña</label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            style={{ 
-              width: '100%', 
-              padding: '12px', 
-              fontSize: '1rem', 
-              border: '1px solid #374151', 
-              borderRadius: '8px', 
-              background: '#0f172a', 
-              color: 'white' 
-            }}
+            className="login-input"
           />
         </div>
-        <button 
-          type="submit" 
-          style={{ 
-            width: '100%', 
-            padding: '14px', 
-            background: '#e11d48', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '8px', 
-            fontSize: '1.1rem', 
-            fontWeight: '600', 
-            cursor: 'pointer' 
-          }}
-        >
+        <button type="submit" className="btn btn-primary login-submit">
           Iniciar Sesión
         </button>
       </form>
+      </div>
     </div>
   );
 }
 
 // ─── NavMenu Component ──────────────────────────────────────────────────────
-function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller }) {
+function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, access }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [desktopMoreOpen, setDesktopMoreOpen] = useState(false);
   const location = useLocation();
+  const canQuote = canAccessPanel(access, 'cotizar');
+  const canSeeHistory = canAccessPanel(access, 'historialGlobal') || canAccessPanel(access, 'historialIndividual');
+  const canSeePerformance = canAccessPanel(access, 'rendimientoGlobal') || canAccessPanel(access, 'rendimientoIndividual');
+  const canSeePedidos = canAccessPanel(access, 'pedidosGlobal') || canAccessPanel(access, 'pedidosIndividual');
+  const canSeeInventory = canAccessPanel(access, 'inventarioGlobal') || canAccessPanel(access, 'inventarioIndividual');
+  const canSeeQualityControl = canAccessPanel(access, 'control_calidad');
+  const canSeeMicrofabricaPanel = canAccessPanel(access, 'microfabrica_panel');
+  const canSeeAdmin = canAccessPanel(access, 'admin');
+  const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
 
   useEffect(() => {
     setMenuOpen(false);
+    setDesktopMoreOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -123,92 +107,112 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller }) 
       if (menuOpen && !event.target.closest('.nav-links.mobile') && !event.target.closest('.hamburger')) {
         setMenuOpen(false);
       }
+      if (desktopMoreOpen && !event.target.closest('.more-menu')) {
+        setDesktopMoreOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [menuOpen]);
+  }, [menuOpen, desktopMoreOpen]);
 
-  const NavLink = ({ to, label }) => {
-    const loc = useLocation();
-    const isActive = loc.pathname === to;
-    return (
-      <Link
-        to={to}
-        className={`nav-link ${isActive ? 'active' : ''}`}
-        onClick={() => setMenuOpen(false)}
-      >
-        {label}
-      </Link>
-    );
-  };
+  const allNavItems = [
+    canQuote ? { to: '/', label: 'Cotizar' } : null,
+    canSeeHistory ? { to: '/history', label: 'Historial' } : null,
+    canSeePerformance ? { to: '/performance', label: 'Rendimiento' } : null,
+    canSeePedidos ? { to: '/pedidos', label: 'Pedidos' } : null,
+    canSeeInventory ? { to: '/inventory', label: 'Inventario' } : null,
+    canSeeQualityControl ? { to: '/control-calidad', label: 'Control Calidad' } : null,
+    canSeeMicrofabricaPanel ? { to: '/microfabrica', label: 'Microfábrica' } : null,
+    canSeeCalendar ? { to: '/calendario', label: 'Calendario' } : null,
+    canAccessPanel(access, 'marketingCombos') ? { to: '/combos', label: 'Combos' } : null,
+    canAccessPanel(access, 'marketingCupones') ? { to: '/cupones', label: 'Cupones' } : null,
+    canSeeAdmin ? { to: '/admin', label: 'Admin' } : null
+  ].filter(Boolean);
+
+  const MAX_DESKTOP_VISIBLE = 7;
+  const desktopPrimaryItems = allNavItems.slice(0, MAX_DESKTOP_VISIBLE);
+  const desktopOverflowItems = allNavItems.slice(MAX_DESKTOP_VISIBLE);
 
   return (
     <>
-      <nav style={{ 
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1000,
-        background: '#0f172a',
-        borderBottom: '1px solid #374151',
-        padding: '10px 12px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.5)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ fontSize: '1.3rem', fontWeight: '700', color: '#e11d48' }}>
-            PCX
-          </span>
+      <nav className="app-nav">
+        <div className="app-nav-left">
+          <img
+            src={logo}
+            alt="PCX"
+            className="app-logo"
+          />
 
           <button 
             className="hamburger"
             onClick={() => setMenuOpen(!menuOpen)}
-            style={{ fontSize: '1.8rem', background: 'none', border: 'none', color: '#e11d48', cursor: 'pointer' }}
+            aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'}
           >
             {menuOpen ? '✕' : '☰'}
           </button>
 
-          <div className="nav-links" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-            <NavLink to="/" label="Cotizar" />
-            <NavLink to="/history" label="Historial" />
-            <NavLink to="/performance" label="Rendimiento" />
+          <div className="desktop-nav-cluster">
+            <div className="nav-links desktop">
+              {desktopPrimaryItems.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`nav-link ${location.pathname === item.to ? 'active' : ''}`}
+                  onClick={() => setDesktopMoreOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+
+            {desktopOverflowItems.length > 0 && (
+              <div className="more-menu">
+                <button
+                  type="button"
+                  className={`more-menu-button ${desktopOverflowItems.some((item) => location.pathname === item.to) ? 'active' : ''}`}
+                  onClick={() => setDesktopMoreOpen((prev) => !prev)}
+                  aria-haspopup="menu"
+                  aria-expanded={desktopMoreOpen}
+                >
+                  Más ▾
+                </button>
+                {desktopMoreOpen && (
+                  <div className="more-menu-list" role="menu">
+                    {desktopOverflowItems.map((item) => (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        className={`more-menu-item ${location.pathname === item.to ? 'active' : ''}`}
+                        onClick={() => setDesktopMoreOpen(false)}
+                        role="menuitem"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="desktop-user" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ color: '#9ca3af', fontWeight: '500', fontSize: '0.95rem' }}>
+        <div className="mobile-user-inline">
+          <span className="desktop-user-name">
             {displayName}
           </span>
-          <span 
-            style={{ 
-              color: '#10b981', 
-              fontWeight: '600', 
-              fontSize: '1rem',
-              background: 'rgba(16, 185, 129, 0.1)',
-              padding: '6px 14px',
-              borderRadius: '10px',
-              border: isTopSeller ? '2px solid gold' : '1px solid #374151',
-              boxShadow: isTopSeller ? '0 0 15px rgba(255, 215, 0, 0.7)' : 'none',
-              transition: 'all 0.3s ease'
-            }}
-          >
+          <span className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}>
             +{(currentCommission || 0).toFixed(2)} Bs
           </span>
-          <button 
-            onClick={handleLogout}
-            style={{ 
-              padding: '8px 14px', 
-              background: '#374151', 
-              color: '#ef4444', 
-              border: 'none', 
-              borderRadius: '6px', 
-              cursor: 'pointer',
-              fontSize: '0.9rem'
-            }}
-          >
+        </div>
+
+        <div className="desktop-user">
+          <span className="desktop-user-name">
+            {displayName}
+          </span>
+          <span className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}>
+            +{(currentCommission || 0).toFixed(2)} Bs
+          </span>
+          <button onClick={handleLogout} className="btn app-logout-btn">
             Cerrar
           </button>
         </div>
@@ -217,34 +221,21 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller }) 
       {menuOpen && <div className="mobile-menu-overlay active" onClick={() => setMenuOpen(false)} />}
 
       <div className={`nav-links mobile ${menuOpen ? 'active' : ''}`}>
-        <NavLink to="/" label="Cotizar" />
-        <NavLink to="/history" label="Historial" />
-        <NavLink to="/performance" label="Rendimiento" />
+        {allNavItems.map((item) => (
+          <Link
+            key={`mobile-${item.to}`}
+            to={item.to}
+            className={`nav-link ${location.pathname === item.to ? 'active' : ''}`}
+            onClick={() => setMenuOpen(false)}
+          >
+            {item.label}
+          </Link>
+        ))}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px' }}>
-          <span style={{ color: '#9ca3af', fontWeight: '500' }}>
-            {displayName}
-          </span>
-          <span 
-            style={{ 
-              color: '#10b981', 
-              fontWeight: '600',
-              background: 'rgba(16, 185, 129, 0.1)',
-              padding: '6px 14px',
-              borderRadius: '10px',
-              border: isTopSeller ? '2px solid gold' : '1px solid #374151',
-              boxShadow: isTopSeller ? '0 0 15px rgba(255, 215, 0, 0.7)' : 'none',
-              transition: 'all 0.3s ease'
-            }}
-          >
-            +{(currentCommission || 0).toFixed(2)} Bs
-          </span>
-          <div 
-            onClick={handleLogout}
-            style={{ cursor: 'pointer', color: '#ef4444', fontWeight: '600' }}
-          >
+        <div className="mobile-user-panel">
+          <button onClick={handleLogout} className="mobile-logout-btn">
             Cerrar Sesión
-          </div>
+          </button>
         </div>
       </div>
     </>
@@ -261,81 +252,81 @@ function App() {
   const [role, setRole] = useState(() => localStorage.getItem('role'));
   const [currentCommission, setCurrentCommission] = useState(0);
   const [isTopSeller, setIsTopSeller] = useState(false);
+  const [access, setAccess] = useState(() => {
+    const saved = localStorage.getItem('panel_access');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   const handleLogin = (newToken, userData) => {
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('role', userData.role);
+    localStorage.setItem('panel_access', JSON.stringify(userData.panel_access || null));
     setToken(newToken);
     setUser(userData);
     setRole(userData.role);
+    setAccess(userData.panel_access || null);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('role');
+    localStorage.removeItem('panel_access');
     setToken(null);
     setUser(null);
     setRole(null);
     setCurrentCommission(0);
     setIsTopSeller(false);
+    setAccess(null);
   };
 
-  const handleTopSellerUpdate = (topInfo) => {
-    if (!topInfo || !user) return;
-
-    if (topInfo.comision !== null && topInfo.comision !== undefined) {
-      const isMeTop = topInfo.vendor && topInfo.vendor.toLowerCase().includes(user.email.toLowerCase());
-      setIsTopSeller(isMeTop);
-      setCurrentCommission(topInfo.comision);
-    }
-  };
+  const handleTopSellerUpdate = () => {};
 
   useEffect(() => {
     if (token && user) {
       fetchPersonalCommission();
     }
-  }, [token, user]);
+  }, [token, user, role]);
+
+  useEffect(() => {
+    const syncSession = async () => {
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/me`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const me = await res.json();
+        localStorage.setItem('user', JSON.stringify(me));
+        localStorage.setItem('role', me.role);
+        localStorage.setItem('panel_access', JSON.stringify(me.panel_access || null));
+        setUser(me);
+        setRole(me.role);
+        setAccess(me.panel_access || null);
+      } catch {
+        // no-op; keep cached session
+      }
+    };
+    syncSession();
+  }, [token, API_BASE]);
 
   const fetchPersonalCommission = async () => {
     try {
       const params = new URLSearchParams({
-        team: 'false',
         month: new Date().getMonth() + 1,
         year: new Date().getFullYear()
       });
 
-      const res = await fetch(`http://localhost:4000/api/performance?${params.toString()}`, {
+      const res = await fetch(`${API_BASE}/api/commission/current?${params.toString()}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!res.ok) throw new Error('Failed to fetch personal data');
+      if (!res.ok) throw new Error('No se pudo cargar la comisión');
 
       const data = await res.json();
-
-      let commission = 0;
-      let topSeller = false;
-
-      if (role?.toLowerCase().includes('ventas lider') || role?.toLowerCase() === 'admin') {
-        // Leader: 5% override
-        const teamRes = await fetch(`http://localhost:4000/api/performance?team=true&month=${params.get('month')}&year=${params.get('year')}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (teamRes.ok) {
-          const teamData = await teamRes.json();
-          const totalTeam = Array.isArray(teamData) ? teamData.reduce((sum, item) => sum + Number(item.ventas_totales || 0), 0) : 0;
-          commission = totalTeam * 0.05;
-        }
-      } else {
-        // Regular seller: personal commission (8% default)
-        const mySales = Number(data.ventas_totales || 0);
-        commission = mySales * 0.08;
-        topSeller = false; // Regular users cannot see team ranking
-      }
-
-      setCurrentCommission(commission);
-      setIsTopSeller(topSeller);
+      setCurrentCommission(Number(data?.commission || 0));
+      setIsTopSeller(Boolean(data?.isTopSeller));
     } catch (err) {
       console.error('Error fetching personal commission:', err);
       setCurrentCommission(0);
@@ -343,19 +334,27 @@ function App() {
     }
   };
 
+  const handleQuoteStatusChanged = () => {
+    fetchPersonalCommission();
+  };
+
   if (!token) {
     return <Login onLogin={handleLogin} />;
   }
 
   const displayName = user ? user.email.split('@')[0] : 'Usuario';
-
-  const isAdmin = role?.toLowerCase() === 'admin';
-  const isAlmacenRole = role?.toLowerCase().includes('almacen');
-  const isAlmacenLider = role?.toLowerCase().includes('almacen lider');
-  const isMarketingLider = role?.toLowerCase().includes('marketing lider');
-  const isVentasLider = role?.toLowerCase().includes('ventas lider');
-
-  const defaultPath = isAlmacenLider ? '/pedidos' : isMarketingLider ? '/combos' : '/';
+  const effectiveAccess = buildAccessForUser(role, access);
+  const defaultPath = canAccessPanel(effectiveAccess, 'admin')
+    ? '/admin'
+    : canAccessPanel(effectiveAccess, 'pedidos_global') || canAccessPanel(effectiveAccess, 'pedidos_individual')
+      ? '/pedidos'
+      : canAccessPanel(effectiveAccess, 'microfabrica_panel')
+        ? '/microfabrica'
+      : canAccessPanel(effectiveAccess, 'marketing_combos')
+        ? '/combos'
+        : canAccessPanel(effectiveAccess, 'calendario')
+          ? '/calendario'
+        : '/';
 
   return (
     <Router>
@@ -364,26 +363,85 @@ function App() {
         handleLogout={handleLogout}
         currentCommission={currentCommission}
         isTopSeller={isTopSeller}
+        role={role}
+        access={effectiveAccess}
       />
 
       <Routes>
-        <Route path="/" element={<QuoteTool token={token} user={user} />} />
-        <Route path="/history" element={<QuoteHistory token={token} role={role} />} />
+        <Route
+          path="/"
+          element={canAccessPanel(effectiveAccess, 'cotizar') ? <QuoteTool token={token} user={user} /> : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/history"
+          element={
+            canAccessPanel(effectiveAccess, 'historial_global') || canAccessPanel(effectiveAccess, 'historial_individual')
+              ? <QuoteHistory token={token} role={role} access={effectiveAccess} onStatusUpdated={handleQuoteStatusChanged} />
+              : <Navigate to={defaultPath} replace />
+          }
+        />
         <Route 
           path="/performance" 
           element={
-            <PerformanceDashboard 
-              token={token} 
-              role={role} 
-              onTopSellerChange={handleTopSellerUpdate} 
-            />
+            canAccessPanel(effectiveAccess, 'rendimiento_global') || canAccessPanel(effectiveAccess, 'rendimiento_individual')
+              ? (
+                <PerformanceDashboard 
+                  token={token} 
+                  user={user}
+                  role={role}
+                  access={effectiveAccess}
+                  onTopSellerChange={handleTopSellerUpdate} 
+                />
+              )
+              : <Navigate to={defaultPath} replace />
           } 
         />
-        <Route path="/combos" element={<Combos token={token} />} />
-        <Route path="/cupones" element={<Cupones token={token} />} />
-        <Route path="/admin" element={<AdminPanel token={token} />} />
-        <Route path="/inventory" element={<InventoryPanel token={token} />} />
-        <Route path="/pedidos" element={<PedidosPanel token={token} role={role} />} />
+        <Route
+          path="/combos"
+          element={canAccessPanel(effectiveAccess, 'marketing_combos') ? <Combos token={token} /> : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/cupones"
+          element={canAccessPanel(effectiveAccess, 'marketing_cupones') ? <Cupones token={token} /> : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/admin"
+          element={canAccessPanel(effectiveAccess, 'admin') ? <AdminPanel token={token} /> : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/inventory"
+          element={
+            canAccessPanel(effectiveAccess, 'inventario_global') || canAccessPanel(effectiveAccess, 'inventario_individual')
+              ? <InventoryPanel token={token} role={role} access={effectiveAccess} />
+              : <Navigate to={defaultPath} replace />
+          }
+        />
+        <Route
+          path="/pedidos"
+          element={
+            canAccessPanel(effectiveAccess, 'pedidos_global') || canAccessPanel(effectiveAccess, 'pedidos_individual')
+              ? <PedidosPanel token={token} role={role} access={effectiveAccess} onStatusUpdated={handleQuoteStatusChanged} />
+              : <Navigate to={defaultPath} replace />
+          }
+        />
+        <Route
+          path="/control-calidad"
+          element={canAccessPanel(effectiveAccess, 'control_calidad') || canAccessPanel(effectiveAccess, 'admin')
+            ? <QualityControlPanel token={token} />
+            : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/microfabrica"
+          element={canAccessPanel(effectiveAccess, 'microfabrica_panel') || canAccessPanel(effectiveAccess, 'admin')
+            ? <MicrofabricaPanel token={token} />
+            : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/calendario"
+          element={canAccessPanel(effectiveAccess, 'calendario') || canAccessPanel(effectiveAccess, 'admin')
+            ? <TimeOffCalendar token={token} user={user} />
+            : <Navigate to={defaultPath} replace />}
+        />
         <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Routes>
     </Router>

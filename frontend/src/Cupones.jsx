@@ -1,5 +1,5 @@
 // src/Cupones.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 function Cupones({ token }) {
   const [coupons, setCoupons] = useState([]);
@@ -8,25 +8,26 @@ function Cupones({ token }) {
   const [validUntil, setValidUntil] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-  useEffect(() => {
-    fetchCoupons();
-  }, []);
-
-  const fetchCoupons = async () => {
+  const fetchCoupons = useCallback(async () => {
     try {
-      const res = await fetch('http://192.168.1.53:4000/api/cupones', {
+      const res = await fetch(`${API_BASE}/api/cupones`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('No se pudieron cargar cupones');
       const data = await res.json();
       setCoupons(data);
-      setLoading(false);
     } catch (err) {
       setError(err.message);
+    } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE, token]);
+
+  useEffect(() => {
+    fetchCoupons();
+  }, [fetchCoupons]);
 
   const handleCreateCoupon = async () => {
     if (!code.trim() || discountPercent <= 0 || !validUntil) {
@@ -35,7 +36,7 @@ function Cupones({ token }) {
     }
 
     try {
-      const res = await fetch('http://192.168.1.53:4000/api/cupones', {
+      const res = await fetch(`${API_BASE}/api/cupones`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -67,7 +68,7 @@ function Cupones({ token }) {
     if (!window.confirm('¿Eliminar cupón permanentemente?')) return;
 
     try {
-      const res = await fetch(`http://192.168.1.53:4000/api/cupones/${id}`, {
+      const res = await fetch(`${API_BASE}/api/cupones/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -84,6 +85,7 @@ function Cupones({ token }) {
   return (
     <div style={{ padding: '16px' }}>
       <h2 style={{ textAlign: 'center', color: '#f87171', marginBottom: '24px' }}>Cupones</h2>
+      {error && <p style={{ textAlign: 'center', color: '#f87171', marginBottom: '12px' }}>{error}</p>}
 
       {/* Create Coupon Form */}
       <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '32px' }}>

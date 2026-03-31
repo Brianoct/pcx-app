@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import jsPDF from 'jspdf';
 import logo from './assets/logo.png';
+import { buildAccessForUser, canAccessPanel } from './roleAccess';
 
-function PedidosPanel({ token, role }) {
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
+function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [pedidos, setPedidos] = useState([]);
   const [filteredPedidos, setFilteredPedidos] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -11,25 +14,53 @@ function PedidosPanel({ token, role }) {
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
   const [checklistModal, setChecklistModal] = useState(null);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
 
   // Pagination
   const pedidosPerPage = 10;
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Determine user type
-  const isWarehouse = role?.toLowerCase().includes('almacen');
+  const panelAccess = useMemo(() => buildAccessForUser(role, access), [role, access]);
+  const canViewPedidosGlobal = canAccessPanel(panelAccess, 'pedidosGlobal');
+  const canManageStatus = canAccessPanel(panelAccess, 'pedidosIndividual') || canViewPedidosGlobal;
+
+  const normalizePhone = (phone = '') => String(phone).replace(/\D/g, '');
+  const fitTextByWidth = (doc, text = '', maxWidth = 0, suffix = '...') => {
+    const safe = String(text || '').trim();
+    if (!safe) return '—';
+    if (doc.getTextWidth(safe) <= maxWidth) return safe;
+    const suffixW = doc.getTextWidth(suffix);
+    let out = safe;
+    while (out.length > 0 && (doc.getTextWidth(out) + suffixW) > maxWidth) {
+      out = out.slice(0, -1);
+    }
+    return `${out}${suffix}`;
+  };
+  const buildWhatsAppLink = (phone = '') => {
+    const digits = normalizePhone(phone);
+    if (!digits) return null;
+    const withCountry = digits.startsWith('591') ? digits : `591${digits}`;
+    return `https://wa.me/${withCountry}`;
+  };
 
   useEffect(() => {
     fetchPedidos();
   }, [token, role]);
 
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   const fetchPedidos = async () => {
     setLoading(true);
     try {
-      const useTeamView = isWarehouse || 
-                         ['Ventas Lider', 'Admin'].some(r => role?.toLowerCase().includes(r.toLowerCase()));
+      const useTeamView = canViewPedidosGlobal;
       
-      const url = `http://localhost:4000/api/quotes${useTeamView ? '?team=true' : ''}`;
+      const url = `${API_BASE}/api/quotes${useTeamView ? '?team=true' : ''}`;
       
       const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -38,8 +69,11 @@ function PedidosPanel({ token, role }) {
       if (!res.ok) throw new Error((await res.json()).error || 'No se pudieron cargar los pedidos');
       
       const data = await res.json();
-      const filtered = data.filter(q => 
-        q.status === 'Confirmado' || q.status === 'Pagado' || q.status === 'Embalado'
+      const filtered = data.filter((q) =>
+        q.status === 'Confirmado' ||
+        q.status === 'Pagado' ||
+        q.status === 'Embalado' ||
+        q.status === 'Enviado'
       );
       
       setPedidos(filtered);
@@ -83,7 +117,7 @@ function PedidosPanel({ token, role }) {
   const handleStatusChange = async (quoteId, newStatus) => {
     setUpdatingId(quoteId);
     try {
-      const res = await fetch(`http://localhost:4000/api/quotes/${quoteId}/status`, {
+      const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -97,6 +131,9 @@ function PedidosPanel({ token, role }) {
         throw new Error(errData.error || 'No se pudo actualizar el estado');
       }
 
+      if (typeof onStatusUpdated === 'function') {
+        onStatusUpdated();
+      }
       await fetchPedidos();
       alert('Estado actualizado correctamente');
     } catch (err) {
@@ -158,43 +195,62 @@ function PedidosPanel({ token, role }) {
 
     const pageWidth = 70;
     const pageHeight = 40;
-    const margin = 4;
+    const margin = 2.5;
+    const contentX = margin;
+    const contentW = pageWidth - margin * 2;
+    const lineH = 3.8;
+    const maxCenterWidth = contentW - 3;
 
-    const logoWidth = 20;
-    const logoHeight = 8;
-    const logoX = (pageWidth - logoWidth) / 2;
-    const logoY = margin + 4;
-
-    doc.addImage(logo, 'PNG', logoX, logoY, logoWidth, logoHeight);
-
-    const textStartY = logoY + logoHeight + 5.5;
-    const lineHeight = 5.8;
-
-    doc.setFontSize(11);
-    doc.setTextColor(0);
-
-    doc.setFont("helvetica", "bold");
-    const customerName = quote.customer_name || '—';
-    const nameWidth = doc.getTextWidth(customerName);
-    doc.text(customerName, (pageWidth - nameWidth) / 2, textStartY);
-
-    doc.setFont("helvetica", "normal");
-    const celText = `Cel: ${quote.customer_phone || '—'}`;
-    const celWidth = doc.getTextWidth(celText);
-    doc.text(celText, (pageWidth - celWidth) / 2, textStartY + lineHeight);
-
+    const recipientName = (quote.alternative_name && String(quote.alternative_name).trim())
+      ? quote.alternative_name.trim()
+      : (quote.customer_name || '—');
+    const recipientPhone = (quote.alternative_phone && String(quote.alternative_phone).trim())
+      ? quote.alternative_phone.trim()
+      : (quote.customer_phone || '—');
     const locationText = quote.provincia || quote.department || '—';
-    const locationWidth = doc.getTextWidth(locationText);
-    doc.text(locationText, (pageWidth - locationWidth) / 2, textStartY + lineHeight * 2);
+    const notesText = quote.shipping_notes ? String(quote.shipping_notes).trim() : '';
 
-    if (quote.shipping_notes && quote.shipping_notes.trim()) {
-      doc.setFontSize(9.5);
-      const notes = quote.shipping_notes.trim();
-      const splitNotes = doc.splitTextToSize(notes, 60);
-      doc.text(splitNotes, (pageWidth - doc.getTextWidth(splitNotes[0])) / 2, textStartY + lineHeight * 3);
+    // Border and header separator for cleaner thermal print look
+    doc.setDrawColor(0);
+    doc.setLineWidth(0.2);
+    doc.rect(contentX, margin, contentW, pageHeight - margin * 2);
+
+    const logoW = 18;
+    const logoH = 7;
+    const logoX = (pageWidth - logoW) / 2;
+    const logoY = margin + 1;
+    doc.addImage(logo, 'PNG', logoX, logoY, logoW, logoH);
+    const separatorY = logoY + logoH + 1.2;
+    doc.line(contentX + 1.5, separatorY, contentX + contentW - 1.5, separatorY);
+
+    let y = separatorY + 6;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    const namePrint = fitTextByWidth(doc, recipientName, maxCenterWidth);
+    doc.text(namePrint, pageWidth / 2, y, { align: 'center' });
+    y += lineH + 0.2;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    const phonePrint = fitTextByWidth(doc, `Cel: ${recipientPhone}`, maxCenterWidth);
+    doc.text(phonePrint, pageWidth / 2, y, { align: 'center' });
+    y += lineH;
+
+    const locationPrint = fitTextByWidth(doc, locationText, maxCenterWidth);
+    doc.text(locationPrint, pageWidth / 2, y, { align: 'center' });
+
+    if (notesText) {
+      y += lineH;
+      doc.setFontSize(7.7);
+      const noteLines = doc.splitTextToSize(`Nota: ${notesText}`, contentW - 4).slice(0, 2);
+      noteLines.forEach((line, idx) => {
+        const fitted = fitTextByWidth(doc, line, maxCenterWidth);
+        doc.text(fitted, pageWidth / 2, y + (idx * 3.2), { align: 'center' });
+      });
     }
 
-    doc.save(`etiqueta_${quote.id}_${customerName.replace(/\s+/g, '_') || 'cliente'}.pdf`);
+    doc.save(`etiqueta_${quote.id}_${recipientName.replace(/\s+/g, '_') || 'cliente'}.pdf`);
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando pedidos...</div>;
@@ -213,6 +269,56 @@ function PedidosPanel({ token, role }) {
     }
   };
 
+  const actionButtons = (quote, compact = false) => (
+    <div
+      className="pedidos-actions"
+      style={{
+        display: 'flex',
+        gap: compact ? '8px' : '6px',
+        justifyContent: 'center',
+        flexWrap: 'nowrap'
+      }}
+    >
+      <button
+        type="button"
+        className="btn pedidos-action-btn empaque"
+        onClick={() => openChecklist(quote)}
+        title="Lista de empaque"
+        style={{
+          minHeight: compact ? '36px' : '34px',
+          minWidth: compact ? '96px' : '84px',
+          padding: compact ? '8px 12px' : '6px 10px',
+          fontSize: compact ? '0.85rem' : '0.8rem',
+          borderRadius: '8px',
+          border: '1px solid rgba(16, 185, 129, 0.45)',
+          background: 'rgba(16, 185, 129, 0.15)',
+          color: '#a7f3d0',
+          fontWeight: 700
+        }}
+      >
+        Empaque
+      </button>
+      <button
+        type="button"
+        className="btn pedidos-action-btn etiqueta"
+        onClick={() => printLabel(quote)}
+        style={{
+          minHeight: compact ? '36px' : '34px',
+          minWidth: compact ? '96px' : '84px',
+          padding: compact ? '8px 12px' : '6px 10px',
+          fontSize: compact ? '0.85rem' : '0.8rem',
+          borderRadius: '8px',
+          border: '1px solid rgba(59, 130, 246, 0.45)',
+          background: 'rgba(59, 130, 246, 0.15)',
+          color: '#bfdbfe',
+          fontWeight: 700
+        }}
+      >
+        Etiqueta
+      </button>
+    </div>
+  );
+
   return (
     <div className="container">
       <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
@@ -220,43 +326,19 @@ function PedidosPanel({ token, role }) {
       </h2>
 
       {/* Filter Bar - exact same style as QuoteHistory */}
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '16px',
-        marginBottom: '24px',
-        justifyContent: 'center',
-        alignItems: 'center'
-      }}>
+      <div className="filter-bar">
         <input
+          className="filter-input"
           type="text"
           placeholder="Buscar por cliente, teléfono, provincia/departamento, vendedor o estado..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: '250px',
-            padding: '12px',
-            fontSize: '1rem',
-            border: '1px solid #334155',
-            borderRadius: '8px',
-            background: '#0f172a',
-            color: 'white'
-          }}
         />
 
         <select
+          className="filter-select"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          style={{
-            padding: '12px',
-            fontSize: '1rem',
-            border: '1px solid #334155',
-            borderRadius: '8px',
-            background: '#0f172a',
-            color: 'white',
-            minWidth: '160px'
-          }}
         >
           <option value="">Todos los estados</option>
           <option value="Confirmado">Confirmado</option>
@@ -266,16 +348,8 @@ function PedidosPanel({ token, role }) {
         </select>
 
         <button
+          className="btn btn-danger"
           onClick={clearFilters}
-          style={{
-            padding: '12px 20px',
-            background: '#ef4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '0.95rem'
-          }}
         >
           Limpiar filtros
         </button>
@@ -285,151 +359,201 @@ function PedidosPanel({ token, role }) {
         <p style={{ textAlign: 'center', color: '#94a3b8' }}>No hay pedidos pendientes que coincidan con la búsqueda.</p>
       ) : (
         <>
-          <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
-            <table style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              minWidth: '900px',
-              tableLayout: 'fixed'
-            }}>
-              <thead>
-                <tr style={{ background: '#0f172a' }}>
-                  <th style={{ padding: '12px 8px', width: '60px', textAlign: 'center' }}>ID</th>
-                  <th style={{ padding: '12px 8px', width: '120px', textAlign: 'center' }}>Vendedor</th>
-                  <th style={{ padding: '12px 8px', width: '180px', textAlign: 'center' }}>Cliente</th>
-                  <th style={{ padding: '12px 8px', width: '130px', textAlign: 'center' }}>Teléfono</th>
-                  <th style={{ padding: '12px 8px', width: '160px', textAlign: 'center' }}>Provincia / Depto</th>
-                  <th style={{ padding: '12px 8px', width: '160px', textAlign: 'center' }}>Almacén</th>
-                  <th style={{ padding: '12px 8px', width: '120px', textAlign: 'center' }}>Estado</th>
-                  <th style={{ padding: '12px 8px', width: '150px', textAlign: 'center' }}>Fecha</th>
-                  <th style={{ padding: '12px 8px', width: '140px', textAlign: 'center' }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentPedidos.map(quote => (
-                  <tr key={quote.id} style={{ borderBottom: '1px solid #334155' }}>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>{quote.id}</td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>{quote.vendor || '—'}</td>
-                    <td style={{
-                      padding: '12px 8px',
-                      textAlign: 'center',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'break-word'
-                    }}>
-                      {quote.customer_name || '—'}
-                    </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                      {quote.customer_phone || '—'}
-                    </td>
-                    <td style={{
-                      padding: '12px 8px',
-                      textAlign: 'center',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'break-word'
-                    }}>
-                      {quote.provincia || quote.department || '—'}
-                    </td>
-                    <td style={{
-                      padding: '12px 8px',
-                      textAlign: 'center',
-                      whiteSpace: 'normal',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'break-word'
-                    }}>
-                      {quote.store_location || '—'}
-                    </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                      <select
-                        value={quote.status}
-                        onChange={(e) => handleStatusChange(quote.id, e.target.value)}
-                        disabled={updatingId === quote.id}
-                        style={{
-                          padding: '6px 10px',
-                          background: quote.status === 'Enviado' ? '#10b981' :
-                                      quote.status === 'Embalado' ? '#8b5cf6' :
-                                      quote.status === 'Pagado' ? '#3b82f6' :
-                                      quote.status === 'Confirmado' ? '#f59e0b' :
-                                      '#64748b',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: updatingId === quote.id ? 'not-allowed' : 'pointer',
-                          fontSize: '0.85rem',
-                          minWidth: '100px'
-                        }}
-                      >
-                        {isWarehouse ? (
-                          <>
-                            <option value="Confirmado">Confirmado</option>
-                            <option value="Pagado">Pagado</option>
-                            <option value="Embalado">Embalado</option>
-                            <option value="Enviado">Enviado</option>
-                          </>
-                        ) : (
-                          <>
-                            <option value="Cotizado">Cotizado</option>
-                            <option value="Confirmado">Confirmado</option>
-                            <option value="Pagado">Pagado</option>
-                            <option value="Embalado">Embalado</option>
-                            <option value="Enviado">Enviado</option>
-                          </>
-                        )}
-                      </select>
-                    </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                      {new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}
-                    </td>
-                    <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => openChecklist(quote)}
-                          title="Lista de Empaque"
-                          style={{
-                            padding: '6px 12px',
-                            background: '#10b981',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '1.1rem',
-                            minWidth: '40px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#059669'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = '#10b981'}
+          {isMobile ? (
+            <div className="mobile-cards-list" style={{ marginBottom: '16px' }}>
+              {currentPedidos.map((quote) => (
+                <div key={quote.id} className="mobile-card">
+                  <div className="mobile-card-header">
+                    <span className="mobile-card-id">Pedido #{quote.id}</span>
+                    <span className="mobile-card-total">{quote.status}</span>
+                  </div>
+
+                  <div className="mobile-card-body">
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Vendedor</span>
+                      {quote.vendor_phone ? (
+                        <a
+                          href={buildWhatsAppLink(quote.vendor_phone)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#25D366', textDecoration: 'none', fontWeight: '600' }}
                         >
-                          ✅
-                        </button>
-                        <button
-                          onClick={() => printLabel(quote)}
-                          style={{
-                            padding: '6px 12px',
-                            background: '#f59e0b',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            minWidth: '90px',
-                            transition: 'background 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#d97706'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = '#f59e0b'}
-                        >
-                          Etiqueta
-                        </button>
-                      </div>
-                    </td>
+                          {quote.vendor || '—'}
+                        </a>
+                      ) : (
+                        <span>{quote.vendor || '—'}</span>
+                      )}
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Cliente</span>
+                      <span>{quote.customer_name || '—'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Teléfono</span>
+                      <span>{quote.customer_phone || '—'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Ubicación</span>
+                      <span>{quote.provincia || quote.department || '—'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Almacén</span>
+                      <span>{quote.store_location || '—'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Fecha</span>
+                      <span>{new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    </div>
+                  </div>
+
+                  <div className="mobile-card-actions">
+                    <select
+                      className="mobile-select"
+                      value={quote.status}
+                      onChange={(e) => handleStatusChange(quote.id, e.target.value)}
+                      disabled={updatingId === quote.id}
+                    >
+                      {canManageStatus ? (
+                        <>
+                          <option value="Confirmado">Confirmado</option>
+                          <option value="Pagado">Pagado</option>
+                          <option value="Embalado">Embalado</option>
+                          <option value="Enviado">Enviado</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="Cotizado">Cotizado</option>
+                          <option value="Confirmado">Confirmado</option>
+                          <option value="Pagado">Pagado</option>
+                          <option value="Embalado">Embalado</option>
+                          <option value="Enviado">Enviado</option>
+                        </>
+                      )}
+                    </select>
+                    {actionButtons(quote, true)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
+              <table style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                minWidth: '100%',
+                tableLayout: 'auto'
+              }}>
+                <thead>
+                  <tr style={{ background: '#0f172a' }}>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>ID</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Vendedor</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Cliente</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Teléfono</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Provincia / Depto</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Almacén</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Estado</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Fecha</th>
+                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {currentPedidos.map(quote => (
+                    <tr key={quote.id} style={{ borderBottom: '1px solid #334155' }}>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>{quote.id}</td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        {quote.vendor_phone ? (
+                          <a
+                            href={buildWhatsAppLink(quote.vendor_phone)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: '#25D366', textDecoration: 'none', fontWeight: '600' }}
+                          >
+                            {quote.vendor || '—'}
+                          </a>
+                        ) : (
+                          quote.vendor || '—'
+                        )}
+                      </td>
+                      <td style={{
+                        padding: '12px 8px',
+                        textAlign: 'center',
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word'
+                      }}>
+                        {quote.customer_name || '—'}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        {quote.customer_phone || '—'}
+                      </td>
+                      <td style={{
+                        padding: '12px 8px',
+                        textAlign: 'center',
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word'
+                      }}>
+                        {quote.provincia || quote.department || '—'}
+                      </td>
+                      <td style={{
+                        padding: '12px 8px',
+                        textAlign: 'center',
+                        whiteSpace: 'normal',
+                        wordBreak: 'break-word',
+                        overflowWrap: 'break-word'
+                      }}>
+                        {quote.store_location || '—'}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        <select
+                          value={quote.status}
+                          onChange={(e) => handleStatusChange(quote.id, e.target.value)}
+                          disabled={updatingId === quote.id}
+                          style={{
+                            padding: '6px 10px',
+                            background: quote.status === 'Enviado' ? '#10b981' :
+                                        quote.status === 'Embalado' ? '#8b5cf6' :
+                                        quote.status === 'Pagado' ? '#3b82f6' :
+                                        quote.status === 'Confirmado' ? '#f59e0b' :
+                                        '#64748b',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: updatingId === quote.id ? 'not-allowed' : 'pointer',
+                            fontSize: '0.85rem',
+                            minWidth: '100px'
+                          }}
+                        >
+                          {canManageStatus ? (
+                            <>
+                              <option value="Confirmado">Confirmado</option>
+                              <option value="Pagado">Pagado</option>
+                              <option value="Embalado">Embalado</option>
+                              <option value="Enviado">Enviado</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="Cotizado">Cotizado</option>
+                              <option value="Confirmado">Confirmado</option>
+                              <option value="Pagado">Pagado</option>
+                              <option value="Embalado">Embalado</option>
+                              <option value="Enviado">Enviado</option>
+                            </>
+                          )}
+                        </select>
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        {new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </td>
+                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                        {actionButtons(quote, false)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Pagination - exact same as QuoteHistory */}
           {totalPages > 1 && (

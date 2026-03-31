@@ -1,18 +1,38 @@
 // src/AdminPanel.jsx
 import { useState, useEffect } from 'react';
+import AdminDashboard from './AdminDashboard';
+import { ACCESS_LABELS, buildAccessForUser, ROLE_LABELS, ROLE_OPTIONS } from './roleAccess';
+import { PRODUCT_CATALOG } from './productCatalog';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
+  value: role,
+  label: role === 'Almacen Lider'
+    ? 'Almacén Líder'
+    : role === 'Almacen'
+      ? 'Almacén'
+      : role
+}));
 
 // User management component
 function UserManagement({ token }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [newUser, setNewUser] = useState({ email: '', password: '', role: 'Ventas', city: 'Santa Cruz', phone: '' });
-  const [editModal, setEditModal] = useState(null); // { userId, email, role, city, phone }
+  const [newUser, setNewUser] = useState({
+    email: '',
+    password: '',
+    role: 'Ventas',
+    city: 'Santa Cruz',
+    phone: '',
+    panel_access: buildAccessForUser('Ventas')
+  });
+  const [editModal, setEditModal] = useState(null); // { userId, email, role, city, phone, panel_access }
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/users', {
+        const res = await fetch(`${API_BASE}/api/users`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error('No se pudo cargar usuarios');
@@ -36,18 +56,25 @@ function UserManagement({ token }) {
     }
 
     try {
-      const res = await fetch('http://localhost:4000/api/users', {
+      const res = await fetch(`${API_BASE}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(newUser)
       });
       if (!res.ok) throw new Error('No se pudo agregar usuario');
       alert('Usuario agregado con éxito');
-      const refreshRes = await fetch('http://localhost:4000/api/users', {
+      const refreshRes = await fetch(`${API_BASE}/api/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       setUsers(await refreshRes.json());
-      setNewUser({ email: '', password: '', role: 'Ventas', city: 'Santa Cruz', phone: '' });
+      setNewUser({
+        email: '',
+        password: '',
+        role: 'Ventas',
+        city: 'Santa Cruz',
+        phone: '',
+        panel_access: buildAccessForUser('Ventas')
+      });
     } catch (err) {
       alert('Error: ' + err.message);
     }
@@ -55,14 +82,17 @@ function UserManagement({ token }) {
 
   const handleUpdateRole = async (userId, newRole) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/users/${userId}`, {
+      const res = await fetch(`${API_BASE}/api/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ role: newRole })
+        body: JSON.stringify({
+          role: newRole,
+          panel_access: buildAccessForUser(newRole)
+        })
       });
       if (!res.ok) throw new Error('No se pudo actualizar rol');
       alert('Rol actualizado');
-      const refreshRes = await fetch('http://localhost:4000/api/users', {
+      const refreshRes = await fetch(`${API_BASE}/api/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       setUsers(await refreshRes.json());
@@ -74,13 +104,13 @@ function UserManagement({ token }) {
   const handleDeleteUser = async (userId) => {
     if (!window.confirm('¿Eliminar este usuario y TODAS sus cotizaciones asociadas? Esto es irreversible.')) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/users/${userId}`, {
+      const res = await fetch(`${API_BASE}/api/users/${userId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('No se pudo eliminar usuario');
       alert('Usuario eliminado');
-      const refreshRes = await fetch('http://localhost:4000/api/users', {
+      const refreshRes = await fetch(`${API_BASE}/api/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       setUsers(await refreshRes.json());
@@ -95,7 +125,8 @@ function UserManagement({ token }) {
       email: user.email,
       role: user.role,
       city: user.city || '',
-      phone: user.phone || ''
+      phone: user.phone || '',
+      panel_access: buildAccessForUser(user.role, user.panel_access)
     });
   };
 
@@ -108,18 +139,19 @@ function UserManagement({ token }) {
     }
 
     try {
-      const res = await fetch(`http://localhost:4000/api/users/${editModal.userId}`, {
+      const res = await fetch(`${API_BASE}/api/users/${editModal.userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           role: editModal.role,
           city: editModal.city,
-          phone: editModal.phone
+          phone: editModal.phone,
+          panel_access: editModal.panel_access
         })
       });
       if (!res.ok) throw new Error('No se pudo actualizar usuario');
       alert('Usuario actualizado con éxito');
-      const refreshRes = await fetch('http://localhost:4000/api/users', {
+      const refreshRes = await fetch(`${API_BASE}/api/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       setUsers(await refreshRes.json());
@@ -144,16 +176,52 @@ function UserManagement({ token }) {
     }
   };
 
+  const handleNewRoleChange = (role) => {
+    setNewUser({
+      ...newUser,
+      role,
+      panel_access: buildAccessForUser(role)
+    });
+  };
+
+  const handleNewAccessToggle = (field) => {
+    setNewUser((prev) => ({
+      ...prev,
+      panel_access: {
+        ...(prev.panel_access || buildAccessForUser(prev.role)),
+        [field]: !(prev.panel_access || buildAccessForUser(prev.role))[field]
+      }
+    }));
+  };
+
+  const handleEditRoleChange = (role) => {
+    setEditModal((prev) => ({
+      ...prev,
+      role,
+      panel_access: buildAccessForUser(role)
+    }));
+  };
+
+  const handleEditAccessToggle = (field) => {
+    setEditModal((prev) => ({
+      ...prev,
+      panel_access: {
+        ...(prev.panel_access || buildAccessForUser(prev.role)),
+        [field]: !(prev.panel_access || buildAccessForUser(prev.role))[field]
+      }
+    }));
+  };
+
   if (loading) return <div style={{ textAlign: 'center', padding: '50px' }}>Cargando usuarios...</div>;
   if (error) return <div style={{ color: '#f87171', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
 
   return (
     <div>
       {/* Add new user form */}
-      <div style={{ background: '#1e293b', padding: '24px', borderRadius: '12px', marginBottom: '32px' }}>
-        <h3 style={{ marginBottom: '20px' }}>Agregar Nuevo Usuario</h3>
+      <div style={{ background: '#1e293b', padding: '24px', borderRadius: '14px', marginBottom: '28px', border: '1px solid rgba(71, 85, 105, 0.5)' }}>
+        <h3 style={{ marginBottom: '16px' }}>Agregar Nuevo Usuario</h3>
         <form onSubmit={handleAddUser}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Email</label>
               <input
@@ -191,16 +259,14 @@ function UserManagement({ token }) {
               <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Rol</label>
               <select
                 value={newUser.role}
-                onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                onChange={(e) => handleNewRoleChange(e.target.value)}
                 style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
               >
-                <option value="Ventas">Ventas</option>
-                <option value="Ventas Lider">Ventas Líder</option>
-                <option value="Marketing">Marketing</option>
-                <option value="Marketing Lider">Marketing Líder</option>
-                <option value="Admin">Admin</option>
-                <option value="Almacen Lider">Almacén Líder</option>
-                <option value="Almacen">Almacén</option>
+                {ROLE_SELECT_OPTIONS.map((roleOption) => (
+                  <option key={roleOption.value} value={roleOption.value}>
+                    {roleOption.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -213,7 +279,36 @@ function UserManagement({ token }) {
               />
             </div>
           </div>
-          <button type="submit" style={{ width: '100%', padding: '14px', background: '#f87171', color: 'white', border: 'none', borderRadius: '8px', marginTop: '24px', fontWeight: '600' }}>
+
+          <div style={{ marginTop: '18px' }}>
+            <h4 style={{ marginBottom: '10px', color: '#f1f5f9' }}>Acceso por panel</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
+              {ACCESS_LABELS.map((field) => (
+                <label
+                  key={field.key}
+                  style={{
+                    display: 'flex',
+                    gap: '9px',
+                    alignItems: 'center',
+                    color: '#e2e8f0',
+                    border: '1px solid #334155',
+                    borderRadius: '10px',
+                    padding: '10px 12px',
+                    background: '#111b2d'
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={Boolean(newUser.panel_access?.[field.key])}
+                    onChange={() => handleNewAccessToggle(field.key)}
+                  />
+                  {field.label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <button type="submit" style={{ width: '100%', padding: '14px', background: '#f87171', color: 'white', border: 'none', borderRadius: '10px', marginTop: '22px', fontWeight: '700' }}>
             Agregar Usuario
           </button>
         </form>
@@ -224,59 +319,59 @@ function UserManagement({ token }) {
       {users.length === 0 ? (
         <p>No hay usuarios.</p>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
-          <thead>
-            <tr style={{ background: '#0f172a' }}>
-              <th style={{ padding: '12px' }}>Email</th>
-              <th style={{ padding: '12px' }}>Teléfono</th>
-              <th style={{ padding: '12px' }}>Rol</th>
-              <th style={{ padding: '12px' }}>Ciudad</th>
-              <th style={{ padding: '12px' }}>Creado</th>
-              <th style={{ padding: '12px' }}>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(user => (
-              <tr key={user.id} style={{ borderBottom: '1px solid #334155' }}>
-                <td style={{ padding: '12px' }}>{user.email}</td>
-                <td style={{ padding: '12px' }}>
-                  {user.phone ? `+591 ${user.phone}` : '—'}
-                </td>
-                <td style={{ padding: '12px' }}>
-                  <select
-                    value={user.role}
-                    onChange={(e) => handleUpdateRole(user.id, e.target.value)}
-                    style={{ padding: '6px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
-                  >
-                    <option value="Ventas">Ventas</option>
-                    <option value="Ventas Lider">Ventas Líder</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Marketing Lider">Marketing Líder</option>
-                    <option value="Admin">Admin</option>
-                    <option value="Almacen Lider">Almacén Líder</option>
-                    <option value="Almacen">Almacén</option>
-                  </select>
-                </td>
-                <td style={{ padding: '12px' }}>{user.city || '—'}</td>
-                <td style={{ padding: '12px' }}>{new Date(user.created_at).toLocaleString('es-BO')}</td>
-                <td style={{ padding: '12px' }}>
-                  <button
-                    onClick={() => openEditModal(user)}
-                    style={{ padding: '8px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', marginRight: '8px' }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    onClick={() => handleDeleteUser(user.id)}
-                    style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                  >
-                    Eliminar
-                  </button>
-                </td>
+        <div style={{ overflowX: 'auto', border: '1px solid rgba(71, 85, 105, 0.45)', borderRadius: '12px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
+            <thead>
+              <tr style={{ background: '#0f172a' }}>
+                <th style={{ padding: '12px' }}>Email</th>
+                <th style={{ padding: '12px' }}>Teléfono</th>
+                <th style={{ padding: '12px' }}>Rol</th>
+                <th style={{ padding: '12px' }}>Ciudad</th>
+                <th style={{ padding: '12px' }}>Creado</th>
+                <th style={{ padding: '12px' }}>Acción</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map(user => (
+                <tr key={user.id} style={{ borderBottom: '1px solid #334155' }}>
+                  <td style={{ padding: '12px' }}>{user.email}</td>
+                  <td style={{ padding: '12px' }}>
+                    {user.phone ? `+591 ${user.phone}` : '—'}
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <select
+                      value={user.role}
+                      onChange={(e) => handleUpdateRole(user.id, e.target.value)}
+                      style={{ padding: '6px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+                    >
+                      {ROLE_SELECT_OPTIONS.map((roleOption) => (
+                        <option key={roleOption.value} value={roleOption.value}>
+                          {roleOption.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td style={{ padding: '12px' }}>{user.city || '—'}</td>
+                  <td style={{ padding: '12px' }}>{new Date(user.created_at).toLocaleString('es-BO')}</td>
+                  <td style={{ padding: '12px' }}>
+                    <button
+                      onClick={() => openEditModal(user)}
+                      style={{ padding: '8px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', marginRight: '8px' }}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => handleDeleteUser(user.id)}
+                      style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Edit User Modal */}
@@ -328,16 +423,14 @@ function UserManagement({ token }) {
                   <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Rol</label>
                   <select
                     value={editModal.role}
-                    onChange={(e) => setEditModal({ ...editModal, role: e.target.value })}
+                    onChange={(e) => handleEditRoleChange(e.target.value)}
                     style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
                   >
-                    <option value="Ventas">Ventas</option>
-                    <option value="Ventas Lider">Ventas Líder</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Marketing Lider">Marketing Líder</option>
-                    <option value="Admin">Admin</option>
-                    <option value="Almacen Lider">Almacén Líder</option>
-                    <option value="Almacen">Almacén</option>
+                    {ROLE_SELECT_OPTIONS.map((roleOption) => (
+                      <option key={roleOption.value} value={roleOption.value}>
+                        {roleOption.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -348,6 +441,33 @@ function UserManagement({ token }) {
                     onChange={(e) => setEditModal({ ...editModal, city: e.target.value })}
                     style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
                   />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Acceso por panel</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
+                    {ACCESS_LABELS.map((field) => (
+                      <label
+                        key={field.key}
+                        style={{
+                          display: 'flex',
+                          gap: '9px',
+                          alignItems: 'center',
+                          color: '#e2e8f0',
+                          border: '1px solid #334155',
+                          borderRadius: '10px',
+                          padding: '10px 12px',
+                          background: '#111b2d'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editModal.panel_access?.[field.key])}
+                          onChange={() => handleEditAccessToggle(field.key)}
+                        />
+                        {field.label}
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -390,29 +510,759 @@ function UserManagement({ token }) {
   );
 }
 
-// Dashboard component (unchanged)
-function StatisticsDashboard({ token }) {
-  // ... same as before ...
+function StatisticsPanel({ token }) {
+  return <AdminDashboard token={token} />;
 }
 
-// Main Admin Panel with tabs (unchanged)
-function AdminPanel({ token }) {
-  const [activeTab, setActiveTab] = useState('usuarios');
+function TimeOffAdminPanel({ token }) {
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [rows, setRows] = useState([]);
+  const [summary, setSummary] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [updatingId, setUpdatingId] = useState(null);
+
+  const loadData = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [requestsRes, summaryRes] = await Promise.all([
+        fetch(`${API_BASE}/api/timeoff/requests?year=${year}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE}/api/timeoff/summary?year=${year}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+      if (!requestsRes.ok) {
+        const err = await requestsRes.json().catch(() => ({}));
+        throw new Error(err.error || 'No se pudieron cargar solicitudes');
+      }
+      if (!summaryRes.ok) {
+        const err = await summaryRes.json().catch(() => ({}));
+        throw new Error(err.error || 'No se pudo cargar resumen');
+      }
+      setRows(await requestsRes.json());
+      setSummary(await summaryRes.json());
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [token, year]);
+
+  const updateStatus = async (id, status) => {
+    setUpdatingId(id);
+    try {
+      const res = await fetch(`${API_BASE}/api/timeoff/requests/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'No se pudo actualizar estado');
+      }
+      await loadData();
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   return (
-    <div style={{ padding: '16px', maxWidth: '1400px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '32px', borderBottom: '2px solid #334155' }}>
-        <button onClick={() => setActiveTab('usuarios')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'usuarios' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'usuarios' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'usuarios' ? '600' : '500', cursor: 'pointer' }}>
-          Usuarios
+    <div style={{ display: 'grid', gap: '14px' }}>
+      <div className="card" style={{ marginBottom: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <h3 style={{ margin: 0 }}>Calendario global de permisos</h3>
+          <select
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            style={{ minHeight: '40px', minWidth: '120px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '8px 10px' }}
+          >
+            {[2024, 2025, 2026, 2027, 2028].map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <p style={{ marginTop: '8px', color: '#94a3b8' }}>
+          Política anual: 14 días de vacaciones pagadas y 5 días de enfermedad pagados por usuario.
+        </p>
+      </div>
+
+      <div className="card" style={{ marginBottom: 0 }}>
+        <h4 style={{ marginBottom: '10px' }}>Resumen por usuario ({year})</h4>
+        {loading ? (
+          <p style={{ color: '#94a3b8' }}>Cargando resumen...</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ minWidth: '860px' }}>
+              <thead>
+                <tr>
+                  <th>Usuario</th>
+                  <th>Vacaciones aprobadas</th>
+                  <th>Restante vacaciones</th>
+                  <th>Enfermedad aprobada</th>
+                  <th>Restante enfermedad</th>
+                  <th>Otros aprobados</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign: 'center', color: '#94a3b8' }}>Sin datos</td></tr>
+                ) : summary.map((row) => (
+                  <tr key={row.user_id}>
+                    <td>{row.email}</td>
+                    <td>{Number(row.vacation_used || 0)}</td>
+                    <td>{Math.max(0, Number(row.vacation_remaining || 0))}</td>
+                    <td>{Number(row.sick_used || 0)}</td>
+                    <td>{Math.max(0, Number(row.sick_remaining || 0))}</td>
+                    <td>{Number(row.other_used || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 0 }}>
+        <h4 style={{ marginBottom: '10px' }}>Solicitudes ({year})</h4>
+        {error && <div style={{ color: '#fca5a5', marginBottom: '10px' }}>{error}</div>}
+        {loading ? (
+          <p style={{ color: '#94a3b8' }}>Cargando solicitudes...</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ minWidth: '980px' }}>
+              <thead>
+                <tr>
+                  <th>Usuario</th>
+                  <th>Tipo</th>
+                  <th>Inicio</th>
+                  <th>Fin</th>
+                  <th>Días</th>
+                  <th>Estado</th>
+                  <th>Notas</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={8} style={{ textAlign: 'center', color: '#94a3b8' }}>No hay solicitudes</td></tr>
+                ) : rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.user_email}</td>
+                    <td>{row.leave_type_label || row.leave_type}</td>
+                    <td>{row.start_date}</td>
+                    <td>{row.end_date}</td>
+                    <td>{row.total_days}</td>
+                    <td>{row.status_label || row.status}</td>
+                    <td style={{ maxWidth: '240px', whiteSpace: 'normal', wordBreak: 'break-word' }}>{row.notes || '—'}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        <button
+                          className="btn"
+                          disabled={updatingId === row.id || row.status === 'approved'}
+                          onClick={() => updateStatus(row.id, 'approved')}
+                          style={{ minHeight: '34px', padding: '6px 10px', background: '#10b981', color: 'white' }}
+                        >
+                          Aprobar
+                        </button>
+                        <button
+                          className="btn"
+                          disabled={updatingId === row.id || row.status === 'rejected'}
+                          onClick={() => updateStatus(row.id, 'rejected')}
+                          style={{ minHeight: '34px', padding: '6px 10px', background: '#ef4444', color: 'white' }}
+                        >
+                          Rechazar
+                        </button>
+                        <button
+                          className="btn"
+                          disabled={updatingId === row.id || row.status === 'pending'}
+                          onClick={() => updateStatus(row.id, 'pending')}
+                          style={{ minHeight: '34px', padding: '6px 10px', background: '#334155', color: 'white' }}
+                        >
+                          Pendiente
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function QualityControlCommissionConfig({ token }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const loadRows = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/qc/commissions`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'No se pudo cargar configuración de control de calidad');
+      }
+      setRows(await res.json());
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRows();
+  }, [token]);
+
+  const updateRate = (sku, value) => {
+    const parsed = Number(value);
+    const safe = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 0;
+    setRows((prev) => prev.map((row) => (
+      row.sku === sku ? { ...row, commission_rate: safe } : row
+    )));
+  };
+
+  const updateBasePrice = (sku, value) => {
+    const parsed = Number(value);
+    const safe = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    setRows((prev) => prev.map((row) => (
+      row.sku === sku ? { ...row, base_price: safe } : row
+    )));
+  };
+
+  const saveRows = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/qc/commissions`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ rows })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'No se pudo guardar configuración');
+      }
+      setMessage('Comisiones por producto guardadas.');
+      await loadRows();
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '30px' }}>Cargando comisiones por producto...</div>;
+
+  return (
+    <div style={{ background: '#1e293b', borderRadius: '12px', padding: '20px' }}>
+      <h3 style={{ marginBottom: '10px' }}>Control de calidad — comisión por producto</h3>
+      <p style={{ color: '#94a3b8', marginBottom: '14px' }}>
+        Define el % por producto para comisión de piezas aprobadas. Aplica a Admin, Almacén Lider, Microfabrica Lider y Microfabrica.
+      </p>
+      {message && (
+        <div style={{
+          marginBottom: '12px',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
+          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+        }}>
+          {message}
+        </div>
+      )}
+      <div style={{ overflowX: 'auto' }}>
+        <table className="table" style={{ minWidth: '940px' }}>
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Producto</th>
+              <th style={{ textAlign: 'right' }}>Base Bs</th>
+              <th style={{ textAlign: 'right' }}>% comisión</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.sku}>
+                <td>{row.sku}</td>
+                <td>{row.name || row.product_name}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={Number(row.base_price || 0)}
+                    onChange={(e) => updateBasePrice(row.sku, e.target.value)}
+                    style={{
+                      width: '110px',
+                      padding: '6px 8px',
+                      borderRadius: '8px',
+                      border: '1px solid #334155',
+                      background: '#0f172a',
+                      color: 'white',
+                      textAlign: 'right'
+                    }}
+                  />
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={Number(row.commission_rate || 0)}
+                    onChange={(e) => updateRate(row.sku, e.target.value)}
+                    style={{
+                      width: '110px',
+                      padding: '6px 8px',
+                      borderRadius: '8px',
+                      border: '1px solid #334155',
+                      background: '#0f172a',
+                      color: 'white',
+                      textAlign: 'right'
+                    }}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ marginTop: '14px' }}>
+        <button
+          onClick={saveRows}
+          disabled={saving}
+          style={{
+            padding: '10px 16px',
+            borderRadius: '8px',
+            border: 'none',
+            background: '#3b82f6',
+            color: 'white',
+            cursor: saving ? 'not-allowed' : 'pointer',
+            fontWeight: 600
+          }}
+        >
+          {saving ? 'Guardando...' : 'Guardar comisión por producto'}
         </button>
-        <button onClick={() => setActiveTab('dashboard')} style={{ padding: '14px 40px', background: 'transparent', color: activeTab === 'dashboard' ? '#f87171' : '#94a3b8', border: 'none', borderBottom: activeTab === 'dashboard' ? '4px solid #f87171' : '4px solid transparent', fontSize: '1.2rem', fontWeight: activeTab === 'dashboard' ? '600' : '500', cursor: 'pointer' }}>
-          Dashboard
-        </button>
+      </div>
+    </div>
+  );
+}
+
+function CommissionConfig({ token }) {
+  const [settings, setSettings] = useState({
+    ventas_lider_percent: 5,
+    ventas_top_percent: 12,
+    ventas_regular_percent: 8,
+    almacen_percent: 5,
+    marketing_lider_percent: 5
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      setLoading(true);
+      setMessage('');
+      try {
+        const res = await fetch(`${API_BASE}/api/commission/settings`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'No se pudo cargar configuración de comisiones');
+        }
+        const data = await res.json();
+        setSettings({
+          ventas_lider_percent: Number(data.ventas_lider_percent ?? 5),
+          ventas_top_percent: Number(data.ventas_top_percent ?? 12),
+          ventas_regular_percent: Number(data.ventas_regular_percent ?? 8),
+          almacen_percent: Number(data.almacen_percent ?? 5),
+          marketing_lider_percent: Number(data.marketing_lider_percent ?? 5)
+        });
+      } catch (err) {
+        setMessage(`Error: ${err.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSettings();
+  }, [token]);
+
+  const handlePercentChange = (key, value) => {
+    const parsed = Number(value);
+    const safe = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : 0;
+    setSettings((prev) => ({ ...prev, [key]: safe }));
+    setMessage('');
+  };
+
+  const saveSettings = async () => {
+    setSaving(true);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/commission/settings`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ settings })
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo guardar configuración');
+      }
+      const data = await res.json();
+      setSettings({
+        ventas_lider_percent: Number(data.settings?.ventas_lider_percent ?? settings.ventas_lider_percent),
+        ventas_top_percent: Number(data.settings?.ventas_top_percent ?? settings.ventas_top_percent),
+        ventas_regular_percent: Number(data.settings?.ventas_regular_percent ?? settings.ventas_regular_percent),
+        almacen_percent: Number(data.settings?.almacen_percent ?? settings.almacen_percent),
+        marketing_lider_percent: Number(data.settings?.marketing_lider_percent ?? settings.marketing_lider_percent)
+      });
+      setMessage('Configuración de comisiones guardada.');
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: '40px' }}>Cargando comisiones...</div>;
+  }
+
+  const rows = [
+    { key: 'ventas_lider_percent', label: 'Ventas Lider (% sobre ventas de equipo + propias)' },
+    { key: 'ventas_top_percent', label: 'Ventas top (% sobre ventas propias)' },
+    { key: 'ventas_regular_percent', label: 'Asesor de ventas (% sobre ventas propias)' },
+    { key: 'almacen_percent', label: 'Almacen (% sobre ventas del almacén local)' },
+    { key: 'marketing_lider_percent', label: 'Marketing Lider (% sobre total de ventas)' }
+  ];
+
+  return (
+    <div style={{ background: '#1e293b', borderRadius: '12px', padding: '20px' }}>
+      <h3 style={{ marginBottom: '12px' }}>Comisiones por Rol</h3>
+      <p style={{ color: '#94a3b8', marginBottom: '16px' }}>
+        Aquí defines los porcentajes configurables de comisión. Los cambios impactan el cálculo en tiempo real.
+      </p>
+
+      <div style={{ display: 'grid', gap: '12px', marginBottom: '16px' }}>
+        {rows.map((row) => (
+          <div
+            key={row.key}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(280px, 1fr) 140px',
+              gap: '12px',
+              alignItems: 'center',
+              border: '1px solid #334155',
+              borderRadius: '10px',
+              padding: '10px 12px'
+            }}
+          >
+            <span style={{ color: '#e2e8f0' }}>{row.label}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifySelf: 'end' }}>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={settings[row.key]}
+                onChange={(e) => handlePercentChange(row.key, e.target.value)}
+                style={{
+                  width: '88px',
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: '1px solid #334155',
+                  background: '#0f172a',
+                  color: 'white',
+                  textAlign: 'right'
+                }}
+              />
+              <span style={{ color: '#94a3b8' }}>%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ color: '#94a3b8', fontSize: '0.92rem', lineHeight: 1.5, marginBottom: '14px' }}>
+        <div>• Almacen Lider: compensación por pieza / control de calidad (modelo contractual).</div>
+        <div>• Marketing: compensación por contrato.</div>
+        <div>• Microfabrica Lider y Microfabrica: ingreso por piezas fabricadas por producto (mensual).</div>
+      </div>
+
+      {message && (
+        <div style={{
+          marginBottom: '12px',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
+          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+        }}>
+          {message}
+        </div>
+      )}
+
+      <button
+        onClick={saveSettings}
+        disabled={saving}
+        style={{
+          padding: '10px 16px',
+          borderRadius: '8px',
+          border: 'none',
+          background: '#3b82f6',
+          color: 'white',
+          cursor: saving ? 'not-allowed' : 'pointer',
+          fontWeight: 600
+        }}
+      >
+        {saving ? 'Guardando...' : 'Guardar comisiones'}
+      </button>
+    </div>
+  );
+}
+
+function RoleConfiguration({ token }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [savingRole, setSavingRole] = useState(null);
+  const [applyingRole, setApplyingRole] = useState(null);
+  const [message, setMessage] = useState('');
+
+  const loadDefaults = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/roles/access-defaults`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('No se pudo cargar configuración de roles');
+      const data = await res.json();
+      setRows(data);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDefaults();
+  }, [token]);
+
+  const toggleRoleAccess = (role, key) => {
+    setRows((prev) => prev.map((row) => (
+      row.role === role
+        ? {
+            ...row,
+            panel_access: {
+              ...(row.panel_access || {}),
+              [key]: !row.panel_access?.[key]
+            }
+          }
+        : row
+    )));
+  };
+
+  const saveRole = async (role) => {
+    const row = rows.find((r) => r.role === role);
+    if (!row) return;
+    setSavingRole(role);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/roles/access-defaults/${encodeURIComponent(role)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ panel_access: row.panel_access })
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo guardar configuración del rol');
+      }
+      setMessage(`Configuración guardada para rol ${role}.`);
+      await loadDefaults();
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSavingRole(null);
+    }
+  };
+
+  const applyRoleDefaultsToUsers = async (role) => {
+    if (!window.confirm(`¿Aplicar la configuración por defecto del rol "${role}" a todos los usuarios con ese rol?`)) return;
+    setApplyingRole(role);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/roles/access-defaults/${encodeURIComponent(role)}/apply`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo aplicar configuración a usuarios');
+      }
+      const data = await res.json();
+      setMessage(`Aplicado a ${data.updated_users ?? 0} usuario(s) del rol ${role}.`);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setApplyingRole(null);
+    }
+  };
+
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: '40px' }}>Cargando configuración de roles...</div>;
+  }
+
+  return (
+    <div style={{ background: '#1e293b', borderRadius: '12px', padding: '20px' }}>
+      <h3 style={{ marginBottom: '12px' }}>Configuración de Roles</h3>
+      <p style={{ color: '#94a3b8', marginBottom: '16px' }}>
+        Edita los paneles por defecto por rol. Luego puedes aplicar esa configuración a todos los usuarios del rol.
+      </p>
+
+      {message && (
+        <div style={{
+          marginBottom: '14px',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
+          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+        }}>
+          {message}
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gap: '12px' }}>
+        {rows.map((row) => (
+          <div key={row.role} style={{ border: '1px solid #334155', borderRadius: '10px', padding: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+              <strong>{row.role}</strong>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => saveRole(row.role)}
+                  disabled={savingRole === row.role}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#3b82f6', color: 'white', cursor: 'pointer' }}
+                >
+                  {savingRole === row.role ? 'Guardando...' : 'Guardar rol'}
+                </button>
+                <button
+                  onClick={() => applyRoleDefaultsToUsers(row.role)}
+                  disabled={applyingRole === row.role}
+                  style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#10b981', color: 'white', cursor: 'pointer' }}
+                >
+                  {applyingRole === row.role ? 'Aplicando...' : 'Aplicar a usuarios'}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+              {ACCESS_LABELS.map((field) => (
+                <label key={`${row.role}-${field.key}`} style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#cbd5e1' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(row.panel_access?.[field.key])}
+                    onChange={() => toggleRoleAccess(row.role, field.key)}
+                  />
+                  {field.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AdminPanel({ token }) {
+  const [activeTab, setActiveTab] = useState('usuarios');
+  const tabs = [
+    { key: 'usuarios', label: 'Usuarios' },
+    { key: 'roles', label: 'Configuración de Roles' },
+    { key: 'comisiones', label: 'Comisiones' },
+    { key: 'calendario', label: 'Calendario' },
+    { key: 'estadisticas', label: 'Estadísticas' }
+  ];
+
+  return (
+    <div style={{ padding: '24px 16px 16px', maxWidth: '1400px', margin: '0 auto' }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'flex-start',
+        flexWrap: 'nowrap',
+        gap: '10px',
+        marginBottom: '20px',
+        borderBottom: '1px solid #334155',
+        paddingBottom: '8px',
+        position: 'sticky',
+        top: '68px',
+        zIndex: 15,
+        background: '#0f172a',
+        overflowX: 'auto'
+      }}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              padding: '10px 16px',
+              background: activeTab === tab.key ? 'rgba(248,113,113,0.14)' : 'transparent',
+              color: activeTab === tab.key ? '#fca5a5' : '#94a3b8',
+              border: activeTab === tab.key ? '1px solid rgba(248,113,113,0.45)' : '1px solid transparent',
+              borderRadius: '10px',
+              fontSize: '0.98rem',
+              fontWeight: activeTab === tab.key ? 700 : 600,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div>
         {activeTab === 'usuarios' && <UserManagement token={token} />}
-        {activeTab === 'dashboard' && <StatisticsDashboard token={token} />}
+        {activeTab === 'roles' && <RoleConfiguration token={token} />}
+        {activeTab === 'comisiones' && (
+          <div style={{ display: 'grid', gap: '14px' }}>
+            <CommissionConfig token={token} />
+            <QualityControlCommissionConfig token={token} />
+          </div>
+        )}
+        {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}
+        {activeTab === 'estadisticas' && <StatisticsPanel token={token} />}
       </div>
     </div>
   );

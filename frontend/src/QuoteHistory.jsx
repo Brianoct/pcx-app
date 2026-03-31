@@ -1,13 +1,27 @@
-import { useState, useEffect } from 'react';
-import jsPDF from 'jspdf';
+import { useMemo, useState, useEffect } from 'react';
+import logo from './assets/logo.png';
+import { generateModernQuotePdf } from './quotePdf';
+import { canAccessPanel } from './roleAccess';
 
-function QuoteHistory({ token, role }) {
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
+function QuoteHistory({ token, access, onStatusUpdated }) {
   const [quotes, setQuotes] = useState([]);
   const [filteredQuotes, setFilteredQuotes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [editingQuote, setEditingQuote] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
+
+  const canViewGlobalHistory = canAccessPanel(access, 'historialGlobal');
+  const canViewHistory = canAccessPanel(access, 'historialIndividual');
+  const canMutateQuotes = canViewHistory || canViewGlobalHistory;
 
   // Pagination
   const quotesPerPage = 10;
@@ -17,10 +31,8 @@ function QuoteHistory({ token, role }) {
     const fetchQuotes = async () => {
       setLoading(true);
       try {
-        const isTeamAllowed = ['Ventas Lider', 'Admin', 'Almacén Lider'].some(r => 
-          role?.toLowerCase().includes(r.toLowerCase())
-        );
-        const url = `http://localhost:4000/api/quotes${isTeamAllowed ? '?team=true' : ''}`;
+        const isTeamAllowed = canViewGlobalHistory;
+        const url = `${API_BASE}/api/quotes${isTeamAllowed ? '?team=true' : ''}`;
 
         const res = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -51,7 +63,13 @@ function QuoteHistory({ token, role }) {
       }
     };
     fetchQuotes();
-  }, [token, role]);
+  }, [token, canViewGlobalHistory]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Apply filters
   useEffect(() => {
@@ -59,9 +77,7 @@ function QuoteHistory({ token, role }) {
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      const isLeader = ['Ventas Lider', 'Admin', 'Almacén Lider'].some(r => 
-        role?.toLowerCase().includes(r.toLowerCase())
-      );
+      const isLeader = canViewGlobalHistory;
 
       filtered = filtered.filter(q => 
         q.customer_name?.toLowerCase().includes(term) ||
@@ -76,7 +92,7 @@ function QuoteHistory({ token, role }) {
 
     setFilteredQuotes(filtered);
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, quotes, role]);
+  }, [searchTerm, statusFilter, quotes, canViewGlobalHistory]);
 
   const clearFilters = () => {
     setSearchTerm('');
@@ -85,7 +101,7 @@ function QuoteHistory({ token, role }) {
 
   const updateStatus = async (quoteId, newStatus) => {
     try {
-      const res = await fetch(`http://localhost:4000/api/quotes/${quoteId}/status`, {
+      const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -103,6 +119,10 @@ function QuoteHistory({ token, role }) {
         q.id === quoteId ? { ...q, status: newStatus } : q
       ));
 
+      if (typeof onStatusUpdated === 'function') {
+        onStatusUpdated();
+      }
+
       alert('Estado actualizado a: ' + newStatus);
     } catch (err) {
       alert('Error: ' + err.message);
@@ -111,79 +131,184 @@ function QuoteHistory({ token, role }) {
   };
 
   const regeneratePDF = (quote) => {
-    const doc = new jsPDF();
+    const subtotal = Number(quote.subtotal || 0);
+    const discountPercent = Number(quote.discount_percent || 0);
+    const discountAmount = subtotal * (discountPercent / 100);
+    const rawRows = Array.isArray(quote.line_items) ? quote.line_items : [];
 
-    doc.setFontSize(20);
-    doc.setTextColor(244, 63, 94);
-    doc.text("PCX - Cotización", 105, 18, { align: "center" });
+    const rows = rawRows.map((row) => ({
+      sku: row.sku,
+      skuDisplay: row.skuDisplay || row.displayName || row.sku || '—',
+      qty: Number(row.qty || 0),
+      unitPrice: Number(row.unitPrice || row.unit_price || 0),
+      lineTotal: Number(row.lineTotal || row.line_total || 0),
+      isComboHeader: Boolean(row.isComboHeader),
+      isIndented: Boolean(row.isIndented)
+    }));
 
-    doc.setFontSize(11);
-    doc.setTextColor(80);
-    doc.text(`Vendedor: ${quote.vendor || '—'}   •   Almacén: ${quote.store_location || '—'}`, 20, 30);
-    doc.text(`Fecha: ${new Date(quote.created_at).toLocaleString('es-BO')}`, 20, 37);
-
-    doc.setFontSize(12);
-    doc.setTextColor(0);
-    doc.text(`Cliente: ${quote.customer_name || '—'}`, 20, 47);
-    doc.text(`Teléfono: ${quote.customer_phone || '—'}`, 20, 54);
-    const location = quote.provincia ? `Provincia: ${quote.provincia}` : `Departamento: ${quote.department || '—'}`;
-    doc.text(location, 20, 61);
-
-    if (quote.shipping_notes && quote.shipping_notes.trim()) {
-      doc.setFontSize(10);
-      doc.text('Notas de envío:', 20, 68);
-      const splitNotes = doc.splitTextToSize(quote.shipping_notes, 170);
-      doc.text(splitNotes, 20, 75);
-    }
-
-    doc.setFillColor(30, 41, 59);
-    doc.rect(15, 85, 180, 10, 'F');
-    doc.setTextColor(255);
-    doc.setFontSize(11);
-    doc.text("Descripción", 22, 92);
-    doc.text("Cant.", 100, 92, { align: "center" });
-    doc.text("P. Unit.", 138, 92, { align: "right" });
-    doc.text("Subtotal", 178, 92, { align: "right" });
-
-    doc.setTextColor(0);
-    doc.setFontSize(10);
-    let y = 102;
-
-    (quote.line_items || []).forEach(row => {
-      let desc = row.skuDisplay || row.sku || '—';
-      if (desc.length > 48) desc = desc.substring(0, 45) + "...";
-
-      doc.text(desc, 22, y);
-      doc.text((row.qty || 0).toString(), 100, y, { align: "center" });
-      doc.text(Number(row.unitPrice || 0).toFixed(2), 138, y, { align: "right" });
-      doc.text(Number(row.lineTotal || 0).toFixed(2), 178, y, { align: "right" });
-
-      y += 10;
+    generateModernQuotePdf({
+      logo,
+      filename: `cotizacion_${quote.id}_${quote.customer_name?.replace(/\s+/g, '_') || 'anon'}.pdf`,
+      quoteNumber: quote.id,
+      customerName: quote.customer_name,
+      customerPhone: quote.customer_phone,
+      vendorName: quote.vendor,
+      storeLocation: quote.store_location,
+      dateText: new Date(quote.created_at).toLocaleString('es-BO'),
+      sourceText: quote.store_location ? `Despacho: ${quote.store_location}` : 'Origen no especificado',
+      department: quote.department,
+      provincia: quote.provincia,
+      shippingNotes: quote.shipping_notes,
+      alternativeName: quote.alternative_name,
+      alternativePhone: quote.alternative_phone,
+      rows,
+      subtotal,
+      discountPercent,
+      discountAmount,
+      roundTotal: Boolean(quote.round_total),
+      total: Number(quote.total || 0)
     });
+  };
 
-    y += 10;
-    doc.setFontSize(12);
-    doc.text(`Subtotal: ${Number(quote.subtotal || 0).toFixed(2)} Bs`, 150, y, { align: "right" });
-    y += 8;
+  const quoteItemsSummary = useMemo(() => {
+    if (!editingQuote) return [];
+    const rawRows = Array.isArray(editingQuote.line_items) ? editingQuote.line_items : [];
+    return rawRows.map((row, index) => {
+      const qty = Number(row?.qty || 0);
+      const unitPrice = Number(row?.unitPrice ?? row?.unit_price ?? 0);
+      const rawLineTotal = Number(row?.lineTotal ?? row?.line_total);
+      const lineTotal = Number.isFinite(rawLineTotal) ? rawLineTotal : (unitPrice * qty);
+      return {
+        key: `${index}-${row?.sku || 'sku'}`,
+        label: row?.displayName || row?.skuDisplay || row?.sku || 'Producto',
+        qty,
+        unitPrice,
+        lineTotal
+      };
+    });
+  }, [editingQuote]);
 
-    if (quote.discount_percent > 0) {
-      const discAmt = Number(quote.subtotal || 0) * (quote.discount_percent / 100);
-      doc.text(`Descuento (${quote.discount_percent}%): ${discAmt.toFixed(2)} Bs`, 150, y, { align: "right" });
-      y += 8;
+  const openEditModal = (quote) => {
+    setEditingQuote({
+      id: quote.id,
+      customer_name: quote.customer_name || '',
+      customer_phone: quote.customer_phone || '',
+      department: quote.department || '',
+      provincia: quote.provincia || '',
+      shipping_notes: quote.shipping_notes || '',
+      alternative_name: quote.alternative_name || '',
+      alternative_phone: quote.alternative_phone || '',
+      store_location: quote.store_location || '',
+      venta_type: quote.venta_type || 'sf',
+      discount_percent: Number(quote.discount_percent || 0),
+      subtotal: Number(quote.subtotal || 0),
+      total: Number(quote.total || 0),
+      status: quote.status || 'Cotizado',
+      line_items: Array.isArray(quote.line_items) ? quote.line_items : []
+    });
+  };
+
+  const closeEditModal = () => {
+    if (savingEdit) return;
+    setEditingQuote(null);
+  };
+
+  const onEditField = (field, value) => {
+    setEditingQuote((prev) => (prev ? { ...prev, [field]: value } : prev));
+  };
+
+  const submitEdit = async () => {
+    if (!editingQuote) return;
+    if (!editingQuote.customer_name.trim() || !editingQuote.customer_phone.trim() || !editingQuote.store_location.trim()) {
+      alert('Completa cliente, teléfono y almacén para guardar los cambios.');
+      return;
     }
+    setSavingEdit(true);
+    try {
+      const payload = {
+        customer_name: editingQuote.customer_name.trim(),
+        customer_phone: editingQuote.customer_phone.trim(),
+        department: editingQuote.department ? editingQuote.department.trim() : null,
+        provincia: editingQuote.provincia ? editingQuote.provincia.trim() : null,
+        shipping_notes: editingQuote.shipping_notes ? editingQuote.shipping_notes.trim() : null,
+        alternative_name: editingQuote.alternative_name ? editingQuote.alternative_name.trim() : null,
+        alternative_phone: editingQuote.alternative_phone ? editingQuote.alternative_phone.trim() : null,
+        store_location: editingQuote.store_location,
+        venta_type: editingQuote.venta_type || 'sf',
+        discount_percent: Number(editingQuote.discount_percent || 0),
+        rows: Array.isArray(editingQuote.line_items) ? editingQuote.line_items : [],
+        subtotal: Number(editingQuote.subtotal || 0),
+        total: Number(editingQuote.total || 0),
+        status: editingQuote.status || 'Cotizado'
+      };
+      const res = await fetch(`${API_BASE}/api/quotes/${editingQuote.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'No se pudo actualizar la cotización');
+      }
 
-    doc.setFontSize(14);
-    doc.setTextColor(244, 63, 94);
-    doc.text(`TOTAL: ${Number(quote.total || 0).toFixed(2)} Bs`, 150, y, { align: "right" });
+      setQuotes((prev) => prev.map((quote) => (
+        quote.id === editingQuote.id
+          ? {
+              ...quote,
+              customer_name: payload.customer_name,
+              customer_phone: payload.customer_phone,
+              department: payload.department,
+              provincia: payload.provincia,
+              shipping_notes: payload.shipping_notes,
+              alternative_name: payload.alternative_name,
+              alternative_phone: payload.alternative_phone,
+              store_location: payload.store_location,
+              venta_type: payload.venta_type,
+              discount_percent: payload.discount_percent,
+              line_items: payload.rows,
+              subtotal: payload.subtotal,
+              total: payload.total,
+              status: payload.status
+            }
+          : quote
+      )));
+      setEditingQuote(null);
+      if (typeof onStatusUpdated === 'function') onStatusUpdated();
+      alert('Cotización actualizada correctamente');
+    } catch (err) {
+      alert('Error: ' + err.message);
+      console.error(err);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
-    y += 22;
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text("Cotización válida por 7 días", 105, y, { align: "center" });
-    y += 7;
-    doc.text("PCX - ¡Esperamos servirle nuevamente!", 105, y, { align: "center" });
-
-    doc.save(`cotizacion_${quote.id}_${quote.customer_name?.replace(/\s+/g, '_') || 'anon'}.pdf`);
+  const deleteQuote = async (quote) => {
+    if (!canMutateQuotes || deletingId) return;
+    const confirmDelete = window.confirm(`¿Eliminar la cotización #${quote.id}? Esta acción no se puede deshacer.`);
+    if (!confirmDelete) return;
+    setDeletingId(quote.id);
+    try {
+      const res = await fetch(`${API_BASE}/api/quotes/${quote.id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'No se pudo eliminar la cotización');
+      }
+      setQuotes((prev) => prev.filter((q) => q.id !== quote.id));
+      if (typeof onStatusUpdated === 'function') onStatusUpdated();
+      alert(`Cotización #${quote.id} eliminada`);
+    } catch (err) {
+      alert('Error: ' + err.message);
+      console.error(err);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando historial...</div>;
@@ -201,9 +326,17 @@ function QuoteHistory({ token, role }) {
     }
   };
 
-  const isLeader = ['Ventas Lider', 'Admin', 'Almacén Lider'].some(r => 
-    role?.toLowerCase().includes(r.toLowerCase())
-  );
+  const isLeader = canViewGlobalHistory;
+
+  if (!canViewHistory && !canViewGlobalHistory) {
+    return (
+      <div className="container">
+        <div className="card" style={{ textAlign: 'center', color: '#fca5a5' }}>
+          No tienes acceso al historial.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container">
@@ -212,45 +345,21 @@ function QuoteHistory({ token, role }) {
       </h2>
 
       {/* Filter Bar */}
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '16px',
-        marginBottom: '24px',
-        justifyContent: 'center',
-        alignItems: 'center'
-      }}>
+      <div className="filter-bar">
         <input
+          className="filter-input"
           type="text"
           placeholder={isLeader 
             ? "Buscar por cliente, teléfono o vendedor..." 
             : "Buscar por cliente o teléfono..."}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: '250px',
-            padding: '12px',
-            fontSize: '1rem',
-            border: '1px solid #334155',
-            borderRadius: '8px',
-            background: '#0f172a',
-            color: 'white'
-          }}
         />
 
         <select
+          className="filter-select"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          style={{
-            padding: '12px',
-            fontSize: '1rem',
-            border: '1px solid #334155',
-            borderRadius: '8px',
-            background: '#0f172a',
-            color: 'white',
-            minWidth: '160px'
-          }}
         >
           <option value="">Todos los estados</option>
           <option value="Cotizado">Cotizado</option>
@@ -261,16 +370,8 @@ function QuoteHistory({ token, role }) {
         </select>
 
         <button
+          className="btn btn-danger"
           onClick={clearFilters}
-          style={{
-            padding: '12px 20px',
-            background: '#ef4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '0.95rem'
-          }}
         >
           Limpiar filtros
         </button>
@@ -282,98 +383,219 @@ function QuoteHistory({ token, role }) {
         </p>
       ) : (
         <>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              minWidth: '1100px',
-              tableLayout: 'fixed'
-            }}>
-              <thead>
-                <tr style={{ background: '#0f172a' }}>
-                  <th style={{ padding: '14px 12px', width: '70px' }}>ID</th>
-                  <th style={{ padding: '14px 12px', width: '220px', textAlign: 'center' }}>Cliente</th>
-                  <th style={{ padding: '14px 12px', width: '160px', textAlign: 'center' }}>Teléfono (WhatsApp)</th>
-                  {isLeader && <th style={{ padding: '14px 12px', width: '160px', textAlign: 'center' }}>Vendedor</th>}
-                  <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Total</th>
-                  <th style={{ padding: '14px 12px', width: '140px', textAlign: 'center' }}>Estado</th>
-                  <th style={{ padding: '14px 12px', width: '180px', textAlign: 'center' }}>Fecha</th>
-                  <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentQuotes.map(quote => (
-                  <tr key={quote.id} style={{ borderBottom: '1px solid #334155' }}>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>{quote.id}</td>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>{quote.customer_name || '—'}</td>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+          {isMobile ? (
+            <div className="mobile-cards-list">
+              {currentQuotes.map((quote) => (
+                <div key={quote.id} className="mobile-card">
+                  <div className="mobile-card-header">
+                    <span className="mobile-card-id">#{quote.id}</span>
+                    <span className="mobile-card-total">{Number(quote.total).toFixed(2)} Bs</span>
+                  </div>
+
+                  <div className="mobile-card-body">
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Cliente</span>
+                      <span>{quote.customer_name || '—'}</span>
+                    </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Teléfono</span>
                       {quote.customer_phone ? (
                         <a
                           href={`https://wa.me/${quote.customer_phone}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          style={{ color: '#25D366', textDecoration: 'none', fontWeight: '500' }}
+                          style={{ color: '#25D366', textDecoration: 'none', fontWeight: '600' }}
                         >
                           {quote.customer_phone}
                         </a>
                       ) : (
-                        '—'
+                        <span>—</span>
                       )}
-                    </td>
-                    {isLeader && <td style={{ padding: '14px 12px', textAlign: 'center' }}>{quote.vendor || '—'}</td>}
-                    <td style={{ padding: '14px 12px', textAlign: 'center', fontWeight: '600' }}>
-                      {Number(quote.total).toFixed(2)} Bs
-                    </td>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      <select
-                        value={quote.status}
-                        onChange={(e) => updateStatus(quote.id, e.target.value)}
-                        style={{
-                          padding: '6px 12px',
-                          background: 
-                            quote.status === 'Enviado' ? '#10b981' :
-                            quote.status === 'Embalado' ? '#8b5cf6' :
-                            quote.status === 'Pagado' ? '#3b82f6' :
-                            quote.status === 'Confirmado' ? '#f59e0b' :
-                            '#64748b',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '0.9rem'
-                        }}
-                      >
-                        <option value="Cotizado">Cotizado</option>
-                        <option value="Confirmado">Confirmado</option>
-                        <option value="Pagado">Pagado</option>
-                        <option value="Embalado">Embalado</option>
-                        <option value="Enviado">Enviado</option>
-                      </select>
-                    </td>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      {new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}
-                    </td>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      <button
-                        onClick={() => regeneratePDF(quote)}
-                        style={{ 
-                          padding: '8px 14px', 
-                          background: '#3b82f6', 
-                          color: 'white', 
-                          border: 'none', 
-                          borderRadius: '6px', 
-                          cursor: 'pointer',
-                          fontSize: '0.9rem'
-                        }}
-                      >
-                        Ver PDF
-                      </button>
-                    </td>
+                    </div>
+                    {isLeader && (
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Vendedor</span>
+                        <span>{quote.vendor || '—'}</span>
+                      </div>
+                    )}
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Fecha</span>
+                      <span>{new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    </div>
+                  </div>
+
+                  <div className="mobile-card-actions">
+                    <select
+                      className="mobile-select"
+                      value={quote.status}
+                      onChange={(e) => updateStatus(quote.id, e.target.value)}
+                    >
+                      <option value="Cotizado">Cotizado</option>
+                      <option value="Confirmado">Confirmado</option>
+                      <option value="Pagado">Pagado</option>
+                      <option value="Embalado">Embalado</option>
+                      <option value="Enviado">Enviado</option>
+                    </select>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => regeneratePDF(quote)}
+                    >
+                      Ver PDF
+                    </button>
+                    {canMutateQuotes && (
+                      <>
+                        <button
+                          className="btn"
+                          style={{ background: '#f59e0b', color: '#111827' }}
+                          onClick={() => openEditModal(quote)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          disabled={deletingId === quote.id}
+                          onClick={() => deleteQuote(quote)}
+                          style={{ opacity: deletingId === quote.id ? 0.7 : 1 }}
+                        >
+                          {deletingId === quote.id ? 'Eliminando...' : 'Eliminar'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                minWidth: '1100px',
+                tableLayout: 'fixed'
+              }}>
+                <thead>
+                  <tr style={{ background: '#0f172a' }}>
+                    <th style={{ padding: '14px 12px', width: '70px' }}>ID</th>
+                    <th style={{ padding: '14px 12px', width: '220px', textAlign: 'center' }}>Cliente</th>
+                    <th style={{ padding: '14px 12px', width: '160px', textAlign: 'center' }}>Teléfono (WhatsApp)</th>
+                    {isLeader && <th style={{ padding: '14px 12px', width: '160px', textAlign: 'center' }}>Vendedor</th>}
+                    <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Total</th>
+                    <th style={{ padding: '14px 12px', width: '140px', textAlign: 'center' }}>Estado</th>
+                    <th style={{ padding: '14px 12px', width: '180px', textAlign: 'center' }}>Fecha</th>
+                    <th style={{ padding: '14px 12px', width: '220px', textAlign: 'center' }}>Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {currentQuotes.map(quote => (
+                    <tr key={quote.id} style={{ borderBottom: '1px solid #334155' }}>
+                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>{quote.id}</td>
+                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>{quote.customer_name || '—'}</td>
+                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+                        {quote.customer_phone ? (
+                          <a
+                            href={`https://wa.me/${quote.customer_phone}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: '#25D366', textDecoration: 'none', fontWeight: '500' }}
+                          >
+                            {quote.customer_phone}
+                          </a>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      {isLeader && <td style={{ padding: '14px 12px', textAlign: 'center' }}>{quote.vendor || '—'}</td>}
+                      <td style={{ padding: '14px 12px', textAlign: 'center', fontWeight: '600' }}>
+                        {Number(quote.total).toFixed(2)} Bs
+                      </td>
+                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+                        <select
+                          value={quote.status}
+                          onChange={(e) => updateStatus(quote.id, e.target.value)}
+                          style={{
+                            padding: '6px 12px',
+                            background: 
+                              quote.status === 'Enviado' ? '#10b981' :
+                              quote.status === 'Embalado' ? '#8b5cf6' :
+                              quote.status === 'Pagado' ? '#3b82f6' :
+                              quote.status === 'Confirmado' ? '#f59e0b' :
+                              '#64748b',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '0.9rem'
+                          }}
+                        >
+                          <option value="Cotizado">Cotizado</option>
+                          <option value="Confirmado">Confirmado</option>
+                          <option value="Pagado">Pagado</option>
+                          <option value="Embalado">Embalado</option>
+                          <option value="Enviado">Enviado</option>
+                        </select>
+                      </td>
+                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+                        {new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}
+                      </td>
+                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => regeneratePDF(quote)}
+                            style={{
+                              padding: '8px 14px',
+                              background: '#3b82f6',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '0.9rem'
+                            }}
+                          >
+                            Ver PDF
+                          </button>
+                          {canMutateQuotes && (
+                            <>
+                              <button
+                                onClick={() => openEditModal(quote)}
+                                style={{
+                                  padding: '8px 14px',
+                                  background: '#f59e0b',
+                                  color: '#111827',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  fontSize: '0.9rem',
+                                  fontWeight: 700
+                                }}
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => deleteQuote(quote)}
+                                disabled={deletingId === quote.id}
+                                style={{
+                                  padding: '8px 14px',
+                                  background: '#ef4444',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  cursor: deletingId === quote.id ? 'not-allowed' : 'pointer',
+                                  fontSize: '0.9rem',
+                                  opacity: deletingId === quote.id ? 0.7 : 1
+                                }}
+                              >
+                                {deletingId === quote.id ? 'Eliminando...' : 'Eliminar'}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -421,6 +643,154 @@ function QuoteHistory({ token, role }) {
             </div>
           )}
         </>
+      )}
+      {editingQuote && (
+        <div className="quote-edit-overlay" onClick={closeEditModal}>
+          <div className="quote-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginBottom: '12px' }}>Editar cotización #{editingQuote.id}</h3>
+            <div className="quote-edit-grid">
+              <label>
+                Cliente
+                <input
+                  value={editingQuote.customer_name}
+                  onChange={(e) => onEditField('customer_name', e.target.value)}
+                />
+              </label>
+              <label>
+                Teléfono
+                <input
+                  value={editingQuote.customer_phone}
+                  onChange={(e) => onEditField('customer_phone', e.target.value)}
+                />
+              </label>
+              <label>
+                Departamento
+                <input
+                  value={editingQuote.department || ''}
+                  onChange={(e) => onEditField('department', e.target.value)}
+                />
+              </label>
+              <label>
+                Provincia
+                <input
+                  value={editingQuote.provincia || ''}
+                  onChange={(e) => onEditField('provincia', e.target.value)}
+                />
+              </label>
+              <label>
+                Almacén
+                <select
+                  value={editingQuote.store_location}
+                  onChange={(e) => onEditField('store_location', e.target.value)}
+                >
+                  <option value="">Seleccionar</option>
+                  <option value="Cochabamba">Cochabamba</option>
+                  <option value="Santa Cruz">Santa Cruz</option>
+                  <option value="Lima">Lima</option>
+                </select>
+              </label>
+              <label>
+                Estado
+                <select
+                  value={editingQuote.status}
+                  onChange={(e) => onEditField('status', e.target.value)}
+                >
+                  <option value="Cotizado">Cotizado</option>
+                  <option value="Confirmado">Confirmado</option>
+                  <option value="Pagado">Pagado</option>
+                  <option value="Embalado">Embalado</option>
+                  <option value="Enviado">Enviado</option>
+                </select>
+              </label>
+              <label>
+                Tipo de venta
+                <select
+                  value={editingQuote.venta_type || 'sf'}
+                  onChange={(e) => onEditField('venta_type', e.target.value)}
+                >
+                  <option value="sf">Sin Factura</option>
+                  <option value="cf">Con Factura</option>
+                </select>
+              </label>
+              <label>
+                Descuento %
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={editingQuote.discount_percent}
+                  onChange={(e) => onEditField('discount_percent', Number(e.target.value || 0))}
+                />
+              </label>
+              <label>
+                Subtotal
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editingQuote.subtotal}
+                  onChange={(e) => onEditField('subtotal', Number(e.target.value || 0))}
+                />
+              </label>
+              <label>
+                Total
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editingQuote.total}
+                  onChange={(e) => onEditField('total', Number(e.target.value || 0))}
+                />
+              </label>
+              <label>
+                Nombre alternativo
+                <input
+                  value={editingQuote.alternative_name || ''}
+                  onChange={(e) => onEditField('alternative_name', e.target.value)}
+                />
+              </label>
+              <label>
+                Teléfono alternativo
+                <input
+                  value={editingQuote.alternative_phone || ''}
+                  onChange={(e) => onEditField('alternative_phone', e.target.value)}
+                />
+              </label>
+              <label style={{ gridColumn: '1 / -1' }}>
+                Notas de envío
+                <textarea
+                  rows={2}
+                  value={editingQuote.shipping_notes || ''}
+                  onChange={(e) => onEditField('shipping_notes', e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="quote-edit-lines">
+              <h4>Productos (solo lectura)</h4>
+              {quoteItemsSummary.length === 0 ? (
+                <p style={{ color: '#94a3b8' }}>Sin líneas</p>
+              ) : (
+                <div className="quote-edit-lines-list">
+                  {quoteItemsSummary.map((item) => (
+                    <div key={item.key} className="quote-edit-line-item">
+                      <span>{item.label}</span>
+                      <span>x{item.qty}</span>
+                      <span>{item.lineTotal.toFixed(2)} Bs</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="quote-edit-actions">
+              <button className="btn" onClick={closeEditModal} disabled={savingEdit}>Cancelar</button>
+              <button className="btn btn-primary" onClick={submitEdit} disabled={savingEdit}>
+                {savingEdit ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

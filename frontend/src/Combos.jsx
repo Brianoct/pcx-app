@@ -1,9 +1,33 @@
 // src/Combos.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 function Combos({ token }) {
   const products = [
-    // ... your full products list here (same as before)
+    { sku: 'T6195R', name: 'Tablero 61x95 Rojo', sf: 330, cf: 383 },
+    { sku: 'T6195N', name: 'Tablero 61x95 Negro', sf: 330, cf: 383 },
+    { sku: 'T6195AM', name: 'Tablero 61x95 Amarillo', sf: 330, cf: 383 },
+    { sku: 'T6195AP', name: 'Tablero 61x95 Azul Petroleo', sf: 330, cf: 383 },
+    { sku: 'T6195PL', name: 'Tablero 61x95 Plomo', sf: 330, cf: 383 },
+    { sku: 'T9495R', name: 'Tablero 94x95 Rojo', sf: 450, cf: 522 },
+    { sku: 'T9495N', name: 'Tablero 94x95 Negro', sf: 450, cf: 522 },
+    { sku: 'T9495AM', name: 'Tablero 94x95 Amarillo', sf: 450, cf: 522 },
+    { sku: 'T9495AP', name: 'Tablero 94x95 Azul Petroleo', sf: 450, cf: 522 },
+    { sku: 'T9495PL', name: 'Tablero 94x95 Plomo', sf: 450, cf: 522 },
+    { sku: 'T1099R', name: 'Tablero 10x99 Rojo', sf: 105, cf: 122 },
+    { sku: 'T1099N', name: 'Tablero 10x99 Negro', sf: 105, cf: 122 },
+    { sku: 'T1099AP', name: 'Tablero 10x99 Azul Petroleo', sf: 105, cf: 122 },
+    { sku: 'R40N', name: 'Repisa Grande Negro', sf: 85, cf: 99 },
+    { sku: 'R25N', name: 'Repisa Pequeña Negro', sf: 40, cf: 47 },
+    { sku: 'D40N', name: 'Desarmador Grande Negro', sf: 70, cf: 82 },
+    { sku: 'D22N', name: 'Desarmador Pequeño Negro', sf: 45, cf: 53 },
+    { sku: 'L40N', name: 'Llave Grande Negro', sf: 80, cf: 93 },
+    { sku: 'L22N', name: 'Llave Pequeño Negro', sf: 50, cf: 58 },
+    { sku: 'C15N', name: 'Caja Negro', sf: 48, cf: 56 },
+    { sku: 'M08N', name: 'Martillo Negro', sf: 17, cf: 20 },
+    { sku: 'A15N', name: 'Amoladora Negro', sf: 30, cf: 35 },
+    { sku: 'RR15N', name: 'Repisa/Rollo Negro', sf: 90, cf: 105 },
+    { sku: 'G05C', name: 'Gancho 5cm Cromo', sf: 65, cf: 76 },
+    { sku: 'G10C', name: 'Gancho 10cm Cromo', sf: 84, cf: 98 }
   ];
 
   const [combos, setCombos] = useState([]);
@@ -13,25 +37,26 @@ function Combos({ token }) {
   const [comboPriceCf, setComboPriceCf] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
-  useEffect(() => {
-    fetchCombos();
-  }, []);
-
-  const fetchCombos = async () => {
+  const fetchCombos = useCallback(async () => {
     try {
-      const res = await fetch('http://192.168.100.15:4000/api/combos', {
+      const res = await fetch(`${API_BASE}/api/combos`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('No se pudieron cargar combos');
       const data = await res.json();
       setCombos(data);
-      setLoading(false);
     } catch (err) {
       setError(err.message);
+    } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE, token]);
+
+  useEffect(() => {
+    fetchCombos();
+  }, [fetchCombos]);
 
   const handleAddItem = () => {
     setComboItems([...comboItems, { sku: '', quantity: 1 }]);
@@ -76,7 +101,7 @@ function Combos({ token }) {
     const validItems = comboItems.filter(i => i.sku && i.quantity > 0);
 
     try {
-      const res = await fetch('http://192.168.100.15:4000/api/combos', {
+      const res = await fetch(`${API_BASE}/api/combos`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -110,7 +135,7 @@ function Combos({ token }) {
     if (!window.confirm('¿Eliminar combo permanentemente?')) return;
 
     try {
-      const res = await fetch(`http://192.168.100.15:4000/api/combos/${id}`, {
+      const res = await fetch(`${API_BASE}/api/combos/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -127,6 +152,7 @@ function Combos({ token }) {
   return (
     <div style={{ padding: '16px' }}>
       <h2 style={{ textAlign: 'center', color: '#f87171', marginBottom: '24px' }}>Combos</h2>
+      {error && <p style={{ textAlign: 'center', color: '#f87171', marginBottom: '12px' }}>{error}</p>}
 
       {/* Create Combo Form */}
       <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '32px' }}>
