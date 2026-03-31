@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import AdminDashboard from './AdminDashboard';
 import { ACCESS_LABELS, buildAccessForUser, ROLE_LABELS, ROLE_OPTIONS } from './roleAccess';
-import { PRODUCT_CATALOG } from './productCatalog';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
@@ -503,6 +502,344 @@ function UserManagement({ token }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductCatalogAdmin({ token }) {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [newProduct, setNewProduct] = useState({
+    sku: '',
+    name: '',
+    sf: '',
+    cf: ''
+  });
+  const visibleProducts = products.filter((row) => Boolean(row.is_active));
+  const inactiveProducts = products.filter((row) => !row.is_active);
+
+  const loadProducts = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/product-catalog?include_inactive=1`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo cargar catálogo de productos');
+      }
+      const data = await res.json();
+      setProducts(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProducts();
+  }, [token]);
+
+  const onRowField = (sku, field, value) => {
+    setProducts((prev) => prev.map((row) => (
+      row.sku === sku ? { ...row, [field]: value } : row
+    )));
+    setMessage('');
+  };
+
+  const createProduct = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage('');
+    try {
+      const payload = {
+        sku: String(newProduct.sku || '').toUpperCase().trim(),
+        name: String(newProduct.name || '').trim(),
+        sf: Number(newProduct.sf || 0),
+        cf: Number(newProduct.cf || 0)
+      };
+      if (!payload.sku || !payload.name) {
+        throw new Error('SKU y nombre son requeridos');
+      }
+      if (!Number.isFinite(payload.sf) || payload.sf < 0 || !Number.isFinite(payload.cf) || payload.cf < 0) {
+        throw new Error('Precios SF/CF inválidos');
+      }
+
+      const res = await fetch(`${API_BASE}/api/product-catalog`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo crear producto');
+      }
+      setNewProduct({ sku: '', name: '', sf: '', cf: '' });
+      setMessage('Producto agregado.');
+      await loadProducts();
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveProduct = async (row) => {
+    setSaving(true);
+    setMessage('');
+    try {
+      const payload = {
+        name: String(row.name || '').trim(),
+        sf: Number(row.sf ?? row.sf_price ?? 0),
+        cf: Number(row.cf ?? row.cf_price ?? 0),
+        is_active: Boolean(row.is_active)
+      };
+      if (!payload.name) throw new Error('Nombre requerido');
+      if (!Number.isFinite(payload.sf) || payload.sf < 0 || !Number.isFinite(payload.cf) || payload.cf < 0) {
+        throw new Error('Precios SF/CF inválidos');
+      }
+
+      const res = await fetch(`${API_BASE}/api/product-catalog/${encodeURIComponent(row.sku)}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `No se pudo actualizar ${row.sku}`);
+      }
+      setMessage(`Producto ${row.sku} actualizado.`);
+      await loadProducts();
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteProduct = async (row) => {
+    if (!window.confirm(`¿Desactivar producto ${row.sku}?`)) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/api/product-catalog/${encodeURIComponent(row.sku)}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `No se pudo desactivar ${row.sku}`);
+      }
+      setMessage(`Producto ${row.sku} desactivado.`);
+      await loadProducts();
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: '16px' }}>
+      <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px' }}>
+        <h3 style={{ marginBottom: '12px' }}>Agregar producto al cotizador</h3>
+        <form onSubmit={createProduct} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+          <input
+            placeholder="SKU"
+            value={newProduct.sku}
+            onChange={(e) => setNewProduct((prev) => ({ ...prev, sku: e.target.value.toUpperCase() }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            placeholder="Nombre"
+            value={newProduct.name}
+            onChange={(e) => setNewProduct((prev) => ({ ...prev, name: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Precio SF"
+            value={newProduct.sf}
+            onChange={(e) => setNewProduct((prev) => ({ ...prev, sf: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Precio CF"
+            value={newProduct.cf}
+            onChange={(e) => setNewProduct((prev) => ({ ...prev, cf: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <button
+            type="submit"
+            disabled={saving}
+            style={{ border: 'none', borderRadius: '8px', background: '#3b82f6', color: 'white', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}
+          >
+            {saving ? 'Guardando...' : 'Agregar'}
+          </button>
+        </form>
+      </div>
+
+      {message && (
+        <div style={{
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
+          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+        }}>
+          {message}
+        </div>
+      )}
+
+      <div style={{ background: '#1e293b', borderRadius: '12px', padding: '16px' }}>
+        <h3 style={{ marginBottom: '12px' }}>Productos del cotizador</h3>
+        {loading ? (
+          <p style={{ color: '#94a3b8' }}>Cargando productos...</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ minWidth: '960px' }}>
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Nombre</th>
+                  <th style={{ textAlign: 'right' }}>SF</th>
+                  <th style={{ textAlign: 'right' }}>CF</th>
+                  <th>Activo</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {products.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign: 'center', color: '#94a3b8' }}>Sin productos</td></tr>
+                ) : products.map((row) => (
+                  <tr key={row.sku}>
+                    <td>{row.sku}</td>
+                    <td>
+                      <input
+                        value={row.name || ''}
+                        onChange={(e) => onRowField(row.sku, 'name', e.target.value)}
+                        style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={Number(row.sf ?? row.sf_price ?? 0)}
+                        onChange={(e) => onRowField(row.sku, 'sf', e.target.value)}
+                        style={{ width: '100px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={Number(row.cf ?? row.cf_price ?? 0)}
+                        onChange={(e) => onRowField(row.sku, 'cf', e.target.value)}
+                        style={{ width: '100px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                      />
+                    </td>
+                    <td>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(row.is_active)}
+                          onChange={(e) => onRowField(row.sku, 'is_active', e.target.checked)}
+                        />
+                        {row.is_active ? 'Sí' : 'No'}
+                      </label>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => saveProduct(row)}
+                          disabled={saving}
+                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          onClick={() => deleteProduct(row)}
+                          disabled={saving || !row.is_active}
+                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
+                        >
+                          Desactivar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {inactiveProducts.length > 0 && (
+        <div style={{ background: '#1e293b', borderRadius: '12px', padding: '16px' }}>
+          <h4 style={{ marginBottom: '8px' }}>Productos inactivos</h4>
+          <p style={{ marginBottom: '10px', color: '#94a3b8' }}>
+            Reactiva un producto marcando <strong>Activo</strong> y guardando.
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ minWidth: '860px' }}>
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Nombre</th>
+                  <th style={{ textAlign: 'right' }}>SF</th>
+                  <th style={{ textAlign: 'right' }}>CF</th>
+                  <th>Activo</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inactiveProducts.map((row) => (
+                  <tr key={`inactive-${row.sku}`}>
+                    <td>{row.sku}</td>
+                    <td>{row.name}</td>
+                    <td style={{ textAlign: 'right' }}>{Number(row.sf ?? row.sf_price ?? 0).toFixed(2)}</td>
+                    <td style={{ textAlign: 'right' }}>{Number(row.cf ?? row.cf_price ?? 0).toFixed(2)}</td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(row.is_active)}
+                        onChange={(e) => onRowField(row.sku, 'is_active', e.target.checked)}
+                      />
+                    </td>
+                    <td>
+                      <button
+                        onClick={() => saveProduct({ ...row, is_active: true })}
+                        disabled={saving}
+                        style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
+                      >
+                        Reactivar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -1208,6 +1545,7 @@ function AdminPanel({ token }) {
   const [activeTab, setActiveTab] = useState('usuarios');
   const tabs = [
     { key: 'usuarios', label: 'Usuarios' },
+    { key: 'productos', label: 'Productos Cotizador' },
     { key: 'roles', label: 'Configuración de Roles' },
     { key: 'comisiones', label: 'Comisiones' },
     { key: 'calendario', label: 'Calendario' },
@@ -1254,6 +1592,7 @@ function AdminPanel({ token }) {
 
       <div>
         {activeTab === 'usuarios' && <UserManagement token={token} />}
+        {activeTab === 'productos' && <ProductCatalogAdmin token={token} />}
         {activeTab === 'roles' && <RoleConfiguration token={token} />}
         {activeTab === 'comisiones' && (
           <div style={{ display: 'grid', gap: '14px' }}>
