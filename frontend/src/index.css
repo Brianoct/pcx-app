@@ -546,6 +546,12 @@ button, .btn {
   margin-bottom: 14px;
 }
 
+.quote-add-row-bottom {
+  display: flex;
+  justify-content: flex-end;
+  margin: 10px 0 16px;
+}
+
 .quote-summary-panel {
   border-radius: 0 0 12px 12px;
 }

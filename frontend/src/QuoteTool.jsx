@@ -653,14 +653,6 @@ export default function QuoteTool({ token, user }) {
                 Con Factura
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={addRow}
-              className="btn btn-secondary"
-            >
-              + Agregar línea
-            </button>
           </div>
 
           <div className="quote-products-meta">
@@ -809,6 +801,16 @@ export default function QuoteTool({ token, user }) {
               </table>
             </div>
           )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-6px', marginBottom: '16px' }}>
+            <button
+              type="button"
+              onClick={addRow}
+              className="btn btn-secondary"
+            >
+              + Agregar línea
+            </button>
+          </div>
 
           {/* Summary - only % discount and rounding */}
           <div className="quote-summary-panel" style={{
