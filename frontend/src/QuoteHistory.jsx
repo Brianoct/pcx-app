@@ -1,9 +1,12 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { canAccessPanel } from './roleAccess';
+import { PRODUCT_CATALOG } from './productCatalog';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const QUOTE_STATUS_OPTIONS = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
+const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
 
 function QuoteHistory({ token, access, onStatusUpdated }) {
   const [quotes, setQuotes] = useState([]);
@@ -15,6 +18,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const [editingQuote, setEditingQuote] = useState(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [openActionsMenuId, setOpenActionsMenuId] = useState(null);
+  const actionsMenuRef = useRef(null);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
@@ -69,6 +74,17 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!actionsMenuRef.current) return;
+      if (!actionsMenuRef.current.contains(event.target)) {
+        setOpenActionsMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Apply filters
@@ -188,8 +204,182 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     });
   }, [editingQuote]);
 
+  const recalcEditTotals = (nextRows, nextDiscountPercent = null) => {
+    const safeRows = Array.isArray(nextRows) ? nextRows : [];
+    const subtotal = safeRows.reduce((sum, row) => sum + Number(row?.lineTotal || 0), 0);
+    const discountPercent = Number(
+      nextDiscountPercent === null ? editingQuote?.discount_percent || 0 : nextDiscountPercent
+    );
+    const discountAmount = subtotal * (Math.max(0, Math.min(100, discountPercent)) / 100);
+    const total = Math.max(0, subtotal - discountAmount);
+    return { subtotal, total };
+  };
+
+  const updateEditRows = (nextRows, nextDiscountPercent = null) => {
+    const { subtotal, total } = recalcEditTotals(nextRows, nextDiscountPercent);
+    setEditingQuote((prev) => (
+      prev
+        ? {
+            ...prev,
+            line_items: nextRows,
+            subtotal,
+            total
+          }
+        : prev
+    ));
+  };
+
+  const createDefaultEditRow = (sku = PRODUCT_CATALOG[0]?.sku || '', ventaType = 'sf') => {
+    const product = PRODUCT_CATALOG.find((item) => item.sku === sku) || PRODUCT_CATALOG[0];
+    const safeQty = 1;
+    const safeUnit = Number(
+      ventaType === 'cf'
+        ? (product?.cf ?? product?.sf ?? 0)
+        : (product?.sf ?? product?.cf ?? 0)
+    );
+    return {
+      sku: product?.sku || sku,
+      displayName: product?.name || sku || 'Producto',
+      qty: safeQty,
+      unitPrice: safeUnit,
+      lineTotal: safeUnit * safeQty,
+      isCombo: false,
+      comboItems: []
+    };
+  };
+
+  const onEditDiscountPercent = (value) => {
+    const normalized = Math.max(0, Math.min(100, Number(value) || 0));
+    setEditingQuote((prev) => {
+      if (!prev) return prev;
+      const { subtotal, total } = recalcEditTotals(prev.line_items, normalized);
+      return {
+        ...prev,
+        discount_percent: normalized,
+        subtotal,
+        total
+      };
+    });
+  };
+
+  const updateEditRowSku = (index, skuValue) => {
+    setEditingQuote((prev) => {
+      if (!prev) return prev;
+      const rows = Array.isArray(prev.line_items) ? [...prev.line_items] : [];
+      const current = rows[index];
+      if (!current) return prev;
+      const product = PRODUCT_CATALOG.find((item) => item.sku === skuValue);
+      if (!product) return prev;
+      const qty = Number.parseInt(current.qty, 10);
+      const safeQty = Number.isInteger(qty) && qty > 0 ? qty : 1;
+      const unitPrice = Number(
+        prev.venta_type === 'cf'
+          ? (product.cf ?? product.sf ?? 0)
+          : (product.sf ?? product.cf ?? 0)
+      );
+      rows[index] = {
+        ...current,
+        sku: product.sku,
+        displayName: product.name,
+        qty: safeQty,
+        isCombo: false,
+        comboItems: [],
+        unitPrice,
+        lineTotal: unitPrice * safeQty
+      };
+      const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
+      return {
+        ...prev,
+        line_items: rows,
+        subtotal,
+        total
+      };
+    });
+  };
+
+  const updateEditRowQty = (index, qtyValue) => {
+    setEditingQuote((prev) => {
+      if (!prev) return prev;
+      const rows = Array.isArray(prev.line_items) ? [...prev.line_items] : [];
+      const current = rows[index];
+      if (!current) return prev;
+      const parsed = Number.parseInt(qtyValue, 10);
+      const qty = Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+      const unitPrice = Number(current.unitPrice || 0);
+      rows[index] = {
+        ...current,
+        qty,
+        lineTotal: unitPrice * qty
+      };
+      const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
+      return {
+        ...prev,
+        line_items: rows,
+        subtotal,
+        total
+      };
+    });
+  };
+
+  const updateEditRowUnitPrice = (index, unitPriceValue) => {
+    setEditingQuote((prev) => {
+      if (!prev) return prev;
+      const rows = Array.isArray(prev.line_items) ? [...prev.line_items] : [];
+      const current = rows[index];
+      if (!current) return prev;
+      const parsed = Number(unitPriceValue);
+      const unitPrice = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+      const qty = Number.parseInt(current.qty, 10);
+      const safeQty = Number.isInteger(qty) && qty > 0 ? qty : 1;
+      rows[index] = {
+        ...current,
+        unitPrice,
+        qty: safeQty,
+        lineTotal: unitPrice * safeQty
+      };
+      const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
+      return {
+        ...prev,
+        line_items: rows,
+        subtotal,
+        total
+      };
+    });
+  };
+
+  const addEditRow = () => {
+    setEditingQuote((prev) => {
+      if (!prev) return prev;
+      const rows = Array.isArray(prev.line_items) ? [...prev.line_items] : [];
+      rows.push(createDefaultEditRow(PRODUCT_CATALOG[0]?.sku, prev.venta_type || 'sf'));
+      const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
+      return {
+        ...prev,
+        line_items: rows,
+        subtotal,
+        total
+      };
+    });
+  };
+
+  const removeEditRow = (index) => {
+    setEditingQuote((prev) => {
+      if (!prev) return prev;
+      const rows = Array.isArray(prev.line_items) ? [...prev.line_items] : [];
+      if (rows.length <= 1) return prev;
+      rows.splice(index, 1);
+      const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
+      return {
+        ...prev,
+        line_items: rows,
+        subtotal,
+        total
+      };
+    });
+  };
+
   const openEditModal = (quote) => {
-    setEditingQuote({
+    const draft = {
       id: quote.id,
       customer_name: quote.customer_name || '',
       customer_phone: quote.customer_phone || '',
@@ -205,6 +395,43 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       total: Number(quote.total || 0),
       status: quote.status || 'Cotizado',
       line_items: Array.isArray(quote.line_items) ? quote.line_items : []
+    };
+
+    const normalizedRows = (Array.isArray(draft.line_items) ? draft.line_items : [])
+      .filter((row) => row && typeof row === 'object')
+      .map((row) => {
+        const sku = String(row.sku || '').toUpperCase();
+        const product = PRODUCT_CATALOG.find((item) => item.sku === sku);
+        const qty = Number.parseInt(row.qty, 10);
+        const safeQty = Number.isInteger(qty) && qty > 0 ? qty : 1;
+        const fallbackUnit = Number(
+          draft.venta_type === 'cf'
+            ? (product?.cf ?? product?.sf ?? 0)
+            : (product?.sf ?? product?.cf ?? 0)
+        );
+        const existingUnit = Number(row.unitPrice ?? row.unit_price);
+        const unitPrice = Number.isFinite(existingUnit) && existingUnit >= 0 ? existingUnit : fallbackUnit;
+        return {
+          ...row,
+          sku: product?.sku || sku,
+          displayName: product?.name || row.displayName || row.skuDisplay || sku || 'Producto',
+          qty: safeQty,
+          unitPrice,
+          lineTotal: unitPrice * safeQty,
+          isCombo: false,
+          comboItems: []
+        };
+      });
+
+    const finalRows = normalizedRows.length > 0
+      ? normalizedRows
+      : [createDefaultEditRow(PRODUCT_CATALOG[0]?.sku, draft.venta_type || 'sf')];
+    const { subtotal, total } = recalcEditTotals(finalRows, draft.discount_percent);
+    setEditingQuote({
+      ...draft,
+      line_items: finalRows,
+      subtotal,
+      total
     });
   };
 
@@ -214,6 +441,40 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   };
 
   const onEditField = (field, value) => {
+    if (field === 'discount_percent') {
+      onEditDiscountPercent(value);
+      return;
+    }
+    if (field === 'venta_type') {
+      setEditingQuote((prev) => {
+        if (!prev) return prev;
+        const nextType = value || 'sf';
+        const nextRows = (Array.isArray(prev.line_items) ? prev.line_items : []).map((row) => {
+          const product = PRODUCT_CATALOG.find((item) => item.sku === row.sku);
+          const fallbackUnit = Number(
+            nextType === 'cf'
+              ? (product?.cf ?? product?.sf ?? 0)
+              : (product?.sf ?? product?.cf ?? 0)
+          );
+          const qty = Number.parseInt(row.qty, 10);
+          const safeQty = Number.isInteger(qty) && qty > 0 ? qty : 1;
+          return {
+            ...row,
+            unitPrice: fallbackUnit,
+            lineTotal: fallbackUnit * safeQty
+          };
+        });
+        const { subtotal, total } = recalcEditTotals(nextRows, prev.discount_percent);
+        return {
+          ...prev,
+          venta_type: nextType,
+          line_items: nextRows,
+          subtotal,
+          total
+        };
+      });
+      return;
+    }
     setEditingQuote((prev) => (prev ? { ...prev, [field]: value } : prev));
   };
 
@@ -236,7 +497,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         store_location: editingQuote.store_location,
         venta_type: editingQuote.venta_type || 'sf',
         discount_percent: Number(editingQuote.discount_percent || 0),
-        rows: Array.isArray(editingQuote.line_items) ? editingQuote.line_items : [],
+        rows: (Array.isArray(editingQuote.line_items) ? editingQuote.line_items : []).map((row) => ({
+          sku: String(row.sku || '').toUpperCase(),
+          qty: Number.parseInt(row.qty, 10) || 1,
+          unitPrice: Number(row.unitPrice || 0),
+          lineTotal: Number(row.lineTotal || 0),
+          displayName: row.displayName || row.skuDisplay || row.sku
+        })),
         subtotal: Number(editingQuote.subtotal || 0),
         total: Number(editingQuote.total || 0),
         status: editingQuote.status || 'Cotizado'
@@ -309,6 +576,10 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     } finally {
       setDeletingId(null);
     }
+  };
+
+  const toggleActionsMenu = (quoteId) => {
+    setOpenActionsMenuId((prev) => (prev === quoteId ? null : quoteId));
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando historial...</div>;
@@ -443,23 +714,40 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       Ver PDF
                     </button>
                     {canMutateQuotes && (
-                      <>
+                      <div className="quote-actions-menu" ref={openActionsMenuId === quote.id ? actionsMenuRef : null}>
                         <button
-                          className="btn"
-                          style={{ background: '#f59e0b', color: '#111827' }}
-                          onClick={() => openEditModal(quote)}
+                          className="quote-actions-toggle"
+                          type="button"
+                          onClick={() => toggleActionsMenu(quote.id)}
                         >
-                          Editar
+                          Más
                         </button>
-                        <button
-                          className="btn btn-danger"
-                          disabled={deletingId === quote.id}
-                          onClick={() => deleteQuote(quote)}
-                          style={{ opacity: deletingId === quote.id ? 0.7 : 1 }}
-                        >
-                          {deletingId === quote.id ? 'Eliminando...' : 'Eliminar'}
-                        </button>
-                      </>
+                        {openActionsMenuId === quote.id && (
+                          <div className="quote-actions-list">
+                            <button
+                              type="button"
+                              className="quote-actions-item quote-actions-item--edit"
+                              onClick={() => {
+                                setOpenActionsMenuId(null);
+                                openEditModal(quote);
+                              }}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="quote-actions-item quote-actions-item--delete"
+                              disabled={deletingId === quote.id}
+                              onClick={() => {
+                                setOpenActionsMenuId(null);
+                                deleteQuote(quote);
+                              }}
+                            >
+                              {deletingId === quote.id ? 'Eliminando...' : 'Eliminar'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -482,7 +770,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                     <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Total</th>
                     <th style={{ padding: '14px 12px', width: '140px', textAlign: 'center' }}>Estado</th>
                     <th style={{ padding: '14px 12px', width: '180px', textAlign: 'center' }}>Fecha</th>
-                    <th style={{ padding: '14px 12px', width: '220px', textAlign: 'center' }}>Acciones</th>
+                    <th style={{ padding: '14px 12px', width: '190px', textAlign: 'center' }}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -538,7 +826,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                         {new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}
                       </td>
                       <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', flexWrap: 'nowrap' }}>
                           <button
                             onClick={() => regeneratePDF(quote)}
                             style={{
@@ -554,39 +842,40 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                             Ver PDF
                           </button>
                           {canMutateQuotes && (
-                            <>
+                            <div className="quote-actions-menu" ref={openActionsMenuId === quote.id ? actionsMenuRef : null}>
                               <button
-                                onClick={() => openEditModal(quote)}
-                                style={{
-                                  padding: '8px 14px',
-                                  background: '#f59e0b',
-                                  color: '#111827',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  cursor: 'pointer',
-                                  fontSize: '0.9rem',
-                                  fontWeight: 700
-                                }}
+                                className="quote-actions-toggle"
+                                type="button"
+                                onClick={() => toggleActionsMenu(quote.id)}
                               >
-                                Editar
+                                Más
                               </button>
-                              <button
-                                onClick={() => deleteQuote(quote)}
-                                disabled={deletingId === quote.id}
-                                style={{
-                                  padding: '8px 14px',
-                                  background: '#ef4444',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  cursor: deletingId === quote.id ? 'not-allowed' : 'pointer',
-                                  fontSize: '0.9rem',
-                                  opacity: deletingId === quote.id ? 0.7 : 1
-                                }}
-                              >
-                                {deletingId === quote.id ? 'Eliminando...' : 'Eliminar'}
-                              </button>
-                            </>
+                              {openActionsMenuId === quote.id && (
+                                <div className="quote-actions-list">
+                                  <button
+                                    type="button"
+                                    className="quote-actions-item quote-actions-item--edit"
+                                    onClick={() => {
+                                      setOpenActionsMenuId(null);
+                                      openEditModal(quote);
+                                    }}
+                                  >
+                                    Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="quote-actions-item quote-actions-item--delete"
+                                    disabled={deletingId === quote.id}
+                                    onClick={() => {
+                                      setOpenActionsMenuId(null);
+                                      deleteQuote(quote);
+                                    }}
+                                  >
+                                    {deletingId === quote.id ? 'Eliminando...' : 'Eliminar'}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )}
                         </div>
                       </td>
@@ -684,9 +973,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                   onChange={(e) => onEditField('store_location', e.target.value)}
                 >
                   <option value="">Seleccionar</option>
-                  <option value="Cochabamba">Cochabamba</option>
-                  <option value="Santa Cruz">Santa Cruz</option>
-                  <option value="Lima">Lima</option>
+                  {STORE_OPTIONS.map((store) => (
+                    <option key={store} value={store}>{store}</option>
+                  ))}
                 </select>
               </label>
               <label>
@@ -695,11 +984,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                   value={editingQuote.status}
                   onChange={(e) => onEditField('status', e.target.value)}
                 >
-                  <option value="Cotizado">Cotizado</option>
-                  <option value="Confirmado">Confirmado</option>
-                  <option value="Pagado">Pagado</option>
-                  <option value="Embalado">Embalado</option>
-                  <option value="Enviado">Enviado</option>
+                  {QUOTE_STATUS_OPTIONS.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
                 </select>
               </label>
               <label>
@@ -719,10 +1006,10 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                   min="0"
                   max="100"
                   value={editingQuote.discount_percent}
-                  onChange={(e) => onEditField('discount_percent', Number(e.target.value || 0))}
+                  onChange={(e) => onEditField('discount_percent', e.target.value)}
                 />
               </label>
-              <label>
+              <label style={{ display: 'none' }}>
                 Subtotal
                 <input
                   type="number"
@@ -732,7 +1019,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                   onChange={(e) => onEditField('subtotal', Number(e.target.value || 0))}
                 />
               </label>
-              <label>
+              <label style={{ display: 'none' }}>
                 Total
                 <input
                   type="number"
@@ -767,20 +1054,81 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
             </div>
 
             <div className="quote-edit-lines">
-              <h4>Productos (solo lectura)</h4>
-              {quoteItemsSummary.length === 0 ? (
-                <p style={{ color: '#94a3b8' }}>Sin líneas</p>
-              ) : (
-                <div className="quote-edit-lines-list">
-                  {quoteItemsSummary.map((item) => (
-                    <div key={item.key} className="quote-edit-line-item">
-                      <span>{item.label}</span>
-                      <span>x{item.qty}</span>
-                      <span>{item.lineTotal.toFixed(2)} Bs</span>
-                    </div>
-                  ))}
+              <div className="quote-edit-line-editor">
+                <div className="quote-edit-line-editor-header">
+                  <h4>Productos</h4>
+                  <button type="button" className="btn btn-secondary" onClick={addEditRow}>
+                    + Agregar línea
+                  </button>
                 </div>
-              )}
+
+                <div className="quote-edit-line-table-wrap">
+                  <table className="quote-edit-line-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        <th style={{ width: '92px' }}>Cant.</th>
+                        <th style={{ width: '130px' }}>Unitario</th>
+                        <th style={{ width: '130px' }}>Subtotal</th>
+                        <th style={{ width: '78px' }}>Quitar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(Array.isArray(editingQuote.line_items) ? editingQuote.line_items : []).map((row, index) => (
+                        <tr key={`${row.sku || 'sku'}-${index}`}>
+                          <td data-label="Producto">
+                            <select
+                              value={row.sku || ''}
+                              onChange={(e) => updateEditRowSku(index, e.target.value)}
+                            >
+                              {PRODUCT_CATALOG.map((item) => (
+                                <option key={item.sku} value={item.sku}>
+                                  {item.name}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td data-label="Cantidad">
+                            <input
+                              type="number"
+                              min="1"
+                              value={row.qty}
+                              onChange={(e) => updateEditRowQty(index, e.target.value)}
+                            />
+                          </td>
+                          <td data-label="Unitario (Bs)">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={Number(row.unitPrice || 0)}
+                              onChange={(e) => updateEditRowUnitPrice(index, e.target.value)}
+                            />
+                          </td>
+                          <td data-label="Subtotal (Bs)">
+                            <strong>{Number(row.lineTotal || 0).toFixed(2)}</strong>
+                          </td>
+                          <td data-label="Quitar">
+                            <button
+                              type="button"
+                              className="quote-edit-line-remove-btn"
+                              onClick={() => removeEditRow(index)}
+                              disabled={(editingQuote.line_items || []).length <= 1}
+                            >
+                              X
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '10px', color: '#cbd5e1', display: 'flex', justifyContent: 'flex-end', gap: '16px', fontWeight: 600 }}>
+              <span>Subtotal: {Number(editingQuote.subtotal || 0).toFixed(2)} Bs</span>
+              <span>Total: {Number(editingQuote.total || 0).toFixed(2)} Bs</span>
             </div>
 
             <div className="quote-edit-actions">
