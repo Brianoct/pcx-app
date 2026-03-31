@@ -1239,12 +1239,12 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     alternative_phone,
     store_location,
     vendor,
+    seller_user_id,
     venta_type,
     discount_percent,
     rows,
     subtotal,
     total,
-    seller_user_id,
     status = 'Cotizado'
   } = req.body || {};
 
@@ -1900,6 +1900,7 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     alternative_phone,
     store_location,
     vendor,
+    seller_user_id,
     venta_type,
     discount_percent,
     rows,
@@ -1948,6 +1949,7 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
 
   const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const canManageAnyQuote = Boolean(access?.pedidos_global || access?.historial_global);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1969,6 +1971,21 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     const newStoreKey = normalizeText(store_location);
     const storeChanged = oldStoreKey !== newStoreKey;
     const lineItemsChanged = lineItemsFingerprint(oldLineItems) !== lineItemsFingerprint(lineItemsWithDisplay);
+    const hasSellerUserId = seller_user_id !== undefined && seller_user_id !== null && String(seller_user_id).trim() !== '';
+
+    let nextQuoteOwnerId = currentQuote.user_id;
+    let nextVendorName = nextVendor || currentQuote.vendor || null;
+    if (hasSellerUserId) {
+      if (!canManageAnyQuote) {
+        throw createHttpError(403, 'No autorizado para reasignar vendedor en esta cotización');
+      }
+      const selectedSellerId = Number.parseInt(seller_user_id, 10);
+      if (!Number.isInteger(selectedSellerId) || selectedSellerId <= 0) {
+        throw createHttpError(400, 'Vendedor asignado inválido');
+      }
+      nextVendorName = await resolveAssignableVendorName(selectedSellerId, nextVendorName || '');
+      nextQuoteOwnerId = selectedSellerId;
+    }
 
     if (wasFinalized && (!willBeFinalized || storeChanged || lineItemsChanged)) {
       await restockStockForQuote(client, oldStore, oldLineItems);
@@ -1987,14 +2004,15 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
            alternative_name = $6,
            alternative_phone = $7,
            store_location = $8,
-          vendor = $9,
-          venta_type = $10,
-          discount_percent = $11,
-          line_items = $12,
-          subtotal = $13,
-          total = $14,
-          status = $15
-      WHERE id = $16`,
+           user_id = $9,
+           vendor = $10,
+           venta_type = $11,
+           discount_percent = $12,
+           line_items = $13,
+           subtotal = $14,
+           total = $15,
+           status = $16
+      WHERE id = $17`,
       [
         customer_name,
         customer_phone,
@@ -2004,7 +2022,8 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         alternative_name || null,
         alternative_phone || null,
         store_location,
-        nextVendor || currentQuote.vendor || null,
+        nextQuoteOwnerId,
+        nextVendorName,
         venta_type,
         discountPercentValue,
         JSON.stringify(lineItemsWithDisplay),
