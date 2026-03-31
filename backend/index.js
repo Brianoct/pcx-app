@@ -823,6 +823,36 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
   return quote;
 };
 
+const flattenQuoteLineItemsToSkuQtyMap = (lineItems = []) => {
+  const map = new Map();
+  const addQty = (skuValue, qtyValue) => {
+    const sku = String(skuValue || '').trim().toUpperCase();
+    const qty = Number.parseInt(qtyValue, 10);
+    if (!sku || !Number.isInteger(qty) || qty <= 0) return;
+    map.set(sku, (map.get(sku) || 0) + qty);
+  };
+
+  for (const row of lineItems || []) {
+    if (row?.isCombo) {
+      for (const comboItem of row.comboItems || []) {
+        const comboQty = Number.parseInt(comboItem?.quantity, 10);
+        const rowQty = Number.parseInt(row?.qty, 10);
+        addQty(comboItem?.sku, (Number.isInteger(comboQty) ? comboQty : 0) * (Number.isInteger(rowQty) ? rowQty : 0));
+      }
+      continue;
+    }
+    addQty(row?.sku, row?.qty);
+  }
+
+  return map;
+};
+
+const lineItemsFingerprint = (lineItems = []) => {
+  const entries = [...flattenQuoteLineItemsToSkuQtyMap(lineItems).entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]));
+  return entries.map(([sku, qty]) => `${sku}:${qty}`).join('|');
+};
+
 const mergeAccessWithDefaults = (baseRole, panelAccess) => {
   const defaults = getDefaultPanelAccessForRole(baseRole);
   const merged = { ...defaults };
@@ -1755,11 +1785,13 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     const willBeFinalized = FINALIZED_QUOTE_STATUSES.includes(normalizedStatus);
     const oldStoreKey = normalizeText(oldStore);
     const newStoreKey = normalizeText(store_location);
+    const storeChanged = oldStoreKey !== newStoreKey;
+    const lineItemsChanged = lineItemsFingerprint(oldLineItems) !== lineItemsFingerprint(lineItemsWithDisplay);
 
-    if (wasFinalized && (oldStoreKey !== newStoreKey || !willBeFinalized)) {
+    if (wasFinalized && (!willBeFinalized || storeChanged || lineItemsChanged)) {
       await restockStockForQuote(client, oldStore, oldLineItems);
     }
-    if (willBeFinalized && (!wasFinalized || oldStoreKey !== newStoreKey)) {
+    if (willBeFinalized && (!wasFinalized || storeChanged || lineItemsChanged)) {
       await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay);
     }
 
