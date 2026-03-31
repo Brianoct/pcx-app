@@ -720,7 +720,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           type="button"
                           onClick={() => toggleActionsMenu(quote.id)}
                         >
-                          Más
+                          <span aria-hidden="true" style={{ fontSize: '0.95rem' }}>⋯</span>
+                          <span>Más</span>
                         </button>
                         {openActionsMenuId === quote.id && (
                           <div className="quote-actions-list">
@@ -732,7 +733,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                                 openEditModal(quote);
                               }}
                             >
-                              Editar
+                              <span aria-hidden="true">✏️</span>
+                              <span>Editar</span>
                             </button>
                             <button
                               type="button"
@@ -743,7 +745,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                                 deleteQuote(quote);
                               }}
                             >
-                              {deletingId === quote.id ? 'Eliminando...' : 'Eliminar'}
+                              <span aria-hidden="true">{deletingId === quote.id ? '⏳' : '🗑️'}</span>
+                              <span>{deletingId === quote.id ? 'Eliminando...' : 'Eliminar'}</span>
                             </button>
                           </div>
                         )}
@@ -848,7 +851,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                                 type="button"
                                 onClick={() => toggleActionsMenu(quote.id)}
                               >
-                                Más
+                                <span aria-hidden="true" style={{ fontSize: '0.95rem' }}>⋯</span>
+                                <span>Más</span>
                               </button>
                               {openActionsMenuId === quote.id && (
                                 <div className="quote-actions-list">
@@ -860,7 +864,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                                       openEditModal(quote);
                                     }}
                                   >
-                                    Editar
+                                    <span aria-hidden="true">✏️</span>
+                                    <span>Editar</span>
                                   </button>
                                   <button
                                     type="button"
@@ -871,7 +876,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                                       deleteQuote(quote);
                                     }}
                                   >
-                                    {deletingId === quote.id ? 'Eliminando...' : 'Eliminar'}
+                                    <span aria-hidden="true">{deletingId === quote.id ? '⏳' : '🗑️'}</span>
+                                    <span>{deletingId === quote.id ? 'Eliminando...' : 'Eliminar'}</span>
                                   </button>
                                 </div>
                               )}

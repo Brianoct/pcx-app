@@ -333,49 +333,59 @@ button, .btn {
 
 .quote-actions-toggle {
   min-height: 34px;
-  padding: 7px 12px;
+  padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid rgba(71, 85, 105, 0.6);
-  background: #1e293b;
-  color: #f1f5f9;
-  font-size: 0.86rem;
+  background: #182338;
+  color: #dbeafe;
+  font-size: 0.8rem;
   font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .quote-actions-list {
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  min-width: 136px;
+  min-width: 128px;
   border-radius: 10px;
   border: 1px solid rgba(71, 85, 105, 0.7);
   background: #0f172a;
   box-shadow: 0 12px 24px rgba(2, 6, 23, 0.45);
-  padding: 6px;
+  padding: 5px;
   display: grid;
-  gap: 4px;
+  gap: 3px;
   z-index: 20;
 }
 
 .quote-actions-item {
   border: none;
-  border-radius: 8px;
-  min-height: 34px;
-  padding: 6px 10px;
-  font-size: 0.84rem;
+  border-radius: 7px;
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 0.78rem;
   font-weight: 700;
   text-align: left;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .quote-actions-item--edit {
-  background: rgba(245, 158, 11, 0.2);
+  background: rgba(245, 158, 11, 0.16);
   color: #fde68a;
 }
 
 .quote-actions-item--delete {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.16);
   color: #fca5a5;
+}
+
+.quote-actions-icon {
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .quote-edit-lines {
