@@ -1,5 +1,5 @@
 // QuoteTool.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { PRODUCT_CATALOG } from './productCatalog';
@@ -26,6 +26,8 @@ export default function QuoteTool({ token, user }) {
   const [currentDateTime, setCurrentDateTime] = useState('');
   const [salesUsers, setSalesUsers] = useState([]);
   const [assignedSellerId, setAssignedSellerId] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
@@ -215,11 +217,37 @@ export default function QuoteTool({ token, user }) {
     (!useAlternativeName || (alternativeName.trim() && alternativePhone.trim())) &&
     (!isAlmacenRole || assignedSellerId);
 
+  const resetQuoteForm = () => {
+    setStep(1);
+    setRows([]);
+    setVentaType('sf');
+    setDiscountPercent(0);
+    setRoundTotal(false);
+    setUseAlternativeName(false);
+    setAlternativeName('');
+    setAlternativePhone('');
+    setCustomerName('');
+    setCustomerPhone('');
+    setDepartment('');
+    setProvincia('');
+    setIsProvincia(false);
+    setAlmacen('');
+    setShippingNotes('');
+    if (isAlmacenRole && Array.isArray(salesUsers) && salesUsers.length > 0) {
+      setAssignedSellerId(String(salesUsers[0].id));
+    } else {
+      setAssignedSellerId('');
+    }
+  };
+
   const saveAndGeneratePDF = async () => {
+    if (isSavingRef.current) return;
     if (!canSave) {
       alert('Completa todos los campos obligatorios del cliente y verifica que todas las líneas tengan producto y cantidad.');
       return;
     }
+    isSavingRef.current = true;
+    setIsSaving(true);
 
     const vendedorName = user ? user.email.split('@')[0] : 'Usuario';
 
@@ -281,11 +309,16 @@ export default function QuoteTool({ token, user }) {
     };
 
     try {
+      const idempotencyKey =
+        (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const saveRes = await fetch(`${API_BASE}/api/quotes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'X-Idempotency-Key': idempotencyKey
         },
         body: JSON.stringify(payload)
       });
@@ -328,10 +361,14 @@ export default function QuoteTool({ token, user }) {
         total
       });
 
+      resetQuoteForm();
       alert('Cotización guardada y PDF generado');
     } catch (err) {
       console.error('Error completo al guardar:', err);
       alert('Error al guardar: ' + (err.message || 'Error desconocido'));
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
     }
   };
 
@@ -819,7 +856,7 @@ export default function QuoteTool({ token, user }) {
 
             <button
               type="button"
-              disabled={!canSave}
+              disabled={!canSave || isSaving}
               onClick={saveAndGeneratePDF}
               className="btn btn-primary"
               style={{
@@ -827,11 +864,11 @@ export default function QuoteTool({ token, user }) {
                 marginTop: '16px',
                 fontSize: '1.1rem',
                 fontWeight: '600',
-                opacity: canSave ? 1 : 0.6,
-                cursor: canSave ? 'pointer' : 'not-allowed'
+                opacity: canSave && !isSaving ? 1 : 0.6,
+                cursor: canSave && !isSaving ? 'pointer' : 'not-allowed'
               }}
             >
-              Guardar y generar PDF
+              {isSaving ? 'Guardando...' : 'Guardar y generar PDF'}
             </button>
           </div>
         </div>

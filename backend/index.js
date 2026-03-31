@@ -207,6 +207,26 @@ const COMMISSION_SETTINGS_DEFAULT = {
   marketing_lider_percent: 5
 };
 const COMMISSION_SETTINGS_KEYS = Object.keys(COMMISSION_SETTINGS_DEFAULT);
+const QUOTE_STATUSES = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
+const FINALIZED_QUOTE_STATUSES = ['Confirmado', 'Pagado', 'Embalado', 'Enviado'];
+const QUOTE_SAVE_IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
+const quoteSaveIdempotencyCache = new Map();
+
+const pruneQuoteSaveIdempotencyCache = () => {
+  const now = Date.now();
+  for (const [cacheKey, entry] of quoteSaveIdempotencyCache.entries()) {
+    if (!entry || !entry.expiresAt || entry.expiresAt <= now) {
+      quoteSaveIdempotencyCache.delete(cacheKey);
+    }
+  }
+};
+
+const getQuoteSaveIdempotencyCacheKey = (userId, headerValue) => {
+  const raw = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+  const key = String(raw || '').trim();
+  if (!key) return null;
+  return `${userId}:${key.slice(0, 120)}`;
+};
 
 const TIME_OFF_LIMITS = {
   vacation: 14,
@@ -692,6 +712,117 @@ const getPedidosAccessScope = (userContext, access) => {
   return { isGlobal: false, city: scope.canonical };
 };
 
+const createHttpError = (statusCode, message) => {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  return err;
+};
+
+const parseAndNormalizeQuoteRows = (rows) => {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw createHttpError(400, 'Debes agregar al menos una línea de producto');
+  }
+
+  return rows.map((rawRow, index) => {
+    if (!rawRow || typeof rawRow !== 'object') {
+      throw createHttpError(400, `Línea ${index + 1} inválida`);
+    }
+
+    const sku = String(rawRow.sku || '').trim().toUpperCase();
+    const qty = Number.parseInt(rawRow.qty, 10);
+    const unitPriceRaw = Number(rawRow.unitPrice ?? rawRow.unit_price);
+    const lineTotalRaw = Number(rawRow.lineTotal ?? rawRow.line_total);
+    const isCombo = Boolean(rawRow.isCombo);
+
+    if (!sku) {
+      throw createHttpError(400, `Línea ${index + 1}: SKU requerido`);
+    }
+    if (!Number.isInteger(qty) || qty <= 0) {
+      throw createHttpError(400, `Línea ${index + 1}: cantidad inválida`);
+    }
+    const resolvedUnitPrice = Number.isFinite(unitPriceRaw)
+      ? unitPriceRaw
+      : (Number.isFinite(lineTotalRaw) && qty > 0 ? lineTotalRaw / qty : NaN);
+    if (!Number.isFinite(resolvedUnitPrice) || resolvedUnitPrice < 0) {
+      throw createHttpError(400, `Línea ${index + 1}: precio unitario inválido`);
+    }
+
+    const comboItems = Array.isArray(rawRow.comboItems) ? rawRow.comboItems : [];
+    const normalizedComboItems = comboItems.map((comboItem, comboIndex) => {
+      const comboSku = String(comboItem?.sku || '').trim().toUpperCase();
+      const comboQty = Number.parseInt(comboItem?.quantity, 10);
+      if (!comboSku || !Number.isInteger(comboQty) || comboQty <= 0) {
+        throw createHttpError(
+          400,
+          `Línea ${index + 1}: item del combo ${comboIndex + 1} inválido`
+        );
+      }
+      return {
+        ...comboItem,
+        sku: comboSku,
+        quantity: comboQty
+      };
+    });
+
+    if (isCombo && normalizedComboItems.length === 0) {
+      throw createHttpError(400, `Línea ${index + 1}: el combo no tiene productos`);
+    }
+
+    const lineTotal = Number.isFinite(lineTotalRaw) ? lineTotalRaw : resolvedUnitPrice * qty;
+    const displayName = String(
+      rawRow.displayName || rawRow.skuDisplay || rawRow.name || sku
+    ).trim() || sku;
+
+    return {
+      ...rawRow,
+      sku,
+      qty,
+      unitPrice: resolvedUnitPrice,
+      lineTotal,
+      isCombo,
+      comboItems: normalizedComboItems,
+      displayName
+    };
+  });
+};
+
+const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userContext, access) => {
+  const canManageAnyQuote = Boolean(access?.pedidos_global || access?.historial_global);
+  const isPedidosIndividualScoped = Boolean(access?.pedidos_individual) && !canManageAnyQuote;
+  let pedidosScope = null;
+  if (isPedidosIndividualScoped) {
+    pedidosScope = getPedidosAccessScope(userContext, access);
+    if (pedidosScope.error) {
+      throw createHttpError(403, pedidosScope.error);
+    }
+  }
+
+  const quoteRes = await client.query(
+    `SELECT id, user_id, customer_name, customer_phone, department, provincia, shipping_notes,
+            alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
+            line_items, subtotal, total, status
+     FROM quotes
+     WHERE id = $1
+     FOR UPDATE`,
+    [quoteId]
+  );
+
+  if (quoteRes.rowCount === 0) {
+    throw createHttpError(404, 'Cotización no encontrada');
+  }
+
+  const quote = quoteRes.rows[0];
+  if (isPedidosIndividualScoped && pedidosScope && !pedidosScope.isGlobal) {
+    if (quote.store_location !== pedidosScope.city) {
+      throw createHttpError(403, 'No autorizado para modificar pedidos de otra ciudad');
+    }
+  } else if (!canManageAnyQuote && quote.user_id !== reqUserId) {
+    throw createHttpError(403, 'No autorizado para modificar este pedido');
+  }
+
+  return quote;
+};
+
 const mergeAccessWithDefaults = (baseRole, panelAccess) => {
   const defaults = getDefaultPanelAccessForRole(baseRole);
   const merged = { ...defaults };
@@ -891,29 +1022,80 @@ app.get('/api/users/sales', authenticateToken, async (req, res) => {
 
 // ─── SAVE new quote ─────────────────────────────────────────────────────────
 app.post('/api/quotes', authenticateToken, async (req, res) => {
-  const { 
-    customer_name, 
-    customer_phone, 
-    department, 
-    provincia, 
-    shipping_notes, 
+  const {
+    customer_name,
+    customer_phone,
+    department,
+    provincia,
+    shipping_notes,
     alternative_name,
     alternative_phone,
-    store_location, 
-    vendor, 
-    venta_type, 
-    discount_percent, 
-    rows, 
-    subtotal, 
+    store_location,
+    vendor,
+    venta_type,
+    discount_percent,
+    rows,
+    subtotal,
     total,
     seller_user_id,
     status = 'Cotizado'
-  } = req.body;
+  } = req.body || {};
 
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   if (!canAccessPanel(userContext.panel_access, userContext.role, 'cotizar')) {
     return res.status(403).json({ error: 'No tienes permiso para cotizar' });
+  }
+
+  const normalizedStatus = String(status || 'Cotizado').trim();
+  if (!QUOTE_STATUSES.includes(normalizedStatus)) {
+    return res.status(400).json({ error: `Estado inválido. Usa: ${QUOTE_STATUSES.join(', ')}` });
+  }
+
+  if (!customer_name || !customer_phone || !store_location || !venta_type) {
+    return res.status(400).json({ error: 'Faltan campos obligatorios para guardar la cotización' });
+  }
+
+  let lineItemsWithDisplay;
+  let subtotalValue;
+  let totalValue;
+  let discountPercentValue;
+  try {
+    lineItemsWithDisplay = parseAndNormalizeQuoteRows(rows);
+    subtotalValue = Number(subtotal);
+    totalValue = Number(total);
+    discountPercentValue = Number(discount_percent ?? 0);
+    if (!Number.isFinite(subtotalValue) || subtotalValue < 0) {
+      throw createHttpError(400, 'Subtotal inválido');
+    }
+    if (!Number.isFinite(totalValue) || totalValue < 0) {
+      throw createHttpError(400, 'Total inválido');
+    }
+    if (!Number.isFinite(discountPercentValue) || discountPercentValue < 0 || discountPercentValue > 100) {
+      throw createHttpError(400, 'Descuento inválido');
+    }
+  } catch (err) {
+    const statusCode = err?.statusCode || 400;
+    return res.status(statusCode).json({ error: err.message || 'Datos inválidos en la cotización' });
+  }
+
+  pruneQuoteSaveIdempotencyCache();
+  const idempotencyCacheKey = getQuoteSaveIdempotencyCacheKey(req.user.id, req.headers['x-idempotency-key']);
+  if (idempotencyCacheKey) {
+    const existing = quoteSaveIdempotencyCache.get(idempotencyCacheKey);
+    if (existing?.inFlight) {
+      return res.status(409).json({ error: 'La cotización ya se está guardando. Espera un momento.' });
+    }
+    if (existing?.response) {
+      return res.status(existing.statusCode || 201).json({
+        ...existing.response,
+        duplicate: true
+      });
+    }
+    quoteSaveIdempotencyCache.set(idempotencyCacheKey, {
+      inFlight: true,
+      expiresAt: Date.now() + QUOTE_SAVE_IDEMPOTENCY_TTL_MS
+    });
   }
 
   const client = await pool.connect();
@@ -928,34 +1110,29 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     if (isWarehouseQuoteMode) {
       const selectedSellerId = Number.parseInt(seller_user_id, 10);
       if (!Number.isInteger(selectedSellerId)) {
-        return res.status(400).json({ error: 'Selecciona un vendedor válido para asignar la cotización' });
+        throw createHttpError(400, 'Selecciona un vendedor válido para asignar la cotización');
       }
       const sellerRes = await client.query(
         'SELECT id, email, role FROM users WHERE id = $1',
         [selectedSellerId]
       );
       if (sellerRes.rowCount === 0) {
-        return res.status(400).json({ error: 'El vendedor seleccionado no existe' });
+        throw createHttpError(400, 'El vendedor seleccionado no existe');
       }
       const seller = sellerRes.rows[0];
       const sellerRole = normalizeRole(seller.role || '');
       const isAssignableSeller = sellerRole === ROLE_KEYS.ventas || sellerRole === ROLE_KEYS.ventasLider || sellerRole === 'sales' || sellerRole === 'vendedor';
       if (!isAssignableSeller) {
-        return res.status(400).json({ error: 'Solo puedes asignar la cotización a un usuario de ventas' });
+        throw createHttpError(400, 'Solo puedes asignar la cotización a un usuario de ventas');
       }
       quoteOwnerId = seller.id;
       vendorDisplayName = String(seller.email || '').split('@')[0] || vendorDisplayName;
     }
 
-    const lineItemsWithDisplay = rows.map(row => ({
-      ...row,
-      displayName: row.displayName || row.sku || 'Producto desconocido'
-    }));
-
     const quoteResult = await client.query(
       `INSERT INTO quotes (
         user_id, customer_name, customer_phone, department, provincia, shipping_notes,
-        alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent, line_items, subtotal, 
+        alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent, line_items, subtotal,
         total, status, created_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
       RETURNING id`,
@@ -963,35 +1140,48 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
         quoteOwnerId,
         customer_name,
         customer_phone,
-        department,
-        provincia,
-        shipping_notes,
+        department || null,
+        provincia || null,
+        shipping_notes || null,
         alternative_name || null,
         alternative_phone || null,
         store_location,
         vendorDisplayName,
         venta_type,
-        discount_percent,
+        discountPercentValue,
         JSON.stringify(lineItemsWithDisplay),
-        subtotal,
-        total,
-        status
+        subtotalValue,
+        totalValue,
+        normalizedStatus
       ]
     );
 
     const quoteId = quoteResult.rows[0].id;
 
-    // Only deduct stock if initial status is NOT 'Cotizado'
-    if (status !== 'Cotizado') {
+    // Only deduct stock if initial status is finalized.
+    if (FINALIZED_QUOTE_STATUSES.includes(normalizedStatus)) {
       await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay);
     }
 
     await client.query('COMMIT');
-    res.status(201).json({ id: quoteId, message: 'Cotización guardada' });
+    const responseBody = { id: quoteId, message: 'Cotización guardada' };
+    if (idempotencyCacheKey) {
+      quoteSaveIdempotencyCache.set(idempotencyCacheKey, {
+        inFlight: false,
+        statusCode: 201,
+        response: responseBody,
+        expiresAt: Date.now() + QUOTE_SAVE_IDEMPOTENCY_TTL_MS
+      });
+    }
+    res.status(201).json(responseBody);
   } catch (err) {
     await client.query('ROLLBACK');
+    if (idempotencyCacheKey) {
+      quoteSaveIdempotencyCache.delete(idempotencyCacheKey);
+    }
     console.error(err);
-    res.status(500).json({ error: err.message || 'Error al guardar cotización' });
+    const statusCode = err?.statusCode || 500;
+    res.status(statusCode).json({ error: err.message || 'Error al guardar cotización' });
   } finally {
     client.release();
   }
@@ -1486,6 +1676,184 @@ app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
   }
 });
 
+// ─── UPDATE quote details (owner/global roles, stock-safe) ───────────────────
+app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
+  const quoteId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(quoteId) || quoteId <= 0) {
+    return res.status(400).json({ error: 'ID de cotización inválido' });
+  }
+
+  const {
+    customer_name,
+    customer_phone,
+    department,
+    provincia,
+    shipping_notes,
+    alternative_name,
+    alternative_phone,
+    store_location,
+    venta_type,
+    discount_percent,
+    rows,
+    subtotal,
+    total,
+    status
+  } = req.body || {};
+
+  if (!customer_name || !customer_phone || !store_location || !venta_type) {
+    return res.status(400).json({ error: 'Faltan campos obligatorios para actualizar la cotización' });
+  }
+
+  const normalizedStatus = String(status || 'Cotizado').trim();
+  if (!QUOTE_STATUSES.includes(normalizedStatus)) {
+    return res.status(400).json({ error: `Estado inválido. Usa: ${QUOTE_STATUSES.join(', ')}` });
+  }
+
+  let lineItemsWithDisplay;
+  let subtotalValue;
+  let totalValue;
+  let discountPercentValue;
+  try {
+    lineItemsWithDisplay = parseAndNormalizeQuoteRows(rows);
+    subtotalValue = Number(subtotal);
+    totalValue = Number(total);
+    discountPercentValue = Number(discount_percent ?? 0);
+    if (!Number.isFinite(subtotalValue) || subtotalValue < 0) {
+      throw createHttpError(400, 'Subtotal inválido');
+    }
+    if (!Number.isFinite(totalValue) || totalValue < 0) {
+      throw createHttpError(400, 'Total inválido');
+    }
+    if (!Number.isFinite(discountPercentValue) || discountPercentValue < 0 || discountPercentValue > 100) {
+      throw createHttpError(400, 'Descuento inválido');
+    }
+  } catch (err) {
+    const statusCode = err?.statusCode || 400;
+    return res.status(statusCode).json({ error: err.message || 'Datos inválidos en la cotización' });
+  }
+
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const currentQuote = await assertQuoteMutationPermission(
+      client,
+      quoteId,
+      req.user.id,
+      userContext,
+      access
+    );
+
+    const oldStatus = String(currentQuote.status || 'Cotizado');
+    const oldStore = currentQuote.store_location;
+    const oldLineItems = Array.isArray(currentQuote.line_items) ? currentQuote.line_items : [];
+    const wasFinalized = FINALIZED_QUOTE_STATUSES.includes(oldStatus);
+    const willBeFinalized = FINALIZED_QUOTE_STATUSES.includes(normalizedStatus);
+    const oldStoreKey = normalizeText(oldStore);
+    const newStoreKey = normalizeText(store_location);
+
+    if (wasFinalized && (oldStoreKey !== newStoreKey || !willBeFinalized)) {
+      await restockStockForQuote(client, oldStore, oldLineItems);
+    }
+    if (willBeFinalized && (!wasFinalized || oldStoreKey !== newStoreKey)) {
+      await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay);
+    }
+
+    await client.query(
+      `UPDATE quotes
+       SET customer_name = $1,
+           customer_phone = $2,
+           department = $3,
+           provincia = $4,
+           shipping_notes = $5,
+           alternative_name = $6,
+           alternative_phone = $7,
+           store_location = $8,
+           venta_type = $9,
+           discount_percent = $10,
+           line_items = $11,
+           subtotal = $12,
+           total = $13,
+           status = $14
+       WHERE id = $15`,
+      [
+        customer_name,
+        customer_phone,
+        department || null,
+        provincia || null,
+        shipping_notes || null,
+        alternative_name || null,
+        alternative_phone || null,
+        store_location,
+        venta_type,
+        discountPercentValue,
+        JSON.stringify(lineItemsWithDisplay),
+        subtotalValue,
+        totalValue,
+        normalizedStatus,
+        quoteId
+      ]
+    );
+
+    await client.query('COMMIT');
+    return res.json({ message: 'Cotización actualizada', id: quoteId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    const statusCode = err?.statusCode || 500;
+    return res.status(statusCode).json({ error: err.message || 'Error al actualizar cotización' });
+  } finally {
+    client.release();
+  }
+});
+
+// ─── DELETE quote (owner/global roles, restores stock if needed) ─────────────
+app.delete('/api/quotes/:id', authenticateToken, async (req, res) => {
+  const quoteId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(quoteId) || quoteId <= 0) {
+    return res.status(400).json({ error: 'ID de cotización inválido' });
+  }
+
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const currentQuote = await assertQuoteMutationPermission(
+      client,
+      quoteId,
+      req.user.id,
+      userContext,
+      access
+    );
+
+    if (FINALIZED_QUOTE_STATUSES.includes(String(currentQuote.status || 'Cotizado'))) {
+      await restockStockForQuote(
+        client,
+        currentQuote.store_location,
+        Array.isArray(currentQuote.line_items) ? currentQuote.line_items : []
+      );
+    }
+
+    await client.query('DELETE FROM quotes WHERE id = $1', [quoteId]);
+    await client.query('COMMIT');
+    return res.json({ message: 'Cotización eliminada', id: quoteId });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    const statusCode = err?.statusCode || 500;
+    return res.status(statusCode).json({ error: err.message || 'Error al eliminar cotización' });
+  } finally {
+    client.release();
+  }
+});
+
 // ─── Helper: Deduct stock for a quote ───────────────────────────────────────
 async function deductStockForQuote(client, quoteId, storeLocation, lineItems) {
   const warehouseField = {
@@ -1536,6 +1904,48 @@ async function deductStockForQuote(client, quoteId, storeLocation, lineItems) {
         [qty, sku]
       );
     }
+  }
+}
+
+// ─── Helper: Restore stock for a quote ───────────────────────────────────────
+async function restockStockForQuote(client, storeLocation, lineItems) {
+  const warehouseField = {
+    'Cochabamba': 'stock_cochabamba',
+    'Santa Cruz': 'stock_santacruz',
+    'Lima': 'stock_lima'
+  }[storeLocation];
+
+  if (!warehouseField) throw new Error('Almacén no válido');
+
+  for (const row of lineItems || []) {
+    if (row?.isCombo) {
+      for (const comboItem of row.comboItems || []) {
+        const sku = String(comboItem?.sku || '').toUpperCase();
+        const qty = Number(comboItem?.quantity || 0) * Number(row?.qty || 1);
+        if (!sku || qty <= 0) continue;
+
+        await client.query(
+          `UPDATE products
+           SET ${warehouseField} = ${warehouseField} + $1,
+               last_updated = NOW()
+           WHERE sku = $2`,
+          [qty, sku]
+        );
+      }
+      continue;
+    }
+
+    const sku = String(row?.sku || '').toUpperCase();
+    const qty = Number(row?.qty || 0);
+    if (!sku || qty <= 0) continue;
+
+    await client.query(
+      `UPDATE products
+       SET ${warehouseField} = ${warehouseField} + $1,
+           last_updated = NOW()
+       WHERE sku = $2`,
+      [qty, sku]
+    );
   }
 }
 

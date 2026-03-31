@@ -212,6 +212,99 @@ button, .btn {
   gap: 8px;
 }
 
+.quote-edit-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.68);
+  z-index: 1300;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 72px 14px 20px;
+  overflow-y: auto;
+}
+
+.quote-edit-modal {
+  width: min(960px, 100%);
+  background: #0f172a;
+  border: 1px solid rgba(71, 85, 105, 0.7);
+  border-radius: 14px;
+  box-shadow: 0 20px 44px rgba(2, 6, 23, 0.5);
+  padding: 18px;
+}
+
+.quote-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.quote-edit-grid label {
+  display: grid;
+  gap: 6px;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.quote-edit-grid input,
+.quote-edit-grid select,
+.quote-edit-grid textarea {
+  width: 100%;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #111827;
+  color: #f1f5f9;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+}
+
+.quote-edit-grid textarea {
+  min-height: 66px;
+  resize: vertical;
+}
+
+.quote-edit-lines {
+  margin-top: 14px;
+}
+
+.quote-edit-lines h4 {
+  margin-bottom: 8px;
+}
+
+.quote-edit-lines-list {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.quote-edit-line-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(71, 85, 105, 0.45);
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.6);
+  font-size: 0.9rem;
+}
+
+.quote-edit-line-item span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quote-edit-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .pedidos-action-buttons {
   display: flex;
   align-items: center;
@@ -736,6 +829,26 @@ nav {
     flex: 1 1 0;
     min-height: 40px;
     font-size: 0.86rem;
+  }
+
+  .quote-edit-overlay {
+    padding-top: 60px;
+  }
+
+  .quote-edit-modal {
+    padding: 14px;
+  }
+
+  .quote-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quote-edit-actions {
+    justify-content: stretch;
+  }
+
+  .quote-edit-actions .btn {
+    flex: 1 1 0;
   }
 
   .quote-stepper {
