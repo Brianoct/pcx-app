@@ -1038,6 +1038,33 @@ const loadUserContext = async (userId) => {
   return result.rows[0];
 };
 
+const resolveAssignableVendorName = async (sellerUserId, fallbackName = '') => {
+  const parsedId = Number.parseInt(sellerUserId, 10);
+  if (!Number.isInteger(parsedId) || parsedId <= 0) {
+    throw createHttpError(400, 'Vendedor asignado inválido');
+  }
+  const sellerRes = await pool.query(
+    `SELECT id, email, role
+     FROM users
+     WHERE id = $1`,
+    [parsedId]
+  );
+  if (sellerRes.rowCount === 0) {
+    throw createHttpError(404, 'Vendedor asignado no encontrado');
+  }
+  const seller = sellerRes.rows[0];
+  const sellerRole = normalizeRole(seller.role || '');
+  const isAssignableSeller = sellerRole === ROLE_KEYS.ventas
+    || sellerRole === ROLE_KEYS.ventasLider
+    || sellerRole === 'sales'
+    || sellerRole === 'vendedor';
+  if (!isAssignableSeller) {
+    throw createHttpError(400, 'El usuario asignado no pertenece al equipo de ventas');
+  }
+  const displayName = String(seller.email || '').split('@')[0] || fallbackName || 'Vendedor';
+  return displayName;
+};
+
 const buildDateFilter = (month, year, tableAlias = 'q', startIndex = 1) => {
   const params = [];
   const clauses = [];
@@ -1872,6 +1899,7 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     alternative_name,
     alternative_phone,
     store_location,
+    vendor,
     venta_type,
     discount_percent,
     rows,
@@ -1882,6 +1910,10 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
 
   if (!customer_name || !customer_phone || !store_location || !venta_type) {
     return res.status(400).json({ error: 'Faltan campos obligatorios para actualizar la cotización' });
+  }
+  const nextVendor = String(vendor || '').trim();
+  if (nextVendor && nextVendor.length > 120) {
+    return res.status(400).json({ error: 'Vendedor demasiado largo (máx 120)' });
   }
 
   const normalizedStatus = String(status || 'Cotizado').trim();
@@ -1955,13 +1987,14 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
            alternative_name = $6,
            alternative_phone = $7,
            store_location = $8,
-           venta_type = $9,
-           discount_percent = $10,
-           line_items = $11,
-           subtotal = $12,
-           total = $13,
-           status = $14
-       WHERE id = $15`,
+          vendor = $9,
+          venta_type = $10,
+          discount_percent = $11,
+          line_items = $12,
+          subtotal = $13,
+          total = $14,
+          status = $15
+      WHERE id = $16`,
       [
         customer_name,
         customer_phone,
@@ -1971,6 +2004,7 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         alternative_name || null,
         alternative_phone || null,
         store_location,
+        nextVendor || currentQuote.vendor || null,
         venta_type,
         discountPercentValue,
         JSON.stringify(lineItemsWithDisplay),
