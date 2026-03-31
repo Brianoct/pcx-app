@@ -6,6 +6,7 @@ import { canAccessPanel } from './roleAccess';
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 const QUOTE_STATUS_OPTIONS = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
+const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'];
 
 function QuoteHistory({ token, access, onStatusUpdated }) {
   const [quotes, setQuotes] = useState([]);
@@ -19,6 +20,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const [deletingId, setDeletingId] = useState(null);
   const [openActionsMenuId, setOpenActionsMenuId] = useState(null);
   const [productCatalog, setProductCatalog] = useState([]);
+  const [salesUsers, setSalesUsers] = useState([]);
   const actionsMenuRef = useRef(null);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
@@ -85,6 +87,22 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       }
     };
     fetchProductCatalog();
+  }, [token]);
+
+  useEffect(() => {
+    const fetchSalesUsers = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/sellers/assignable`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setSalesUsers(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('No se pudo cargar lista de vendedores para edición:', err);
+      }
+    };
+    fetchSalesUsers();
   }, [token]);
 
   useEffect(() => {
@@ -396,11 +414,18 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   };
 
   const openEditModal = (quote) => {
+    const quoteVendor = String(quote.vendor || '').trim().toLowerCase();
+    const matchedSeller = salesUsers.find((seller) => {
+      const byDisplay = String(seller.display_name || '').trim().toLowerCase();
+      const byEmailUser = String(seller.email || '').split('@')[0].trim().toLowerCase();
+      return quoteVendor && (quoteVendor === byDisplay || quoteVendor === byEmailUser);
+    });
     const draft = {
       id: quote.id,
       customer_name: quote.customer_name || '',
       customer_phone: quote.customer_phone || '',
       vendor: quote.vendor || '',
+      seller_user_id: matchedSeller ? String(matchedSeller.id) : '',
       department: quote.department || '',
       provincia: quote.provincia || '',
       shipping_notes: quote.shipping_notes || '',
@@ -518,6 +543,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         alternative_name: editingQuote.alternative_name ? editingQuote.alternative_name.trim() : null,
         alternative_phone: editingQuote.alternative_phone ? editingQuote.alternative_phone.trim() : null,
         store_location: editingQuote.store_location,
+        seller_user_id: editingQuote.seller_user_id ? Number(editingQuote.seller_user_id) : null,
         venta_type: editingQuote.venta_type || 'sf',
         discount_percent: Number(editingQuote.discount_percent || 0),
         rows: (Array.isArray(editingQuote.line_items) ? editingQuote.line_items : []).map((row) => ({
@@ -983,19 +1009,40 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                 />
               </label>
               <label>
-                Vendedor
-                <input
-                  value={editingQuote.vendor || ''}
-                  onChange={(e) => onEditField('vendor', e.target.value)}
-                  placeholder="Nombre del vendedor"
-                />
+                Vendedor asignado
+                <select
+                  value={editingQuote.seller_user_id || ''}
+                  onChange={(e) => {
+                    const sellerId = e.target.value;
+                    const seller = salesUsers.find((s) => String(s.id) === String(sellerId));
+                    onEditField('seller_user_id', sellerId);
+                    onEditField(
+                      'vendor',
+                      seller
+                        ? (seller.display_name || String(seller.email || '').split('@')[0] || '')
+                        : ''
+                    );
+                  }}
+                >
+                  <option value="">Seleccionar vendedor</option>
+                  {salesUsers.map((seller) => (
+                    <option key={seller.id} value={seller.id}>
+                      {(seller.display_name || String(seller.email || '').split('@')[0] || 'Vendedor')} ({seller.role})
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 Departamento
-                <input
+                <select
                   value={editingQuote.department || ''}
                   onChange={(e) => onEditField('department', e.target.value)}
-                />
+                >
+                  <option value="">Seleccionar</option>
+                  {DEPARTMENT_OPTIONS.map((dep) => (
+                    <option key={dep} value={dep}>{dep}</option>
+                  ))}
+                </select>
               </label>
               <label>
                 Provincia
