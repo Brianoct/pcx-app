@@ -12,6 +12,7 @@ import Cupones from './Cupones';
 import TimeOffCalendar from './TimeOffCalendar';
 import QualityControlPanel from './QualityControlPanel';
 import MicrofabricaPanel from './MicrofabricaPanel';
+import ProfilePanel from './ProfilePanel';
 import logo from './assets/PCX.png';
 import './index.css';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
@@ -124,6 +125,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     canSeeQualityControl ? { to: '/control-calidad', label: 'Control Calidad' } : null,
     canSeeMicrofabricaPanel ? { to: '/microfabrica', label: 'Microfábrica' } : null,
     canSeeCalendar ? { to: '/calendario', label: 'Calendario' } : null,
+    { to: '/perfil', label: 'Perfil' },
     canAccessPanel(access, 'marketingCombos') ? { to: '/combos', label: 'Combos' } : null,
     canAccessPanel(access, 'marketingCupones') ? { to: '/cupones', label: 'Cupones' } : null,
     canSeeAdmin ? { to: '/admin', label: 'Admin' } : null
@@ -441,6 +443,24 @@ function App() {
           element={canAccessPanel(effectiveAccess, 'calendario') || canAccessPanel(effectiveAccess, 'admin')
             ? <TimeOffCalendar token={token} user={user} />
             : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/perfil"
+          element={
+            <ProfilePanel
+              token={token}
+              user={user}
+              onUserUpdated={(nextUser) => {
+                if (!nextUser) return;
+                localStorage.setItem('user', JSON.stringify(nextUser));
+                localStorage.setItem('role', nextUser.role);
+                localStorage.setItem('panel_access', JSON.stringify(nextUser.panel_access || null));
+                setUser(nextUser);
+                setRole(nextUser.role);
+                setAccess(nextUser.panel_access || null);
+              }}
+            />
+          }
         />
         <Route path="*" element={<Navigate to={defaultPath} replace />} />
       </Routes>
