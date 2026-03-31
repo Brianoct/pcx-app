@@ -2,7 +2,6 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { canAccessPanel } from './roleAccess';
-import { PRODUCT_CATALOG } from './productCatalog';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 const QUOTE_STATUS_OPTIONS = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
@@ -19,6 +18,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [openActionsMenuId, setOpenActionsMenuId] = useState(null);
+  const [productCatalog, setProductCatalog] = useState([]);
   const actionsMenuRef = useRef(null);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
@@ -27,6 +27,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const canViewGlobalHistory = canAccessPanel(access, 'historialGlobal');
   const canViewHistory = canAccessPanel(access, 'historialIndividual');
   const canMutateQuotes = canViewHistory || canViewGlobalHistory;
+  const availableProducts = Array.isArray(productCatalog) ? productCatalog : [];
 
   // Pagination
   const quotesPerPage = 10;
@@ -69,6 +70,22 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     };
     fetchQuotes();
   }, [token, canViewGlobalHistory]);
+
+  useEffect(() => {
+    const fetchProductCatalog = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/product-catalog`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setProductCatalog(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('No se pudo cargar catálogo de productos para edición:', err);
+      }
+    };
+    fetchProductCatalog();
+  }, [token]);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
@@ -229,8 +246,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     ));
   };
 
-  const createDefaultEditRow = (sku = PRODUCT_CATALOG[0]?.sku || '', ventaType = 'sf') => {
-    const product = PRODUCT_CATALOG.find((item) => item.sku === sku) || PRODUCT_CATALOG[0];
+  const createDefaultEditRow = (sku = availableProducts[0]?.sku || '', ventaType = 'sf') => {
+    const product = availableProducts.find((item) => item.sku === sku) || availableProducts[0];
     const safeQty = 1;
     const safeUnit = Number(
       ventaType === 'cf'
@@ -268,7 +285,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       const rows = Array.isArray(prev.line_items) ? [...prev.line_items] : [];
       const current = rows[index];
       if (!current) return prev;
-      const product = PRODUCT_CATALOG.find((item) => item.sku === skuValue);
+      const product = availableProducts.find((item) => item.sku === skuValue);
       if (!product) return prev;
       const qty = Number.parseInt(current.qty, 10);
       const safeQty = Number.isInteger(qty) && qty > 0 ? qty : 1;
@@ -351,7 +368,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     setEditingQuote((prev) => {
       if (!prev) return prev;
       const rows = Array.isArray(prev.line_items) ? [...prev.line_items] : [];
-      rows.push(createDefaultEditRow(PRODUCT_CATALOG[0]?.sku, prev.venta_type || 'sf'));
+      rows.push(createDefaultEditRow(availableProducts[0]?.sku, prev.venta_type || 'sf'));
       const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
       return {
         ...prev,
@@ -401,7 +418,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       .filter((row) => row && typeof row === 'object')
       .map((row) => {
         const sku = String(row.sku || '').toUpperCase();
-        const product = PRODUCT_CATALOG.find((item) => item.sku === sku);
+        const product = availableProducts.find((item) => item.sku === sku);
         const qty = Number.parseInt(row.qty, 10);
         const safeQty = Number.isInteger(qty) && qty > 0 ? qty : 1;
         const fallbackUnit = Number(
@@ -425,7 +442,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
 
     const finalRows = normalizedRows.length > 0
       ? normalizedRows
-      : [createDefaultEditRow(PRODUCT_CATALOG[0]?.sku, draft.venta_type || 'sf')];
+      : [createDefaultEditRow(availableProducts[0]?.sku, draft.venta_type || 'sf')];
     const { subtotal, total } = recalcEditTotals(finalRows, draft.discount_percent);
     setEditingQuote({
       ...draft,
@@ -450,7 +467,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         if (!prev) return prev;
         const nextType = value || 'sf';
         const nextRows = (Array.isArray(prev.line_items) ? prev.line_items : []).map((row) => {
-          const product = PRODUCT_CATALOG.find((item) => item.sku === row.sku);
+          const product = availableProducts.find((item) => item.sku === row.sku);
           const fallbackUnit = Number(
             nextType === 'cf'
               ? (product?.cf ?? product?.sf ?? 0)
@@ -480,6 +497,10 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
 
   const submitEdit = async () => {
     if (!editingQuote) return;
+    if (!Array.isArray(productCatalog) || productCatalog.length === 0) {
+      alert('Aún no se cargó el catálogo de productos. Intenta nuevamente en unos segundos.');
+      return;
+    }
     if (!editingQuote.customer_name.trim() || !editingQuote.customer_phone.trim() || !editingQuote.store_location.trim()) {
       alert('Completa cliente, teléfono y almacén para guardar los cambios.');
       return;
@@ -1087,7 +1108,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                               value={row.sku || ''}
                               onChange={(e) => updateEditRowSku(index, e.target.value)}
                             >
-                              {PRODUCT_CATALOG.map((item) => (
+                              {productCatalog.map((item) => (
                                 <option key={item.sku} value={item.sku}>
                                   {item.name}
                                 </option>

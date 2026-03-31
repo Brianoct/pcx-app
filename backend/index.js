@@ -583,41 +583,191 @@ const loadQcSettingsMap = async () => {
   return map;
 };
 
-const PRODUCT_CATALOG = [
-  { sku: 'T6195R', name: 'Tablero 61x95 Rojo', sf: 330 },
-  { sku: 'T6195N', name: 'Tablero 61x95 Negro', sf: 330 },
-  { sku: 'T6195AM', name: 'Tablero 61x95 Amarillo', sf: 330 },
-  { sku: 'T6195AP', name: 'Tablero 61x95 Azul Petroleo', sf: 330 },
-  { sku: 'T6195PL', name: 'Tablero 61x95 Plomo', sf: 330 },
-  { sku: 'T9495R', name: 'Tablero 94x95 Rojo', sf: 450 },
-  { sku: 'T9495N', name: 'Tablero 94x95 Negro', sf: 450 },
-  { sku: 'T9495AM', name: 'Tablero 94x95 Amarillo', sf: 450 },
-  { sku: 'T9495AP', name: 'Tablero 94x95 Azul Petroleo', sf: 450 },
-  { sku: 'T9495PL', name: 'Tablero 94x95 Plomo', sf: 450 },
-  { sku: 'T1099R', name: 'Tablero 10x99 Rojo', sf: 105 },
-  { sku: 'T1099N', name: 'Tablero 10x99 Negro', sf: 105 },
-  { sku: 'T1099AP', name: 'Tablero 10x99 Azul Petroleo', sf: 105 },
-  { sku: 'R40N', name: 'Repisa Grande Negro', sf: 85 },
-  { sku: 'R25N', name: 'Repisa Pequeña Negro', sf: 40 },
-  { sku: 'D40N', name: 'Desarmador Grande Negro', sf: 70 },
-  { sku: 'D22N', name: 'Desarmador Pequeño Negro', sf: 45 },
-  { sku: 'L40N', name: 'Llave Grande Negro', sf: 80 },
-  { sku: 'L22N', name: 'Llave Pequeño Negro', sf: 50 },
-  { sku: 'C15N', name: 'Caja Negro', sf: 48 },
-  { sku: 'M08N', name: 'Martillo Negro', sf: 17 },
-  { sku: 'A15N', name: 'Amoladora Negro', sf: 30 },
-  { sku: 'RR15N', name: 'Repisa/Rollo Negro', sf: 90 },
-  { sku: 'G05C', name: 'Gancho 5cm Cromo', sf: 65 },
-  { sku: 'G10C', name: 'Gancho 10cm Cromo', sf: 84 }
+const DEFAULT_PRODUCT_CATALOG = [
+  { sku: 'T6195R', name: 'Tablero 61x95 Rojo', sf: 330, cf: 383 },
+  { sku: 'T6195N', name: 'Tablero 61x95 Negro', sf: 330, cf: 383 },
+  { sku: 'T6195AM', name: 'Tablero 61x95 Amarillo', sf: 330, cf: 383 },
+  { sku: 'T6195AP', name: 'Tablero 61x95 Azul Petroleo', sf: 330, cf: 383 },
+  { sku: 'T6195PL', name: 'Tablero 61x95 Plomo', sf: 330, cf: 383 },
+  { sku: 'T9495R', name: 'Tablero 94x95 Rojo', sf: 450, cf: 522 },
+  { sku: 'T9495N', name: 'Tablero 94x95 Negro', sf: 450, cf: 522 },
+  { sku: 'T9495AM', name: 'Tablero 94x95 Amarillo', sf: 450, cf: 522 },
+  { sku: 'T9495AP', name: 'Tablero 94x95 Azul Petroleo', sf: 450, cf: 522 },
+  { sku: 'T9495PL', name: 'Tablero 94x95 Plomo', sf: 450, cf: 522 },
+  { sku: 'T1099R', name: 'Tablero 10x99 Rojo', sf: 105, cf: 122 },
+  { sku: 'T1099N', name: 'Tablero 10x99 Negro', sf: 105, cf: 122 },
+  { sku: 'T1099AP', name: 'Tablero 10x99 Azul Petroleo', sf: 105, cf: 122 },
+  { sku: 'R40N', name: 'Repisa Grande Negro', sf: 85, cf: 99 },
+  { sku: 'R25N', name: 'Repisa Pequeña Negro', sf: 40, cf: 47 },
+  { sku: 'D40N', name: 'Desarmador Grande Negro', sf: 70, cf: 82 },
+  { sku: 'D22N', name: 'Desarmador Pequeño Negro', sf: 45, cf: 53 },
+  { sku: 'L40N', name: 'Llave Grande Negro', sf: 80, cf: 93 },
+  { sku: 'L22N', name: 'Llave Pequeño Negro', sf: 50, cf: 58 },
+  { sku: 'C15N', name: 'Caja Negro', sf: 48, cf: 56 },
+  { sku: 'M08N', name: 'Martillo Negro', sf: 17, cf: 20 },
+  { sku: 'A15N', name: 'Amoladora Negro', sf: 30, cf: 35 },
+  { sku: 'RR15N', name: 'Repisa/Rollo Negro', sf: 90, cf: 105 },
+  { sku: 'G05C', name: 'Gancho 5cm Cromo', sf: 65, cf: 76 },
+  { sku: 'G10C', name: 'Gancho 10cm Cromo', sf: 84, cf: 98 }
 ];
 
-const PRODUCT_CATALOG_BY_SKU = new Map(
-  PRODUCT_CATALOG.map((item) => [item.sku.toUpperCase(), item.name])
+let PRODUCT_CATALOG = [...DEFAULT_PRODUCT_CATALOG];
+let PRODUCT_CATALOG_BY_SKU = new Map(
+  PRODUCT_CATALOG.map((item) => [String(item.sku || '').toUpperCase(), item.name])
 );
+
+let productCatalogInitPromise = null;
+
+const syncProductCatalogBySkuFromRows = (rows = []) => {
+  const nextCatalog = rows.map((row) => ({
+    sku: String(row.sku || '').toUpperCase(),
+    name: String(row.name || '').trim(),
+    sf: Number(row.sf ?? row.sf_price ?? 0),
+    cf: Number(row.cf ?? row.cf_price ?? 0)
+  }));
+  PRODUCT_CATALOG = nextCatalog;
+  PRODUCT_CATALOG_BY_SKU = new Map(
+    nextCatalog.map((item) => [item.sku, item.name || item.sku])
+  );
+};
+
+const ensureProductCatalogReady = async () => {
+  if (!productCatalogInitPromise) {
+    productCatalogInitPromise = (async () => {
+      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS sf_price NUMERIC(12,2) NOT NULL DEFAULT 0`);
+      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cf_price NUMERIC(12,2) NOT NULL DEFAULT 0`);
+      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
+
+      for (const item of DEFAULT_PRODUCT_CATALOG) {
+        await pool.query(
+          `INSERT INTO products (sku, name, sf_price, cf_price, is_active)
+           VALUES ($1, $2, $3, $4, TRUE)
+           ON CONFLICT (sku) DO UPDATE
+           SET name = CASE
+                 WHEN products.name IS NULL OR BTRIM(products.name) = ''
+                   THEN EXCLUDED.name
+                 ELSE products.name
+               END,
+               sf_price = CASE
+                 WHEN products.sf_price IS NULL OR products.sf_price = 0
+                   THEN EXCLUDED.sf_price
+                 ELSE products.sf_price
+               END,
+               cf_price = CASE
+                 WHEN products.cf_price IS NULL OR products.cf_price = 0
+                   THEN EXCLUDED.cf_price
+                 ELSE products.cf_price
+               END`,
+          [item.sku, item.name, Number(item.sf || 0), Number(item.cf || 0)]
+        );
+      }
+
+      const rowsResult = await pool.query(
+        `SELECT sku, name, sf_price, cf_price
+         FROM products
+         WHERE is_active = TRUE
+         ORDER BY UPPER(name) ASC, UPPER(sku) ASC`
+      );
+      syncProductCatalogBySkuFromRows(rowsResult.rows || []);
+    })();
+  }
+  await productCatalogInitPromise;
+};
+
+const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
+  await ensureProductCatalogReady();
+  const whereClause = includeInactive ? '' : 'WHERE is_active = TRUE';
+  const result = await pool.query(
+    `SELECT sku, name, sf_price, cf_price, is_active
+     FROM products
+     ${whereClause}
+     ORDER BY UPPER(name) ASC, UPPER(sku) ASC`
+  );
+  const rows = (result.rows || []).map((row) => ({
+    sku: String(row.sku || '').toUpperCase(),
+    name: String(row.name || '').trim(),
+    sf: Number(row.sf_price || 0),
+    cf: Number(row.cf_price || 0),
+    is_active: Boolean(row.is_active)
+  }));
+  if (!includeInactive) {
+    syncProductCatalogBySkuFromRows(rows);
+  }
+  return rows;
+};
+
+const normalizeProductSku = (value = '') => String(value || '').trim().toUpperCase();
+const PRODUCT_SKU_REGEX = /^[A-Z0-9_-]{2,30}$/;
+
+const validateProductSku = (value) => {
+  const sku = normalizeProductSku(value);
+  if (!sku) throw createHttpError(400, 'SKU requerido');
+  if (!PRODUCT_SKU_REGEX.test(sku)) {
+    throw createHttpError(400, 'SKU inválido. Usa 2-30 caracteres A-Z, 0-9, guion o guion bajo');
+  }
+  return sku;
+};
+
+const parseProductPrice = (value, label) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw createHttpError(400, `${label} debe ser un número mayor o igual a 0`);
+  }
+  return parsed;
+};
+
+const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
+  const src = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  const hasName = Object.prototype.hasOwnProperty.call(src, 'name');
+  const hasSf = Object.prototype.hasOwnProperty.call(src, 'sf') || Object.prototype.hasOwnProperty.call(src, 'sf_price');
+  const hasCf = Object.prototype.hasOwnProperty.call(src, 'cf') || Object.prototype.hasOwnProperty.call(src, 'cf_price');
+  const hasIsActive = Object.prototype.hasOwnProperty.call(src, 'is_active');
+
+  if (!partial && (!hasName || !hasSf || !hasCf)) {
+    throw createHttpError(400, 'Debes enviar name, sf y cf');
+  }
+  if (partial && !hasName && !hasSf && !hasCf && !hasIsActive) {
+    throw createHttpError(400, 'No se enviaron cambios para actualizar');
+  }
+
+  const normalized = {};
+  if (hasName) {
+    const name = String(src.name || '').trim();
+    if (!name) throw createHttpError(400, 'Nombre de producto requerido');
+    if (name.length > 120) throw createHttpError(400, 'Nombre de producto demasiado largo (máx 120)');
+    normalized.name = name;
+  }
+  if (hasSf) normalized.sf_price = parseProductPrice(src.sf ?? src.sf_price, 'Precio SF');
+  if (hasCf) normalized.cf_price = parseProductPrice(src.cf ?? src.cf_price, 'Precio CF');
+  if (hasIsActive) {
+    if (typeof src.is_active === 'boolean') {
+      normalized.is_active = src.is_active;
+    } else {
+      const activeRaw = normalizeText(String(src.is_active));
+      if (['true', '1', 'si', 'yes', 'activo', 'active'].includes(activeRaw)) {
+        normalized.is_active = true;
+      } else if (['false', '0', 'no', 'inactivo', 'inactive'].includes(activeRaw)) {
+        normalized.is_active = false;
+      } else {
+        throw createHttpError(400, 'is_active debe ser booleano');
+      }
+    }
+  }
+  return normalized;
+};
+
+const loadProductNameMap = async () => {
+  await ensureProductCatalogReady();
+  if (!PRODUCT_CATALOG_BY_SKU || PRODUCT_CATALOG_BY_SKU.size === 0) {
+    await loadProductCatalogRows();
+  }
+  return PRODUCT_CATALOG_BY_SKU;
+};
 
 const ensureQcProductSettingsSeeded = async () => {
   await ensureQcTables();
-  for (const item of PRODUCT_CATALOG) {
+  const catalogRows = await loadProductCatalogRows();
+  for (const item of catalogRows) {
     await pool.query(
       `INSERT INTO quality_control_settings (sku, base_price, commission_rate)
        VALUES ($1, $2, 0)
@@ -627,7 +777,7 @@ const ensureQcProductSettingsSeeded = async () => {
            THEN EXCLUDED.base_price
          ELSE quality_control_settings.base_price
        END`,
-      [item.sku, Number(item.sf || 0)]
+      [item.sku, Number(item.sf || item.sf_price || 0)]
     );
   }
 };
@@ -2934,6 +3084,135 @@ app.get('/api/commission/current/orders', authenticateToken, async (req, res) =>
   }
 });
 
+// ─── PRODUCT CATALOG (Admin CRUD for Cotizador) ─────────────────────────────
+app.get('/api/product-catalog', authenticateToken, async (req, res) => {
+  try {
+    await ensureProductCatalogReady();
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const includeInactive = Boolean(
+      access?.admin &&
+      ['1', 'true', 'si', 'yes'].includes(normalizeText(req.query?.include_inactive || ''))
+    );
+    const rows = await loadProductCatalogRows({ includeInactive });
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar catálogo de productos' });
+  }
+});
+
+app.post('/api/product-catalog', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductCatalogReady();
+    const sku = validateProductSku(req.body?.sku);
+    const normalized = normalizeProductPayload(req.body, { partial: false });
+    const result = await pool.query(
+      `INSERT INTO products (sku, name, sf_price, cf_price, is_active, last_updated)
+       VALUES ($1, $2, $3, $4, TRUE, NOW())
+       RETURNING sku, name, sf_price, cf_price, is_active`,
+      [sku, normalized.name, normalized.sf_price, normalized.cf_price]
+    );
+    await loadProductCatalogRows();
+    res.status(201).json({
+      sku: String(result.rows[0].sku || '').toUpperCase(),
+      name: result.rows[0].name,
+      sf: Number(result.rows[0].sf_price || 0),
+      cf: Number(result.rows[0].cf_price || 0),
+      is_active: Boolean(result.rows[0].is_active)
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err?.code === '23505') return res.status(409).json({ error: 'El SKU ya existe' });
+    res.status(500).json({ error: 'No se pudo crear producto' });
+  }
+});
+
+app.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductCatalogReady();
+    const sku = validateProductSku(req.params.sku);
+    const normalized = normalizeProductPayload(req.body, { partial: true });
+    const sets = [];
+    const values = [];
+    if (Object.prototype.hasOwnProperty.call(normalized, 'name')) {
+      values.push(normalized.name);
+      sets.push(`name = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'sf_price')) {
+      values.push(normalized.sf_price);
+      sets.push(`sf_price = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'cf_price')) {
+      values.push(normalized.cf_price);
+      sets.push(`cf_price = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'is_active')) {
+      values.push(Boolean(normalized.is_active));
+      sets.push(`is_active = $${values.length}`);
+    }
+    values.push(sku);
+    const result = await pool.query(
+      `UPDATE products
+       SET ${sets.join(', ')}, last_updated = NOW()
+       WHERE sku = $${values.length}
+       RETURNING sku, name, sf_price, cf_price, is_active`,
+      values
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+    await loadProductCatalogRows();
+    res.json({
+      sku: String(result.rows[0].sku || '').toUpperCase(),
+      name: result.rows[0].name,
+      sf: Number(result.rows[0].sf_price || 0),
+      cf: Number(result.rows[0].cf_price || 0),
+      is_active: Boolean(result.rows[0].is_active)
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    res.status(500).json({ error: 'No se pudo actualizar producto' });
+  }
+});
+
+app.delete('/api/product-catalog/:sku', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductCatalogReady();
+    const sku = validateProductSku(req.params.sku);
+    const inUseRes = await pool.query(
+      `SELECT 1
+       FROM combo_items
+       WHERE UPPER(sku) = $1
+       LIMIT 1`,
+      [sku]
+    );
+    if (inUseRes.rowCount > 0) {
+      return res.status(409).json({ error: 'No se puede eliminar: producto usado en combos' });
+    }
+    const result = await pool.query(
+      `UPDATE products
+       SET is_active = FALSE, last_updated = NOW()
+       WHERE sku = $1
+       RETURNING sku`,
+      [sku]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+    await loadProductCatalogRows();
+    res.json({ message: 'Producto desactivado', sku });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err?.code === '42P01') return res.status(409).json({ error: 'No se pudo validar combos asociados' });
+    res.status(500).json({ error: 'No se pudo eliminar producto' });
+  }
+});
+
 // ─── INVENTORY ──────────────────────────────────────────────────────────────
 app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
@@ -2943,12 +3222,14 @@ app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almac
   if (inventoryScope.error) return res.status(403).json({ error: inventoryScope.error });
 
   try {
+    await ensureProductCatalogReady();
     if (!inventoryScope.isGlobal) {
       const stockField = inventoryScope.scope.stockField;
       const minField = inventoryScope.scope.minField;
       const result = await pool.query(`
         SELECT sku, name, ${stockField}, ${minField}, last_updated
-        FROM products 
+        FROM products
+        WHERE is_active = TRUE
         ORDER BY sku
       `);
       return res.json(result.rows);
@@ -2958,7 +3239,8 @@ app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almac
       SELECT sku, name, stock_cochabamba, stock_santacruz, stock_lima,
              min_stock_cochabamba, min_stock_santacruz, min_stock_lima,
              last_updated
-      FROM products 
+      FROM products
+      WHERE is_active = TRUE
       ORDER BY sku
     `);
     res.json(result.rows);
@@ -3073,7 +3355,8 @@ app.get('/api/qc/products', authenticateToken, async (req, res) => {
   try {
     await ensureQcProductSettingsSeeded();
     const settingsMap = await loadQcSettingsMap();
-    const rows = PRODUCT_CATALOG.map((item) => {
+    const productCatalog = await loadProductCatalogRows();
+    const rows = productCatalog.map((item) => {
       const settings = settingsMap.get(String(item.sku || '').toUpperCase()) || { base_price: 0, commission_rate: 0 };
       return {
         sku: item.sku,
@@ -3100,9 +3383,6 @@ app.post('/api/qc/checks', authenticateToken, async (req, res) => {
   const sku = String(req.body?.sku || '').toUpperCase().trim();
   const quantity = Number.parseInt(req.body?.quantity, 10);
   const resultValue = normalizeQcResult(req.body?.result);
-  if (!sku || !PRODUCT_CATALOG_BY_SKU.has(sku)) {
-    return res.status(400).json({ error: 'Producto inválido para control de calidad' });
-  }
   if (!Number.isInteger(quantity) || quantity <= 0) {
     return res.status(400).json({ error: 'Cantidad inválida. Debe ser un entero mayor a 0' });
   }
@@ -3112,7 +3392,11 @@ app.post('/api/qc/checks', authenticateToken, async (req, res) => {
 
   try {
     await ensureQcProductSettingsSeeded();
-    const productName = PRODUCT_CATALOG_BY_SKU.get(sku) || sku;
+    const productMap = await loadProductNameMap();
+    if (!sku || !productMap.has(sku)) {
+      return res.status(400).json({ error: 'Producto inválido para control de calidad' });
+    }
+    const productName = productMap.get(sku) || sku;
     const insertRes = await pool.query(
       `INSERT INTO quality_control_records (user_id, sku, product_name, quantity, result)
        VALUES ($1, $2, $3, $4, $5)
@@ -3202,7 +3486,8 @@ app.patch('/api/qc/checks/:id', authenticateToken, async (req, res) => {
       ? normalizeQcResult(req.body?.result)
       : normalizeQcResult(existing.result);
 
-    if (!sku || !PRODUCT_CATALOG_BY_SKU.has(sku)) {
+    const productNameMap = await getProductNameMap();
+    if (!sku || !productNameMap.has(sku)) {
       return res.status(400).json({ error: 'Producto inválido para control de calidad' });
     }
     if (!Number.isInteger(quantity) || quantity <= 0) {
@@ -3212,7 +3497,7 @@ app.patch('/api/qc/checks/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Resultado inválido. Debe ser Aprobado o Rechazado' });
     }
 
-    const productName = PRODUCT_CATALOG_BY_SKU.get(sku) || sku;
+    const productName = productNameMap.get(sku) || sku;
     const updateRes = await pool.query(
       `UPDATE quality_control_records
        SET sku = $1,
@@ -3287,6 +3572,7 @@ app.get('/api/qc/summary', authenticateToken, async (req, res) => {
   try {
     await ensureQcProductSettingsSeeded();
     const settingsMap = await loadQcSettingsMap();
+    const productNameMap = await loadProductNameMap();
     const summaryRes = await pool.query(
       `SELECT r.sku, r.product_name,
               SUM(CASE WHEN r.result = 'passed' THEN r.quantity ELSE 0 END) AS qty_passed,
@@ -3306,7 +3592,7 @@ app.get('/api/qc/summary', authenticateToken, async (req, res) => {
       const commissionRate = Number(settings.commission_rate || 0);
       return {
         sku,
-        product_name: row.product_name || PRODUCT_CATALOG_BY_SKU.get(sku) || sku,
+        product_name: row.product_name || productNameMap.get(sku) || sku,
         qty_passed: qtyPassed,
         qty_rejected: qtyRejected,
         base_price: basePrice,
@@ -3337,6 +3623,7 @@ app.get('/api/microfabrica/dashboard', authenticateToken, async (req, res) => {
   try {
     await ensureQcProductSettingsSeeded();
     const settingsMap = await loadQcSettingsMap();
+    const productCatalog = await loadProductCatalogRows();
     const summaryRes = await pool.query(
       `SELECT UPPER(r.sku) AS sku,
               SUM(CASE WHEN r.result = 'passed' THEN r.quantity ELSE 0 END) AS qty_passed,
@@ -3357,7 +3644,7 @@ app.get('/api/microfabrica/dashboard', authenticateToken, async (req, res) => {
       ])
     );
 
-    const rows = PRODUCT_CATALOG.map((item) => {
+    const rows = productCatalog.map((item) => {
       const sku = String(item.sku || '').toUpperCase();
       const totals = bySku.get(sku) || { qty_passed: 0, qty_rejected: 0 };
       const settings = settingsMap.get(sku) || { base_price: Number(item.sf || 0), commission_rate: 0 };
@@ -3408,7 +3695,8 @@ app.get('/api/qc/commissions', authenticateToken, requireRole(['admin']), async 
   try {
     await ensureQcProductSettingsSeeded();
     const settingsMap = await loadQcSettingsMap();
-    const rows = PRODUCT_CATALOG.map((item) => {
+    const productCatalog = await loadProductCatalogRows();
+    const rows = productCatalog.map((item) => {
       const settings = settingsMap.get(String(item.sku || '').toUpperCase()) || { base_price: 0, commission_rate: 0 };
       return {
         sku: item.sku,
@@ -3432,12 +3720,13 @@ app.patch('/api/qc/commissions', authenticateToken, requireRole(['admin']), asyn
 
   try {
     await ensureQcProductSettingsSeeded();
+    const productNameMap = await loadProductNameMap();
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       for (const row of rows) {
         const sku = String(row?.sku || '').toUpperCase().trim();
-        if (!sku || !PRODUCT_CATALOG_BY_SKU.has(sku)) continue;
+        if (!sku || !productNameMap.has(sku)) continue;
         const rate = Math.max(0, Math.min(100, Number(row?.commission_rate || 0)));
         const basePrice = Math.max(0, Number(row?.base_price || 0));
         await client.query(

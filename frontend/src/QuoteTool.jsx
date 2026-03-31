@@ -2,10 +2,10 @@
 import { useState, useEffect, useRef } from 'react';
 import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
-import { PRODUCT_CATALOG } from './productCatalog';
 
 export default function QuoteTool({ token, user }) {
   const [combos, setCombos] = useState([]);
+  const [products, setProducts] = useState([]);
 
   const [step, setStep] = useState(1);
 
@@ -43,6 +43,21 @@ export default function QuoteTool({ token, user }) {
 
   useEffect(() => {
     if (step === 2) {
+      const fetchCatalog = async () => {
+        try {
+          const res = await fetch(`${API_BASE}/api/product-catalog`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setProducts(Array.isArray(data) ? data : []);
+          } else {
+            console.error('Failed to fetch product catalog:', res.status);
+          }
+        } catch (err) {
+          console.error('Error fetching product catalog:', err);
+        }
+      };
       const fetchCombos = async () => {
         try {
           const res = await fetch(`${API_BASE}/api/combos`, {
@@ -58,6 +73,7 @@ export default function QuoteTool({ token, user }) {
           console.error('Error fetching combos:', err);
         }
       };
+      fetchCatalog();
       fetchCombos();
     }
   }, [step, token, API_BASE]);
@@ -103,7 +119,7 @@ export default function QuoteTool({ token, user }) {
   }, [token, isAlmacenRole, API_BASE]);
 
   const allItems = [
-    ...PRODUCT_CATALOG.map((p) => ({ ...p, displayName: p.name })),
+    ...products.map((p) => ({ ...p, displayName: p.name })),
     ...combos.map(combo => ({
       sku: `COMBO_${combo.id}`,
       displayName: `${combo.name} (Combo)`,
