@@ -127,7 +127,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [menuOpen, desktopMoreOpen]);
 
-  const allNavItems = [
+  const primaryNavItems = [
     canQuote ? { to: '/', label: 'Cotizar' } : null,
     canSeeHistory ? { to: '/history', label: 'Historial' } : null,
     canSeePerformance ? { to: '/performance', label: 'Rendimiento' } : null,
@@ -135,12 +135,15 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     canSeeInventory ? { to: '/inventory', label: 'Inventario' } : null,
     canSeeQualityControl ? { to: '/control-calidad', label: 'Control Calidad' } : null,
     canSeeMicrofabricaPanel ? { to: '/microfabrica', label: 'Microfábrica' } : null,
-    canSeeCalendar ? { to: '/calendario', label: 'Calendario' } : null,
-    { to: '/perfil', label: 'Perfil' },
     canAccessPanel(access, 'marketingCombos') ? { to: '/combos', label: 'Combos' } : null,
     canAccessPanel(access, 'marketingCupones') ? { to: '/cupones', label: 'Cupones' } : null,
     canSeeAdmin ? { to: '/admin', label: 'Admin' } : null
   ].filter(Boolean);
+  const trailingNavItems = [
+    canSeeCalendar ? { to: '/calendario', label: 'Calendario' } : null,
+    { to: '/perfil', label: 'Perfil' }
+  ].filter(Boolean);
+  const allNavItems = [...primaryNavItems, ...trailingNavItems];
 
   const MAX_DESKTOP_VISIBLE = 7;
   const desktopPrimaryItems = allNavItems.slice(0, MAX_DESKTOP_VISIBLE);
