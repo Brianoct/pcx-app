@@ -686,6 +686,29 @@ button, .btn {
   color: var(--text-primary);
 }
 
+.password-input-wrap {
+  position: relative;
+}
+
+.password-input-wrap .login-input {
+  padding-right: 92px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #cbd5e1;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
 .login-submit {
   width: 100%;
   margin-top: 2px;
