@@ -13,6 +13,7 @@ function InventoryPanel({ token, role, access }) {
   const [originalStocks, setOriginalStocks] = useState({});
   const [originalMins, setOriginalMins] = useState({});
   const [saveMessage, setSaveMessage] = useState('');
+  const [globalStoreView, setGlobalStoreView] = useState('all');
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
@@ -20,26 +21,35 @@ function InventoryPanel({ token, role, access }) {
   const effectiveAccess = buildAccessForUser(role, access);
   const canViewGlobalInventory = canAccessPanel(effectiveAccess, 'inventarioGlobal');
   const [userCity, setUserCity] = useState('');
+  const globalStores = [
+    { key: 'cochabamba', field: 'stock_cochabamba', location: 'Cochabamba', minField: 'min_stock_cochabamba', minLabel: 'Min Cbba' },
+    { key: 'santacruz', field: 'stock_santacruz', location: 'Santa Cruz', minField: 'min_stock_santacruz', minLabel: 'Min Scz' },
+    { key: 'lima', field: 'stock_lima', location: 'Lima', minField: 'min_stock_lima', minLabel: 'Min Lima' }
+  ];
   const cityToKey = {
     cochabamba: {
+      key: 'cochabamba',
       location: 'Cochabamba',
       stockField: 'stock_cochabamba',
       minField: 'min_stock_cochabamba',
       minLabel: 'Min Cbba'
     },
     'santa cruz': {
+      key: 'santacruz',
       location: 'Santa Cruz',
       stockField: 'stock_santacruz',
       minField: 'min_stock_santacruz',
       minLabel: 'Min Scz'
     },
     santacruz: {
+      key: 'santacruz',
       location: 'Santa Cruz',
       stockField: 'stock_santacruz',
       minField: 'min_stock_santacruz',
       minLabel: 'Min Scz'
     },
     lima: {
+      key: 'lima',
       location: 'Lima',
       stockField: 'stock_lima',
       minField: 'min_stock_lima',
@@ -49,18 +59,23 @@ function InventoryPanel({ token, role, access }) {
 
   const normalizedCity = String(userCity || '').trim().toLowerCase();
   const individualStore = cityToKey[normalizedCity] || null;
+  const storesForView = canViewGlobalInventory
+    ? (
+      globalStoreView === 'all'
+        ? globalStores
+        : globalStores.filter((store) => store.key === globalStoreView)
+    )
+    : [];
   const visibleStores = canViewGlobalInventory
-    ? [
-        { field: 'stock_cochabamba', location: 'Cochabamba', minField: 'min_stock_cochabamba', minLabel: 'Min Cbba' },
-        { field: 'stock_santacruz', location: 'Santa Cruz', minField: 'min_stock_santacruz', minLabel: 'Min Scz' },
-        { field: 'stock_lima', location: 'Lima', minField: 'min_stock_lima', minLabel: 'Min Lima' }
-      ]
+    ? storesForView
     : (individualStore ? [{
+      key: individualStore.key,
       field: individualStore.stockField,
       location: individualStore.location,
       minField: individualStore.minField,
       minLabel: individualStore.minLabel
     }] : []);
+  const editableStores = canViewGlobalInventory ? globalStores : visibleStores;
 
   useEffect(() => {
     const fetchInventory = async () => {
@@ -136,7 +151,7 @@ function InventoryPanel({ token, role, access }) {
     const changedProducts = products.filter((product) => {
       const base = originalStocks[product.sku];
       if (!base) return false;
-      return visibleStores.some((store) => Number(product[store.field] ?? 0) !== Number(base[store.field] ?? 0));
+      return editableStores.some((store) => Number(product[store.field] ?? 0) !== Number(base[store.field] ?? 0));
     });
 
     if (changedProducts.length === 0) return;
@@ -145,7 +160,7 @@ function InventoryPanel({ token, role, access }) {
     setSaveMessage('');
     try {
       for (const product of changedProducts) {
-        for (const store of visibleStores) {
+        for (const store of editableStores) {
           const new_stock = product[store.field] ?? 0;
           const base = originalStocks[product.sku];
           if (!base || Number(new_stock) === Number(base[store.field] ?? 0)) continue;
@@ -188,7 +203,7 @@ function InventoryPanel({ token, role, access }) {
   };
 
   const saveMinimums = async () => {
-    const minFields = visibleStores.map((store) => store.minField);
+    const minFields = editableStores.map((store) => store.minField);
 
     const changedMinProducts = products.filter((product) => {
       const base = originalMins[product.sku];
@@ -203,7 +218,7 @@ function InventoryPanel({ token, role, access }) {
     try {
       for (const product of changedMinProducts) {
         const payload = {};
-        visibleStores.forEach((store) => {
+        editableStores.forEach((store) => {
           payload[store.minField] = Number(product[store.minField] ?? 0);
         });
 
@@ -243,7 +258,7 @@ function InventoryPanel({ token, role, access }) {
   const changedSkus = products.reduce((acc, product) => {
     const base = originalStocks[product.sku];
     if (!base) return acc;
-    const changed = visibleStores.some((store) => Number(product[store.field] ?? 0) !== Number(base[store.field] ?? 0));
+    const changed = editableStores.some((store) => Number(product[store.field] ?? 0) !== Number(base[store.field] ?? 0));
     if (changed) acc.push(product.sku);
     return acc;
   }, []);
@@ -252,7 +267,7 @@ function InventoryPanel({ token, role, access }) {
   const changedMinSkus = products.reduce((acc, product) => {
     const base = originalMins[product.sku];
     if (!base) return acc;
-    const changed = visibleStores.map((store) => store.minField)
+    const changed = editableStores.map((store) => store.minField)
       .some((field) => Number(product[field] ?? 0) !== Number(base[field] ?? 0));
     if (changed) acc.push(product.sku);
     return acc;
@@ -297,6 +312,41 @@ function InventoryPanel({ token, role, access }) {
       <p style={{ textAlign: 'center', color: '#94a3b8', marginBottom: '14px' }}>
         Vista: {canViewGlobalInventory ? 'Global' : `Individual (${individualStore?.location || 'Ciudad no configurada'})`}
       </p>
+      {canViewGlobalInventory && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginBottom: '14px' }}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setGlobalStoreView('all')}
+            style={{
+              minHeight: '34px',
+              padding: '6px 12px',
+              background: globalStoreView === 'all' ? '#2563eb' : '#1e293b',
+              color: 'white',
+              border: globalStoreView === 'all' ? '1px solid #60a5fa' : '1px solid #334155'
+            }}
+          >
+            Todas
+          </button>
+          {globalStores.map((store) => (
+            <button
+              key={`filter-${store.key}`}
+              type="button"
+              className="btn"
+              onClick={() => setGlobalStoreView(store.key)}
+              style={{
+                minHeight: '34px',
+                padding: '6px 12px',
+                background: globalStoreView === store.key ? '#2563eb' : '#1e293b',
+                color: 'white',
+                border: globalStoreView === store.key ? '1px solid #60a5fa' : '1px solid #334155'
+              }}
+            >
+              {store.location}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div style={{
         position: 'sticky',
@@ -419,30 +469,32 @@ function InventoryPanel({ token, role, access }) {
                       <span className="mobile-card-label">Producto</span>
                       <span style={{ textAlign: 'right' }}>{product.name}</span>
                     </div>
-                    <div className="mobile-card-row">
-                      <span className="mobile-card-label">{visibleStores[0]?.location || '—'}</span>
-                      <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
-                        <input
-                          type="number"
-                          min="0"
-                          value={product[visibleStores[0]?.field] ?? 0}
-                          onChange={(e) => handleStockChange(product.sku, visibleStores[0]?.field, e.target.value)}
-                          style={{
-                            ...inputStyle,
-                            borderColor: getStockLevel(product, visibleStores[0]?.field, visibleStores[0]?.minField) === 'ok' ? inputStyle.border : '#ef4444',
-                            color: getStockLevel(product, visibleStores[0]?.field, visibleStores[0]?.minField) === 'ok' ? 'white' : '#fecaca'
-                          }}
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          value={product[visibleStores[0]?.minField] ?? 0}
-                          onChange={(e) => handleMinChange(product.sku, visibleStores[0]?.minField, e.target.value)}
-                          style={minInputStyle}
-                          placeholder="Mín"
-                        />
+                    {visibleStores.map((store) => (
+                      <div className="mobile-card-row" key={`${product.sku}-${store.key || store.location}`}>
+                        <span className="mobile-card-label">{store.location}</span>
+                        <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
+                          <input
+                            type="number"
+                            min="0"
+                            value={product[store.field] ?? 0}
+                            onChange={(e) => handleStockChange(product.sku, store.field, e.target.value)}
+                            style={{
+                              ...inputStyle,
+                              borderColor: getStockLevel(product, store.field, store.minField) === 'ok' ? inputStyle.border : '#ef4444',
+                              color: getStockLevel(product, store.field, store.minField) === 'ok' ? 'white' : '#fecaca'
+                            }}
+                          />
+                          <input
+                            type="number"
+                            min="0"
+                            value={product[store.minField] ?? 0}
+                            onChange={(e) => handleMinChange(product.sku, store.minField, e.target.value)}
+                            style={minInputStyle}
+                            placeholder="Mín"
+                          />
+                        </div>
                       </div>
-                    </div>
+                    ))}
                     <div className="mobile-card-row">
                       <span className="mobile-card-label">Actualizado</span>
                       <span>
