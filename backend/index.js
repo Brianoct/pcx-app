@@ -2637,18 +2637,42 @@ app.patch('/api/roles/access-defaults/:role', authenticateToken, requireRole(['a
     return res.status(400).json({ error: 'Rol inválido para configuración por defecto' });
   }
   const panelAccess = sanitizePanelAccess(req.body?.panel_access, matchedRole);
+  const applyToUsers = Boolean(req.body?.apply_to_users);
+  const roleAccentMapFrom = 'ÁÀÄÂÉÈËÊÍÌÏÎÓÒÖÔÚÙÜÛáàäâéèëêíìïîóòöôúùüû';
+  const roleAccentMapTo = 'AAAAEEEEIIIIOOOOUUUUaaaaeeeeiiiioooouuuu';
+  const client = await pool.connect();
   try {
-    await pool.query(
+    await client.query('BEGIN');
+    await client.query(
       `INSERT INTO role_panel_defaults (role, panel_access)
        VALUES ($1, $2::jsonb)
        ON CONFLICT (role)
        DO UPDATE SET panel_access = EXCLUDED.panel_access, updated_at = NOW()`,
       [matchedRole, JSON.stringify(panelAccess)]
     );
-    res.json({ message: 'Configuración del rol guardada', role: matchedRole, panel_access: panelAccess });
+    let updatedUsers = 0;
+    if (applyToUsers) {
+      const updateResult = await client.query(
+        `UPDATE users
+         SET panel_access = $1::jsonb
+         WHERE LOWER(translate(role, $3, $4)) = LOWER(translate($2, $3, $4))`,
+        [JSON.stringify(panelAccess), matchedRole, roleAccentMapFrom, roleAccentMapTo]
+      );
+      updatedUsers = Number(updateResult.rowCount || 0);
+    }
+    await client.query('COMMIT');
+    res.json({
+      message: applyToUsers ? 'Configuración del rol guardada y aplicada a usuarios' : 'Configuración del rol guardada',
+      role: matchedRole,
+      panel_access: panelAccess,
+      updated_users: updatedUsers
+    });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'No se pudo guardar configuración del rol' });
+  } finally {
+    client.release();
   }
 });
 

@@ -1,7 +1,7 @@
 // src/AdminPanel.jsx
 import { useState, useEffect } from 'react';
 import AdminDashboard from './AdminDashboard';
-import { ACCESS_LABELS, buildAccessForUser, ROLE_LABELS, ROLE_OPTIONS } from './roleAccess';
+import { ACCESS_LABELS, buildAccessForUser, ROLE_OPTIONS } from './roleAccess';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
@@ -1387,8 +1387,9 @@ function CommissionConfig({ token }) {
 function RoleConfiguration({ token }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [savingRole, setSavingRole] = useState(null);
-  const [applyingRole, setApplyingRole] = useState(null);
+  const [selectedRole, setSelectedRole] = useState('Ventas');
+  const [saving, setSaving] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [message, setMessage] = useState('');
 
   const loadDefaults = async () => {
@@ -1412,6 +1413,12 @@ function RoleConfiguration({ token }) {
     loadDefaults();
   }, [token]);
 
+  useEffect(() => {
+    if (rows.length > 0 && !rows.some((row) => row.role === selectedRole)) {
+      setSelectedRole(rows[0].role);
+    }
+  }, [rows, selectedRole]);
+
   const toggleRoleAccess = (role, key) => {
     setRows((prev) => prev.map((row) => (
       row.role === role
@@ -1426,10 +1433,11 @@ function RoleConfiguration({ token }) {
     )));
   };
 
-  const saveRole = async (role) => {
+  const saveRole = async (role, options = {}) => {
+    const { applyToUsers = false } = options;
     const row = rows.find((r) => r.role === role);
     if (!row) return;
-    setSavingRole(role);
+    setSaving(true);
     setMessage('');
     try {
       const res = await fetch(`${API_BASE}/api/roles/access-defaults/${encodeURIComponent(role)}`, {
@@ -1438,24 +1446,27 @@ function RoleConfiguration({ token }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ panel_access: row.panel_access })
+        body: JSON.stringify({ panel_access: row.panel_access, apply_to_users: applyToUsers })
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'No se pudo guardar configuración del rol');
       }
-      setMessage(`Configuración guardada para rol ${role}.`);
+      const data = await res.json().catch(() => ({}));
+      const updatedUsers = Number(data?.updated_users || 0);
+      const baseMsg = `Configuración guardada para rol ${role}.`;
+      setMessage(applyToUsers ? `${baseMsg} Aplicada a ${updatedUsers} usuario(s).` : baseMsg);
       await loadDefaults();
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
-      setSavingRole(null);
+      setSaving(false);
     }
   };
 
   const applyRoleDefaultsToUsers = async (role) => {
     if (!window.confirm(`¿Aplicar la configuración por defecto del rol "${role}" a todos los usuarios con ese rol?`)) return;
-    setApplyingRole(role);
+    setApplying(true);
     setMessage('');
     try {
       const res = await fetch(`${API_BASE}/api/roles/access-defaults/${encodeURIComponent(role)}/apply`, {
@@ -1471,7 +1482,7 @@ function RoleConfiguration({ token }) {
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
-      setApplyingRole(null);
+      setApplying(false);
     }
   };
 
@@ -1483,7 +1494,7 @@ function RoleConfiguration({ token }) {
     <div style={{ background: '#1e293b', borderRadius: '12px', padding: '20px' }}>
       <h3 style={{ marginBottom: '12px' }}>Configuración de Roles</h3>
       <p style={{ color: '#94a3b8', marginBottom: '16px' }}>
-        Edita los paneles por defecto por rol. Luego puedes aplicar esa configuración a todos los usuarios del rol.
+        Edita los paneles por rol y guarda con un solo clic. Puedes guardar solo la plantilla o guardar y aplicar a todos los usuarios del rol.
       </p>
 
       {message && (
@@ -1499,44 +1510,80 @@ function RoleConfiguration({ token }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gap: '12px' }}>
-        {rows.map((row) => (
-          <div key={row.role} style={{ border: '1px solid #334155', borderRadius: '10px', padding: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
-              <strong>{row.role}</strong>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => saveRole(row.role)}
-                  disabled={savingRole === row.role}
-                  style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#3b82f6', color: 'white', cursor: 'pointer' }}
-                >
-                  {savingRole === row.role ? 'Guardando...' : 'Guardar rol'}
-                </button>
-                <button
-                  onClick={() => applyRoleDefaultsToUsers(row.role)}
-                  disabled={applyingRole === row.role}
-                  style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#10b981', color: 'white', cursor: 'pointer' }}
-                >
-                  {applyingRole === row.role ? 'Aplicando...' : 'Aplicar a usuarios'}
-                </button>
-              </div>
+      {rows.length > 0 && (
+        <div style={{ border: '1px solid #334155', borderRadius: '10px', padding: '14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <strong>Rol</strong>
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+                style={{
+                  minWidth: '220px',
+                  minHeight: '40px',
+                  padding: '8px 10px',
+                  borderRadius: '8px',
+                  border: '1px solid #334155',
+                  background: '#0f172a',
+                  color: '#e2e8f0'
+                }}
+              >
+                {rows.map((row) => (
+                  <option key={row.role} value={row.role}>{row.role}</option>
+                ))}
+              </select>
             </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => saveRole(selectedRole)}
+                disabled={saving || applying}
+                style={{ padding: '9px 14px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: saving || applying ? 'not-allowed' : 'pointer', fontWeight: 700 }}
+              >
+                {saving ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+              <button
+                onClick={() => saveRole(selectedRole, { applyToUsers: true })}
+                disabled={saving || applying}
+                style={{ padding: '9px 14px', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', cursor: saving || applying ? 'not-allowed' : 'pointer', fontWeight: 700 }}
+              >
+                {saving ? 'Guardando...' : 'Guardar y aplicar'}
+              </button>
+            </div>
+          </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
-              {ACCESS_LABELS.map((field) => (
-                <label key={`${row.role}-${field.key}`} style={{ display: 'flex', gap: '8px', alignItems: 'center', color: '#cbd5e1' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
+            {ACCESS_LABELS.map((field) => {
+              const activeRow = rows.find((row) => row.role === selectedRole);
+              return (
+                <label
+                  key={`${selectedRole}-${field.key}`}
+                  style={{
+                    display: 'flex',
+                    gap: '8px',
+                    alignItems: 'center',
+                    color: '#cbd5e1',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    padding: '8px 10px',
+                    background: 'rgba(15,23,42,0.7)'
+                  }}
+                >
                   <input
                     type="checkbox"
-                    checked={Boolean(row.panel_access?.[field.key])}
-                    onChange={() => toggleRoleAccess(row.role, field.key)}
+                    checked={Boolean(activeRow?.panel_access?.[field.key])}
+                    onChange={() => toggleRoleAccess(selectedRole, field.key)}
                   />
                   {field.label}
                 </label>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
+
+          <div style={{ marginTop: '10px', color: '#94a3b8', fontSize: '0.9rem' }}>
+            Consejo: usa <strong>Guardar y aplicar</strong> para que el cambio se refleje inmediatamente en todos los usuarios existentes del rol.
+          </div>
+        </div>
+      )}
     </div>
   );
 }
