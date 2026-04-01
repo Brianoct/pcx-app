@@ -2383,7 +2383,17 @@ app.get('/api/combos', authenticateToken, async (req, res) => {
 app.post('/api/combos', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
   const { name, sf, cf, products } = req.body;
 
-  if (!name || !sf || !cf || !Array.isArray(products) || products.length === 0) {
+  const sfNumber = Number(sf);
+  const cfNumber = Number(cf);
+  if (
+    !String(name || '').trim() ||
+    !Array.isArray(products) ||
+    products.length === 0 ||
+    !Number.isFinite(sfNumber) ||
+    !Number.isFinite(cfNumber) ||
+    sfNumber < 0 ||
+    cfNumber < 0
+  ) {
     return res.status(400).json({ error: 'Faltan campos requeridos o productos vacíos' });
   }
 
@@ -2393,7 +2403,7 @@ app.post('/api/combos', authenticateToken, requireRole(['Marketing Lider', 'Admi
 
     const comboRes = await client.query(
       'INSERT INTO combos (name, sf_price, cf_price, created_by) VALUES ($1, $2, $3, $4) RETURNING id',
-      [name, sf, cf, req.user.id]
+      [String(name).trim(), sfNumber, cfNumber, req.user.id]
     );
     const comboId = comboRes.rows[0].id;
 
