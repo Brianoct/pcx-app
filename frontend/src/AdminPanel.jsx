@@ -122,10 +122,12 @@ function UserManagement({ token }) {
     setEditModal({
       userId: user.id,
       email: user.email,
+      originalRole: user.role,
       role: user.role,
       city: user.city || '',
       phone: user.phone || '',
-      panel_access: buildAccessForUser(user.role, user.panel_access)
+      panel_access: buildAccessForUser(user.role, user.panel_access),
+      showPanelOverride: false
     });
   };
 
@@ -138,15 +140,21 @@ function UserManagement({ token }) {
     }
 
     try {
+      const roleChanged = String(editModal.role || '') !== String(editModal.originalRole || '');
+      const shouldSendPanelAccess = Boolean(editModal.showPanelOverride) || roleChanged;
+      const payload = {
+        role: editModal.role,
+        city: editModal.city,
+        phone: editModal.phone
+      };
+      if (shouldSendPanelAccess) {
+        payload.panel_access = editModal.panel_access;
+      }
+
       const res = await fetch(`${API_BASE}/api/users/${editModal.userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
-          role: editModal.role,
-          city: editModal.city,
-          phone: editModal.phone,
-          panel_access: editModal.panel_access
-        })
+        body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error('No se pudo actualizar usuario');
       alert('Usuario actualizado con éxito');
@@ -209,6 +217,14 @@ function UserManagement({ token }) {
         [field]: !(prev.panel_access || buildAccessForUser(prev.role))[field]
       }
     }));
+  };
+
+  const toggleEditPanelOverride = () => {
+    setEditModal((prev) => (
+      prev
+        ? { ...prev, showPanelOverride: !prev.showPanelOverride }
+        : prev
+    ));
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px' }}>Cargando usuarios...</div>;
@@ -380,22 +396,30 @@ function UserManagement({ token }) {
           inset: 0,
           background: 'rgba(0,0,0,0.75)',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'center',
-          zIndex: 1000
+          zIndex: 1000,
+          overflowY: 'auto',
+          padding: '22px 10px'
         }}>
           <div style={{
             background: '#1e293b',
-            padding: '32px',
             borderRadius: '12px',
             width: '90%',
-            maxWidth: '500px',
-            color: '#f1f5f9'
+            maxWidth: '820px',
+            color: '#f1f5f9',
+            border: '1px solid rgba(71, 85, 105, 0.6)',
+            maxHeight: 'calc(100vh - 44px)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
           }}>
-            <h3 style={{ margin: '0 0 24px', color: '#e11d48' }}>Editar Usuario</h3>
+            <div style={{ padding: '18px 20px 12px', borderBottom: '1px solid rgba(71, 85, 105, 0.45)' }}>
+              <h3 style={{ margin: 0, color: '#e11d48' }}>Editar Usuario</h3>
+            </div>
 
-            <form onSubmit={handleEditSubmit}>
-              <div style={{ display: 'grid', gap: '16px' }}>
+            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+              <div style={{ display: 'grid', gap: '14px', padding: '16px 20px', overflowY: 'auto', minHeight: 0 }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Email (no editable)</label>
                   <input
@@ -442,46 +466,76 @@ function UserManagement({ token }) {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Acceso por panel</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
-                    {ACCESS_LABELS.map((field) => (
-                      <label
-                        key={field.key}
-                        style={{
-                          display: 'flex',
-                          gap: '9px',
-                          alignItems: 'center',
-                          color: '#e2e8f0',
-                          border: '1px solid #334155',
-                          borderRadius: '10px',
-                          padding: '10px 12px',
-                          background: '#111b2d'
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={Boolean(editModal.panel_access?.[field.key])}
-                          onChange={() => handleEditAccessToggle(field.key)}
-                        />
-                        {field.label}
-                      </label>
-                    ))}
+                  <div style={{ border: '1px solid #334155', borderRadius: '10px', padding: '12px', background: '#111b2d' }}>
+                    <div style={{ color: '#94a3b8', marginBottom: '8px', fontSize: '0.92rem' }}>
+                      El acceso principal se administra en <strong>Configuración de Roles</strong>.
+                      Personaliza aquí solo si este usuario necesita una excepción.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleEditPanelOverride}
+                      style={{
+                        padding: '8px 12px',
+                        background: editModal.showPanelOverride ? '#f59e0b' : '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        marginBottom: editModal.showPanelOverride ? '10px' : 0
+                      }}
+                    >
+                      {editModal.showPanelOverride ? 'Ocultar personalización' : 'Personalizar acceso por panel'}
+                    </button>
+                    {editModal.showPanelOverride && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
+                        {ACCESS_LABELS.map((field) => (
+                          <label
+                            key={field.key}
+                            style={{
+                              display: 'flex',
+                              gap: '9px',
+                              alignItems: 'center',
+                              color: '#e2e8f0',
+                              border: '1px solid #334155',
+                              borderRadius: '10px',
+                              padding: '10px 12px',
+                              background: '#0f172a'
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={Boolean(editModal.panel_access?.[field.key])}
+                              onChange={() => handleEditAccessToggle(field.key)}
+                            />
+                            {field.label}
+                          </label>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '16px', marginTop: '32px', justifyContent: 'center' }}>
+              <div style={{
+                display: 'flex',
+                gap: '10px',
+                padding: '12px 20px 16px',
+                justifyContent: 'flex-end',
+                borderTop: '1px solid rgba(71, 85, 105, 0.45)',
+                background: '#1e293b'
+              }}>
                 <button
                   type="button"
                   onClick={() => setEditModal(null)}
                   style={{
-                    padding: '12px 32px',
+                    padding: '10px 18px',
                     background: '#64748b',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',
                     cursor: 'pointer',
-                    fontSize: '1.1rem'
+                    fontSize: '0.95rem'
                   }}
                 >
                   Cancelar
@@ -489,13 +543,14 @@ function UserManagement({ token }) {
                 <button
                   type="submit"
                   style={{
-                    padding: '12px 32px',
+                    padding: '10px 18px',
                     background: '#10b981',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',
                     cursor: 'pointer',
-                    fontSize: '1.1rem'
+                    fontSize: '0.95rem',
+                    fontWeight: 700
                   }}
                 >
                   Guardar Cambios
