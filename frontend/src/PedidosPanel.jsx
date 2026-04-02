@@ -2,8 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import jsPDF from 'jspdf';
 import logo from './assets/logo.png';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { apiRequest } from './apiClient';
 
 function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [pedidos, setPedidos] = useState([]);
@@ -59,16 +58,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     setLoading(true);
     try {
       const useTeamView = canViewPedidosGlobal;
-      
-      const url = `${API_BASE}/api/quotes${useTeamView ? '?team=true' : ''}`;
-      
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (!res.ok) throw new Error((await res.json()).error || 'No se pudieron cargar los pedidos');
-      
-      const data = await res.json();
+      const data = await apiRequest(`/api/quotes${useTeamView ? '?team=true' : ''}`, { token });
       const filtered = data.filter((q) =>
         q.status === 'Confirmado' ||
         q.status === 'Pagado' ||
@@ -117,19 +107,11 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const handleStatusChange = async (quoteId, newStatus) => {
     setUpdatingId(quoteId);
     try {
-      const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/status`, {
+      await apiRequest(`/api/quotes/${quoteId}/status`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ status: newStatus })
+        token,
+        body: { status: newStatus }
       });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'No se pudo actualizar el estado');
-      }
 
       if (typeof onStatusUpdated === 'function') {
         onStatusUpdated();

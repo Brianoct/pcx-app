@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { apiRequest } from './apiClient';
 
 export default function ProfilePanel({ token, user, onUserUpdated }) {
   const [email, setEmail] = useState(user?.email || '');
@@ -24,16 +23,12 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
         city: city ? String(city).trim() : null,
         phone: phone ? String(phone).trim() : null
       };
-      const res = await fetch(`${API_BASE}/api/me`, {
+      const data = await apiRequest('/api/me', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
+        token,
+        body: payload,
+        retries: 0
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'No se pudo actualizar el perfil');
 
       if (data?.user && typeof onUserUpdated === 'function') {
         onUserUpdated(data.user);
@@ -59,20 +54,16 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
 
     setSavingPassword(true);
     try {
-      const res = await fetch(`${API_BASE}/api/me/password`, {
+      await apiRequest('/api/me/password', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
+        token,
+        body: {
           current_password: currentPassword,
           new_password: newPassword,
           confirm_password: confirmPassword
-        })
+        },
+        retries: 0
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'No se pudo actualizar la contraseña');
 
       setCurrentPassword('');
       setNewPassword('');

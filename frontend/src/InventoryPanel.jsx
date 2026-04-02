@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
 import { sortProductsByCatalogOrder } from './productCatalog';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { apiRequest } from './apiClient';
 
 function InventoryPanel({ token, role, access }) {
   const [products, setProducts] = useState([]);
@@ -80,24 +79,10 @@ function InventoryPanel({ token, role, access }) {
   useEffect(() => {
     const fetchInventory = async () => {
       try {
-        const meRes = await fetch(`${API_BASE}/api/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!meRes.ok) {
-          const meErr = await meRes.json().catch(() => ({}));
-          throw new Error(meErr.error || 'No se pudo cargar sesión');
-        }
-        const me = await meRes.json();
+        const me = await apiRequest('/api/me', { token });
         setUserCity(me.city || '');
 
-        const res = await fetch(`${API_BASE}/api/products`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || 'No se pudo cargar inventario');
-        }
-        const data = await res.json();
+        const data = await apiRequest('/api/products', { token });
         const orderedData = sortProductsByCatalogOrder(data);
         setProducts(orderedData);
         const baseline = {};
@@ -165,22 +150,14 @@ function InventoryPanel({ token, role, access }) {
           const base = originalStocks[product.sku];
           if (!base || Number(new_stock) === Number(base[store.field] ?? 0)) continue;
 
-          const res = await fetch(`${API_BASE}/api/products/${product.sku}/stock`, {
+          await apiRequest(`/api/products/${product.sku}/stock`, {
             method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
+            token,
+            body: {
               store_location: store.location,
               new_stock
-            })
+            }
           });
-
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || `No se pudo actualizar ${product.sku} en ${store.location}`);
-          }
         }
       }
 
@@ -222,19 +199,11 @@ function InventoryPanel({ token, role, access }) {
           payload[store.minField] = Number(product[store.minField] ?? 0);
         });
 
-        const res = await fetch(`${API_BASE}/api/products/${product.sku}/min-stock`, {
+        await apiRequest(`/api/products/${product.sku}/min-stock`, {
           method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(payload)
+          token,
+          body: payload
         });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || `No se pudo actualizar mínimo de ${product.sku}`);
-        }
       }
 
       const minBaseline = {};
