@@ -16,8 +16,8 @@ import ProfilePanel from './ProfilePanel';
 import logo from './assets/PCX.png';
 import './index.css';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { apiRequest } from './apiClient';
+import { useOnlineStatus } from './useOnlineStatus';
 
 // ─── Login Component ────────────────────────────────────────────────────────
 function Login({ onLogin }) {
@@ -30,16 +30,11 @@ function Login({ onLogin }) {
     e.preventDefault();
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/api/login`, {
+      const data = await apiRequest('/api/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: { email, password },
+        retries: 0
       });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'No se pudo iniciar sesión');
-      }
-      const data = await res.json();
       onLogin(data.token, data.user);
     } catch (err) {
       setError(err.message);
@@ -260,6 +255,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
 
 // ─── Main App ────────────────────────────────────────────────────────────────
 function App() {
+  const isOnline = useOnlineStatus();
   const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('user');
@@ -309,11 +305,10 @@ function App() {
     const syncSession = async () => {
       if (!token) return;
       try {
-        const res = await fetch(`${API_BASE}/api/me`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+        const me = await apiRequest('/api/me', {
+          token,
+          timeoutMs: 10000
         });
-        if (!res.ok) return;
-        const me = await res.json();
         localStorage.setItem('user', JSON.stringify(me));
         localStorage.setItem('role', me.role);
         localStorage.setItem('panel_access', JSON.stringify(me.panel_access || null));
@@ -325,7 +320,7 @@ function App() {
       }
     };
     syncSession();
-  }, [token, API_BASE]);
+  }, [token]);
 
   const fetchPersonalCommission = async () => {
     try {
@@ -334,13 +329,10 @@ function App() {
         year: new Date().getFullYear()
       });
 
-      const res = await fetch(`${API_BASE}/api/commission/current?${params.toString()}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const data = await apiRequest(`/api/commission/current?${params.toString()}`, {
+        token,
+        timeoutMs: 10000
       });
-
-      if (!res.ok) throw new Error('No se pudo cargar la comisión');
-
-      const data = await res.json();
       setCurrentCommission(Number(data?.commission || 0));
       setIsTopSeller(Boolean(data?.isTopSeller));
     } catch (err) {
@@ -374,6 +366,11 @@ function App() {
 
   return (
     <Router>
+      {!isOnline && (
+        <div className="network-banner" role="status" aria-live="polite">
+          Sin conexión. Los cambios se guardan localmente cuando es posible.
+        </div>
+      )}
       <NavMenu 
         displayName={displayName}
         handleLogout={handleLogout}

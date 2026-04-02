@@ -1,49 +1,50 @@
 // src/Combos.jsx
 import { useState, useEffect, useCallback } from 'react';
 import { sortProductsByCatalogOrder } from './productCatalog';
+import { apiRequest } from './apiClient';
+import { clearDraftState, useDraftState } from './useDraftState';
 
 function Combos({ token }) {
+  const draftKey = 'draft:combos:create';
+  const [draftLoaded, setDraftLoaded] = useState(false);
   const [products, setProducts] = useState([]);
   const [combos, setCombos] = useState([]);
-  const [comboName, setComboName] = useState('');
-  const [comboItems, setComboItems] = useState([{ sku: '', quantity: 1 }]);
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [discountAmount, setDiscountAmount] = useState(0);
+  const [comboName, setComboName] = useDraftState(`${draftKey}:name`, '');
+  const [comboItems, setComboItems] = useDraftState(`${draftKey}:items`, [{ sku: '', quantity: 1 }]);
+  const [discountPercent, setDiscountPercent] = useDraftState(`${draftKey}:discountPercent`, 0);
+  const [discountAmount, setDiscountAmount] = useDraftState(`${draftKey}:discountAmount`, 0);
   const [comboPriceSf, setComboPriceSf] = useState(0);
   const [comboPriceCf, setComboPriceCf] = useState(0);
   const [basePriceSf, setBasePriceSf] = useState(0);
   const [basePriceCf, setBasePriceCf] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
   const fetchCombos = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/combos`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const data = await apiRequest('/api/combos', {
+        token,
+        timeoutMs: 14000
       });
-      if (!res.ok) throw new Error('No se pudieron cargar combos');
-      const data = await res.json();
       setCombos(data);
     } catch (err) {
       setError(err.message);
     }
-  }, [API_BASE, token]);
+  }, [token]);
 
   const fetchCatalog = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/product-catalog`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const data = await apiRequest('/api/product-catalog', {
+        token,
+        timeoutMs: 14000
       });
-      if (!res.ok) throw new Error('No se pudo cargar catálogo de productos');
-      const data = await res.json();
       const ordered = sortProductsByCatalogOrder(Array.isArray(data) ? data : []);
       setProducts(ordered);
     } catch (err) {
       setError(err.message);
       setProducts([]);
     }
-  }, [API_BASE, token]);
+  }, [token]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -52,6 +53,26 @@ function Combos({ token }) {
     };
     loadData();
   }, [fetchCatalog, fetchCombos]);
+
+  useEffect(() => {
+    if (draftLoaded) return;
+    if (!comboName && (!Array.isArray(comboItems) || comboItems.every((item) => !item?.sku))) {
+      setDraftLoaded(true);
+      return;
+    }
+    const shouldRecover = window.confirm('Se encontró un borrador de combo. ¿Quieres recuperarlo?');
+    if (!shouldRecover) {
+      clearDraftState(`${draftKey}:name`);
+      clearDraftState(`${draftKey}:items`);
+      clearDraftState(`${draftKey}:discountPercent`);
+      clearDraftState(`${draftKey}:discountAmount`);
+      setComboName('');
+      setComboItems([{ sku: '', quantity: 1 }]);
+      setDiscountPercent(0);
+      setDiscountAmount(0);
+    }
+    setDraftLoaded(true);
+  }, [draftLoaded, comboName, comboItems, discountPercent, discountAmount]);
 
   const handleAddItem = () => {
     setComboItems([...comboItems, { sku: '', quantity: 1 }]);
@@ -107,26 +128,23 @@ function Combos({ token }) {
     const validItems = comboItems.filter(i => i.sku && i.quantity > 0);
 
     try {
-      const res = await fetch(`${API_BASE}/api/combos`, {
+      await apiRequest('/api/combos', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
+        token,
+        body: {
           name: comboName,
           sf: comboPriceSf,
           cf: comboPriceCf,
           products: validItems.map(i => ({ sku: i.sku, quantity: i.quantity }))
-        })
+        },
+        timeoutMs: 18000
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Error al crear combo');
-      }
-
       alert('Combo creado correctamente');
+      clearDraftState(`${draftKey}:name`);
+      clearDraftState(`${draftKey}:items`);
+      clearDraftState(`${draftKey}:discountPercent`);
+      clearDraftState(`${draftKey}:discountAmount`);
       setComboName('');
       setComboItems([{ sku: '', quantity: 1 }]);
       setDiscountPercent(0);
@@ -145,11 +163,11 @@ function Combos({ token }) {
     if (!window.confirm('¿Eliminar combo permanentemente?')) return;
 
     try {
-      const res = await fetch(`${API_BASE}/api/combos/${id}`, {
+      await apiRequest(`/api/combos/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        token,
+        timeoutMs: 18000
       });
-      if (!res.ok) throw new Error('No se pudo eliminar');
       alert('Combo eliminado');
       fetchCombos();
     } catch (err) {

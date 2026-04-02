@@ -2,10 +2,13 @@
 import { useState, useEffect, useRef } from 'react';
 import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
+import { apiRequest } from './apiClient';
+import { clearDraftState, useDraftState } from './useDraftState';
 
 export default function QuoteTool({ token, user }) {
   const [combos, setCombos] = useState([]);
   const [products, setProducts] = useState([]);
+  const [draft, setDraft] = useDraftState('pcx.quoteDraft.v1', null);
 
   const [step, setStep] = useState(1);
 
@@ -28,10 +31,10 @@ export default function QuoteTool({ token, user }) {
   const [assignedSellerId, setAssignedSellerId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const isSavingRef = useRef(false);
+  const [draftNotice, setDraftNotice] = useState('');
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
   const normalizedRole = String(user?.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   const isAlmacenRole = normalizedRole === 'almacen' || normalizedRole === 'almacen lider';
 
@@ -45,30 +48,16 @@ export default function QuoteTool({ token, user }) {
     if (step === 2) {
       const fetchCatalog = async () => {
         try {
-          const res = await fetch(`${API_BASE}/api/product-catalog`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setProducts(Array.isArray(data) ? data : []);
-          } else {
-            console.error('Failed to fetch product catalog:', res.status);
-          }
+          const data = await apiRequest('/api/product-catalog', { token });
+          setProducts(Array.isArray(data) ? data : []);
         } catch (err) {
           console.error('Error fetching product catalog:', err);
         }
       };
       const fetchCombos = async () => {
         try {
-          const res = await fetch(`${API_BASE}/api/combos`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setCombos(data);
-          } else {
-            console.error('Failed to fetch combos:', res.status);
-          }
+          const data = await apiRequest('/api/combos', { token });
+          setCombos(Array.isArray(data) ? data : []);
         } catch (err) {
           console.error('Error fetching combos:', err);
         }
@@ -76,7 +65,7 @@ export default function QuoteTool({ token, user }) {
       fetchCatalog();
       fetchCombos();
     }
-  }, [step, token, API_BASE]);
+  }, [step, token]);
 
   useEffect(() => {
     if (step === 2 && rows.length === 0) {
@@ -101,11 +90,7 @@ export default function QuoteTool({ token, user }) {
     if (!token || !isAlmacenRole) return;
     const fetchSalesUsers = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/sellers/assignable`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) throw new Error('No se pudo cargar lista de vendedores');
-        const data = await res.json();
+        const data = await apiRequest('/api/sellers/assignable', { token });
         setSalesUsers(Array.isArray(data) ? data : []);
         if (Array.isArray(data) && data.length > 0) {
           setAssignedSellerId((prev) => prev || String(data[0].id));
@@ -116,7 +101,7 @@ export default function QuoteTool({ token, user }) {
       }
     };
     fetchSalesUsers();
-  }, [token, isAlmacenRole, API_BASE]);
+  }, [token, isAlmacenRole]);
 
   const allItems = [
     ...products.map((p) => ({ ...p, displayName: p.name })),
@@ -137,11 +122,10 @@ export default function QuoteTool({ token, user }) {
   const fetchStock = async (sku, store) => {
     if (!sku || !store || sku.startsWith('COMBO_')) return null;
     try {
-      const res = await fetch(`${API_BASE}/api/stock?sku=${encodeURIComponent(sku)}&store_location=${encodeURIComponent(store)}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
+      const data = await apiRequest(
+        `/api/stock?sku=${encodeURIComponent(sku)}&store_location=${encodeURIComponent(store)}`,
+        { token }
+      );
       return data.stock;
     } catch (err) {
       console.error('Error fetching stock:', err);
@@ -222,6 +206,73 @@ export default function QuoteTool({ token, user }) {
     refreshStock();
   }, [almacen, step]);
 
+  useEffect(() => {
+    if (!draft || !draft.values || !draft.hasContent) return;
+    const values = draft.values;
+    if (values.step) setStep(values.step);
+    if (Array.isArray(values.rows)) setRows(values.rows);
+    if (values.ventaType) setVentaType(values.ventaType);
+    if (typeof values.discountPercent === 'number') setDiscountPercent(values.discountPercent);
+    if (typeof values.roundTotal === 'boolean') setRoundTotal(values.roundTotal);
+    if (typeof values.useAlternativeName === 'boolean') setUseAlternativeName(values.useAlternativeName);
+    if (typeof values.alternativeName === 'string') setAlternativeName(values.alternativeName);
+    if (typeof values.alternativePhone === 'string') setAlternativePhone(values.alternativePhone);
+    if (typeof values.customerName === 'string') setCustomerName(values.customerName);
+    if (typeof values.customerPhone === 'string') setCustomerPhone(values.customerPhone);
+    if (typeof values.department === 'string') setDepartment(values.department);
+    if (typeof values.provincia === 'string') setProvincia(values.provincia);
+    if (typeof values.isProvincia === 'boolean') setIsProvincia(values.isProvincia);
+    if (typeof values.almacen === 'string') setAlmacen(values.almacen);
+    if (typeof values.shippingNotes === 'string') setShippingNotes(values.shippingNotes);
+    if (typeof values.assignedSellerId === 'string') setAssignedSellerId(values.assignedSellerId);
+    setDraftNotice('Se recuperó un borrador local.');
+  }, []);
+
+  useEffect(() => {
+    const hasContent =
+      Boolean(customerName || customerPhone || department || provincia || shippingNotes || alternativeName || alternativePhone)
+      || rows.some((r) => r?.sku || Number(r?.qty || 0) > 0);
+
+    setDraft({
+      hasContent,
+      values: {
+        step,
+        rows,
+        ventaType,
+        discountPercent,
+        roundTotal,
+        useAlternativeName,
+        alternativeName,
+        alternativePhone,
+        customerName,
+        customerPhone,
+        department,
+        provincia,
+        isProvincia,
+        almacen,
+        shippingNotes,
+        assignedSellerId
+      }
+    });
+  }, [
+    step,
+    rows,
+    ventaType,
+    discountPercent,
+    roundTotal,
+    useAlternativeName,
+    alternativeName,
+    alternativePhone,
+    customerName,
+    customerPhone,
+    department,
+    provincia,
+    isProvincia,
+    almacen,
+    shippingNotes,
+    assignedSellerId
+  ]);
+
   const canSave =
     customerName.trim() &&
     customerPhone.trim() &&
@@ -254,6 +305,7 @@ export default function QuoteTool({ token, user }) {
     } else {
       setAssignedSellerId('');
     }
+    clearDraftState('pcx.quoteDraft.v1');
   };
 
   const saveAndGeneratePDF = async () => {
@@ -335,27 +387,15 @@ export default function QuoteTool({ token, user }) {
         (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const saveRes = await fetch(`${API_BASE}/api/quotes`, {
+      const savedData = await apiRequest('/api/quotes', {
         method: 'POST',
+        token,
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
           'X-Idempotency-Key': idempotencyKey
         },
-        body: JSON.stringify(payload)
+        body: payload,
+        retries: 0
       });
-
-      if (!saveRes.ok) {
-        const errData = await saveRes.json();
-        throw new Error(errData.error || 'No se pudo guardar la cotización');
-      }
-
-      let savedData = null;
-      try {
-        savedData = await saveRes.json();
-      } catch {
-        savedData = null;
-      }
 
       const quoteNumber = savedData?.id || savedData?.quote?.id || null;
       const dateParts = currentDateTime?.split(', ') || [];
@@ -399,6 +439,18 @@ export default function QuoteTool({ token, user }) {
 
   return (
     <div className="container" style={{ paddingTop: '90px' }}>
+      {draftNotice && (
+        <div style={{
+          marginBottom: '12px',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          border: '1px solid #0ea5e9',
+          background: 'rgba(2, 132, 199, 0.2)',
+          color: '#bae6fd'
+        }}>
+          {draftNotice}
+        </div>
+      )}
       <header style={{ textAlign: 'center', marginBottom: '24px' }}>
         {currentDateTime && (
           <div style={{ color: '#9ca3af', fontSize: '1.1rem', fontWeight: '500' }}>
