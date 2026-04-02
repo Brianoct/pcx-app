@@ -9,7 +9,7 @@ const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
 const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'];
 
 function QuoteHistory({ token, access, onStatusUpdated }) {
-  const { enqueueWrite } = useOutbox();
+  const { enqueueWrite, isWriteIntentError } = useOutbox();
   const [quotes, setQuotes] = useState([]);
   const [filteredQuotes, setFilteredQuotes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -558,38 +558,132 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         total: Number(editingQuote.total || 0),
         status: editingQuote.status || 'Cotizado'
       };
-      await apiRequest(`/api/quotes/${editingQuote.id}`, {
+      const editPath = `/api/quotes/${editingQuote.id}`;
+      const applyLocalEdit = () => {
+        setQuotes((prev) => prev.map((quote) => (
+          quote.id === editingQuote.id
+            ? {
+                ...quote,
+                customer_name: payload.customer_name,
+                customer_phone: payload.customer_phone,
+                vendor: payload.vendor,
+                department: payload.department,
+                provincia: payload.provincia,
+                shipping_notes: payload.shipping_notes,
+                alternative_name: payload.alternative_name,
+                alternative_phone: payload.alternative_phone,
+                store_location: payload.store_location,
+                venta_type: payload.venta_type,
+                discount_percent: payload.discount_percent,
+                line_items: payload.rows,
+                subtotal: payload.subtotal,
+                total: payload.total,
+                status: payload.status
+              }
+            : quote
+        )));
+      };
+
+      const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (isOffline) {
+        enqueueWrite({
+          label: `Editar cotización #${editingQuote.id}`,
+          path: editPath,
+          options: {
+            method: 'PUT',
+            token,
+            body: payload,
+            retries: 0
+          },
+          meta: {
+            quoteId: editingQuote.id,
+            customerName: payload.customer_name
+          }
+        });
+        applyLocalEdit();
+        setEditingQuote(null);
+        if (typeof onStatusUpdated === 'function') onStatusUpdated();
+        alert('Sin conexión: edición guardada en cola y se sincronizará automáticamente.');
+        return;
+      }
+
+      await apiRequest(editPath, {
         method: 'PUT',
         token,
         body: payload
       });
 
-      setQuotes((prev) => prev.map((quote) => (
-        quote.id === editingQuote.id
-          ? {
-              ...quote,
-              customer_name: payload.customer_name,
-              customer_phone: payload.customer_phone,
-              vendor: payload.vendor,
-              department: payload.department,
-              provincia: payload.provincia,
-              shipping_notes: payload.shipping_notes,
-              alternative_name: payload.alternative_name,
-              alternative_phone: payload.alternative_phone,
-              store_location: payload.store_location,
-              venta_type: payload.venta_type,
-              discount_percent: payload.discount_percent,
-              line_items: payload.rows,
-              subtotal: payload.subtotal,
-              total: payload.total,
-              status: payload.status
-            }
-          : quote
-      )));
+      applyLocalEdit();
       setEditingQuote(null);
       if (typeof onStatusUpdated === 'function') onStatusUpdated();
       alert('Cotización actualizada correctamente');
     } catch (err) {
+      if (isWriteIntentError(err)) {
+        const payload = {
+          customer_name: editingQuote.customer_name.trim(),
+          customer_phone: editingQuote.customer_phone.trim(),
+          vendor: editingQuote.vendor ? editingQuote.vendor.trim() : null,
+          department: editingQuote.department ? editingQuote.department.trim() : null,
+          provincia: editingQuote.provincia ? editingQuote.provincia.trim() : null,
+          shipping_notes: editingQuote.shipping_notes ? editingQuote.shipping_notes.trim() : null,
+          alternative_name: editingQuote.alternative_name ? editingQuote.alternative_name.trim() : null,
+          alternative_phone: editingQuote.alternative_phone ? editingQuote.alternative_phone.trim() : null,
+          store_location: editingQuote.store_location,
+          seller_user_id: editingQuote.seller_user_id ? Number(editingQuote.seller_user_id) : null,
+          venta_type: editingQuote.venta_type || 'sf',
+          discount_percent: Number(editingQuote.discount_percent || 0),
+          rows: (Array.isArray(editingQuote.line_items) ? editingQuote.line_items : []).map((row) => ({
+            sku: String(row.sku || '').toUpperCase(),
+            qty: Number.parseInt(row.qty, 10) || 1,
+            unitPrice: Number(row.unitPrice || 0),
+            lineTotal: Number(row.lineTotal || 0),
+            displayName: row.displayName || row.skuDisplay || row.sku
+          })),
+          subtotal: Number(editingQuote.subtotal || 0),
+          total: Number(editingQuote.total || 0),
+          status: editingQuote.status || 'Cotizado'
+        };
+        enqueueWrite({
+          label: `Editar cotización #${editingQuote.id}`,
+          path: `/api/quotes/${editingQuote.id}`,
+          options: {
+            method: 'PUT',
+            token,
+            body: payload,
+            retries: 0
+          },
+          meta: {
+            quoteId: editingQuote.id,
+            customerName: payload.customer_name
+          }
+        });
+        setQuotes((prev) => prev.map((quote) => (
+          quote.id === editingQuote.id
+            ? {
+                ...quote,
+                customer_name: payload.customer_name,
+                customer_phone: payload.customer_phone,
+                vendor: payload.vendor,
+                department: payload.department,
+                provincia: payload.provincia,
+                shipping_notes: payload.shipping_notes,
+                alternative_name: payload.alternative_name,
+                alternative_phone: payload.alternative_phone,
+                store_location: payload.store_location,
+                venta_type: payload.venta_type,
+                discount_percent: payload.discount_percent,
+                line_items: payload.rows,
+                subtotal: payload.subtotal,
+                total: payload.total,
+                status: payload.status
+              }
+            : quote
+        )));
+        setEditingQuote(null);
+        if (typeof onStatusUpdated === 'function') onStatusUpdated();
+        alert('Conexión inestable: edición guardada en cola y se enviará automáticamente.');
+        return;
+      }
       alert('Error: ' + err.message);
       console.error(err);
     } finally {
@@ -603,6 +697,28 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     if (!confirmDelete) return;
     setDeletingId(quote.id);
     try {
+      const deletePath = `/api/quotes/${quote.id}`;
+      const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (isOffline) {
+        enqueueWrite({
+          label: `Eliminar cotización #${quote.id}`,
+          path: deletePath,
+          options: {
+            method: 'DELETE',
+            token,
+            retries: 0
+          },
+          meta: {
+            quoteId: quote.id,
+            customerName: quote.customer_name || ''
+          }
+        });
+        setQuotes((prev) => prev.filter((q) => q.id !== quote.id));
+        if (typeof onStatusUpdated === 'function') onStatusUpdated();
+        alert(`Sin conexión: eliminación #${quote.id} quedó en cola.`);
+        return;
+      }
+
       await apiRequest(`/api/quotes/${quote.id}`, {
         method: 'DELETE',
         token
@@ -611,6 +727,25 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       if (typeof onStatusUpdated === 'function') onStatusUpdated();
       alert(`Cotización #${quote.id} eliminada`);
     } catch (err) {
+      if (isWriteIntentError(err)) {
+        enqueueWrite({
+          label: `Eliminar cotización #${quote.id}`,
+          path: `/api/quotes/${quote.id}`,
+          options: {
+            method: 'DELETE',
+            token,
+            retries: 0
+          },
+          meta: {
+            quoteId: quote.id,
+            customerName: quote.customer_name || ''
+          }
+        });
+        setQuotes((prev) => prev.filter((q) => q.id !== quote.id));
+        if (typeof onStatusUpdated === 'function') onStatusUpdated();
+        alert(`Conexión inestable: eliminación #${quote.id} quedó en cola.`);
+        return;
+      }
       alert('Error: ' + err.message);
       console.error(err);
     } finally {

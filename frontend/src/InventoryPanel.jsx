@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
 import { sortProductsByCatalogOrder } from './productCatalog';
 import { apiRequest } from './apiClient';
+import { useOutbox } from './OutboxProvider';
 
 function InventoryPanel({ token, role, access }) {
   const [products, setProducts] = useState([]);
@@ -16,6 +17,7 @@ function InventoryPanel({ token, role, access }) {
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
+  const { isOnline, enqueueWrite } = useOutbox();
 
   const effectiveAccess = buildAccessForUser(role, access);
   const canViewGlobalInventory = canAccessPanel(effectiveAccess, 'inventarioGlobal');
@@ -150,6 +152,28 @@ function InventoryPanel({ token, role, access }) {
           const base = originalStocks[product.sku];
           if (!base || Number(new_stock) === Number(base[store.field] ?? 0)) continue;
 
+          if (!isOnline) {
+            enqueueWrite({
+              label: `Stock ${product.sku} (${store.location})`,
+              path: `/api/products/${product.sku}/stock`,
+              options: {
+                method: 'PATCH',
+                token,
+                body: {
+                  store_location: store.location,
+                  new_stock
+                },
+                retries: 0
+              },
+              meta: {
+                sku: product.sku,
+                storeLocation: store.location,
+                newStock: Number(new_stock)
+              }
+            });
+            continue;
+          }
+
           await apiRequest(`/api/products/${product.sku}/stock`, {
             method: 'PATCH',
             token,
@@ -170,7 +194,11 @@ function InventoryPanel({ token, role, access }) {
         };
       }
       setOriginalStocks(refreshedBaseline);
-      setSaveMessage(`Se guardaron cambios de ${changedProducts.length} producto(s).`);
+      if (!isOnline) {
+        setSaveMessage(`Sin conexión: se encolaron cambios de inventario para ${changedProducts.length} producto(s).`);
+      } else {
+        setSaveMessage(`Se guardaron cambios de ${changedProducts.length} producto(s).`);
+      }
     } catch (err) {
       console.error(err);
       setSaveMessage(`Error al guardar: ${err.message}`);
@@ -199,6 +227,24 @@ function InventoryPanel({ token, role, access }) {
           payload[store.minField] = Number(product[store.minField] ?? 0);
         });
 
+        if (!isOnline) {
+          enqueueWrite({
+            label: `Mínimos ${product.sku}`,
+            path: `/api/products/${product.sku}/min-stock`,
+            options: {
+              method: 'PATCH',
+              token,
+              body: payload,
+              retries: 0
+            },
+            meta: {
+              sku: product.sku,
+              minFields: payload
+            }
+          });
+          continue;
+        }
+
         await apiRequest(`/api/products/${product.sku}/min-stock`, {
           method: 'PATCH',
           token,
@@ -215,7 +261,11 @@ function InventoryPanel({ token, role, access }) {
         };
       }
       setOriginalMins(minBaseline);
-      setSaveMessage(`Se actualizaron mínimos de ${changedMinProducts.length} producto(s).`);
+      if (!isOnline) {
+        setSaveMessage(`Sin conexión: se encolaron mínimos de ${changedMinProducts.length} producto(s).`);
+      } else {
+        setSaveMessage(`Se actualizaron mínimos de ${changedMinProducts.length} producto(s).`);
+      }
     } catch (err) {
       console.error(err);
       setSaveMessage(`Error al guardar mínimos: ${err.message}`);
