@@ -609,6 +609,32 @@ button, .btn {
   box-shadow: 0 0 14px rgba(251, 191, 36, 0.55);
 }
 
+.network-banner {
+  position: fixed;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  width: min(92vw, 760px);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 10px 20px rgba(2, 6, 23, 0.35);
+}
+
+.network-banner.offline {
+  background: rgba(127, 29, 29, 0.93);
+  border: 1px solid #ef4444;
+  color: #fecaca;
+}
+
+.network-banner.online {
+  background: rgba(6, 78, 59, 0.93);
+  border: 1px solid #10b981;
+  color: #bbf7d0;
+}
+
 .app-logout-btn {
   min-height: 38px;
   padding: 8px 12px;
