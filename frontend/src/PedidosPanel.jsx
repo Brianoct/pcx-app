@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import logo from './assets/logo.png';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
 import { apiRequest } from './apiClient';
+import { useOutbox } from './OutboxProvider';
 
 function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [pedidos, setPedidos] = useState([]);
@@ -22,6 +23,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [currentPage, setCurrentPage] = useState(1);
 
   const panelAccess = useMemo(() => buildAccessForUser(role, access), [role, access]);
+  const { isOnline, enqueueWrite } = useOutbox();
   const canViewPedidosGlobal = canAccessPanel(panelAccess, 'pedidosGlobal');
   const canManageStatus = canAccessPanel(panelAccess, 'pedidosIndividual') || canViewPedidosGlobal;
 
@@ -107,6 +109,31 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const handleStatusChange = async (quoteId, newStatus) => {
     setUpdatingId(quoteId);
     try {
+      if (!isOnline) {
+        const actionId = enqueueWrite({
+          label: `Estado pedido #${quoteId} → ${newStatus}`,
+          path: `/api/quotes/${quoteId}/status`,
+          options: {
+            method: 'PATCH',
+            token,
+            body: { status: newStatus },
+            retries: 0
+          }
+        });
+        setPedidos((prev) => prev.map((q) => (
+          q.id === quoteId
+            ? { ...q, status: newStatus, sync_status: 'queued', sync_action_id: actionId }
+            : q
+        )));
+        setFilteredPedidos((prev) => prev.map((q) => (
+          q.id === quoteId
+            ? { ...q, status: newStatus, sync_status: 'queued', sync_action_id: actionId }
+            : q
+        )));
+        alert('Sin conexión: estado en cola para sincronizar.');
+        return;
+      }
+
       await apiRequest(`/api/quotes/${quoteId}/status`, {
         method: 'PATCH',
         token,

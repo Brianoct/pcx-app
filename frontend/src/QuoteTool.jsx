@@ -4,6 +4,7 @@ import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { apiRequest } from './apiClient';
 import { clearDraftState, useDraftState } from './useDraftState';
+import { useOutbox } from './OutboxProvider';
 
 export default function QuoteTool({ token, user }) {
   const [combos, setCombos] = useState([]);
@@ -32,6 +33,7 @@ export default function QuoteTool({ token, user }) {
   const [isSaving, setIsSaving] = useState(false);
   const isSavingRef = useRef(false);
   const [draftNotice, setDraftNotice] = useState('');
+  const { enqueue } = useOutbox();
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
@@ -387,7 +389,8 @@ export default function QuoteTool({ token, user }) {
         (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const savedData = await apiRequest('/api/quotes', {
+      const requestPath = '/api/quotes';
+      const requestOptions = {
         method: 'POST',
         token,
         headers: {
@@ -395,7 +398,31 @@ export default function QuoteTool({ token, user }) {
         },
         body: payload,
         retries: 0
-      });
+      };
+      let savedData = null;
+      try {
+        savedData = await apiRequest(requestPath, requestOptions);
+      } catch (requestErr) {
+        const isLikelyOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+        if (!isLikelyOffline) throw requestErr;
+        const queueId = enqueue({
+          type: 'quote_create',
+          label: `Cotización ${customerName || 'sin nombre'}`,
+          endpoint: requestPath,
+          method: 'POST',
+          token,
+          headers: requestOptions.headers || {},
+          body: payload,
+          meta: {
+            customerName,
+            customerPhone,
+            storeLocation: almacen
+          }
+        });
+        resetQuoteForm();
+        alert(`Sin conexión. La cotización quedó en cola (pendiente de envío): ${queueId.slice(0, 8)}.`);
+        return;
+      }
 
       const quoteNumber = savedData?.id || savedData?.quote?.id || null;
       const dateParts = currentDateTime?.split(', ') || [];
