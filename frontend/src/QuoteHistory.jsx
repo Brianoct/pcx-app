@@ -3,11 +3,13 @@ import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { canAccessPanel } from './roleAccess';
 import { apiRequest } from './apiClient';
+import { useOutbox } from './OutboxProvider';
 const QUOTE_STATUS_OPTIONS = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
 const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'];
 
 function QuoteHistory({ token, access, onStatusUpdated }) {
+  const { enqueueWrite } = useOutbox();
   const [quotes, setQuotes] = useState([]);
   const [filteredQuotes, setFilteredQuotes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -132,6 +134,32 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   };
 
   const updateStatus = async (quoteId, newStatus) => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const quote = quotes.find((q) => q.id === quoteId);
+      enqueueWrite({
+        label: `Estado cotización #${quoteId} → ${newStatus}`,
+        path: `/api/quotes/${quoteId}/status`,
+        options: {
+          method: 'PATCH',
+          token,
+          body: { status: newStatus },
+          retries: 0
+        },
+        meta: {
+          quoteId,
+          customerName: quote?.customer_name || '',
+          newStatus
+        }
+      });
+      setQuotes((prev) => prev.map((q) => (
+        q.id === quoteId ? { ...q, status: newStatus } : q
+      )));
+      if (typeof onStatusUpdated === 'function') {
+        onStatusUpdated();
+      }
+      alert('Sin conexión: cambio guardado en cola y se enviará automáticamente.');
+      return;
+    }
     try {
       await apiRequest(`/api/quotes/${quoteId}/status`, {
         method: 'PATCH',

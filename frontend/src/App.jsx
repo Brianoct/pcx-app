@@ -18,6 +18,7 @@ import './index.css';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
 import { apiRequest } from './apiClient';
 import { useOnlineStatus } from './useOnlineStatus';
+import { useOutbox } from './OutboxProvider';
 
 // ─── Login Component ────────────────────────────────────────────────────────
 function Login({ onLogin }) {
@@ -256,6 +257,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
 // ─── Main App ────────────────────────────────────────────────────────────────
 function App() {
   const isOnline = useOnlineStatus();
+  const { pendingCount } = useOutbox();
   const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('user');
@@ -369,6 +371,11 @@ function App() {
       {!isOnline && (
         <div className="network-banner" role="status" aria-live="polite">
           Sin conexión. Los cambios se guardan localmente cuando es posible.
+        </div>
+      )}
+      {isOnline && pendingCount > 0 && (
+        <div className="outbox-banner" role="status" aria-live="polite">
+          Sincronizando acciones pendientes: {pendingCount}
         </div>
       )}
       <NavMenu 

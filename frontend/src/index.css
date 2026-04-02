@@ -635,6 +635,23 @@ button, .btn {
   color: #bbf7d0;
 }
 
+.outbox-banner {
+  position: fixed;
+  top: 104px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1190;
+  width: min(92vw, 760px);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 10px 20px rgba(2, 6, 23, 0.35);
+  background: rgba(30, 58, 138, 0.9);
+  border: 1px solid #60a5fa;
+  color: #dbeafe;
+}
+
 .app-logout-btn {
   min-height: 38px;
   padding: 8px 12px;
