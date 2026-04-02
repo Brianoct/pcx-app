@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { apiRequest } from './apiClient';
 
 const REQUEST_TYPE_LABELS = {
   vacation: 'Vacaciones',
@@ -41,19 +40,10 @@ export default function TimeOffCalendar({ token }) {
     setLoading(true);
     setError('');
     try {
-      const [entriesRes, summaryRes] = await Promise.all([
-        fetch(`${API_BASE}/api/time-off/mine`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_BASE}/api/time-off/mine/summary`, { headers: { Authorization: `Bearer ${token}` } })
+      const [entriesData, summaryData] = await Promise.all([
+        apiRequest('/api/time-off/mine', { token }),
+        apiRequest('/api/time-off/mine/summary', { token })
       ]);
-      if (!entriesRes.ok) {
-        const err = await entriesRes.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudieron cargar tus permisos');
-      }
-      if (!summaryRes.ok) {
-        const err = await summaryRes.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudo cargar el resumen de cupos');
-      }
-      const [entriesData, summaryData] = await Promise.all([entriesRes.json(), summaryRes.json()]);
       setEntries(Array.isArray(entriesData) ? entriesData : []);
       setSummary(summaryData || summary);
     } catch (err) {
@@ -73,18 +63,11 @@ export default function TimeOffCalendar({ token }) {
     setSaving(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/api/time-off`, {
+      await apiRequest('/api/time-off', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(form)
+        token,
+        body: form
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudo registrar el permiso');
-      }
       setForm({
         request_type: 'vacation',
         start_date: '',

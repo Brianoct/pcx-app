@@ -1,13 +1,12 @@
 // src/AdminDashboard.jsx
 import { useState, useEffect } from 'react';
+import { apiRequest } from './apiClient';
 
 function AdminDashboard({ token }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
   useEffect(() => {
     fetchStats();
   }, [selectedMonth, selectedYear, token]);
@@ -15,12 +14,7 @@ function AdminDashboard({ token }) {
   const fetchStats = async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `${API_BASE}/api/admin/stats?month=${selectedMonth}&year=${selectedYear}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-      if (!res.ok) throw new Error('Error al cargar estadísticas');
-      const data = await res.json();
+      const data = await apiRequest(`/api/admin/stats?month=${selectedMonth}&year=${selectedYear}`, { token });
       setStats(data);
     } catch (err) {
       console.error(err);

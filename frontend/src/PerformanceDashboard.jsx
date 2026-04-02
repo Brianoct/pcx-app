@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { canAccessPanel, normalizeRole } from './roleAccess';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { apiRequest } from './apiClient';
 
 const isSalesRole = (roleValue = '') => {
   const r = normalizeRole(roleValue);
@@ -58,25 +57,14 @@ function PerformanceDashboard({ token, user, role, access }) {
         });
 
         const [perfRes, commissionRes, settingsRes] = await Promise.all([
-          fetch(`${API_BASE}/api/performance?${params.toString()}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          }),
-          fetch(`${API_BASE}/api/commission/current?${commissionParams.toString()}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          }),
-          fetch(`${API_BASE}/api/commission/settings`, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
+          apiRequest(`/api/performance?${params.toString()}`, { token }),
+          apiRequest(`/api/commission/current?${commissionParams.toString()}`, { token }),
+          apiRequest('/api/commission/settings', { token })
         ]);
 
-        if (!perfRes.ok) {
-          const errData = await perfRes.json().catch(() => ({}));
-          throw new Error(errData.error || 'No se pudo cargar rendimiento');
-        }
-
-        const perfData = await perfRes.json();
-        const commissionData = commissionRes.ok ? await commissionRes.json() : null;
-        const settingsData = settingsRes.ok ? await settingsRes.json() : null;
+        const perfData = perfRes;
+        const commissionData = commissionRes;
+        const settingsData = settingsRes;
         setCommissionInfo(commissionData);
         setCommissionSettings(settingsData);
 

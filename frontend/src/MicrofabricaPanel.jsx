@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { apiRequest } from './apiClient';
 
 const formatMoney = (value) => `${Number(value || 0).toFixed(2)} Bs`;
 
@@ -25,14 +24,7 @@ export default function MicrofabricaPanel({ token }) {
         month: String(month),
         year: String(year)
       });
-      const res = await fetch(`${API_BASE}/api/microfabrica/dashboard?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudo cargar panel de microfábrica');
-      }
-      const data = await res.json();
+      const data = await apiRequest(`/api/microfabrica/dashboard?${params.toString()}`, { token });
       const list = Array.isArray(data?.rows) ? data.rows : [];
       setRows(list);
       setTotals({
