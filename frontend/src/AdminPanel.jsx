@@ -2,8 +2,7 @@
 import { useState, useEffect } from 'react';
 import AdminDashboard from './AdminDashboard';
 import { ACCESS_LABELS, buildAccessForUser, ROLE_OPTIONS } from './roleAccess';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { apiRequest } from './apiClient';
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
   value: role,
   label: role === 'Almacen Lider'
@@ -28,15 +27,15 @@ function UserManagement({ token }) {
   });
   const [editModal, setEditModal] = useState(null); // { userId, email, role, city, phone, panel_access }
 
+  const refreshUsers = async () => {
+    const data = await apiRequest('/api/users', { token });
+    setUsers(Array.isArray(data) ? data : []);
+  };
+
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/users`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) throw new Error('No se pudo cargar usuarios');
-        const data = await res.json();
-        setUsers(data);
+        await refreshUsers();
       } catch (err) {
         setError(err.message);
       } finally {
@@ -55,17 +54,13 @@ function UserManagement({ token }) {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/users`, {
+      await apiRequest('/api/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(newUser)
+        token,
+        body: newUser
       });
-      if (!res.ok) throw new Error('No se pudo agregar usuario');
       alert('Usuario agregado con éxito');
-      const refreshRes = await fetch(`${API_BASE}/api/users`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      setUsers(await refreshRes.json());
+      await refreshUsers();
       setNewUser({
         email: '',
         password: '',
@@ -81,20 +76,16 @@ function UserManagement({ token }) {
 
   const handleUpdateRole = async (userId, newRole) => {
     try {
-      const res = await fetch(`${API_BASE}/api/users/${userId}`, {
+      await apiRequest(`/api/users/${userId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
+        token,
+        body: {
           role: newRole,
           panel_access: buildAccessForUser(newRole)
-        })
+        }
       });
-      if (!res.ok) throw new Error('No se pudo actualizar rol');
       alert('Rol actualizado');
-      const refreshRes = await fetch(`${API_BASE}/api/users`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      setUsers(await refreshRes.json());
+      await refreshUsers();
     } catch (err) {
       alert('Error: ' + err.message);
     }
@@ -103,16 +94,12 @@ function UserManagement({ token }) {
   const handleDeleteUser = async (userId) => {
     if (!window.confirm('¿Eliminar este usuario y TODAS sus cotizaciones asociadas? Esto es irreversible.')) return;
     try {
-      const res = await fetch(`${API_BASE}/api/users/${userId}`, {
+      await apiRequest(`/api/users/${userId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        token
       });
-      if (!res.ok) throw new Error('No se pudo eliminar usuario');
       alert('Usuario eliminado');
-      const refreshRes = await fetch(`${API_BASE}/api/users`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      setUsers(await refreshRes.json());
+      await refreshUsers();
     } catch (err) {
       alert('Error: ' + err.message);
     }
@@ -151,17 +138,13 @@ function UserManagement({ token }) {
         payload.panel_access = editModal.panel_access;
       }
 
-      const res = await fetch(`${API_BASE}/api/users/${editModal.userId}`, {
+      await apiRequest(`/api/users/${editModal.userId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(payload)
+        token,
+        body: payload
       });
-      if (!res.ok) throw new Error('No se pudo actualizar usuario');
       alert('Usuario actualizado con éxito');
-      const refreshRes = await fetch(`${API_BASE}/api/users`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      setUsers(await refreshRes.json());
+      await refreshUsers();
       setEditModal(null);
     } catch (err) {
       alert('Error: ' + err.message);
@@ -582,14 +565,7 @@ function ProductCatalogAdmin({ token }) {
     setLoading(true);
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/api/product-catalog?include_inactive=1`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'No se pudo cargar catálogo de productos');
-      }
-      const data = await res.json();
+      const data = await apiRequest('/api/product-catalog?include_inactive=1', { token });
       setProducts(Array.isArray(data) ? data : []);
     } catch (err) {
       setMessage(`Error: ${err.message}`);
@@ -627,18 +603,11 @@ function ProductCatalogAdmin({ token }) {
         throw new Error('Precios SF/CF inválidos');
       }
 
-      const res = await fetch(`${API_BASE}/api/product-catalog`, {
+      await apiRequest('/api/product-catalog', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
+        token,
+        body: payload
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'No se pudo crear producto');
-      }
       setNewProduct({ sku: '', name: '', sf: '', cf: '' });
       setMessage('Producto agregado.');
       await loadProducts();
@@ -664,18 +633,11 @@ function ProductCatalogAdmin({ token }) {
         throw new Error('Precios SF/CF inválidos');
       }
 
-      const res = await fetch(`${API_BASE}/api/product-catalog/${encodeURIComponent(row.sku)}`, {
+      await apiRequest(`/api/product-catalog/${encodeURIComponent(row.sku)}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
+        token,
+        body: payload
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `No se pudo actualizar ${row.sku}`);
-      }
       setMessage(`Producto ${row.sku} actualizado.`);
       await loadProducts();
     } catch (err) {
@@ -690,14 +652,10 @@ function ProductCatalogAdmin({ token }) {
     setSaving(true);
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/api/product-catalog/${encodeURIComponent(row.sku)}`, {
+      await apiRequest(`/api/product-catalog/${encodeURIComponent(row.sku)}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        token
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `No se pudo desactivar ${row.sku}`);
-      }
       setMessage(`Producto ${row.sku} desactivado.`);
       await loadProducts();
     } catch (err) {
@@ -919,23 +877,11 @@ function TimeOffAdminPanel({ token }) {
     setError('');
     try {
       const [requestsRes, summaryRes] = await Promise.all([
-        fetch(`${API_BASE}/api/timeoff/requests?year=${year}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch(`${API_BASE}/api/timeoff/summary?year=${year}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
+        apiRequest(`/api/timeoff/requests?year=${year}`, { token }),
+        apiRequest(`/api/timeoff/summary?year=${year}`, { token })
       ]);
-      if (!requestsRes.ok) {
-        const err = await requestsRes.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudieron cargar solicitudes');
-      }
-      if (!summaryRes.ok) {
-        const err = await summaryRes.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudo cargar resumen');
-      }
-      setRows(await requestsRes.json());
-      setSummary(await summaryRes.json());
+      setRows(Array.isArray(requestsRes) ? requestsRes : []);
+      setSummary(Array.isArray(summaryRes) ? summaryRes : []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -950,18 +896,11 @@ function TimeOffAdminPanel({ token }) {
   const updateStatus = async (id, status) => {
     setUpdatingId(id);
     try {
-      const res = await fetch(`${API_BASE}/api/timeoff/requests/${id}/status`, {
+      await apiRequest(`/api/timeoff/requests/${id}/status`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ status })
+        token,
+        body: { status }
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudo actualizar estado');
-      }
       await loadData();
     } catch (err) {
       alert(`Error: ${err.message}`);
@@ -1105,14 +1044,8 @@ function QualityControlCommissionConfig({ token }) {
     setLoading(true);
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/api/qc/commissions`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudo cargar configuración de control de calidad');
-      }
-      setRows(await res.json());
+      const data = await apiRequest('/api/qc/commissions', { token });
+      setRows(Array.isArray(data) ? data : []);
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
@@ -1144,18 +1077,11 @@ function QualityControlCommissionConfig({ token }) {
     setSaving(true);
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/api/qc/commissions`, {
+      await apiRequest('/api/qc/commissions', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ rows })
+        token,
+        body: { rows }
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudo guardar configuración');
-      }
       setMessage('Comisiones por producto guardadas.');
       await loadRows();
     } catch (err) {
@@ -1280,14 +1206,7 @@ function CommissionConfig({ token }) {
       setLoading(true);
       setMessage('');
       try {
-        const res = await fetch(`${API_BASE}/api/commission/settings`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || 'No se pudo cargar configuración de comisiones');
-        }
-        const data = await res.json();
+        const data = await apiRequest('/api/commission/settings', { token });
         setSettings({
           ventas_lider_percent: Number(data.ventas_lider_percent ?? 5),
           ventas_top_percent: Number(data.ventas_top_percent ?? 12),
@@ -1315,19 +1234,11 @@ function CommissionConfig({ token }) {
     setSaving(true);
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/api/commission/settings`, {
+      const data = await apiRequest('/api/commission/settings', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ settings })
+        token,
+        body: { settings }
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'No se pudo guardar configuración');
-      }
-      const data = await res.json();
       setSettings({
         ventas_lider_percent: Number(data.settings?.ventas_lider_percent ?? settings.ventas_lider_percent),
         ventas_top_percent: Number(data.settings?.ventas_top_percent ?? settings.ventas_top_percent),
@@ -1451,11 +1362,7 @@ function RoleConfiguration({ token }) {
     setLoading(true);
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/api/roles/access-defaults`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error('No se pudo cargar configuración de roles');
-      const data = await res.json();
+      const data = await apiRequest('/api/roles/access-defaults', { token });
       setRows(data);
     } catch (err) {
       setMessage(`Error: ${err.message}`);
@@ -1495,19 +1402,11 @@ function RoleConfiguration({ token }) {
     setSaving(true);
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/api/roles/access-defaults/${encodeURIComponent(role)}`, {
+      const data = await apiRequest(`/api/roles/access-defaults/${encodeURIComponent(role)}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ panel_access: row.panel_access, apply_to_users: applyToUsers })
+        token,
+        body: { panel_access: row.panel_access, apply_to_users: applyToUsers }
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'No se pudo guardar configuración del rol');
-      }
-      const data = await res.json().catch(() => ({}));
       const updatedUsers = Number(data?.updated_users || 0);
       const baseMsg = `Configuración guardada para rol ${role}.`;
       setMessage(applyToUsers ? `${baseMsg} Aplicada a ${updatedUsers} usuario(s).` : baseMsg);
@@ -1524,15 +1423,10 @@ function RoleConfiguration({ token }) {
     setApplying(true);
     setMessage('');
     try {
-      const res = await fetch(`${API_BASE}/api/roles/access-defaults/${encodeURIComponent(role)}/apply`, {
+      const data = await apiRequest(`/api/roles/access-defaults/${encodeURIComponent(role)}/apply`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        token
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'No se pudo aplicar configuración a usuarios');
-      }
-      const data = await res.json();
       setMessage(`Aplicado a ${data.updated_users ?? 0} usuario(s) del rol ${role}.`);
     } catch (err) {
       setMessage(`Error: ${err.message}`);

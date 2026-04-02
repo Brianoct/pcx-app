@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { apiRequest } from './apiClient';
 
 const RESULT_OPTIONS = [
   { value: 'passed', label: 'Aprobado' },
@@ -40,28 +39,11 @@ export default function QualityControlPanel({ token }) {
     setError('');
     try {
       const params = new URLSearchParams({ month: String(month), year: String(year) });
-      const [productsRes, summaryRes, checksRes] = await Promise.all([
-        fetch(`${API_BASE}/api/qc/products`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_BASE}/api/qc/summary?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_BASE}/api/qc/checks?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } })
+      const [productsData, summaryData, checksData] = await Promise.all([
+        apiRequest('/api/qc/products', { token }),
+        apiRequest(`/api/qc/summary?${params.toString()}`, { token }),
+        apiRequest(`/api/qc/checks?${params.toString()}`, { token })
       ]);
-
-      if (!productsRes.ok) {
-        const err = await productsRes.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudieron cargar productos para control de calidad');
-      }
-      if (!summaryRes.ok) {
-        const err = await summaryRes.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudo cargar resumen mensual de control de calidad');
-      }
-      if (!checksRes.ok) {
-        const err = await checksRes.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudo cargar registros de control de calidad');
-      }
-
-      const productsData = await productsRes.json();
-      const summaryData = await summaryRes.json();
-      const checksData = await checksRes.json();
 
       const sortedProducts = [...(Array.isArray(productsData) ? productsData : [])]
         .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'es', { sensitivity: 'base' }));
@@ -93,27 +75,18 @@ export default function QualityControlPanel({ token }) {
     setSaving(true);
     setError('');
     try {
-      const res = await fetch(
-        isEditing ? `${API_BASE}/api/qc/checks/${editingId}` : `${API_BASE}/api/qc/checks`,
+      await apiRequest(
+        isEditing ? `/api/qc/checks/${editingId}` : '/api/qc/checks',
         {
           method: isEditing ? 'PATCH' : 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
+          token,
+          body: {
             sku: form.sku,
             quantity: Number.parseInt(form.quantity, 10),
             result: form.result
-          })
+          }
         }
       );
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || (isEditing
-          ? 'No se pudo actualizar control de calidad'
-          : 'No se pudo registrar control de calidad'));
-      }
       setForm((prev) => ({
         ...prev,
         quantity: '',
@@ -156,16 +129,10 @@ export default function QualityControlPanel({ token }) {
     setDeletingId(recordId);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/api/qc/checks/${recordId}`, {
+      await apiRequest(`/api/qc/checks/${recordId}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        token
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'No se pudo eliminar el registro de control de calidad');
-      }
       if (recordId === editingId) {
         cancelEdit();
       }

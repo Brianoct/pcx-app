@@ -1,5 +1,6 @@
 // src/Cupones.jsx
 import { useState, useEffect, useCallback } from 'react';
+import { apiRequest } from './apiClient';
 
 function Cupones({ token }) {
   const [coupons, setCoupons] = useState([]);
@@ -8,22 +9,16 @@ function Cupones({ token }) {
   const [validUntil, setValidUntil] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
   const fetchCoupons = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/cupones`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error('No se pudieron cargar cupones');
-      const data = await res.json();
+      const data = await apiRequest('/api/cupones', { token });
       setCoupons(data);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [API_BASE, token]);
+  }, [token]);
 
   useEffect(() => {
     fetchCoupons();
@@ -36,23 +31,15 @@ function Cupones({ token }) {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/cupones`, {
+      await apiRequest('/api/cupones', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
+        token,
+        body: {
           code: code.trim().toUpperCase(),
           discount_percent: discountPercent,
           valid_until: validUntil
-        })
+        }
       });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Error al crear cupón');
-      }
 
       alert('Cupón creado correctamente');
       setCode('');
@@ -68,11 +55,10 @@ function Cupones({ token }) {
     if (!window.confirm('¿Eliminar cupón permanentemente?')) return;
 
     try {
-      const res = await fetch(`${API_BASE}/api/cupones/${id}`, {
+      await apiRequest(`/api/cupones/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        token
       });
-      if (!res.ok) throw new Error('No se pudo eliminar');
       alert('Cupón eliminado');
       fetchCoupons();
     } catch (err) {
