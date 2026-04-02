@@ -1,8 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  cancelOutboxItem,
   enqueueOutboxAction,
   getOutboxItems,
+  processOutboxItemById,
   processOutboxQueue,
+  retryOutboxItem,
   shouldQueueOutboxFromError,
   subscribeOutbox
 } from './outbox';
@@ -70,6 +73,38 @@ export function OutboxProvider({ children }) {
     return enqueue(action);
   }, [enqueue]);
 
+  const cancelItem = useCallback((itemId) => {
+    if (!itemId) return false;
+    const ok = cancelOutboxItem(itemId);
+    if (ok) {
+      refresh();
+    }
+    return ok;
+  }, [refresh]);
+
+  const retryItem = useCallback(async (itemId) => {
+    if (!itemId) return false;
+    const marked = retryOutboxItem(itemId);
+    if (!marked) return false;
+    refresh();
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('token') : null;
+    if (!token) return true;
+    if (processingRef.current) return true;
+
+    processingRef.current = true;
+    setProcessing(true);
+    try {
+      await processOutboxItemById(itemId, token);
+      refresh();
+    } finally {
+      processingRef.current = false;
+      setProcessing(false);
+    }
+    return true;
+  }, [refresh]);
+
   const processOutbox = useCallback(async () => {
     if (processingRef.current) return;
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
@@ -91,7 +126,7 @@ export function OutboxProvider({ children }) {
       processingRef.current = false;
       setProcessing(false);
     }
-  }, [processing, refresh]);
+  }, [refresh]);
 
   useEffect(() => {
     const unsubscribe = subscribeOutbox((nextItems) => {
@@ -136,10 +171,12 @@ export function OutboxProvider({ children }) {
     enqueue,
     enqueueAction,
     enqueueWrite,
+    cancelItem,
+    retryItem,
     refresh,
     processOutbox,
     isWriteIntentError: shouldQueueOutboxFromError
-  }), [items, isOnline, processing, enqueue, enqueueAction, enqueueWrite, refresh, processOutbox]);
+  }), [items, isOnline, processing, enqueue, enqueueAction, enqueueWrite, cancelItem, retryItem, refresh, processOutbox]);
 
   return (
     <OutboxContext.Provider value={value}>

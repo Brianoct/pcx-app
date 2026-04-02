@@ -254,10 +254,118 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   );
 }
 
+function OutboxPanel({
+  items,
+  pendingCount,
+  errorCount,
+  processing,
+  open,
+  onToggle,
+  onRetry,
+  onCancel
+}) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  const sortedItems = [...items]
+    .sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))
+    .slice(0, 8);
+
+  const statusLabel = (item) => {
+    if (item.status === 'syncing') return 'Sincronizando';
+    if (item.status === 'pending') return 'Pendiente';
+    if (item.status === 'error' && item.retryable === false) return 'Error manual';
+    if (item.status === 'error') return 'Error reintento';
+    return 'Pendiente';
+  };
+
+  const formatDate = (ts) => {
+    if (!ts) return '';
+    try {
+      return new Date(ts).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' });
+    } catch {
+      return '';
+    }
+  };
+
+  return (
+    <aside className="outbox-panel" aria-live="polite">
+      <div className="outbox-panel-header">
+        <div>
+          <h4 className="outbox-panel-title">Acciones pendientes</h4>
+          <div className="outbox-panel-meta">
+            {pendingCount} pendientes · {errorCount} errores
+          </div>
+        </div>
+        <button type="button" className="outbox-panel-refresh" onClick={onToggle}>
+          {open ? 'Ocultar' : 'Ver'}
+        </button>
+      </div>
+      {open && (
+        <div className="outbox-panel-list">
+          {sortedItems.map((item) => (
+            <div key={item.id} className="outbox-item">
+              <div className="outbox-item-head">
+                <div className="outbox-item-label">
+                  {item.meta?.label || `${item.request?.method || 'POST'} ${item.request?.path || ''}`}
+                </div>
+                <span className={`outbox-item-status ${item.status === 'syncing' ? 'syncing' : item.status === 'error' ? 'error' : 'pending'}`}>
+                  {statusLabel(item)}
+                </span>
+              </div>
+              <div className="outbox-item-detail">
+                Creado: {formatDate(item.created_at)} · Intentos: {Number(item.attempts || 0)}
+              </div>
+              {item.status === 'error' && item.retryable === false && (
+                <div className="outbox-item-error">
+                  {item.user_message || 'Accion requiere revision manual.'}
+                </div>
+              )}
+              {item.status === 'error' && item.last_error && (
+                <div className="outbox-item-error">Detalle: {item.last_error}</div>
+              )}
+              <div className="outbox-item-actions">
+                <button
+                  type="button"
+                  className="outbox-item-btn retry"
+                  onClick={() => onRetry(item.id)}
+                  disabled={processing || item.status === 'syncing'}
+                >
+                  Reintentar
+                </button>
+                <button
+                  type="button"
+                  className="outbox-item-btn cancel"
+                  onClick={() => onCancel(item.id)}
+                  disabled={processing || item.status === 'syncing'}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ))}
+          {items.length > sortedItems.length && (
+            <div className="outbox-item-detail">
+              +{items.length - sortedItems.length} acciones mas en cola
+            </div>
+          )}
+        </div>
+      )}
+    </aside>
+  );
+}
+
 // ─── Main App ────────────────────────────────────────────────────────────────
 function App() {
   const isOnline = useOnlineStatus();
-  const { pendingCount } = useOutbox();
+  const {
+    items,
+    pendingCount,
+    errorCount,
+    processing,
+    retryItem,
+    cancelItem
+  } = useOutbox();
+  const [outboxPanelOpen, setOutboxPanelOpen] = useState(false);
   const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('user');
@@ -302,6 +410,12 @@ function App() {
       fetchPersonalCommission();
     }
   }, [token, user, role]);
+
+  useEffect(() => {
+    if (errorCount > 0) {
+      setOutboxPanelOpen(true);
+    }
+  }, [errorCount]);
 
   useEffect(() => {
     const syncSession = async () => {
@@ -369,7 +483,7 @@ function App() {
   return (
     <Router>
       {!isOnline && (
-        <div className="network-banner" role="status" aria-live="polite">
+        <div className="network-banner offline" role="status" aria-live="polite">
           Sin conexión. Los cambios se guardan localmente cuando es posible.
         </div>
       )}
@@ -378,6 +492,20 @@ function App() {
           Sincronizando acciones pendientes: {pendingCount}
         </div>
       )}
+      <OutboxPanel
+        items={items}
+        pendingCount={pendingCount}
+        errorCount={errorCount}
+        processing={processing}
+        open={outboxPanelOpen}
+        onToggle={() => setOutboxPanelOpen((prev) => !prev)}
+        onRetry={(itemId) => {
+          retryItem(itemId);
+        }}
+        onCancel={(itemId) => {
+          cancelItem(itemId);
+        }}
+      />
       <NavMenu 
         displayName={displayName}
         handleLogout={handleLogout}

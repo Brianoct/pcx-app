@@ -652,6 +652,218 @@ button, .btn {
   color: #dbeafe;
 }
 
+.outbox-panel {
+  position: fixed;
+  top: 148px;
+  right: 16px;
+  z-index: 1185;
+  width: min(92vw, 380px);
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(71, 85, 105, 0.75);
+  background: rgba(15, 23, 42, 0.96);
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.5);
+  padding: 10px;
+}
+
+.outbox-panel-toggle {
+  width: 100%;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(71, 85, 105, 0.6);
+  background: rgba(15, 23, 42, 0.7);
+  color: #dbeafe;
+  font-weight: 700;
+  padding: 8px 10px;
+}
+
+.outbox-panel-counts {
+  color: #93c5fd;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.outbox-panel-body {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.outbox-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(71, 85, 105, 0.45);
+}
+
+.outbox-panel-title {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #dbeafe;
+}
+
+.outbox-panel-meta {
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.outbox-panel-refresh {
+  min-height: 30px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(96, 165, 250, 0.55);
+  background: rgba(30, 58, 138, 0.35);
+  color: #dbeafe;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.outbox-panel-list {
+  display: grid;
+  gap: 8px;
+}
+
+.outbox-item {
+  border: 1px solid rgba(71, 85, 105, 0.55);
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.72);
+  padding: 8px;
+}
+
+.outbox-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.outbox-item-label {
+  color: #f1f5f9;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.outbox-item-status {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.outbox-item-status.status-pending {
+  color: #93c5fd;
+  background: rgba(30, 64, 175, 0.28);
+  border-color: rgba(147, 197, 253, 0.5);
+}
+
+.outbox-item-status.status-syncing {
+  color: #fef08a;
+  background: rgba(161, 98, 7, 0.32);
+  border-color: rgba(254, 240, 138, 0.45);
+}
+
+.outbox-item-status.status-error {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.38);
+  border-color: rgba(252, 165, 165, 0.45);
+}
+
+.outbox-item-status.pending {
+  color: #93c5fd;
+  background: rgba(30, 64, 175, 0.28);
+  border-color: rgba(147, 197, 253, 0.5);
+}
+
+.outbox-item-status.syncing {
+  color: #fef08a;
+  background: rgba(161, 98, 7, 0.32);
+  border-color: rgba(254, 240, 138, 0.45);
+}
+
+.outbox-item-status.error {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.38);
+  border-color: rgba(252, 165, 165, 0.45);
+}
+
+.outbox-item-detail {
+  color: #94a3b8;
+  font-size: 0.76rem;
+}
+
+.outbox-item-meta {
+  color: #94a3b8;
+  font-size: 0.74rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.outbox-item-conflict {
+  margin-top: 5px;
+  color: #fde68a;
+  background: rgba(120, 53, 15, 0.28);
+  border: 1px solid rgba(253, 224, 71, 0.35);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.outbox-item-error {
+  margin-top: 4px;
+  color: #fca5a5;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.outbox-item-more {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  text-align: center;
+  padding: 6px;
+}
+
+.outbox-item-actions {
+  margin-top: 7px;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.outbox-item-btn {
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.outbox-item-btn.retry {
+  color: #dbeafe;
+  background: rgba(30, 64, 175, 0.28);
+  border-color: rgba(96, 165, 250, 0.55);
+}
+
+.outbox-item-btn.cancel {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.36);
+  border-color: rgba(252, 165, 165, 0.5);
+}
+
 .app-logout-btn {
   min-height: 38px;
   padding: 8px 12px;
@@ -1025,6 +1237,14 @@ nav {
 
   .container {
     padding: 82px 12px 26px;
+  }
+
+  .outbox-panel {
+    top: 144px;
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-height: 52vh;
   }
 
   nav .nav-links:not(.mobile) {
