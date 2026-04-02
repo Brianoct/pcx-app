@@ -2,8 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { canAccessPanel } from './roleAccess';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+import { apiRequest } from './apiClient';
 const QUOTE_STATUS_OPTIONS = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
 const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'];
@@ -40,18 +39,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       setLoading(true);
       try {
         const isTeamAllowed = canViewGlobalHistory;
-        const url = `${API_BASE}/api/quotes${isTeamAllowed ? '?team=true' : ''}`;
-
-        const res = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || 'No se pudo cargar el historial');
-        }
-
-        const data = await res.json();
+        const url = `/api/quotes${isTeamAllowed ? '?team=true' : ''}`;
+        const data = await apiRequest(url, { token });
 
         const fixedQuotes = data.map(quote => ({
           ...quote,
@@ -76,11 +65,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   useEffect(() => {
     const fetchProductCatalog = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/product-catalog`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await apiRequest('/api/product-catalog', { token });
         setProductCatalog(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('No se pudo cargar catálogo de productos para edición:', err);
@@ -92,11 +77,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   useEffect(() => {
     const fetchSalesUsers = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/sellers/assignable`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await apiRequest('/api/sellers/assignable', { token });
         setSalesUsers(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('No se pudo cargar lista de vendedores para edición:', err);
@@ -152,19 +133,11 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
 
   const updateStatus = async (quoteId, newStatus) => {
     try {
-      const res = await fetch(`${API_BASE}/api/quotes/${quoteId}/status`, {
+      await apiRequest(`/api/quotes/${quoteId}/status`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ status: newStatus })
+        token,
+        body: { status: newStatus }
       });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'No se pudo actualizar el estado');
-      }
 
       setQuotes(quotes.map(q =>
         q.id === quoteId ? { ...q, status: newStatus } : q
@@ -557,18 +530,11 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         total: Number(editingQuote.total || 0),
         status: editingQuote.status || 'Cotizado'
       };
-      const res = await fetch(`${API_BASE}/api/quotes/${editingQuote.id}`, {
+      await apiRequest(`/api/quotes/${editingQuote.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
+        token,
+        body: payload
       });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'No se pudo actualizar la cotización');
-      }
 
       setQuotes((prev) => prev.map((quote) => (
         quote.id === editingQuote.id
@@ -609,14 +575,10 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     if (!confirmDelete) return;
     setDeletingId(quote.id);
     try {
-      const res = await fetch(`${API_BASE}/api/quotes/${quote.id}`, {
+      await apiRequest(`/api/quotes/${quote.id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        token
       });
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'No se pudo eliminar la cotización');
-      }
       setQuotes((prev) => prev.filter((q) => q.id !== quote.id));
       if (typeof onStatusUpdated === 'function') onStatusUpdated();
       alert(`Cotización #${quote.id} eliminada`);
