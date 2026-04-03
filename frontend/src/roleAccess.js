@@ -14,6 +14,7 @@ const ACCESS_TEMPLATE = {
   inventario_global: false,
   control_calidad: false,
   microfabrica_panel: false,
+  gastos_panel: false,
   marketing_combos: false,
   marketing_cupones: false,
   admin: false
@@ -39,6 +40,7 @@ const ROLE_DEFAULTS = {
     rendimiento_global: true,
     pedidos_global: true,
     inventario_global: true,
+    gastos_panel: true,
     marketing_combos: true,
     marketing_cupones: true,
     admin: true
@@ -151,6 +153,14 @@ const PANEL_KEY_ALIASES = {
   microfactory: 'microfabrica_panel',
   microfactory_panel: 'microfabrica_panel',
   microfactorypanel: 'microfabrica_panel',
+  gastos_panel: 'gastos_panel',
+  gastospanel: 'gastos_panel',
+  gastos: 'gastos_panel',
+  expenses: 'gastos_panel',
+  expenses_panel: 'gastos_panel',
+  expensespanel: 'gastos_panel',
+  gastosPanel: 'gastos_panel',
+  expensesPanel: 'gastos_panel',
   marketing_combos: 'marketing_combos',
   marketingcombos: 'marketing_combos',
   combos: 'marketing_combos',
@@ -226,6 +236,7 @@ export const ACCESS_LABELS = [
   { key: 'inventario_global', label: 'Inventario global' },
   { key: 'control_calidad', label: 'Control de calidad' },
   { key: 'microfabrica_panel', label: 'Panel Microfábrica' },
+  { key: 'gastos_panel', label: 'Panel Gastos' },
   { key: 'marketing_combos', label: 'Combos (Marketing)' },
   { key: 'marketing_cupones', label: 'Cupones (Marketing)' },
   { key: 'admin', label: 'Panel Admin' }

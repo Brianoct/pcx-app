@@ -12,6 +12,7 @@ import Cupones from './Cupones';
 import TimeOffCalendar from './TimeOffCalendar';
 import QualityControlPanel from './QualityControlPanel';
 import MicrofabricaPanel from './MicrofabricaPanel';
+import ExpensesPanel from './ExpensesPanel';
 import ProfilePanel from './ProfilePanel';
 import logo from './assets/PCX.png';
 import './index.css';
@@ -100,6 +101,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const canSeePerformance = canAccessPanel(access, 'rendimientoGlobal') || canAccessPanel(access, 'rendimientoIndividual');
   const canSeePedidos = canAccessPanel(access, 'pedidosGlobal') || canAccessPanel(access, 'pedidosIndividual');
   const canSeeInventory = canAccessPanel(access, 'inventarioGlobal') || canAccessPanel(access, 'inventarioIndividual');
+  const canSeeExpenses = canAccessPanel(access, 'gastos_panel');
   const canSeeQualityControl = canAccessPanel(access, 'control_calidad');
   const canSeeMicrofabricaPanel = canAccessPanel(access, 'microfabrica_panel');
   const canSeeAdmin = canAccessPanel(access, 'admin');
@@ -129,6 +131,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     canSeePerformance ? { to: '/performance', label: 'Rendimiento' } : null,
     canSeePedidos ? { to: '/pedidos', label: 'Pedidos' } : null,
     canSeeInventory ? { to: '/inventory', label: 'Inventario' } : null,
+    canSeeExpenses ? { to: '/gastos', label: 'Gastos' } : null,
     canSeeQualityControl ? { to: '/control-calidad', label: 'Control Calidad' } : null,
     canSeeMicrofabricaPanel ? { to: '/microfabrica', label: 'Microfábrica' } : null,
     canAccessPanel(access, 'marketingCombos') ? { to: '/combos', label: 'Combos' } : null,
@@ -503,6 +506,8 @@ function App() {
       ? '/pedidos'
       : canAccessPanel(effectiveAccess, 'microfabrica_panel')
         ? '/microfabrica'
+      : canAccessPanel(effectiveAccess, 'gastos_panel')
+        ? '/gastos'
       : canAccessPanel(effectiveAccess, 'marketing_combos')
         ? '/combos'
         : canAccessPanel(effectiveAccess, 'calendario')
@@ -534,6 +539,10 @@ function App() {
     }
     if (String(item?.request?.path || '').includes('/api/me')) {
       window.location.hash = '#/perfil';
+      return;
+    }
+    if (String(item?.request?.path || '').includes('/api/expenses')) {
+      window.location.hash = '#/gastos';
       return;
     }
     window.location.hash = '#/history';
@@ -642,6 +651,14 @@ function App() {
           element={
             canAccessPanel(effectiveAccess, 'pedidos_global') || canAccessPanel(effectiveAccess, 'pedidos_individual')
               ? <PedidosPanel token={token} role={role} access={effectiveAccess} onStatusUpdated={handleQuoteStatusChanged} />
+              : <Navigate to={defaultPath} replace />
+          }
+        />
+        <Route
+          path="/gastos"
+          element={
+            canAccessPanel(effectiveAccess, 'gastos_panel')
+              ? <ExpensesPanel token={token} user={user} role={role} />
               : <Navigate to={defaultPath} replace />
           }
         />
