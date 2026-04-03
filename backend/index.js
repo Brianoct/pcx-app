@@ -50,6 +50,7 @@ const PANEL_KEYS = [
   'inventario_global',
   'control_calidad',
   'microfabrica_panel',
+  'gastos_panel',
   'marketing_combos',
   'marketing_cupones',
   'admin'
@@ -70,6 +71,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     inventario_global: false,
     control_calidad: false,
     microfabrica_panel: false,
+    gastos_panel: false,
     marketing_combos: false,
     marketing_cupones: false,
     admin: false
@@ -208,6 +210,59 @@ const ROLE_KEYS = {
   marketing: 'marketing',
   microfabricaLider: 'microfabrica lider',
   microfabrica: 'microfabrica'
+};
+
+const EXPENSE_RECURRENCE_VALUES = ['weekly', 'monthly', 'quarterly', 'yearly'];
+const EXPENSE_DEPARTMENT_BY_ROLE = {
+  [ROLE_KEYS.admin]: 'Administración',
+  [ROLE_KEYS.ventas]: 'Ventas',
+  [ROLE_KEYS.ventasLider]: 'Ventas',
+  [ROLE_KEYS.almacen]: 'Almacén',
+  [ROLE_KEYS.almacenLider]: 'Almacén',
+  [ROLE_KEYS.marketing]: 'Marketing',
+  [ROLE_KEYS.marketingLider]: 'Marketing',
+  [ROLE_KEYS.microfabrica]: 'Microfábrica',
+  [ROLE_KEYS.microfabricaLider]: 'Microfábrica'
+};
+
+const resolveDepartmentFromRole = (roleValue = '') => {
+  const role = normalizeRole(roleValue);
+  return EXPENSE_DEPARTMENT_BY_ROLE[role] || null;
+};
+
+const normalizeRecurringPeriod = (value = '') => {
+  const normalized = normalizeText(value).replace(/_/g, ' ').replace(/\s+/g, ' ');
+  const map = {
+    weekly: 'weekly',
+    semanal: 'weekly',
+    month: 'monthly',
+    monthly: 'monthly',
+    mensual: 'monthly',
+    quarter: 'quarterly',
+    quarterly: 'quarterly',
+    trimestral: 'quarterly',
+    annual: 'yearly',
+    yearly: 'yearly',
+    anual: 'yearly'
+  };
+  return map[normalized] || null;
+};
+
+const normalizeDepartmentLabel = (value = '') => {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  return trimmed
+    .replace(/\s+/g, ' ')
+    .slice(0, 80);
+};
+
+const parseBooleanLike = (value, fallback = false) => {
+  if (typeof value === 'boolean') return value;
+  if (value === undefined || value === null) return fallback;
+  const normalized = normalizeText(String(value));
+  if (['1', 'true', 'si', 'sí', 'yes'].includes(normalized)) return true;
+  if (['0', 'false', 'no'].includes(normalized)) return false;
+  return fallback;
 };
 
 const COMMISSION_SETTINGS_DEFAULT = {
@@ -578,6 +633,113 @@ const ensureQcTables = async () => {
   );
 };
 
+const ensureExpensesTable = async () => {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS department_expenses (
+       id BIGSERIAL PRIMARY KEY,
+       department TEXT NOT NULL,
+       category TEXT NOT NULL DEFAULT 'Operativo',
+       concept TEXT NOT NULL,
+       vendor TEXT,
+       amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+       currency TEXT NOT NULL DEFAULT 'BOB',
+       is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
+       recurrence_period TEXT,
+       expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
+       notes TEXT,
+       created_by INTEGER NOT NULL REFERENCES users(id),
+       created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+       updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+       CONSTRAINT department_expenses_recurrence_chk CHECK (
+         (is_recurring = FALSE AND recurrence_period IS NULL)
+         OR (is_recurring = TRUE AND recurrence_period IN ('weekly', 'monthly', 'quarterly', 'yearly'))
+       )
+     )`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS department TEXT NOT NULL DEFAULT 'General'`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'Operativo'`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS concept TEXT NOT NULL DEFAULT 'Gasto'`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS vendor TEXT`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS amount NUMERIC(12,2) NOT NULL DEFAULT 0`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'BOB'`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS recurrence_period TEXT`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS expense_date DATE NOT NULL DEFAULT CURRENT_DATE`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS notes TEXT`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_department_expenses_department_date
+     ON department_expenses (department, expense_date DESC, id DESC)`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_department_expenses_recurring
+     ON department_expenses (is_recurring, recurrence_period)`
+  );
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS idx_department_expenses_concept
+     ON department_expenses (LOWER(concept))`
+  );
+};
+
+const mapExpenseRow = (row = {}) => ({
+  id: Number(row.id),
+  department: String(row.department || '').trim(),
+  category: String(row.category || '').trim(),
+  concept: String(row.concept || '').trim(),
+  vendor: row.vendor || null,
+  amount: Number(row.amount || 0),
+  currency: String(row.currency || 'BOB').trim().toUpperCase(),
+  is_recurring: Boolean(row.is_recurring),
+  recurrence_period: row.recurrence_period || null,
+  expense_date: row.expense_date,
+  notes: row.notes || null,
+  created_by: Number(row.created_by || 0),
+  created_by_email: row.created_by_email || null,
+  created_at: row.created_at || null,
+  updated_at: row.updated_at || null
+});
+
 const loadQcSettingsMap = async () => {
   await ensureQcTables();
   const settingsRes = await pool.query(
@@ -873,10 +1035,148 @@ const getPedidosAccessScope = (userContext, access) => {
   return { isGlobal: false, city: scope.canonical };
 };
 
+const getExpensesAccessScope = (userContext, access) => {
+  const hasExpensesPanel = Boolean(access?.gastos_panel);
+  const isAdmin = normalizeRole(userContext?.role || '') === ROLE_KEYS.admin;
+  if (!hasExpensesPanel && !isAdmin) {
+    return { error: 'No tienes permiso para gastos' };
+  }
+  if (isAdmin) {
+    return { isAdmin: true, department: null };
+  }
+  const department = resolveDepartmentFromRole(userContext?.role || '');
+  if (!department) {
+    return { error: 'No se pudo determinar tu departamento para registrar gastos' };
+  }
+  return { isAdmin: false, department };
+};
+
 const createHttpError = (statusCode, message) => {
   const err = new Error(message);
   err.statusCode = statusCode;
   return err;
+};
+
+const normalizeExpenseDateInput = (value, fieldLabel = 'Fecha del gasto') => {
+  if (value === undefined || value === null || String(value).trim() === '') return null;
+  const dateText = String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) {
+    throw createHttpError(400, `${fieldLabel} inválida. Usa formato YYYY-MM-DD`);
+  }
+  return dateText;
+};
+
+const normalizeExpensePayload = (payload = {}, { partial = false } = {}) => {
+  const src = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  const has = (key) => Object.prototype.hasOwnProperty.call(src, key);
+  const normalized = {};
+
+  if (!partial || has('department')) {
+    const value = normalizeDepartmentLabel(src.department || '');
+    if (!partial && !value) {
+      throw createHttpError(400, 'Departamento requerido');
+    }
+    if (has('department')) {
+      if (!value) throw createHttpError(400, 'Departamento inválido');
+      normalized.department = value;
+    }
+  }
+
+  if (!partial || has('concept')) {
+    const concept = String(src.concept || '').trim();
+    if (!concept) throw createHttpError(400, 'Concepto requerido');
+    if (concept.length > 140) throw createHttpError(400, 'Concepto demasiado largo (máx 140)');
+    normalized.concept = concept;
+  }
+
+  if (!partial || has('amount')) {
+    const amount = Number(src.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw createHttpError(400, 'Monto inválido (debe ser mayor a 0)');
+    }
+    normalized.amount = amount;
+  }
+
+  if (!partial || has('category')) {
+    const category = String(src.category || 'Operativo').trim();
+    if (!category) throw createHttpError(400, 'Categoría inválida');
+    if (category.length > 80) throw createHttpError(400, 'Categoría demasiado larga (máx 80)');
+    normalized.category = category;
+  }
+
+  if (!partial || has('currency')) {
+    const currency = String(src.currency || 'BOB').trim().toUpperCase();
+    if (!currency) throw createHttpError(400, 'Moneda inválida');
+    if (currency.length > 10) throw createHttpError(400, 'Moneda inválida');
+    normalized.currency = currency;
+  }
+
+  if (has('vendor')) {
+    const vendor = String(src.vendor || '').trim();
+    if (vendor.length > 140) throw createHttpError(400, 'Proveedor demasiado largo (máx 140)');
+    normalized.vendor = vendor || null;
+  } else if (!partial) {
+    normalized.vendor = null;
+  }
+
+  if (has('notes')) {
+    const notes = String(src.notes || '').trim();
+    if (notes.length > 600) throw createHttpError(400, 'Notas demasiado largas (máx 600)');
+    normalized.notes = notes || null;
+  } else if (!partial) {
+    normalized.notes = null;
+  }
+
+  if (!partial || has('expense_date')) {
+    const dateValue = normalizeExpenseDateInput(src.expense_date, 'Fecha de gasto');
+    if (has('expense_date')) {
+      normalized.expense_date = dateValue;
+    } else if (!partial) {
+      normalized.expense_date = new Date().toISOString().slice(0, 10);
+    }
+  }
+
+  const recurringProvided = has('is_recurring');
+  const recurrenceProvided = has('recurrence_period');
+  if (!partial || recurringProvided || recurrenceProvided) {
+    const isRecurring = recurringProvided
+      ? parseBooleanLike(src.is_recurring, false)
+      : (!partial ? false : undefined);
+    const recurrenceNormalized = recurrenceProvided
+      ? normalizeRecurringPeriod(src.recurrence_period || '')
+      : undefined;
+
+    if (recurringProvided) {
+      normalized.is_recurring = isRecurring;
+    } else if (!partial) {
+      normalized.is_recurring = false;
+    }
+
+    if (recurrenceProvided) {
+      if (String(src.recurrence_period || '').trim() !== '' && !recurrenceNormalized) {
+        throw createHttpError(400, 'Frecuencia recurrente inválida');
+      }
+      normalized.recurrence_period = recurrenceNormalized || null;
+    } else if (!partial) {
+      normalized.recurrence_period = null;
+    }
+
+    const effectiveRecurring = recurringProvided
+      ? isRecurring
+      : (partial ? undefined : false);
+    const effectiveRecurrence = recurrenceProvided
+      ? (recurrenceNormalized || null)
+      : (!partial ? null : undefined);
+
+    if (effectiveRecurring === true && effectiveRecurrence === null) {
+      throw createHttpError(400, 'Debes indicar frecuencia para gastos recurrentes');
+    }
+    if (effectiveRecurring === false && recurrenceProvided && recurrenceNormalized) {
+      throw createHttpError(400, 'Frecuencia recurrente solo aplica cuando el gasto es recurrente');
+    }
+  }
+
+  return normalized;
 };
 
 const parseAndNormalizeQuoteRows = (rows) => {
@@ -1791,6 +2091,381 @@ app.patch('/api/timeoff/requests/:id/status', authenticateToken, requireRole(['a
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo actualizar estado de la solicitud' });
+  }
+});
+
+// ─── EXPENSES / COST ACCOUNTABILITY ──────────────────────────────────────────
+app.get('/api/expenses', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const scope = getExpensesAccessScope(userContext, access);
+  if (scope.error) return res.status(403).json({ error: scope.error });
+
+  const monthRaw = req.query?.month;
+  const yearRaw = req.query?.year;
+  const month = monthRaw !== undefined ? Number.parseInt(monthRaw, 10) : null;
+  const year = yearRaw !== undefined ? Number.parseInt(yearRaw, 10) : null;
+  if (monthRaw !== undefined && (!Number.isInteger(month) || month < 1 || month > 12)) {
+    return res.status(400).json({ error: 'Mes inválido. Debe estar entre 1 y 12' });
+  }
+  if (yearRaw !== undefined && (!Number.isInteger(year) || year < 2000 || year > 3000)) {
+    return res.status(400).json({ error: 'Año inválido' });
+  }
+
+  const recurringOnly = parseBooleanLike(req.query?.recurring_only, false);
+  const departmentFilter = normalizeDepartmentLabel(req.query?.department || '');
+  const search = String(req.query?.q || '').trim();
+
+  try {
+    await ensureExpensesTable();
+    const where = [];
+    const params = [];
+
+    if (scope.isAdmin) {
+      if (departmentFilter) {
+        params.push(departmentFilter);
+        where.push(`LOWER(e.department) = LOWER($${params.length})`);
+      }
+    } else {
+      params.push(scope.department);
+      where.push(`LOWER(e.department) = LOWER($${params.length})`);
+    }
+
+    if (Number.isInteger(month)) {
+      params.push(month);
+      where.push(`EXTRACT(MONTH FROM e.expense_date) = $${params.length}`);
+    }
+    if (Number.isInteger(year)) {
+      params.push(year);
+      where.push(`EXTRACT(YEAR FROM e.expense_date) = $${params.length}`);
+    }
+    if (recurringOnly) {
+      where.push('e.is_recurring = TRUE');
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      where.push(`(
+        e.concept ILIKE $${params.length}
+        OR COALESCE(e.vendor, '') ILIKE $${params.length}
+        OR COALESCE(e.category, '') ILIKE $${params.length}
+      )`);
+    }
+
+    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    const result = await pool.query(
+      `SELECT
+         e.id, e.department, e.category, e.concept, e.vendor,
+         e.amount, e.currency, e.is_recurring, e.recurrence_period,
+         e.expense_date, e.notes, e.created_by, e.created_at, e.updated_at,
+         u.email AS created_by_email
+       FROM department_expenses e
+       LEFT JOIN users u ON u.id = e.created_by
+       ${whereSql}
+       ORDER BY e.expense_date DESC, e.id DESC
+       LIMIT 500`,
+      params
+    );
+    res.json((result.rows || []).map((row) => mapExpenseRow(row)));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron cargar gastos' });
+  }
+});
+
+app.get('/api/expenses/variance', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const scope = getExpensesAccessScope(userContext, access);
+  if (scope.error) return res.status(403).json({ error: scope.error });
+
+  const months = Number.parseInt(req.query?.months, 10);
+  const safeMonths = Number.isInteger(months) ? Math.max(1, Math.min(36, months)) : 6;
+  const limit = Number.parseInt(req.query?.limit, 10);
+  const safeLimit = Number.isInteger(limit) ? Math.max(5, Math.min(200, limit)) : 30;
+  const departmentFilter = normalizeDepartmentLabel(req.query?.department || '');
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - safeMonths);
+  const startDateText = startDate.toISOString().slice(0, 10);
+
+  try {
+    await ensureExpensesTable();
+    const where = ['e.is_recurring = TRUE', `e.expense_date >= $1::date`];
+    const params = [startDateText];
+
+    if (scope.isAdmin) {
+      if (departmentFilter) {
+        params.push(departmentFilter);
+        where.push(`LOWER(e.department) = LOWER($${params.length})`);
+      }
+    } else {
+      params.push(scope.department);
+      where.push(`LOWER(e.department) = LOWER($${params.length})`);
+    }
+
+    const result = await pool.query(
+      `SELECT
+         e.id, e.department, e.concept, e.vendor, e.amount, e.currency,
+         e.recurrence_period, e.expense_date
+       FROM department_expenses e
+       WHERE ${where.join(' AND ')}
+       ORDER BY LOWER(e.department) ASC, LOWER(e.concept) ASC, COALESCE(e.recurrence_period, '') ASC, e.expense_date DESC, e.id DESC`,
+      params
+    );
+
+    const grouped = new Map();
+    for (const row of result.rows || []) {
+      const key = [
+        normalizeText(row.department || ''),
+        normalizeText(row.concept || ''),
+        String(row.recurrence_period || '')
+      ].join('|');
+      const bucket = grouped.get(key) || [];
+      bucket.push({
+        department: row.department,
+        concept: row.concept,
+        vendor: row.vendor || null,
+        amount: Number(row.amount || 0),
+        recurrence_period: row.recurrence_period || null,
+        expense_date: row.expense_date
+      });
+      grouped.set(key, bucket);
+    }
+
+    const summary = [];
+    for (const entries of grouped.values()) {
+      if (!Array.isArray(entries) || entries.length < 2) continue;
+      const latest = entries[0];
+      const previous = entries[1];
+      const amounts = entries.map((item) => Number(item.amount || 0));
+      const sum = amounts.reduce((acc, value) => acc + value, 0);
+      const deltaAmount = Number(latest.amount || 0) - Number(previous.amount || 0);
+      const previousAmount = Number(previous.amount || 0);
+      const deltaPercent = previousAmount > 0 ? (deltaAmount / previousAmount) * 100 : null;
+      summary.push({
+        department: latest.department,
+        concept: latest.concept,
+        recurrence_period: latest.recurrence_period,
+        samples: entries.length,
+        latest_amount: Number(latest.amount || 0),
+        previous_amount: previousAmount,
+        delta_amount: deltaAmount,
+        delta_percent: deltaPercent,
+        avg_amount: sum / amounts.length,
+        min_amount: Math.min(...amounts),
+        max_amount: Math.max(...amounts),
+        latest_vendor: latest.vendor,
+        previous_vendor: previous.vendor,
+        latest_date: latest.expense_date,
+        previous_date: previous.expense_date
+      });
+    }
+
+    summary.sort((a, b) => {
+      if (b.delta_amount !== a.delta_amount) return b.delta_amount - a.delta_amount;
+      const absDiff = Math.abs(b.delta_amount) - Math.abs(a.delta_amount);
+      if (absDiff !== 0) return absDiff;
+      return String(a.concept || '').localeCompare(String(b.concept || ''), 'es');
+    });
+
+    res.json(summary.slice(0, safeLimit));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo calcular variación de gastos recurrentes' });
+  }
+});
+
+app.post('/api/expenses', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const scope = getExpensesAccessScope(userContext, access);
+  if (scope.error) return res.status(403).json({ error: scope.error });
+
+  try {
+    await ensureExpensesTable();
+    const body = scope.isAdmin
+      ? req.body
+      : { ...(req.body || {}), department: scope.department };
+    const normalized = normalizeExpensePayload(body, { partial: false });
+    if (!scope.isAdmin && normalizeText(normalized.department) !== normalizeText(scope.department)) {
+      return res.status(403).json({ error: 'No puedes registrar gastos para otro departamento' });
+    }
+    if (!normalized.is_recurring) {
+      normalized.recurrence_period = null;
+    }
+
+    const result = await pool.query(
+      `INSERT INTO department_expenses (
+         department, category, concept, vendor, amount, currency,
+         is_recurring, recurrence_period, expense_date, notes, created_by, created_at, updated_at
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10, $11, NOW(), NOW())
+       RETURNING id, department, category, concept, vendor, amount, currency, is_recurring, recurrence_period, expense_date, notes, created_by, created_at, updated_at`,
+      [
+        normalized.department,
+        normalized.category,
+        normalized.concept,
+        normalized.vendor,
+        normalized.amount,
+        normalized.currency,
+        Boolean(normalized.is_recurring),
+        normalized.recurrence_period,
+        normalized.expense_date,
+        normalized.notes,
+        req.user.id
+      ]
+    );
+    res.status(201).json(mapExpenseRow({ ...result.rows[0], created_by_email: userContext.email }));
+  } catch (err) {
+    const statusCode = err?.statusCode || 500;
+    if (statusCode >= 400 && statusCode < 500) {
+      return res.status(statusCode).json({ error: err.message || 'Datos de gasto inválidos' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo registrar gasto' });
+  }
+});
+
+app.patch('/api/expenses/:id', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const scope = getExpensesAccessScope(userContext, access);
+  if (scope.error) return res.status(403).json({ error: scope.error });
+
+  const expenseId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(expenseId) || expenseId <= 0) {
+    return res.status(400).json({ error: 'ID de gasto inválido' });
+  }
+
+  try {
+    await ensureExpensesTable();
+    const existingRes = await pool.query(
+      `SELECT id, department, category, concept, vendor, amount, currency, is_recurring, recurrence_period, expense_date, notes, created_by
+       FROM department_expenses
+       WHERE id = $1`,
+      [expenseId]
+    );
+    if (existingRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Gasto no encontrado' });
+    }
+
+    const current = existingRes.rows[0];
+    if (!scope.isAdmin && normalizeText(current.department) !== normalizeText(scope.department)) {
+      return res.status(403).json({ error: 'No autorizado para editar este gasto' });
+    }
+
+    const normalized = normalizeExpensePayload(req.body, { partial: true });
+    if (Object.keys(normalized).length === 0) {
+      return res.status(400).json({ error: 'No se enviaron cambios' });
+    }
+    if (!scope.isAdmin && Object.prototype.hasOwnProperty.call(normalized, 'department')
+      && normalizeText(normalized.department) !== normalizeText(scope.department)) {
+      return res.status(403).json({ error: 'No puedes mover gastos a otro departamento' });
+    }
+
+    const nextDepartment = scope.isAdmin
+      ? (normalized.department ?? current.department)
+      : scope.department;
+    const nextCategory = normalized.category ?? current.category;
+    const nextConcept = normalized.concept ?? current.concept;
+    const nextVendor = Object.prototype.hasOwnProperty.call(normalized, 'vendor')
+      ? normalized.vendor
+      : current.vendor;
+    const nextAmount = Object.prototype.hasOwnProperty.call(normalized, 'amount')
+      ? normalized.amount
+      : Number(current.amount || 0);
+    const nextCurrency = normalized.currency ?? current.currency;
+    const nextIsRecurring = Object.prototype.hasOwnProperty.call(normalized, 'is_recurring')
+      ? Boolean(normalized.is_recurring)
+      : Boolean(current.is_recurring);
+    const requestedRecurrence = Object.prototype.hasOwnProperty.call(normalized, 'recurrence_period')
+      ? normalized.recurrence_period
+      : current.recurrence_period;
+    const nextRecurrence = nextIsRecurring ? requestedRecurrence : null;
+    if (nextIsRecurring && !nextRecurrence) {
+      return res.status(400).json({ error: 'Debes indicar frecuencia para gastos recurrentes' });
+    }
+    const nextExpenseDate = Object.prototype.hasOwnProperty.call(normalized, 'expense_date')
+      ? normalized.expense_date
+      : current.expense_date;
+    const nextNotes = Object.prototype.hasOwnProperty.call(normalized, 'notes')
+      ? normalized.notes
+      : current.notes;
+
+    const result = await pool.query(
+      `UPDATE department_expenses
+       SET department = $1,
+           category = $2,
+           concept = $3,
+           vendor = $4,
+           amount = $5,
+           currency = $6,
+           is_recurring = $7,
+           recurrence_period = $8,
+           expense_date = $9::date,
+           notes = $10,
+           updated_at = NOW()
+       WHERE id = $11
+       RETURNING id, department, category, concept, vendor, amount, currency, is_recurring, recurrence_period, expense_date, notes, created_by, created_at, updated_at`,
+      [
+        nextDepartment,
+        nextCategory,
+        nextConcept,
+        nextVendor,
+        nextAmount,
+        nextCurrency,
+        nextIsRecurring,
+        nextRecurrence,
+        nextExpenseDate,
+        nextNotes,
+        expenseId
+      ]
+    );
+
+    const row = result.rows[0];
+    const ownerRes = await pool.query('SELECT email FROM users WHERE id = $1', [row.created_by]);
+    res.json(mapExpenseRow({ ...row, created_by_email: ownerRes.rows[0]?.email || null }));
+  } catch (err) {
+    const statusCode = err?.statusCode || 500;
+    if (statusCode >= 400 && statusCode < 500) {
+      return res.status(statusCode).json({ error: err.message || 'Datos inválidos' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo actualizar gasto' });
+  }
+});
+
+app.delete('/api/expenses/:id', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  const scope = getExpensesAccessScope(userContext, access);
+  if (scope.error) return res.status(403).json({ error: scope.error });
+
+  const expenseId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(expenseId) || expenseId <= 0) {
+    return res.status(400).json({ error: 'ID de gasto inválido' });
+  }
+
+  try {
+    await ensureExpensesTable();
+    const rowRes = await pool.query(
+      'SELECT id, department FROM department_expenses WHERE id = $1',
+      [expenseId]
+    );
+    if (rowRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Gasto no encontrado' });
+    }
+    if (!scope.isAdmin && normalizeText(rowRes.rows[0].department) !== normalizeText(scope.department)) {
+      return res.status(403).json({ error: 'No autorizado para eliminar este gasto' });
+    }
+    await pool.query('DELETE FROM department_expenses WHERE id = $1', [expenseId]);
+    res.json({ message: 'Gasto eliminado', id: expenseId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo eliminar gasto' });
   }
 });
 
