@@ -9,7 +9,12 @@ import { useOutbox } from './OutboxProvider';
 export default function QuoteTool({ token, user }) {
   const [combos, setCombos] = useState([]);
   const [products, setProducts] = useState([]);
-  const [draft, setDraft] = useDraftState('pcx.quoteDraft.v1', null);
+  const legacyDraftStorageKey = 'pcx.quoteDraft.v1';
+  const userDraftSuffix = user?.id
+    ? `id:${user.id}`
+    : `email:${String(user?.email || 'anon').trim().toLowerCase()}`;
+  const draftStorageKey = `pcx.quoteDraft.v2:${userDraftSuffix}`;
+  const [draft, setDraft] = useDraftState(draftStorageKey, null);
 
   const [step, setStep] = useState(1);
 
@@ -32,6 +37,7 @@ export default function QuoteTool({ token, user }) {
   const [assignedSellerId, setAssignedSellerId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const isSavingRef = useRef(false);
+  const restoredDraftKeyRef = useRef('');
   const [draftNotice, setDraftNotice] = useState('');
   const { enqueue } = useOutbox();
   const [isMobile, setIsMobile] = useState(() =>
@@ -209,6 +215,8 @@ export default function QuoteTool({ token, user }) {
   }, [almacen, step]);
 
   useEffect(() => {
+    if (restoredDraftKeyRef.current === draftStorageKey) return;
+    restoredDraftKeyRef.current = draftStorageKey;
     if (!draft || !draft.values || !draft.hasContent) return;
     const values = draft.values;
     if (values.step) setStep(values.step);
@@ -228,6 +236,11 @@ export default function QuoteTool({ token, user }) {
     if (typeof values.shippingNotes === 'string') setShippingNotes(values.shippingNotes);
     if (typeof values.assignedSellerId === 'string') setAssignedSellerId(values.assignedSellerId);
     setDraftNotice('Se recuperó un borrador local.');
+  }, [draftStorageKey, draft]);
+
+  useEffect(() => {
+    // Remove legacy shared draft key so drafts never bleed across accounts again.
+    clearDraftState(legacyDraftStorageKey);
   }, []);
 
   useEffect(() => {
@@ -307,7 +320,7 @@ export default function QuoteTool({ token, user }) {
     } else {
       setAssignedSellerId('');
     }
-    clearDraftState('pcx.quoteDraft.v1');
+    clearDraftState(draftStorageKey);
   };
 
   const saveAndGeneratePDF = async () => {
