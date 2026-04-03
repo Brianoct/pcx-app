@@ -1,12 +1,27 @@
 import { apiRequest } from './apiClient';
 
 const OUTBOX_STORAGE_KEY = 'pcx.outbox.v1';
+const OUTBOX_AUTH_BLOCK_KEY = 'pcx.outbox.authblock.v1';
 const OUTBOX_EVENT = 'pcx-outbox-updated';
 const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_AUTORETRY_ATTEMPTS = 6;
+const BASE_RETRY_DELAY_MS = 1200;
+const MAX_RETRY_DELAY_MS = 90000;
 
 let isProcessingQueue = false;
 
 const hasWindow = typeof window !== 'undefined';
+
+const dispatchOutboxUpdated = (items) => {
+  if (!hasWindow) return;
+  try {
+    const authBlock = window.localStorage.getItem(OUTBOX_AUTH_BLOCK_KEY);
+    const parsedAuthBlock = authBlock ? JSON.parse(authBlock) : null;
+    window.dispatchEvent(new CustomEvent(OUTBOX_EVENT, { detail: { items, authBlock: parsedAuthBlock } }));
+  } catch {
+    // Ignore event dispatch errors.
+  }
+};
 
 const readOutbox = () => {
   if (!hasWindow) return [];
@@ -26,11 +41,40 @@ const writeOutbox = (items) => {
   } catch {
     // Ignore localStorage write errors in private mode.
   }
+  dispatchOutboxUpdated(items);
+};
+
+const readOutboxAuthBlock = () => {
+  if (!hasWindow) return null;
   try {
-    window.dispatchEvent(new CustomEvent(OUTBOX_EVENT, { detail: { items } }));
+    const raw = window.localStorage.getItem(OUTBOX_AUTH_BLOCK_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
   } catch {
-    // Ignore event dispatch errors.
+    return null;
   }
+};
+
+const setOutboxAuthBlock = (block) => {
+  if (!hasWindow) return;
+  try {
+    if (!block) {
+      window.localStorage.removeItem(OUTBOX_AUTH_BLOCK_KEY);
+    } else {
+      window.localStorage.setItem(OUTBOX_AUTH_BLOCK_KEY, JSON.stringify(block));
+    }
+  } catch {
+    // Ignore localStorage write errors.
+  }
+  dispatchOutboxUpdated(readOutbox());
+};
+
+const calculateRetryAfter = (attempts) => {
+  const exp = Math.max(0, Number(attempts || 1) - 1);
+  const noJitter = Math.min(MAX_RETRY_DELAY_MS, BASE_RETRY_DELAY_MS * (2 ** exp));
+  const jitter = Math.floor(Math.random() * 400);
+  return Date.now() + noJitter + jitter;
 };
 
 const updateOutboxItem = (itemId, patch) => {
@@ -55,6 +99,8 @@ const removeOutboxItem = (itemId) => {
 
 const processOutboxItem = async (item, token) => {
   if (!item?.id || !item?.request?.path || !token) return false;
+  const retryAfter = Number(item?.retry_after || 0);
+  if (retryAfter > Date.now()) return false;
   const isPending = item.status === 'pending';
   const isRetryableError = item.status === 'error' && item.retryable !== false;
   if (!isPending && !isRetryableError) return false;
@@ -69,17 +115,58 @@ const processOutboxItem = async (item, token) => {
       timeoutMs: item.request.timeoutMs || 12000,
       retries: 0
     });
+    if (readOutboxAuthBlock()) {
+      setOutboxAuthBlock(null);
+    }
     removeOutboxItem(item.id);
   } catch (err) {
     const details = classifyOutboxError(err);
+    const nextAttempts = Number(item.attempts || 0) + 1;
+    if (details.type === 'auth') {
+      setOutboxAuthBlock({
+        blocked_at: Date.now(),
+        reason: 'auth',
+        message: details.userMessage
+      });
+    }
+    if (details.retryable) {
+      if (nextAttempts >= MAX_AUTORETRY_ATTEMPTS) {
+        updateOutboxItem(item.id, {
+          status: 'error',
+          retryable: false,
+          attempts: nextAttempts,
+          retry_after: null,
+          last_error: err?.message || 'Error de sincronizacion',
+          last_error_type: details.type,
+          last_error_status: Number(err?.status || 0) || null,
+          user_message: 'Se alcanzó el límite de reintentos automáticos. Revisa y vuelve a intentar manualmente.',
+          recommended_action: 'Abre el registro, confirma datos y usa Reintentar.'
+        });
+        return true;
+      }
+      updateOutboxItem(item.id, {
+        status: 'pending',
+        retryable: true,
+        attempts: nextAttempts,
+        retry_after: calculateRetryAfter(nextAttempts),
+        last_error: err?.message || 'Error de sincronizacion',
+        last_error_type: details.type,
+        last_error_status: Number(err?.status || 0) || null,
+        user_message: '',
+        recommended_action: 'Reintento automático programado.'
+      });
+      return true;
+    }
     updateOutboxItem(item.id, {
-      status: details.retryable ? 'pending' : 'error',
-      retryable: details.retryable,
-      attempts: Number(item.attempts || 0) + 1,
+      status: 'error',
+      retryable: false,
+      attempts: nextAttempts,
+      retry_after: null,
       last_error: err?.message || 'Error de sincronizacion',
       last_error_type: details.type,
       last_error_status: Number(err?.status || 0) || null,
-      user_message: details.retryable ? '' : details.userMessage
+      user_message: details.userMessage,
+      recommended_action: details.recommendedAction
     });
   }
   return true;
@@ -92,13 +179,15 @@ const classifyOutboxError = (err) => {
       return {
         retryable: true,
         type: 'timeout',
-        userMessage: 'La sincronizacion tardo demasiado. Se reintentara automaticamente.'
+        userMessage: 'La sincronizacion tardo demasiado. Se reintentara automaticamente.',
+        recommendedAction: 'Espera el reintento automático o reintenta manualmente.'
       };
     }
     return {
       retryable: true,
       type: 'network',
-      userMessage: 'Sin conexion temporal. Se reintentara automaticamente.'
+      userMessage: 'Sin conexion temporal. Se reintentara automaticamente.',
+      recommendedAction: 'Verifica conexión y vuelve a intentar si es necesario.'
     };
   }
 
@@ -106,7 +195,8 @@ const classifyOutboxError = (err) => {
     return {
       retryable: true,
       type: 'server',
-      userMessage: 'Error temporal del servidor. Se reintentara automaticamente.'
+      userMessage: 'Error temporal del servidor. Se reintentara automaticamente.',
+      recommendedAction: 'Espera el próximo intento automático.'
     };
   }
 
@@ -114,7 +204,8 @@ const classifyOutboxError = (err) => {
     return {
       retryable: false,
       type: 'conflict',
-      userMessage: 'Conflicto detectado: este registro cambio en otro lugar. Revisa el dato y actualiza manualmente.'
+      userMessage: 'Conflicto detectado: este registro cambio en otro lugar. Revisa el dato y actualiza manualmente.',
+      recommendedAction: 'Abre el registro, compara cambios y guarda nuevamente.'
     };
   }
 
@@ -122,7 +213,8 @@ const classifyOutboxError = (err) => {
     return {
       retryable: false,
       type: 'auth',
-      userMessage: 'Tu sesion no tiene permisos para sincronizar esta accion. Vuelve a iniciar sesion.'
+      userMessage: 'Tu sesion no tiene permisos para sincronizar esta accion. Vuelve a iniciar sesion.',
+      recommendedAction: 'Inicia sesión nuevamente para reactivar la sincronización.'
     };
   }
 
@@ -130,7 +222,8 @@ const classifyOutboxError = (err) => {
     return {
       retryable: false,
       type: 'not_found',
-      userMessage: 'El registro ya no existe en el servidor. Esta accion se puede cancelar.'
+      userMessage: 'El registro ya no existe en el servidor. Esta accion se puede cancelar.',
+      recommendedAction: 'Descarta esta acción o recrea el registro.'
     };
   }
 
@@ -138,18 +231,22 @@ const classifyOutboxError = (err) => {
     return {
       retryable: false,
       type: 'validation',
-      userMessage: 'La accion tiene datos invalidos para el servidor. Corrige y vuelve a intentar.'
+      userMessage: 'La accion tiene datos invalidos para el servidor. Corrige y vuelve a intentar.',
+      recommendedAction: 'Abre el formulario, corrige datos y guarda de nuevo.'
     };
   }
 
   return {
     retryable: false,
     type: 'request',
-    userMessage: 'No se pudo sincronizar automaticamente esta accion. Revisa el detalle y gestiona manualmente.'
+    userMessage: 'No se pudo sincronizar automaticamente esta accion. Revisa el detalle y gestiona manualmente.',
+    recommendedAction: 'Revisa el registro y decide si reintentar o descartar.'
   };
 };
 
 export const getOutboxItems = () => readOutbox();
+export const getOutboxAuthBlock = () => readOutboxAuthBlock();
+export const clearOutboxAuthBlock = () => setOutboxAuthBlock(null);
 
 export const cancelOutboxItem = (itemId) => {
   const items = readOutbox();
@@ -169,6 +266,7 @@ export const retryOutboxItem = (itemId) => {
       ...item,
       status: 'pending',
       retryable: true,
+      retry_after: null,
       updated_at: Date.now()
     };
   });
@@ -197,6 +295,7 @@ export const retryOutboxItemWithLatest = (itemId) => {
         body: item?.meta?.latest_body ?? item?.request?.body ?? null,
         headers: item?.meta?.latest_headers ?? item?.request?.headers ?? {}
       },
+      retry_after: null,
       updated_at: Date.now()
     };
   });
@@ -236,6 +335,7 @@ export const enqueueOutboxAction = ({ request, meta = {} }) => {
     status: 'pending',
     attempts: 0,
     retryable: true,
+    retry_after: null,
     last_error: '',
     request: {
       path: request.path,
@@ -268,6 +368,7 @@ export const shouldQueueOutboxFromError = (err) => {
 
 export const processOutboxQueue = async (token) => {
   if (!token || isProcessingQueue) return;
+  if (readOutboxAuthBlock()) return;
   isProcessingQueue = true;
   try {
     const queue = readOutbox()

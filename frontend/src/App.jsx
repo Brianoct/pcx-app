@@ -262,9 +262,9 @@ function OutboxPanel({
   open,
   onToggle,
   onRetry,
+  onRetryWithLatest,
   onCancel,
-  onOpenRecord,
-  onRetryWithLatest
+  onOpenRecord
 }) {
   if (!Array.isArray(items) || items.length === 0) return null;
 
@@ -352,10 +352,10 @@ function OutboxPanel({
                     <button
                       type="button"
                       className="outbox-item-btn latest"
-                      onClick={() => onRetryWithLatest(item)}
+                      onClick={() => onRetryWithLatest(item.id)}
                       disabled={processing || item.status === 'syncing'}
                     >
-                      Reintentar actual
+                      Reintentar con datos actuales
                     </button>
                   </>
                 )}
@@ -390,6 +390,8 @@ function App() {
     errorCount,
     processing,
     retryItem,
+    retryWithLatestItem,
+    queuePausedReason,
     cancelItem
   } = useOutbox();
   const [outboxPanelOpen, setOutboxPanelOpen] = useState(false);
@@ -538,11 +540,8 @@ function App() {
   };
 
   const retryOutboxWithLatest = (item) => {
-    if (!item) return;
-    const guidance = item?.suggested_recovery
-      || 'Abre el registro relacionado, confirma los datos actuales y guarda nuevamente.';
-    openOutboxRecord(item);
-    alert(`Se abrió la vista del registro para reintento con datos actuales.\n\n${guidance}`);
+    if (!item?.id) return;
+    retryWithLatestItem(item.id);
   };
 
   return (
@@ -557,6 +556,11 @@ function App() {
           Sincronizando acciones pendientes: {pendingCount}
         </div>
       )}
+      {queuePausedReason === 'auth' && (
+        <div className="outbox-banner outbox-banner-warning" role="status" aria-live="polite">
+          La sincronizacion esta en pausa por sesion expirada. Cierra sesion y vuelve a iniciar para continuar.
+        </div>
+      )}
       <OutboxPanel
         items={items}
         pendingCount={pendingCount}
@@ -567,11 +571,13 @@ function App() {
         onRetry={(itemId) => {
           retryItem(itemId);
         }}
+        onRetryWithLatest={(itemId) => {
+          retryWithLatestItem(itemId);
+        }}
         onCancel={(itemId) => {
           cancelItem(itemId);
         }}
         onOpenRecord={openOutboxRecord}
-        onRetryWithLatest={retryOutboxWithLatest}
       />
       <NavMenu 
         displayName={displayName}
