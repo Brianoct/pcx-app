@@ -841,6 +841,7 @@ button, .btn {
   display: flex;
   gap: 6px;
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .outbox-item-btn {
@@ -862,6 +863,18 @@ button, .btn {
   color: #fecaca;
   background: rgba(127, 29, 29, 0.36);
   border-color: rgba(252, 165, 165, 0.5);
+}
+
+.outbox-item-btn.open {
+  color: #bfdbfe;
+  background: rgba(30, 64, 175, 0.22);
+  border-color: rgba(96, 165, 250, 0.42);
+}
+
+.outbox-item-btn.latest {
+  color: #fde68a;
+  background: rgba(161, 98, 7, 0.32);
+  border-color: rgba(253, 224, 71, 0.42);
 }
 
 .app-logout-btn {

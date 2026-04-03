@@ -262,7 +262,9 @@ function OutboxPanel({
   open,
   onToggle,
   onRetry,
-  onCancel
+  onCancel,
+  onOpenRecord,
+  onRetryWithLatest
 }) {
   if (!Array.isArray(items) || items.length === 0) return null;
 
@@ -316,12 +318,17 @@ function OutboxPanel({
                 Creado: {formatDate(item.created_at)} · Intentos: {Number(item.attempts || 0)}
               </div>
               {item.status === 'error' && item.retryable === false && (
-                <div className="outbox-item-error">
+                <div className="outbox-item-conflict">
                   {item.user_message || 'Accion requiere revision manual.'}
                 </div>
               )}
               {item.status === 'error' && item.last_error && (
                 <div className="outbox-item-error">Detalle: {item.last_error}</div>
+              )}
+              {item.status === 'error' && item.retryable === false && (
+                <div className="outbox-item-guidance">
+                  Sugerencia: {item.recommended_action || 'Revisa el registro y vuelve a intentar con datos actuales.'}
+                </div>
               )}
               <div className="outbox-item-actions">
                 <button
@@ -332,6 +339,26 @@ function OutboxPanel({
                 >
                   Reintentar
                 </button>
+                {item.status === 'error' && item.retryable === false && (
+                  <>
+                    <button
+                      type="button"
+                      className="outbox-item-btn open"
+                      onClick={() => onOpenRecord(item)}
+                      disabled={processing || item.status === 'syncing'}
+                    >
+                      Abrir registro
+                    </button>
+                    <button
+                      type="button"
+                      className="outbox-item-btn latest"
+                      onClick={() => onRetryWithLatest(item)}
+                      disabled={processing || item.status === 'syncing'}
+                    >
+                      Reintentar actual
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   className="outbox-item-btn cancel"
@@ -480,6 +507,44 @@ function App() {
           ? '/calendario'
         : '/';
 
+  const openOutboxRecord = (item) => {
+    if (!item) return;
+    const type = String(item?.meta?.recordType || item?.last_error_type || '').toLowerCase();
+    if (type === 'inventory' || String(item?.request?.path || '').includes('/api/products/')) {
+      window.location.hash = '#/inventory';
+      return;
+    }
+    if (type === 'timeoff' || String(item?.request?.path || '').includes('/api/time-off')) {
+      window.location.hash = '#/calendario';
+      return;
+    }
+    if (String(item?.request?.path || '').includes('/api/qc/')) {
+      window.location.hash = '#/control-calidad';
+      return;
+    }
+    if (String(item?.request?.path || '').includes('/api/combos')) {
+      window.location.hash = '#/combos';
+      return;
+    }
+    if (String(item?.request?.path || '').includes('/api/cupones')) {
+      window.location.hash = '#/cupones';
+      return;
+    }
+    if (String(item?.request?.path || '').includes('/api/me')) {
+      window.location.hash = '#/perfil';
+      return;
+    }
+    window.location.hash = '#/history';
+  };
+
+  const retryOutboxWithLatest = (item) => {
+    if (!item) return;
+    const guidance = item?.suggested_recovery
+      || 'Abre el registro relacionado, confirma los datos actuales y guarda nuevamente.';
+    openOutboxRecord(item);
+    alert(`Se abrió la vista del registro para reintento con datos actuales.\n\n${guidance}`);
+  };
+
   return (
     <Router>
       {!isOnline && (
@@ -505,6 +570,8 @@ function App() {
         onCancel={(itemId) => {
           cancelItem(itemId);
         }}
+        onOpenRecord={openOutboxRecord}
+        onRetryWithLatest={retryOutboxWithLatest}
       />
       <NavMenu 
         displayName={displayName}
