@@ -278,14 +278,21 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     }
   };
 
+  const formatPedidoDate = (value) => {
+    if (!value) return '—';
+    try {
+      return new Date(value).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' });
+    } catch {
+      return '—';
+    }
+  };
+
   const actionButtons = (quote, compact = false) => (
     <div
-      className="pedidos-actions"
+      className="pedidos-action-buttons"
       style={{
-        display: 'flex',
         gap: compact ? '8px' : '6px',
-        justifyContent: 'center',
-        flexWrap: 'nowrap'
+        justifyContent: 'center'
       }}
     >
       <button
@@ -411,7 +418,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                     </div>
                     <div className="mobile-card-row">
                       <span className="mobile-card-label">Fecha</span>
-                      <span>{new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                      <span>{formatPedidoDate(quote.created_at)}</span>
                     </div>
                   </div>
 
@@ -445,92 +452,76 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
               ))}
             </div>
           ) : (
-            <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
-              <table style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                minWidth: '100%',
-                tableLayout: 'auto'
-              }}>
+            <div className="pedidos-table-wrap">
+              <table className="pedidos-table">
+                <colgroup>
+                  <col style={{ width: '56px' }} />
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '190px' }} />
+                  <col style={{ width: '140px' }} />
+                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '170px' }} />
+                  <col style={{ width: '190px' }} />
+                </colgroup>
                 <thead>
-                  <tr style={{ background: '#0f172a' }}>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>ID</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Vendedor</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Cliente</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Teléfono</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Provincia / Depto</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Almacén</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Estado</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Fecha</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>Acciones</th>
+                  <tr>
+                    <th className="pedidos-th center">ID</th>
+                    <th className="pedidos-th center">Vendedor</th>
+                    <th className="pedidos-th center">Cliente</th>
+                    <th className="pedidos-th center">Teléfono</th>
+                    <th className="pedidos-th center">Provincia / Depto</th>
+                    <th className="pedidos-th center">Almacén</th>
+                    <th className="pedidos-th center">Estado</th>
+                    <th className="pedidos-th center">Fecha</th>
+                    <th className="pedidos-th center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {currentPedidos.map(quote => (
-                    <tr key={quote.id} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>{quote.id}</td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                    <tr key={quote.id} className="pedidos-row">
+                      <td className="pedidos-td center nowrap">{quote.id}</td>
+                      <td className="pedidos-td center" title={quote.vendor || '—'}>
                         {quote.vendor_phone ? (
                           <a
                             href={buildWhatsAppLink(quote.vendor_phone)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{ color: '#25D366', textDecoration: 'none', fontWeight: '600' }}
+                            className="pedidos-vendor-link"
                           >
-                            {quote.vendor || '—'}
+                            <span className="pedidos-cell-truncate">{quote.vendor || '—'}</span>
                           </a>
                         ) : (
-                          quote.vendor || '—'
+                          <span className="pedidos-cell-truncate">{quote.vendor || '—'}</span>
                         )}
                       </td>
-                      <td style={{
-                        padding: '12px 8px',
-                        textAlign: 'center',
-                        whiteSpace: 'normal',
-                        wordBreak: 'break-word',
-                        overflowWrap: 'break-word'
-                      }}>
-                        {quote.customer_name || '—'}
+                      <td className="pedidos-td center" title={quote.customer_name || '—'}>
+                        <span className="pedidos-cell-truncate">{quote.customer_name || '—'}</span>
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                      <td className="pedidos-td center nowrap">
                         {quote.customer_phone || '—'}
                       </td>
-                      <td style={{
-                        padding: '12px 8px',
-                        textAlign: 'center',
-                        whiteSpace: 'normal',
-                        wordBreak: 'break-word',
-                        overflowWrap: 'break-word'
-                      }}>
-                        {quote.provincia || quote.department || '—'}
+                      <td className="pedidos-td center" title={quote.provincia || quote.department || '—'}>
+                        <span className="pedidos-cell-truncate">{quote.provincia || quote.department || '—'}</span>
                       </td>
-                      <td style={{
-                        padding: '12px 8px',
-                        textAlign: 'center',
-                        whiteSpace: 'normal',
-                        wordBreak: 'break-word',
-                        overflowWrap: 'break-word'
-                      }}>
-                        {quote.store_location || '—'}
+                      <td className="pedidos-td center" title={quote.store_location || '—'}>
+                        <span className="pedidos-cell-truncate">{quote.store_location || '—'}</span>
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                      <td className="pedidos-td center">
                         <select
                           value={quote.status}
                           onChange={(e) => handleStatusChange(quote.id, e.target.value)}
                           disabled={updatingId === quote.id}
+                          className="pedidos-status-select"
                           style={{
-                            padding: '6px 10px',
                             background: quote.status === 'Enviado' ? '#10b981' :
                                         quote.status === 'Embalado' ? '#8b5cf6' :
                                         quote.status === 'Pagado' ? '#3b82f6' :
                                         quote.status === 'Confirmado' ? '#f59e0b' :
                                         '#64748b',
                             color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: updatingId === quote.id ? 'not-allowed' : 'pointer',
-                            fontSize: '0.85rem',
-                            minWidth: '100px'
+                            cursor: updatingId === quote.id ? 'not-allowed' : 'pointer'
                           }}
                         >
                           {canManageStatus ? (
@@ -551,10 +542,10 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                           )}
                         </select>
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
-                        {new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}
+                      <td className="pedidos-td center nowrap">
+                        {formatPedidoDate(quote.created_at)}
                       </td>
-                      <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                      <td className="pedidos-td center">
                         {actionButtons(quote, false)}
                       </td>
                     </tr>
