@@ -437,6 +437,76 @@ button, .btn {
   flex-wrap: nowrap;
 }
 
+.pedidos-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 16px;
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.pedidos-table {
+  width: 100%;
+  min-width: 1280px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.pedidos-th {
+  padding: 12px 8px;
+  background: #0f172a;
+  border-bottom: 1px solid #334155;
+  font-size: 0.84rem;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.pedidos-td {
+  padding: 11px 8px;
+  border-bottom: 1px solid #334155;
+  vertical-align: middle;
+}
+
+.pedidos-row:hover {
+  background: rgba(30, 41, 59, 0.45);
+}
+
+.pedidos-th.center,
+.pedidos-td.center {
+  text-align: center;
+}
+
+.pedidos-td.nowrap {
+  white-space: nowrap;
+}
+
+.pedidos-cell-truncate {
+  display: block;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pedidos-vendor-link {
+  color: #25D366;
+  text-decoration: none;
+  font-weight: 600;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.pedidos-status-select {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #fff;
+}
+
 .pedidos-action-btn {
   min-height: 34px;
   padding: 7px 12px;
@@ -563,7 +633,7 @@ button, .btn {
 .app-nav-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 18px;
   min-width: 0;
   flex: 1 1 auto;
   overflow: visible;
@@ -574,8 +644,9 @@ button, .btn {
   align-items: center;
   min-width: 0;
   flex: 1 1 auto;
-  gap: 10px;
+  gap: 12px;
   overflow: visible;
+  margin-left: 6px;
 }
 
 .app-logo {
@@ -585,6 +656,7 @@ button, .btn {
   max-width: 132px;
   object-fit: contain;
   flex-shrink: 0;
+  margin-right: 2px;
 }
 
 .desktop-user-name {
@@ -1245,7 +1317,7 @@ nav {
   }
 
   .app-nav-left {
-    gap: 8px;
+    gap: 10px;
   }
 
   .container {
