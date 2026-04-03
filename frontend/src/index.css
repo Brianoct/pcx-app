@@ -443,6 +443,7 @@ button, .btn {
   border: 1px solid rgba(71, 85, 105, 0.5);
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.4);
+  max-height: min(68vh, 680px);
 }
 
 .pedidos-table {
@@ -459,6 +460,9 @@ button, .btn {
   font-size: 0.84rem;
   color: #cbd5e1;
   white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 6;
 }
 
 .pedidos-td {
@@ -497,6 +501,80 @@ button, .btn {
 }
 
 .pedidos-status-select {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.history-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 16px;
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.4);
+  max-height: min(68vh, 680px);
+}
+
+.history-table {
+  width: 100%;
+  min-width: 1140px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.history-th {
+  padding: 12px 8px;
+  background: #0f172a;
+  border-bottom: 1px solid #334155;
+  font-size: 0.84rem;
+  color: #cbd5e1;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+
+.history-td {
+  padding: 11px 8px;
+  border-bottom: 1px solid #334155;
+  vertical-align: middle;
+}
+
+.history-row:hover {
+  background: rgba(30, 41, 59, 0.45);
+}
+
+.history-th.center,
+.history-td.center {
+  text-align: center;
+}
+
+.history-td.nowrap {
+  white-space: nowrap;
+}
+
+.history-cell-truncate {
+  display: block;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-phone-link {
+  color: #25D366;
+  text-decoration: none;
+  font-weight: 500;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.history-status-select {
   width: 100%;
   min-height: 34px;
   padding: 6px 8px;

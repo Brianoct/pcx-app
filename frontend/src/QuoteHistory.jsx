@@ -772,6 +772,15 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     }
   };
 
+  const formatHistoryDate = (value) => {
+    if (!value) return '—';
+    try {
+      return new Date(value).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' });
+    } catch {
+      return '—';
+    }
+  };
+
   const isLeader = canViewGlobalHistory;
 
   if (!canViewHistory && !canViewGlobalHistory) {
@@ -866,7 +875,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                     )}
                     <div className="mobile-card-row">
                       <span className="mobile-card-label">Fecha</span>
-                      <span>{new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                      <span>{formatHistoryDate(quote.created_at)}</span>
                     </div>
                   </div>
 
@@ -932,37 +941,44 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
               ))}
             </div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                minWidth: '1100px',
-                tableLayout: 'fixed'
-              }}>
+            <div className="history-table-wrap">
+              <table className="history-table">
+                <colgroup>
+                  <col style={{ width: '64px' }} />
+                  <col style={{ width: '220px' }} />
+                  <col style={{ width: '170px' }} />
+                  {isLeader && <col style={{ width: '150px' }} />}
+                  <col style={{ width: '130px' }} />
+                  <col style={{ width: '140px' }} />
+                  <col style={{ width: '170px' }} />
+                  <col style={{ width: '200px' }} />
+                </colgroup>
                 <thead>
-                  <tr style={{ background: '#0f172a' }}>
-                    <th style={{ padding: '14px 12px', width: '70px' }}>ID</th>
-                    <th style={{ padding: '14px 12px', width: '220px', textAlign: 'center' }}>Cliente</th>
-                    <th style={{ padding: '14px 12px', width: '160px', textAlign: 'center' }}>Teléfono (WhatsApp)</th>
-                    {isLeader && <th style={{ padding: '14px 12px', width: '160px', textAlign: 'center' }}>Vendedor</th>}
-                    <th style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>Total</th>
-                    <th style={{ padding: '14px 12px', width: '140px', textAlign: 'center' }}>Estado</th>
-                    <th style={{ padding: '14px 12px', width: '180px', textAlign: 'center' }}>Fecha</th>
-                    <th style={{ padding: '14px 12px', width: '190px', textAlign: 'center' }}>Acciones</th>
+                  <tr>
+                    <th className="history-th center">ID</th>
+                    <th className="history-th center">Cliente</th>
+                    <th className="history-th center">Teléfono (WhatsApp)</th>
+                    {isLeader && <th className="history-th center">Vendedor</th>}
+                    <th className="history-th center">Total</th>
+                    <th className="history-th center">Estado</th>
+                    <th className="history-th center">Fecha</th>
+                    <th className="history-th center">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {currentQuotes.map(quote => (
-                    <tr key={quote.id} style={{ borderBottom: '1px solid #334155' }}>
-                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>{quote.id}</td>
-                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>{quote.customer_name || '—'}</td>
-                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+                    <tr key={quote.id} className="history-row">
+                      <td className="history-td center nowrap">{quote.id}</td>
+                      <td className="history-td center" title={quote.customer_name || '—'}>
+                        <span className="history-cell-truncate">{quote.customer_name || '—'}</span>
+                      </td>
+                      <td className="history-td center nowrap">
                         {quote.customer_phone ? (
                           <a
                             href={`https://wa.me/${quote.customer_phone}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            style={{ color: '#25D366', textDecoration: 'none', fontWeight: '500' }}
+                            className="history-phone-link"
                           >
                             {quote.customer_phone}
                           </a>
@@ -970,16 +986,20 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           '—'
                         )}
                       </td>
-                      {isLeader && <td style={{ padding: '14px 12px', textAlign: 'center' }}>{quote.vendor || '—'}</td>}
-                      <td style={{ padding: '14px 12px', textAlign: 'center', fontWeight: '600' }}>
+                      {isLeader && (
+                        <td className="history-td center" title={quote.vendor || '—'}>
+                          <span className="history-cell-truncate">{quote.vendor || '—'}</span>
+                        </td>
+                      )}
+                      <td className="history-td center nowrap" style={{ fontWeight: '600' }}>
                         {Number(quote.total).toFixed(2)} Bs
                       </td>
-                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>
+                      <td className="history-td center">
                         <select
                           value={quote.status}
                           onChange={(e) => updateStatus(quote.id, e.target.value)}
+                          className="history-status-select"
                           style={{
-                            padding: '6px 12px',
                             background: 
                               quote.status === 'Enviado' ? '#10b981' :
                               quote.status === 'Embalado' ? '#8b5cf6' :
@@ -987,10 +1007,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                               quote.status === 'Confirmado' ? '#f59e0b' :
                               '#64748b',
                             color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '0.9rem'
+                            cursor: 'pointer'
                           }}
                         >
                           <option value="Cotizado">Cotizado</option>
@@ -1000,22 +1017,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           <option value="Enviado">Enviado</option>
                         </select>
                       </td>
-                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                        {new Date(quote.created_at).toLocaleString('es-BO', { dateStyle: 'medium', timeStyle: 'short' })}
+                      <td className="history-td center nowrap">
+                        {formatHistoryDate(quote.created_at)}
                       </td>
-                      <td style={{ padding: '14px 12px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', flexWrap: 'nowrap' }}>
+                      <td className="history-td center">
+                        <div className="history-actions-wrap">
                           <button
                             onClick={() => regeneratePDF(quote)}
-                            style={{
-                              padding: '8px 14px',
-                              background: '#3b82f6',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontSize: '0.9rem'
-                            }}
+                            className="btn history-pdf-btn"
                           >
                             Ver PDF
                           </button>
