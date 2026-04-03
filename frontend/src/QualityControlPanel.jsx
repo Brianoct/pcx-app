@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
+import { useOutbox } from './OutboxProvider';
 
 const RESULT_OPTIONS = [
   { value: 'passed', label: 'Aprobado' },
@@ -9,6 +10,7 @@ const RESULT_OPTIONS = [
 const formatMoney = (value) => `${Number(value || 0).toFixed(2)} Bs`;
 
 export default function QualityControlPanel({ token }) {
+  const { enqueueWrite, isOnline } = useOutbox();
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [products, setProducts] = useState([]);
@@ -75,6 +77,68 @@ export default function QualityControlPanel({ token }) {
     setSaving(true);
     setError('');
     try {
+      if (!isOnline) {
+        if (isEditing) {
+          enqueueWrite({
+            label: `Editar control de calidad #${editingId}`,
+            path: `/api/qc/checks/${editingId}`,
+            options: {
+              method: 'PATCH',
+              token,
+              body: {
+                sku: form.sku,
+                quantity: Number.parseInt(form.quantity, 10),
+                result: form.result
+              },
+              retries: 0
+            },
+            meta: { recordId: editingId, sku: form.sku, quantity: Number.parseInt(form.quantity, 10), result: form.result }
+          });
+          setRecords((prev) => prev.map((row) => (
+            Number(row.id) === Number(editingId)
+              ? { ...row, sku: form.sku, quantity: Number.parseInt(form.quantity, 10), result: form.result }
+              : row
+          )));
+        } else {
+          enqueueWrite({
+            label: `Nuevo control de calidad (${form.sku})`,
+            path: '/api/qc/checks',
+            options: {
+              method: 'POST',
+              token,
+              body: {
+                sku: form.sku,
+                quantity: Number.parseInt(form.quantity, 10),
+                result: form.result
+              },
+              retries: 0
+            },
+            meta: { sku: form.sku, quantity: Number.parseInt(form.quantity, 10), result: form.result }
+          });
+          const tempId = Date.now() * -1;
+          setRecords((prev) => ([
+            {
+              id: tempId,
+              created_at: new Date().toISOString(),
+              sku: form.sku,
+              product_name: selectedProduct?.name || form.sku,
+              quantity: Number.parseInt(form.quantity, 10),
+              result: form.result,
+              user_email: 'Pendiente de sincronización'
+            },
+            ...prev
+          ]));
+        }
+        setForm((prev) => ({
+          ...prev,
+          quantity: '',
+          result: 'passed'
+        }));
+        setEditingId(null);
+        alert('Sin conexión: cambio guardado en cola y se sincronizará automáticamente.');
+        return;
+      }
+
       await apiRequest(
         isEditing ? `/api/qc/checks/${editingId}` : '/api/qc/checks',
         {
@@ -129,6 +193,25 @@ export default function QualityControlPanel({ token }) {
     setDeletingId(recordId);
     setError('');
     try {
+      if (!isOnline) {
+        enqueueWrite({
+          label: `Eliminar control de calidad #${recordId}`,
+          path: `/api/qc/checks/${recordId}`,
+          options: {
+            method: 'DELETE',
+            token,
+            retries: 0
+          },
+          meta: { recordId }
+        });
+        if (recordId === editingId) {
+          cancelEdit();
+        }
+        setRecords((prev) => prev.filter((row) => Number(row.id) !== Number(recordId)));
+        alert('Sin conexión: eliminación en cola para sincronizar.');
+        return;
+      }
+
       await apiRequest(`/api/qc/checks/${recordId}`, {
         method: 'DELETE',
         token

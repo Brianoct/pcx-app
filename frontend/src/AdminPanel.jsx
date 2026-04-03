@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import AdminDashboard from './AdminDashboard';
 import { ACCESS_LABELS, buildAccessForUser, ROLE_OPTIONS } from './roleAccess';
 import { apiRequest } from './apiClient';
+import { useOutbox } from './OutboxProvider';
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
   value: role,
   label: role === 'Almacen Lider'
@@ -14,6 +15,7 @@ const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
 
 // User management component
 function UserManagement({ token }) {
+  const { enqueueWrite } = useOutbox();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -54,11 +56,26 @@ function UserManagement({ token }) {
     }
 
     try {
-      await apiRequest('/api/users', {
-        method: 'POST',
-        token,
-        body: newUser
-      });
+      const payload = { ...newUser };
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Crear usuario ${payload.email || ''}`.trim(),
+          path: '/api/users',
+          options: {
+            method: 'POST',
+            body: payload,
+            retries: 0
+          },
+          meta: { email: payload.email || '', role: payload.role || '' }
+        });
+        alert('Sin conexión: creación de usuario en cola para sincronizar.');
+      } else {
+        await apiRequest('/api/users', {
+          method: 'POST',
+          token,
+          body: payload
+        });
+      }
       alert('Usuario agregado con éxito');
       await refreshUsers();
       setNewUser({
@@ -76,13 +93,31 @@ function UserManagement({ token }) {
 
   const handleUpdateRole = async (userId, newRole) => {
     try {
+      const payload = {
+        role: newRole,
+        panel_access: buildAccessForUser(newRole)
+      };
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Actualizar rol usuario #${userId} -> ${newRole}`,
+          path: `/api/users/${userId}`,
+          options: {
+            method: 'PATCH',
+            body: payload,
+            retries: 0
+          },
+          meta: { userId, role: newRole }
+        });
+        setUsers((prev) => prev.map((u) => (
+          u.id === userId ? { ...u, role: newRole, panel_access: payload.panel_access } : u
+        )));
+        alert('Sin conexión: cambio de rol en cola para sincronizar.');
+        return;
+      }
       await apiRequest(`/api/users/${userId}`, {
         method: 'PATCH',
         token,
-        body: {
-          role: newRole,
-          panel_access: buildAccessForUser(newRole)
-        }
+        body: payload
       });
       alert('Rol actualizado');
       await refreshUsers();
@@ -94,6 +129,20 @@ function UserManagement({ token }) {
   const handleDeleteUser = async (userId) => {
     if (!window.confirm('¿Eliminar este usuario y TODAS sus cotizaciones asociadas? Esto es irreversible.')) return;
     try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Eliminar usuario #${userId}`,
+          path: `/api/users/${userId}`,
+          options: {
+            method: 'DELETE',
+            retries: 0
+          },
+          meta: { userId }
+        });
+        setUsers((prev) => prev.filter((u) => u.id !== userId));
+        alert('Sin conexión: eliminación de usuario en cola para sincronizar.');
+        return;
+      }
       await apiRequest(`/api/users/${userId}`, {
         method: 'DELETE',
         token
@@ -138,6 +187,32 @@ function UserManagement({ token }) {
         payload.panel_access = editModal.panel_access;
       }
 
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Editar usuario #${editModal.userId}`,
+          path: `/api/users/${editModal.userId}`,
+          options: {
+            method: 'PATCH',
+            body: payload,
+            retries: 0
+          },
+          meta: { userId: editModal.userId, role: payload.role || '' }
+        });
+        setUsers((prev) => prev.map((u) => (
+          u.id === editModal.userId
+            ? {
+                ...u,
+                role: payload.role,
+                city: payload.city,
+                phone: payload.phone,
+                panel_access: payload.panel_access || u.panel_access
+              }
+            : u
+        )));
+        setEditModal(null);
+        alert('Sin conexión: edición de usuario en cola para sincronizar.');
+        return;
+      }
       await apiRequest(`/api/users/${editModal.userId}`, {
         method: 'PATCH',
         token,
@@ -548,6 +623,7 @@ function UserManagement({ token }) {
 }
 
 function ProductCatalogAdmin({ token }) {
+  const { enqueueWrite } = useOutbox();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -603,14 +679,37 @@ function ProductCatalogAdmin({ token }) {
         throw new Error('Precios SF/CF inválidos');
       }
 
-      await apiRequest('/api/product-catalog', {
-        method: 'POST',
-        token,
-        body: payload
-      });
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Crear producto ${payload.sku}`,
+          path: '/api/product-catalog',
+          options: {
+            method: 'POST',
+            body: payload,
+            retries: 0
+          },
+          meta: { sku: payload.sku, name: payload.name }
+        });
+        setProducts((prev) => [...prev, {
+          sku: payload.sku,
+          name: payload.name,
+          sf: payload.sf,
+          cf: payload.cf,
+          is_active: true
+        }]);
+        setMessage('Sin conexión: producto en cola para sincronizar.');
+      } else {
+        await apiRequest('/api/product-catalog', {
+          method: 'POST',
+          token,
+          body: payload
+        });
+        setMessage('Producto agregado.');
+      }
       setNewProduct({ sku: '', name: '', sf: '', cf: '' });
-      setMessage('Producto agregado.');
-      await loadProducts();
+      if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
+        await loadProducts();
+      }
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
@@ -633,13 +732,30 @@ function ProductCatalogAdmin({ token }) {
         throw new Error('Precios SF/CF inválidos');
       }
 
-      await apiRequest(`/api/product-catalog/${encodeURIComponent(row.sku)}`, {
-        method: 'PATCH',
-        token,
-        body: payload
-      });
-      setMessage(`Producto ${row.sku} actualizado.`);
-      await loadProducts();
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Editar producto ${row.sku}`,
+          path: `/api/product-catalog/${encodeURIComponent(row.sku)}`,
+          options: {
+            method: 'PATCH',
+            body: payload,
+            retries: 0
+          },
+          meta: { sku: row.sku }
+        });
+        setProducts((prev) => prev.map((item) => (
+          item.sku === row.sku ? { ...item, ...payload } : item
+        )));
+        setMessage(`Sin conexión: cambios de ${row.sku} en cola para sincronizar.`);
+      } else {
+        await apiRequest(`/api/product-catalog/${encodeURIComponent(row.sku)}`, {
+          method: 'PATCH',
+          token,
+          body: payload
+        });
+        setMessage(`Producto ${row.sku} actualizado.`);
+        await loadProducts();
+      }
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
@@ -652,12 +768,28 @@ function ProductCatalogAdmin({ token }) {
     setSaving(true);
     setMessage('');
     try {
-      await apiRequest(`/api/product-catalog/${encodeURIComponent(row.sku)}`, {
-        method: 'DELETE',
-        token
-      });
-      setMessage(`Producto ${row.sku} desactivado.`);
-      await loadProducts();
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Desactivar producto ${row.sku}`,
+          path: `/api/product-catalog/${encodeURIComponent(row.sku)}`,
+          options: {
+            method: 'DELETE',
+            retries: 0
+          },
+          meta: { sku: row.sku }
+        });
+        setProducts((prev) => prev.map((item) => (
+          item.sku === row.sku ? { ...item, is_active: false } : item
+        )));
+        setMessage(`Sin conexión: desactivación de ${row.sku} en cola para sincronizar.`);
+      } else {
+        await apiRequest(`/api/product-catalog/${encodeURIComponent(row.sku)}`, {
+          method: 'DELETE',
+          token
+        });
+        setMessage(`Producto ${row.sku} desactivado.`);
+        await loadProducts();
+      }
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
@@ -865,6 +997,7 @@ function StatisticsPanel({ token }) {
 }
 
 function TimeOffAdminPanel({ token }) {
+  const { enqueueWrite } = useOutbox();
   const [year, setYear] = useState(new Date().getFullYear());
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState([]);
@@ -896,12 +1029,29 @@ function TimeOffAdminPanel({ token }) {
   const updateStatus = async (id, status) => {
     setUpdatingId(id);
     try {
-      await apiRequest(`/api/timeoff/requests/${id}/status`, {
-        method: 'PATCH',
-        token,
-        body: { status }
-      });
-      await loadData();
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Permiso #${id} -> ${status}`,
+          path: `/api/timeoff/requests/${id}/status`,
+          options: {
+            method: 'PATCH',
+            body: { status },
+            retries: 0
+          },
+          meta: { requestId: id, status }
+        });
+        setRows((prev) => prev.map((row) => (
+          row.id === id ? { ...row, status, status_label: status } : row
+        )));
+        alert('Sin conexión: cambio de estado en cola para sincronizar.');
+      } else {
+        await apiRequest(`/api/timeoff/requests/${id}/status`, {
+          method: 'PATCH',
+          token,
+          body: { status }
+        });
+        await loadData();
+      }
     } catch (err) {
       alert(`Error: ${err.message}`);
     } finally {
@@ -1035,6 +1185,7 @@ function TimeOffAdminPanel({ token }) {
 }
 
 function QualityControlCommissionConfig({ token }) {
+  const { enqueueWrite } = useOutbox();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1077,13 +1228,27 @@ function QualityControlCommissionConfig({ token }) {
     setSaving(true);
     setMessage('');
     try {
-      await apiRequest('/api/qc/commissions', {
-        method: 'PATCH',
-        token,
-        body: { rows }
-      });
-      setMessage('Comisiones por producto guardadas.');
-      await loadRows();
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: 'Guardar comisiones QC',
+          path: '/api/qc/commissions',
+          options: {
+            method: 'PATCH',
+            body: { rows },
+            retries: 0
+          },
+          meta: { rowCount: rows.length }
+        });
+        setMessage('Sin conexión: comisiones QC en cola para sincronizar.');
+      } else {
+        await apiRequest('/api/qc/commissions', {
+          method: 'PATCH',
+          token,
+          body: { rows }
+        });
+        setMessage('Comisiones por producto guardadas.');
+        await loadRows();
+      }
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
@@ -1190,6 +1355,7 @@ function QualityControlCommissionConfig({ token }) {
 }
 
 function CommissionConfig({ token }) {
+  const { enqueueWrite } = useOutbox();
   const [settings, setSettings] = useState({
     ventas_lider_percent: 5,
     ventas_top_percent: 12,
@@ -1234,19 +1400,32 @@ function CommissionConfig({ token }) {
     setSaving(true);
     setMessage('');
     try {
-      const data = await apiRequest('/api/commission/settings', {
-        method: 'PATCH',
-        token,
-        body: { settings }
-      });
-      setSettings({
-        ventas_lider_percent: Number(data.settings?.ventas_lider_percent ?? settings.ventas_lider_percent),
-        ventas_top_percent: Number(data.settings?.ventas_top_percent ?? settings.ventas_top_percent),
-        ventas_regular_percent: Number(data.settings?.ventas_regular_percent ?? settings.ventas_regular_percent),
-        almacen_percent: Number(data.settings?.almacen_percent ?? settings.almacen_percent),
-        marketing_lider_percent: Number(data.settings?.marketing_lider_percent ?? settings.marketing_lider_percent)
-      });
-      setMessage('Configuración de comisiones guardada.');
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: 'Guardar configuración de comisiones',
+          path: '/api/commission/settings',
+          options: {
+            method: 'PATCH',
+            body: { settings },
+            retries: 0
+          }
+        });
+        setMessage('Sin conexión: configuración de comisiones en cola para sincronizar.');
+      } else {
+        const data = await apiRequest('/api/commission/settings', {
+          method: 'PATCH',
+          token,
+          body: { settings }
+        });
+        setSettings({
+          ventas_lider_percent: Number(data.settings?.ventas_lider_percent ?? settings.ventas_lider_percent),
+          ventas_top_percent: Number(data.settings?.ventas_top_percent ?? settings.ventas_top_percent),
+          ventas_regular_percent: Number(data.settings?.ventas_regular_percent ?? settings.ventas_regular_percent),
+          almacen_percent: Number(data.settings?.almacen_percent ?? settings.almacen_percent),
+          marketing_lider_percent: Number(data.settings?.marketing_lider_percent ?? settings.marketing_lider_percent)
+        });
+        setMessage('Configuración de comisiones guardada.');
+      }
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
@@ -1351,6 +1530,7 @@ function CommissionConfig({ token }) {
 }
 
 function RoleConfiguration({ token }) {
+  const { enqueueWrite } = useOutbox();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState('Ventas');
@@ -1402,15 +1582,33 @@ function RoleConfiguration({ token }) {
     setSaving(true);
     setMessage('');
     try {
-      const data = await apiRequest(`/api/roles/access-defaults/${encodeURIComponent(role)}`, {
-        method: 'PATCH',
-        token,
-        body: { panel_access: row.panel_access, apply_to_users: applyToUsers }
-      });
-      const updatedUsers = Number(data?.updated_users || 0);
-      const baseMsg = `Configuración guardada para rol ${role}.`;
-      setMessage(applyToUsers ? `${baseMsg} Aplicada a ${updatedUsers} usuario(s).` : baseMsg);
-      await loadDefaults();
+      const payload = { panel_access: row.panel_access, apply_to_users: applyToUsers };
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: applyToUsers
+            ? `Guardar y aplicar rol ${role}`
+            : `Guardar configuración rol ${role}`,
+          path: `/api/roles/access-defaults/${encodeURIComponent(role)}`,
+          options: {
+            method: 'PATCH',
+            body: payload,
+            retries: 0
+          },
+          meta: { role, applyToUsers }
+        });
+        const baseMsg = `Sin conexión: configuración del rol ${role} en cola para sincronizar.`;
+        setMessage(applyToUsers ? `${baseMsg} Se aplicará a usuarios al sincronizar.` : baseMsg);
+      } else {
+        const data = await apiRequest(`/api/roles/access-defaults/${encodeURIComponent(role)}`, {
+          method: 'PATCH',
+          token,
+          body: payload
+        });
+        const updatedUsers = Number(data?.updated_users || 0);
+        const baseMsg = `Configuración guardada para rol ${role}.`;
+        setMessage(applyToUsers ? `${baseMsg} Aplicada a ${updatedUsers} usuario(s).` : baseMsg);
+        await loadDefaults();
+      }
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
@@ -1423,11 +1621,24 @@ function RoleConfiguration({ token }) {
     setApplying(true);
     setMessage('');
     try {
-      const data = await apiRequest(`/api/roles/access-defaults/${encodeURIComponent(role)}/apply`, {
-        method: 'POST',
-        token
-      });
-      setMessage(`Aplicado a ${data.updated_users ?? 0} usuario(s) del rol ${role}.`);
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Aplicar rol ${role} a usuarios`,
+          path: `/api/roles/access-defaults/${encodeURIComponent(role)}/apply`,
+          options: {
+            method: 'POST',
+            retries: 0
+          },
+          meta: { role }
+        });
+        setMessage(`Sin conexión: aplicación de rol ${role} en cola para sincronizar.`);
+      } else {
+        const data = await apiRequest(`/api/roles/access-defaults/${encodeURIComponent(role)}/apply`, {
+          method: 'POST',
+          token
+        });
+        setMessage(`Aplicado a ${data.updated_users ?? 0} usuario(s) del rol ${role}.`);
+      }
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {

@@ -3,8 +3,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { sortProductsByCatalogOrder } from './productCatalog';
 import { apiRequest } from './apiClient';
 import { clearDraftState, useDraftState } from './useDraftState';
+import { useOutbox } from './OutboxProvider';
 
 function Combos({ token }) {
+  const { isOnline, enqueueWrite } = useOutbox();
   const draftKey = 'draft:combos:create';
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [products, setProducts] = useState([]);
@@ -126,17 +128,46 @@ function Combos({ token }) {
     }
 
     const validItems = comboItems.filter(i => i.sku && i.quantity > 0);
+    const payload = {
+      name: comboName,
+      sf: comboPriceSf,
+      cf: comboPriceCf,
+      products: validItems.map(i => ({ sku: i.sku, quantity: i.quantity }))
+    };
+
+    if (!isOnline) {
+      enqueueWrite({
+        label: `Crear combo ${comboName.trim()}`,
+        path: '/api/combos',
+        options: {
+          method: 'POST',
+          body: payload
+        },
+        meta: {
+          comboName: comboName.trim()
+        }
+      });
+      clearDraftState(`${draftKey}:name`);
+      clearDraftState(`${draftKey}:items`);
+      clearDraftState(`${draftKey}:discountPercent`);
+      clearDraftState(`${draftKey}:discountAmount`);
+      setComboName('');
+      setComboItems([{ sku: '', quantity: 1 }]);
+      setDiscountPercent(0);
+      setDiscountAmount(0);
+      setBasePriceSf(0);
+      setBasePriceCf(0);
+      setComboPriceSf(0);
+      setComboPriceCf(0);
+      alert('Sin conexión: combo en cola para sincronizar.');
+      return;
+    }
 
     try {
       await apiRequest('/api/combos', {
         method: 'POST',
         token,
-        body: {
-          name: comboName,
-          sf: comboPriceSf,
-          cf: comboPriceCf,
-          products: validItems.map(i => ({ sku: i.sku, quantity: i.quantity }))
-        },
+        body: payload,
         timeoutMs: 18000
       });
 
@@ -161,6 +192,20 @@ function Combos({ token }) {
 
   const handleDeleteCombo = async (id) => {
     if (!window.confirm('¿Eliminar combo permanentemente?')) return;
+
+    if (!isOnline) {
+      enqueueWrite({
+        label: `Eliminar combo #${id}`,
+        path: `/api/combos/${id}`,
+        options: {
+          method: 'DELETE'
+        },
+        meta: { comboId: id }
+      });
+      setCombos((prev) => prev.filter((combo) => combo.id !== id));
+      alert('Sin conexión: eliminación en cola para sincronizar.');
+      return;
+    }
 
     try {
       await apiRequest(`/api/combos/${id}`, {

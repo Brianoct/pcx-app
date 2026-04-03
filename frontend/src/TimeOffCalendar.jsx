@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
+import { useOutbox } from './OutboxProvider';
 
 const REQUEST_TYPE_LABELS = {
   vacation: 'Vacaciones',
@@ -20,6 +21,7 @@ const formatDate = (value) => {
 };
 
 export default function TimeOffCalendar({ token }) {
+  const { enqueueWrite } = useOutbox();
   const [entries, setEntries] = useState([]);
   const [summary, setSummary] = useState({ year: new Date().getFullYear(), vacation_used: 0, sick_used: 0, vacation_remaining: 14, sick_remaining: 5 });
   const [loading, setLoading] = useState(true);
@@ -63,18 +65,48 @@ export default function TimeOffCalendar({ token }) {
     setSaving(true);
     setError('');
     try {
-      await apiRequest('/api/time-off', {
-        method: 'POST',
-        token,
-        body: form
-      });
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Permiso ${form.request_type} ${form.start_date} - ${form.end_date}`,
+          path: '/api/time-off',
+          options: {
+            method: 'POST',
+            token,
+            body: form,
+            retries: 0
+          },
+          meta: {
+            requestType: form.request_type,
+            startDate: form.start_date,
+            endDate: form.end_date
+          }
+        });
+        setEntries((prev) => ([
+          {
+            id: `queued-${Date.now()}`,
+            request_type: form.request_type,
+            start_date: form.start_date,
+            end_date: form.end_date,
+            days_count: 0,
+            status: 'pending',
+            notes: `${form.notes || ''}${form.notes ? ' · ' : ''}(pendiente de sincronización)`
+          },
+          ...prev
+        ]));
+      } else {
+        await apiRequest('/api/time-off', {
+          method: 'POST',
+          token,
+          body: form
+        });
+        await loadData();
+      }
       setForm({
         request_type: 'vacation',
         start_date: '',
         end_date: '',
         notes: ''
       });
-      await loadData();
     } catch (err) {
       setError(err.message || 'Error al registrar permiso');
     } finally {
