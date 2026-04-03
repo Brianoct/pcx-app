@@ -1,8 +1,10 @@
 // src/Cupones.jsx
 import { useState, useEffect, useCallback } from 'react';
 import { apiRequest } from './apiClient';
+import { useOutbox } from './OutboxProvider';
 
 function Cupones({ token }) {
+  const { enqueueWrite, isOnline } = useOutbox();
   const [coupons, setCoupons] = useState([]);
   const [code, setCode] = useState('');
   const [discountPercent, setDiscountPercent] = useState(0);
@@ -30,15 +32,38 @@ function Cupones({ token }) {
       return;
     }
 
+    const payload = {
+      code: code.trim().toUpperCase(),
+      discount_percent: discountPercent,
+      valid_until: validUntil
+    };
+
+    if (!isOnline) {
+      enqueueWrite({
+        label: `Crear cupón ${payload.code}`,
+        path: '/api/cupones',
+        options: {
+          method: 'POST',
+          body: payload,
+          retries: 0
+        },
+        meta: {
+          type: 'coupon_create',
+          code: payload.code
+        }
+      });
+      setCode('');
+      setDiscountPercent(0);
+      setValidUntil('');
+      alert('Sin conexión: cupón en cola para sincronizar.');
+      return;
+    }
+
     try {
       await apiRequest('/api/cupones', {
         method: 'POST',
         token,
-        body: {
-          code: code.trim().toUpperCase(),
-          discount_percent: discountPercent,
-          valid_until: validUntil
-        }
+        body: payload
       });
 
       alert('Cupón creado correctamente');
@@ -53,6 +78,26 @@ function Cupones({ token }) {
 
   const handleDeleteCoupon = async (id) => {
     if (!window.confirm('¿Eliminar cupón permanentemente?')) return;
+
+    if (!isOnline) {
+      const existing = coupons.find((item) => Number(item.id) === Number(id));
+      enqueueWrite({
+        label: `Eliminar cupón ${existing?.code || `#${id}`}`,
+        path: `/api/cupones/${id}`,
+        options: {
+          method: 'DELETE',
+          retries: 0
+        },
+        meta: {
+          type: 'coupon_delete',
+          couponId: id,
+          code: existing?.code || ''
+        }
+      });
+      setCoupons((prev) => prev.filter((item) => Number(item.id) !== Number(id)));
+      alert('Sin conexión: eliminación en cola para sincronizar.');
+      return;
+    }
 
     try {
       await apiRequest(`/api/cupones/${id}`, {

@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
+import { useOutbox } from './OutboxProvider';
 
 export default function ProfilePanel({ token, user, onUserUpdated }) {
+  const { enqueueWrite, isOnline } = useOutbox();
   const [email, setEmail] = useState(user?.email || '');
   const [city, setCity] = useState(user?.city || '');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -23,6 +25,32 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
         city: city ? String(city).trim() : null,
         phone: phone ? String(phone).trim() : null
       };
+      if (!isOnline) {
+        enqueueWrite({
+          label: 'Actualizar perfil',
+          path: '/api/me',
+          options: {
+            method: 'PATCH',
+            token,
+            body: payload,
+            retries: 0
+          },
+          meta: {
+            type: 'profile_update',
+            email: payload.email
+          }
+        });
+        if (typeof onUserUpdated === 'function') {
+          onUserUpdated({
+            ...user,
+            email: payload.email,
+            city: payload.city,
+            phone: payload.phone
+          });
+        }
+        alert('Sin conexión: actualización de perfil en cola.');
+        return;
+      }
       const data = await apiRequest('/api/me', {
         method: 'PATCH',
         token,
@@ -54,6 +82,30 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
 
     setSavingPassword(true);
     try {
+      if (!isOnline) {
+        enqueueWrite({
+          label: 'Cambiar contraseña',
+          path: '/api/me/password',
+          options: {
+            method: 'PATCH',
+            token,
+            body: {
+              current_password: currentPassword,
+              new_password: newPassword,
+              confirm_password: confirmPassword
+            },
+            retries: 0
+          },
+          meta: {
+            type: 'password_change'
+          }
+        });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        alert('Sin conexión: cambio de contraseña en cola.');
+        return;
+      }
       await apiRequest('/api/me/password', {
         method: 'PATCH',
         token,
