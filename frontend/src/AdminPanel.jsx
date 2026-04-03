@@ -127,11 +127,11 @@ function UserManagement({ token }) {
   };
 
   const handleDeleteUser = async (userId) => {
-    if (!window.confirm('¿Eliminar este usuario y TODAS sus cotizaciones asociadas? Esto es irreversible.')) return;
+    if (!window.confirm('¿Desactivar este usuario? No podrá iniciar sesión ni aparecer en listas activas, pero su historial se conservará.')) return;
     try {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         enqueueWrite({
-          label: `Eliminar usuario #${userId}`,
+          label: `Desactivar usuario #${userId}`,
           path: `/api/users/${userId}`,
           options: {
             method: 'DELETE',
@@ -139,15 +139,50 @@ function UserManagement({ token }) {
           },
           meta: { userId }
         });
-        setUsers((prev) => prev.filter((u) => u.id !== userId));
-        alert('Sin conexión: eliminación de usuario en cola para sincronizar.');
+        setUsers((prev) => prev.map((u) => (
+          u.id === userId ? { ...u, is_active: false } : u
+        )));
+        alert('Sin conexión: desactivación de usuario en cola para sincronizar.');
         return;
       }
       await apiRequest(`/api/users/${userId}`, {
         method: 'DELETE',
         token
       });
-      alert('Usuario eliminado');
+      alert('Usuario desactivado');
+      await refreshUsers();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  const handleSetUserActivation = async (userId, isActive) => {
+    const actionLabel = isActive ? 'reactivar' : 'desactivar';
+    if (!window.confirm(`¿Seguro que deseas ${actionLabel} este usuario?`)) return;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `${isActive ? 'Reactivar' : 'Desactivar'} usuario #${userId}`,
+          path: `/api/users/${userId}/activation`,
+          options: {
+            method: 'PATCH',
+            body: { is_active: isActive },
+            retries: 0
+          },
+          meta: { userId, is_active: isActive }
+        });
+        setUsers((prev) => prev.map((u) => (
+          u.id === userId ? { ...u, is_active: isActive } : u
+        )));
+        alert(`Sin conexión: ${isActive ? 'reactivación' : 'desactivación'} en cola para sincronizar.`);
+        return;
+      }
+      await apiRequest(`/api/users/${userId}/activation`, {
+        method: 'PATCH',
+        token,
+        body: { is_active: isActive }
+      });
+      alert(`Usuario ${isActive ? 'reactivado' : 'desactivado'}`);
       await refreshUsers();
     } catch (err) {
       alert('Error: ' + err.message);
@@ -399,6 +434,7 @@ function UserManagement({ token }) {
                 <th style={{ padding: '12px' }}>Email</th>
                 <th style={{ padding: '12px' }}>Teléfono</th>
                 <th style={{ padding: '12px' }}>Rol</th>
+                <th style={{ padding: '12px' }}>Estado</th>
                 <th style={{ padding: '12px' }}>Ciudad</th>
                 <th style={{ padding: '12px' }}>Creado</th>
                 <th style={{ padding: '12px' }}>Acción</th>
@@ -415,6 +451,7 @@ function UserManagement({ token }) {
                     <select
                       value={user.role}
                       onChange={(e) => handleUpdateRole(user.id, e.target.value)}
+                      disabled={!user.is_active}
                       style={{ padding: '6px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
                     >
                       {ROLE_SELECT_OPTIONS.map((roleOption) => (
@@ -424,21 +461,45 @@ function UserManagement({ token }) {
                       ))}
                     </select>
                   </td>
+                  <td style={{ padding: '12px' }}>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      background: user.is_active ? 'rgba(16,185,129,0.18)' : 'rgba(239,68,68,0.18)',
+                      color: user.is_active ? '#34d399' : '#f87171',
+                      border: user.is_active ? '1px solid rgba(52,211,153,0.45)' : '1px solid rgba(248,113,113,0.45)'
+                    }}>
+                      {user.is_active ? 'Activo' : 'Desactivado'}
+                    </span>
+                  </td>
                   <td style={{ padding: '12px' }}>{user.city || '—'}</td>
                   <td style={{ padding: '12px' }}>{new Date(user.created_at).toLocaleString('es-BO')}</td>
                   <td style={{ padding: '12px' }}>
                     <button
                       onClick={() => openEditModal(user)}
+                      disabled={!user.is_active}
                       style={{ padding: '8px 12px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', marginRight: '8px' }}
                     >
                       Editar
                     </button>
-                    <button
-                      onClick={() => handleDeleteUser(user.id)}
-                      style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-                    >
-                      Eliminar
-                    </button>
+                    {user.is_active ? (
+                      <button
+                        onClick={() => handleDeleteUser(user.id)}
+                        style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        Desactivar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleSetUserActivation(user.id, true)}
+                        style={{ padding: '8px 12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                      >
+                        Reactivar
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
