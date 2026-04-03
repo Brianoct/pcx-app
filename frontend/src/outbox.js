@@ -178,6 +178,34 @@ export const retryOutboxItem = (itemId) => {
   return found;
 };
 
+export const retryOutboxItemWithLatest = (itemId) => {
+  const items = readOutbox();
+  let found = false;
+  const next = items.map((item) => {
+    if (item.id !== itemId) return item;
+    found = true;
+    return {
+      ...item,
+      status: 'pending',
+      retryable: true,
+      last_error: '',
+      last_error_type: '',
+      last_error_status: null,
+      user_message: '',
+      request: {
+        ...(item.request || {}),
+        body: item?.meta?.latest_body ?? item?.request?.body ?? null,
+        headers: item?.meta?.latest_headers ?? item?.request?.headers ?? {}
+      },
+      updated_at: Date.now()
+    };
+  });
+  if (found) {
+    writeOutbox(next);
+  }
+  return found;
+};
+
 export const processOutboxItemById = async (itemId, token) => {
   if (!itemId || !token) return false;
   const items = readOutbox();
@@ -216,7 +244,15 @@ export const enqueueOutboxAction = ({ request, meta = {} }) => {
       headers: request.headers || {},
       timeoutMs: Number(request.timeoutMs || 12000)
     },
-    meta
+    meta: {
+      ...meta,
+      latest_body: (meta && Object.prototype.hasOwnProperty.call(meta, 'latest_body'))
+        ? meta.latest_body
+        : (request.body ?? null),
+      latest_headers: (meta && Object.prototype.hasOwnProperty.call(meta, 'latest_headers'))
+        ? meta.latest_headers
+        : (request.headers || {})
+    }
   };
   writeOutbox([...items, item]);
   return item;
