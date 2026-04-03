@@ -6,6 +6,7 @@ import {
   processOutboxItemById,
   processOutboxQueue,
   retryOutboxItem,
+  retryOutboxItemWithLatest,
   shouldQueueOutboxFromError,
   subscribeOutbox
 } from './outbox';
@@ -105,6 +106,29 @@ export function OutboxProvider({ children }) {
     return true;
   }, [refresh]);
 
+  const retryItemWithLatest = useCallback(async (itemId) => {
+    if (!itemId) return false;
+    const marked = retryOutboxItemWithLatest(itemId);
+    if (!marked) return false;
+    refresh();
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('token') : null;
+    if (!token) return true;
+    if (processingRef.current) return true;
+
+    processingRef.current = true;
+    setProcessing(true);
+    try {
+      await processOutboxItemById(itemId, token);
+      refresh();
+    } finally {
+      processingRef.current = false;
+      setProcessing(false);
+    }
+    return true;
+  }, [refresh]);
+
   const processOutbox = useCallback(async () => {
     if (processingRef.current) return;
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
@@ -173,10 +197,12 @@ export function OutboxProvider({ children }) {
     enqueueWrite,
     cancelItem,
     retryItem,
+    retryItemWithLatest,
     refresh,
     processOutbox,
+    authPaused: items.some((item) => item.status === 'paused_auth'),
     isWriteIntentError: shouldQueueOutboxFromError
-  }), [items, isOnline, processing, enqueue, enqueueAction, enqueueWrite, cancelItem, retryItem, refresh, processOutbox]);
+  }), [items, isOnline, processing, enqueue, enqueueAction, enqueueWrite, cancelItem, retryItem, retryItemWithLatest, refresh, processOutbox]);
 
   return (
     <OutboxContext.Provider value={value}>
