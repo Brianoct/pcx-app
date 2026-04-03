@@ -17,6 +17,17 @@ const pool = new Pool({
   password: process.env.DB_PASS,
 });
 
+const ensureUsersIsActiveColumn = async () => {
+  try {
+    await pool.query(
+      `ALTER TABLE users
+       ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`
+    );
+  } catch (err) {
+    console.error('No se pudo asegurar users.is_active:', err.message);
+  }
+};
+
 const normalizeText = (value = '') =>
   String(value || '')
     .trim()
@@ -1046,11 +1057,12 @@ const resolveAssignableVendorName = async (sellerUserId, fallbackName = '') => {
   const sellerRes = await pool.query(
     `SELECT id, email, role
      FROM users
-     WHERE id = $1`,
+     WHERE id = $1
+       AND is_active = TRUE`,
     [parsedId]
   );
   if (sellerRes.rowCount === 0) {
-    throw createHttpError(404, 'Vendedor asignado no encontrado');
+    throw createHttpError(404, 'Vendedor asignado no encontrado o desactivado');
   }
   const seller = sellerRes.rows[0];
   const sellerRole = normalizeRole(seller.role || '');
@@ -1098,10 +1110,22 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'No se proporcionó token' });
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET, async (err, user) => {
     if (err) return res.status(403).json({ error: 'Token inválido' });
-    req.user = user;
-    next();
+    try {
+      const result = await pool.query('SELECT id, is_active FROM users WHERE id = $1', [user.id]);
+      if (result.rowCount === 0) {
+        return res.status(401).json({ error: 'Usuario no encontrado' });
+      }
+      if (!result.rows[0].is_active) {
+        return res.status(403).json({ error: 'Cuenta desactivada. Contacta a un administrador.' });
+      }
+      req.user = user;
+      next();
+    } catch (dbErr) {
+      console.error(dbErr);
+      return res.status(500).json({ error: 'No se pudo validar sesión' });
+    }
   });
 };
 
@@ -1149,6 +1173,9 @@ app.post('/api/login', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     const user = result.rows[0];
+    if (user && user.is_active === false) {
+      return res.status(403).json({ error: 'Tu cuenta está desactivada. Contacta a un administrador.' });
+    }
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
@@ -1189,7 +1216,8 @@ app.get('/api/sellers/assignable', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT id, email, role
        FROM users
-       WHERE role ILIKE '%ventas%' OR role ILIKE '%sales%' OR role ILIKE '%vendedor%'
+       WHERE is_active = TRUE
+         AND (role ILIKE '%ventas%' OR role ILIKE '%sales%' OR role ILIKE '%vendedor%')
        ORDER BY email ASC`
     );
     res.json(
@@ -1217,7 +1245,8 @@ app.get('/api/users/sales', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT id, email, role
        FROM users
-       WHERE role ILIKE '%ventas%' OR role ILIKE '%sales%' OR role ILIKE '%vendedor%'
+       WHERE is_active = TRUE
+         AND (role ILIKE '%ventas%' OR role ILIKE '%sales%' OR role ILIKE '%vendedor%')
        ORDER BY email ASC`
     );
     res.json(result.rows.map((row) => ({ id: row.id, email: row.email, role: row.role })));
@@ -1320,11 +1349,11 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
         throw createHttpError(400, 'Selecciona un vendedor válido para asignar la cotización');
       }
       const sellerRes = await client.query(
-        'SELECT id, email, role FROM users WHERE id = $1',
+        'SELECT id, email, role FROM users WHERE id = $1 AND is_active = TRUE',
         [selectedSellerId]
       );
       if (sellerRes.rowCount === 0) {
-        throw createHttpError(400, 'El vendedor seleccionado no existe');
+        throw createHttpError(400, 'El vendedor seleccionado no existe o está desactivado');
       }
       const seller = sellerRes.rows[0];
       const sellerRole = normalizeRole(seller.role || '');
@@ -2508,7 +2537,7 @@ app.delete('/api/cupones/:id', authenticateToken, requireRole(['Marketing Lider'
 app.get('/api/users', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, role, city, phone, panel_access, created_at FROM users ORDER BY created_at DESC'
+      'SELECT id, email, role, city, phone, panel_access, created_at, is_active FROM users ORDER BY created_at DESC'
     );
     res.json(result.rows.map((u) => ({ ...u, panel_access: sanitizePanelAccess(u.panel_access, u.role) })));
   } catch (err) {
@@ -2739,12 +2768,53 @@ app.patch('/api/commission/settings', authenticateToken, requireRole(['admin']),
 
 app.delete('/api/users/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [req.params.id]);
+    const targetId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(targetId)) return res.status(400).json({ error: 'Usuario inválido' });
+    if (targetId === Number(req.user.id)) {
+      return res.status(400).json({ error: 'No puedes desactivar tu propio usuario' });
+    }
+    const result = await pool.query(
+      `UPDATE users
+       SET is_active = FALSE
+       WHERE id = $1
+       RETURNING id`,
+      [targetId]
+    );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
-    res.json({ message: 'User deleted' });
+    res.json({ message: 'Usuario desactivado' });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'No se pudo eliminar usuario' });
+    res.status(500).json({ error: 'No se pudo desactivar usuario' });
+  }
+});
+
+app.patch('/api/users/:id/activation', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const targetId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(targetId)) return res.status(400).json({ error: 'Usuario inválido' });
+  if (targetId === Number(req.user.id) && req.body?.is_active === false) {
+    return res.status(400).json({ error: 'No puedes desactivar tu propio usuario' });
+  }
+  if (!Object.prototype.hasOwnProperty.call(req.body || {}, 'is_active')) {
+    return res.status(400).json({ error: 'Debes enviar is_active' });
+  }
+  const isActive = Boolean(req.body.is_active);
+  try {
+    const result = await pool.query(
+      `UPDATE users
+       SET is_active = $1
+       WHERE id = $2
+       RETURNING id, is_active`,
+      [isActive, targetId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+    res.json({
+      message: isActive ? 'Usuario reactivado' : 'Usuario desactivado',
+      id: result.rows[0].id,
+      is_active: Boolean(result.rows[0].is_active)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo actualizar estado de usuario' });
   }
 });
 
@@ -2776,7 +2846,8 @@ app.get('/api/performance', authenticateToken, async (req, res) => {
           COALESCE(SUM(q.total) FILTER (WHERE q.status = ANY($1::text[])), 0) as ventas_totales
         FROM users u
         LEFT JOIN quotes q ON u.id = q.user_id${dateFilter.sql}
-        WHERE u.role ILIKE '%ventas%' OR u.role ILIKE '%sales%' OR u.role ILIKE '%vendedor%'
+        WHERE u.is_active = TRUE
+          AND (u.role ILIKE '%ventas%' OR u.role ILIKE '%sales%' OR u.role ILIKE '%vendedor%')
         GROUP BY u.id, u.email, u.role
         ORDER BY ventas_totales DESC
       `;
@@ -2882,6 +2953,7 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
          FROM quotes q
          JOIN users u ON u.id = q.user_id
          WHERE q.status = ANY($1::text[])
+           AND u.is_active = TRUE
            AND (LOWER(u.role) = $2 OR u.id = $3)${teamDateFilter.sql}`,
         [COMPLETED_STATUSES, ROLE_KEYS.ventas, req.user.id, ...teamDateFilter.params]
       );
@@ -2919,6 +2991,7 @@ app.get('/api/commission/current', authenticateToken, async (req, res) => {
            ON q.user_id = u.id
            AND q.status = ANY($1::text[])${allSalesDateFilter.sql}
          WHERE LOWER(u.role) IN ('ventas', 'sales', 'vendedor')
+           AND u.is_active = TRUE
          GROUP BY u.id, u.email
          ORDER BY total_sales DESC, u.id ASC
          LIMIT 1`,
@@ -3110,6 +3183,7 @@ app.get('/api/commission/current/orders', authenticateToken, async (req, res) =>
          FROM quotes q
          JOIN users u ON u.id = q.user_id
          WHERE q.status = ANY($1::text[])
+           AND u.is_active = TRUE
            AND (LOWER(u.role) = $2 OR u.id = $3)${teamDateFilter.sql}
          ORDER BY q.created_at DESC, q.id DESC`,
         [COMPLETED_STATUSES, ROLE_KEYS.ventas, req.user.id, ...teamDateFilter.params]
@@ -3951,6 +4025,11 @@ app.get('/api/me', authenticateToken, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+const startServer = async () => {
+  await ensureUsersIsActiveColumn();
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+};
+
+void startServer();
