@@ -106,6 +106,7 @@ function PerformanceDashboard({ token, user, role, access }) {
               const rate = (isTop ? topPercent : regularPercent) / 100;
               return {
                 ...row,
+                displayRole: isTop ? 'Mejor en ventas' : 'Asesor en ventas',
                 rate,
                 commission: row.totalVentas * rate,
                 rule: isTop ? `Mejor en ventas (${topPercent}%)` : `Asesor de ventas (${regularPercent}%)`,
@@ -118,15 +119,17 @@ function PerformanceDashboard({ token, user, role, access }) {
               const liderPercent = Number(settingsData?.ventas_lider_percent ?? 5);
               return {
                 ...row,
+                displayRole: 'Ventas Lider',
                 rate: liderPercent / 100,
                 commission: base * (liderPercent / 100),
-                rule: `Mejor en ventas líder (${liderPercent}% equipo + propias)`,
+                rule: `Ventas líder (${liderPercent}% equipo + propias)`,
                 isTopSeller: false
               };
             }
 
             return {
               ...row,
+              displayRole: row.role || '—',
               rate: 0,
               commission: 0,
               rule: 'Sin comisión',
@@ -247,7 +250,7 @@ function PerformanceDashboard({ token, user, role, access }) {
                     <td style={{ padding: '12px', fontWeight: row.isTopSeller ? 700 : 500 }}>
                       {row.vendor}
                     </td>
-                    <td style={{ padding: '12px', color: '#94a3b8' }}>{row.role || '—'}</td>
+                    <td style={{ padding: '12px', color: '#94a3b8' }}>{row.displayRole || row.role || '—'}</td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>{row.cotizaciones}</td>
                     <td style={{ padding: '12px', textAlign: 'right' }}>{formatMoney(row.totalVentas)}</td>
                     <td style={{ padding: '12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
