@@ -131,12 +131,12 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
         { to: '/admin?tab=usuarios', label: 'Usuarios' },
         { to: '/admin?tab=roles', label: 'Roles' },
         { to: '/admin?tab=productos', label: 'Productos' },
-        { to: '/admin?tab=comisiones', label: 'Comisiones' }
+        { to: '/admin?tab=comisiones', label: 'Comisiones' },
+        { to: '/admin?tab=estadisticas', label: 'Estadísticas' }
       ]
     : [];
 
   const sharedNavItems = [
-    isAdminUser ? { to: '/admin?tab=estadisticas', label: 'Estadísticas' } : null,
     canQuote ? { to: '/', label: 'Cotizar' } : null,
     canSeeHistory ? { to: '/history', label: 'Historial' } : null,
     canSeePerformance ? { to: '/performance', label: 'Rendimiento' } : null,
