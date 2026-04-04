@@ -585,6 +585,15 @@ button, .btn {
   color: #fff;
 }
 
+.history-pdf-btn {
+  background: var(--accent-secondary);
+  color: #fff;
+}
+
+.history-pdf-btn:hover {
+  background: #2563eb;
+}
+
 .pedidos-action-btn {
   min-height: 34px;
   padding: 7px 12px;
