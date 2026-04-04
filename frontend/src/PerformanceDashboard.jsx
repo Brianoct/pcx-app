@@ -217,7 +217,7 @@ function PerformanceDashboard({ token, user, role, access }) {
               value={isAlmacenRole ? formatMoney(personal.totalVentas) : String(personal.cotizaciones)}
               accent="#f59e0b"
             />
-            <KpiCard label={isAlmacenRole ? 'Comisión' : 'Comisión estimada'} value={formatMoney(personal.comision)} accent="#10b981" />
+            <KpiCard label="Comisión" value={formatMoney(personal.comision)} accent="#10b981" />
             <KpiCard
               label={isAlmacenRole ? 'Comisión Almacén' : 'Tasa aplicada'}
               value={`${(personal.rate * 100).toFixed(0)}%`}
@@ -249,7 +249,7 @@ function PerformanceDashboard({ token, user, role, access }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '12px', marginBottom: '16px' }}>
             <KpiCard label="Ventas equipo" value={formatMoney(totalTeamVentas)} accent="#60a5fa" />
             <KpiCard label="Cotizaciones confirmadas" value={String(totalTeamCotizaciones)} accent="#f59e0b" />
-            <KpiCard label="Comisiones estimadas" value={formatMoney(totalTeamCommissions)} accent="#10b981" hint="Suma de reglas por rol" />
+            <KpiCard label="Comisiones" value={formatMoney(totalTeamCommissions)} accent="#10b981" hint="Suma de reglas por rol" />
             <KpiCard label="Mejor en ventas" value={topSeller ? topSeller.vendor : 'Sin datos'} hint={topSeller ? formatMoney(topSeller.totalVentas) : ''} accent="#facc15" />
             {isVentasLider && <KpiCard label="Comisión líder" value={formatMoney(leaderCommission)} hint={`${Number(commissionSettings?.ventas_lider_percent ?? 5)}% equipo + propias`} accent="#22c55e" />}
           </div>
