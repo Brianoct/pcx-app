@@ -1,6 +1,6 @@
 // App.jsx (full code - no omissions)
 import { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import QuoteTool from './QuoteTool'; // Separated component
 import QuoteHistory from './QuoteHistory';
 import PerformanceDashboard from './PerformanceDashboard';
@@ -96,6 +96,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const [menuOpen, setMenuOpen] = useState(false);
   const [desktopMoreOpen, setDesktopMoreOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const isAdminTabPath = location.pathname === '/admin';
   const canQuote = canAccessPanel(access, 'cotizar');
   const canSeeHistory = canAccessPanel(access, 'historialGlobal') || canAccessPanel(access, 'historialIndividual');
@@ -152,22 +153,24 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     { to: '/perfil', label: 'Perfil' }
   ].filter(Boolean);
 
-  const almacenPreferredOrder = ['cotizar', 'pedidos', 'inventario', 'rendimiento', 'calendario', 'perfil'];
+  const rolePreferredOrder = ['cotizar', 'history', 'pedidos', 'inventory', 'performance', 'gastos', 'calendario', 'perfil'];
   const roleOrderedSharedNavItems = !isAdminUser
     ? [...sharedNavItems].sort((a, b) => {
         const keyOf = (item) => {
           if (item.to === '/') return 'cotizar';
+          if (item.to === '/history') return 'history';
           if (item.to === '/pedidos') return 'pedidos';
-          if (item.to === '/inventory') return 'inventario';
-          if (item.to === '/performance') return 'rendimiento';
+          if (item.to === '/inventory') return 'inventory';
+          if (item.to === '/performance') return 'performance';
+          if (item.to === '/gastos') return 'gastos';
           if (item.to === '/calendario') return 'calendario';
           if (item.to === '/perfil') return 'perfil';
           return item.to || '';
         };
         const aKey = keyOf(a);
         const bKey = keyOf(b);
-        const aIndex = almacenPreferredOrder.indexOf(aKey);
-        const bIndex = almacenPreferredOrder.indexOf(bKey);
+        const aIndex = rolePreferredOrder.indexOf(aKey);
+        const bIndex = rolePreferredOrder.indexOf(bKey);
         if (aIndex === -1 && bIndex === -1) return 0;
         if (aIndex === -1) return 1;
         if (bIndex === -1) return -1;
@@ -260,21 +263,41 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
         </div>
 
         <div className="mobile-user-inline">
-          <span className="desktop-user-name">
+          <button
+            type="button"
+            className="desktop-user-name"
+            onClick={() => navigate('/perfil')}
+            style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, font: 'inherit' }}
+          >
             {displayName}
-          </span>
-          <span className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}>
+          </button>
+          <button
+            type="button"
+            className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}
+            onClick={() => navigate('/performance')}
+            style={{ border: 'none', cursor: 'pointer' }}
+          >
             +{(currentCommission || 0).toFixed(2)} Bs
-          </span>
+          </button>
         </div>
 
         <div className="desktop-user">
-          <span className="desktop-user-name">
+          <button
+            type="button"
+            className="desktop-user-name"
+            onClick={() => navigate('/perfil')}
+            style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, font: 'inherit' }}
+          >
             {displayName}
-          </span>
-          <span className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}>
+          </button>
+          <button
+            type="button"
+            className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}
+            onClick={() => navigate('/performance')}
+            style={{ border: 'none', cursor: 'pointer' }}
+          >
             +{(currentCommission || 0).toFixed(2)} Bs
-          </span>
+          </button>
           <button onClick={handleLogout} className="btn app-logout-btn">
             Cerrar
           </button>
