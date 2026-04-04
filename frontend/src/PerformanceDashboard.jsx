@@ -76,11 +76,14 @@ function PerformanceDashboard({ token, user, role, access }) {
         if (viewMode === 'individual') {
           const source = Array.isArray(perfData) ? perfData[0] : perfData;
           const warehouseOrders = Number(ordersRes?.orders_count || 0);
+          const warehouseSalesTotal = Number(ordersRes?.total_sales || 0);
           const warehouseLocalStore = String(ordersRes?.criteria?.local_store_match || '').trim();
           setPersonal({
             vendor: user?.email || 'Mi usuario',
             cotizaciones: Number(source?.cotizaciones_confirmadas || 0),
-            totalVentas: Number(source?.ventas_totales || 0),
+            totalVentas: isAlmacenRole
+              ? warehouseSalesTotal
+              : Number(source?.ventas_totales || 0),
             pedidosEnviados: warehouseOrders,
             localStore: warehouseLocalStore,
             comision: Number(commissionData?.commission || 0),
