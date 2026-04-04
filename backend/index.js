@@ -215,6 +215,8 @@ const ROLE_KEYS = {
   microfabricaLider: 'microfabrica lider',
   microfabrica: 'microfabrica'
 };
+const SALES_ROLE_KEYS = new Set([ROLE_KEYS.ventas, ROLE_KEYS.ventasLider, 'sales', 'vendedor']);
+const isSalesRole = (roleValue = '') => SALES_ROLE_KEYS.has(normalizeRole(roleValue));
 
 const EXPENSE_RECURRENCE_VALUES = ['weekly', 'monthly', 'quarterly', 'yearly'];
 const EXPENSE_DEPARTMENT_BY_ROLE = {
@@ -787,6 +789,11 @@ const DEFAULT_PRODUCT_CATALOG = [
   { sku: 'G05C', name: 'Gancho 5cm Cromo', sf: 65, cf: 76 },
   { sku: 'G10C', name: 'Gancho 10cm Cromo', sf: 84, cf: 98 }
 ];
+const CUSTOMER_MENU_CATEGORY_TABLEROS = 'Tableros';
+const CUSTOMER_MENU_CATEGORY_ACCESORIOS = 'Accesorios';
+const CUSTOMER_MENU_CATEGORIES = [CUSTOMER_MENU_CATEGORY_TABLEROS, CUSTOMER_MENU_CATEGORY_ACCESORIOS];
+const CUSTOMER_MENU_TOKEN_PURPOSE = 'customer_menu_share';
+const CUSTOMER_MENU_TOKEN_TTL = process.env.CUSTOMER_MENU_TOKEN_TTL || '30d';
 
 let PRODUCT_CATALOG = [...DEFAULT_PRODUCT_CATALOG];
 let PRODUCT_CATALOG_BY_SKU = new Map(
@@ -814,6 +821,8 @@ const ensureProductCatalogReady = async () => {
       await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS sf_price NUMERIC(12,2) NOT NULL DEFAULT 0`);
       await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cf_price NUMERIC(12,2) NOT NULL DEFAULT 0`);
       await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
+      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS menu_category TEXT`);
+      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT`);
 
       for (const item of DEFAULT_PRODUCT_CATALOG) {
         await pool.query(
@@ -840,7 +849,7 @@ const ensureProductCatalogReady = async () => {
       }
 
       const rowsResult = await pool.query(
-        `SELECT sku, name, sf_price, cf_price
+        `SELECT sku, name, sf_price, cf_price, menu_category, image_url
          FROM products
          WHERE is_active = TRUE
          ORDER BY UPPER(name) ASC, UPPER(sku) ASC`
@@ -855,7 +864,7 @@ const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
   await ensureProductCatalogReady();
   const whereClause = includeInactive ? '' : 'WHERE is_active = TRUE';
   const result = await pool.query(
-    `SELECT sku, name, sf_price, cf_price, is_active
+    `SELECT sku, name, sf_price, cf_price, is_active, menu_category, image_url
      FROM products
      ${whereClause}
      ORDER BY UPPER(name) ASC, UPPER(sku) ASC`
@@ -865,7 +874,9 @@ const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
     name: String(row.name || '').trim(),
     sf: Number(row.sf_price || 0),
     cf: Number(row.cf_price || 0),
-    is_active: Boolean(row.is_active)
+    is_active: Boolean(row.is_active),
+    menu_category: String(row.menu_category || '').trim() || null,
+    image_url: String(row.image_url || '').trim() || null
   }));
   if (!includeInactive) {
     syncProductCatalogBySkuFromRows(rows);
@@ -899,11 +910,13 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
   const hasSf = Object.prototype.hasOwnProperty.call(src, 'sf') || Object.prototype.hasOwnProperty.call(src, 'sf_price');
   const hasCf = Object.prototype.hasOwnProperty.call(src, 'cf') || Object.prototype.hasOwnProperty.call(src, 'cf_price');
   const hasIsActive = Object.prototype.hasOwnProperty.call(src, 'is_active');
+  const hasMenuCategory = Object.prototype.hasOwnProperty.call(src, 'menu_category');
+  const hasImageUrl = Object.prototype.hasOwnProperty.call(src, 'image_url');
 
   if (!partial && (!hasName || !hasSf || !hasCf)) {
     throw createHttpError(400, 'Debes enviar name, sf y cf');
   }
-  if (partial && !hasName && !hasSf && !hasCf && !hasIsActive) {
+  if (partial && !hasName && !hasSf && !hasCf && !hasIsActive && !hasMenuCategory && !hasImageUrl) {
     throw createHttpError(400, 'No se enviaron cambios para actualizar');
   }
 
@@ -930,7 +943,52 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
       }
     }
   }
+  if (hasMenuCategory) {
+    const raw = String(src.menu_category || '').trim();
+    if (!raw) {
+      normalized.menu_category = null;
+    } else {
+      const key = normalizeText(raw);
+      if (['tablero', 'tableros', 'boards', 'board'].includes(key)) {
+        normalized.menu_category = CUSTOMER_MENU_CATEGORY_TABLEROS;
+      } else if (['accesorio', 'accesorios', 'accessory', 'accessories'].includes(key)) {
+        normalized.menu_category = CUSTOMER_MENU_CATEGORY_ACCESORIOS;
+      } else {
+        throw createHttpError(400, 'menu_category inválida. Usa Tableros o Accesorios');
+      }
+    }
+  }
+  if (hasImageUrl) {
+    const urlValue = String(src.image_url || '').trim();
+    if (!urlValue) {
+      normalized.image_url = null;
+    } else {
+      if (!/^https?:\/\//i.test(urlValue)) {
+        throw createHttpError(400, 'image_url debe iniciar con http:// o https://');
+      }
+      if (urlValue.length > 500) {
+        throw createHttpError(400, 'image_url demasiado larga (máx 500)');
+      }
+      normalized.image_url = urlValue;
+    }
+  }
   return normalized;
+};
+
+const inferProductMenuCategory = (productRow = {}) => {
+  const explicit = normalizeText(productRow.menu_category || '');
+  if (explicit) {
+    if (explicit === 'tablero' || explicit === 'tableros' || explicit === 'board' || explicit === 'boards') {
+      return CUSTOMER_MENU_CATEGORY_TABLEROS;
+    }
+    if (explicit === 'accesorio' || explicit === 'accesorios' || explicit === 'accessory' || explicit === 'accessories') {
+      return CUSTOMER_MENU_CATEGORY_ACCESORIOS;
+    }
+  }
+  const sku = String(productRow.sku || '').toUpperCase();
+  const name = normalizeText(productRow.name || '');
+  if (sku.startsWith('T') || name.includes('tablero')) return CUSTOMER_MENU_CATEGORY_TABLEROS;
+  return CUSTOMER_MENU_CATEGORY_ACCESORIOS;
 };
 
 const loadProductNameMap = async () => {
@@ -1595,6 +1653,250 @@ app.get('/api/users/sales', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo cargar la lista de vendedores' });
+  }
+});
+
+// ─── CUSTOMER PUBLIC MENU (sales share link + public ordering) ───────────────
+app.post('/api/customer-menu/share-link', authenticateToken, async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  if (!canAccessPanel(userContext.panel_access, userContext.role, 'cotizar')) {
+    return res.status(403).json({ error: 'No tienes permiso para generar enlaces de menú' });
+  }
+  if (!isSalesRole(userContext.role || '')) {
+    return res.status(403).json({ error: 'Esta herramienta es solo para el equipo de ventas' });
+  }
+
+  try {
+    const shareToken = jwt.sign(
+      {
+        purpose: CUSTOMER_MENU_TOKEN_PURPOSE,
+        seller_user_id: userContext.id
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: CUSTOMER_MENU_TOKEN_TTL }
+    );
+    const requestOrigin = String(req.headers.origin || '').trim();
+    const publicBase = String(process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL || requestOrigin || 'http://localhost:5173').trim();
+    const shareUrl = `${publicBase.replace(/\/+$/, '')}/#/menu/${shareToken}`;
+    return res.json({
+      share_token: shareToken,
+      share_url: shareUrl,
+      expires_in: CUSTOMER_MENU_TOKEN_TTL,
+      seller: {
+        id: userContext.id,
+        display_name: resolveUserDisplayName(userContext, 'Vendedor')
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'No se pudo generar el enlace de menú' });
+  }
+});
+
+app.get('/api/public/menu/:shareToken', async (req, res) => {
+  const shareToken = String(req.params.shareToken || '').trim();
+  if (!shareToken) return res.status(400).json({ error: 'Token de menú inválido' });
+
+  try {
+    const decoded = jwt.verify(shareToken, process.env.JWT_SECRET);
+    if (decoded?.purpose !== CUSTOMER_MENU_TOKEN_PURPOSE) {
+      return res.status(400).json({ error: 'Enlace de menú inválido' });
+    }
+    const sellerUserId = Number.parseInt(decoded?.seller_user_id, 10);
+    if (!Number.isInteger(sellerUserId) || sellerUserId <= 0) {
+      return res.status(400).json({ error: 'Enlace de menú inválido' });
+    }
+
+    const sellerRes = await pool.query(
+      `SELECT id, email, display_name, role, city, is_active
+       FROM users
+       WHERE id = $1`,
+      [sellerUserId]
+    );
+    if (sellerRes.rowCount === 0 || sellerRes.rows[0].is_active === false) {
+      return res.status(404).json({ error: 'Vendedor no disponible para este enlace' });
+    }
+    const seller = sellerRes.rows[0];
+    if (!isSalesRole(seller.role || '')) {
+      return res.status(403).json({ error: 'Este enlace no corresponde a un vendedor válido' });
+    }
+
+    const cityScope = resolveInventoryScopeByCity(seller.city || '');
+    const defaultStore = cityScope?.canonical || 'Cochabamba';
+    const productRows = await loadProductCatalogRows({ includeInactive: false });
+    const products = productRows
+      .map((row) => ({
+        sku: String(row.sku || '').toUpperCase(),
+        name: String(row.name || '').trim(),
+        price: Number(row.sf || 0),
+        image_url: String(row.image_url || '').trim() || null,
+        category: inferProductMenuCategory(row)
+      }))
+      .sort((a, b) => {
+        const catA = CUSTOMER_MENU_CATEGORIES.indexOf(a.category);
+        const catB = CUSTOMER_MENU_CATEGORIES.indexOf(b.category);
+        if (catA !== catB) return catA - catB;
+        return a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });
+      });
+
+    return res.json({
+      seller: {
+        id: seller.id,
+        display_name: resolveUserDisplayName(seller, 'Vendedor')
+      },
+      default_store: defaultStore,
+      categories: CUSTOMER_MENU_CATEGORIES,
+      products
+    });
+  } catch (err) {
+    if (err?.name === 'TokenExpiredError') {
+      return res.status(410).json({ error: 'Este enlace expiró. Pide uno nuevo al vendedor.' });
+    }
+    if (err?.name === 'JsonWebTokenError') {
+      return res.status(400).json({ error: 'Enlace de menú inválido' });
+    }
+    console.error(err);
+    return res.status(500).json({ error: 'No se pudo cargar el menú compartido' });
+  }
+});
+
+app.post('/api/public/menu/:shareToken/order', async (req, res) => {
+  const shareToken = String(req.params.shareToken || '').trim();
+  if (!shareToken) return res.status(400).json({ error: 'Token de menú inválido' });
+  try {
+    const decoded = jwt.verify(shareToken, process.env.JWT_SECRET);
+    if (decoded?.purpose !== CUSTOMER_MENU_TOKEN_PURPOSE) {
+      return res.status(400).json({ error: 'Enlace de menú inválido' });
+    }
+    const sellerUserId = Number.parseInt(decoded?.seller_user_id, 10);
+    if (!Number.isInteger(sellerUserId) || sellerUserId <= 0) {
+      return res.status(400).json({ error: 'Enlace de menú inválido' });
+    }
+
+    const sellerRes = await pool.query(
+      `SELECT id, email, display_name, role, city, is_active
+       FROM users
+       WHERE id = $1`,
+      [sellerUserId]
+    );
+    if (sellerRes.rowCount === 0 || sellerRes.rows[0].is_active === false) {
+      return res.status(404).json({ error: 'Vendedor no disponible para este enlace' });
+    }
+    const seller = sellerRes.rows[0];
+    if (!isSalesRole(seller.role || '')) {
+      return res.status(403).json({ error: 'Este enlace no corresponde a un vendedor válido' });
+    }
+
+    const customerName = String(req.body?.customer_name || '').trim();
+    const customerPhone = String(req.body?.customer_phone || '').trim();
+    const customerNotes = String(req.body?.notes || '').trim();
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!customerName || !customerPhone) {
+      return res.status(400).json({ error: 'Completa nombre y teléfono para enviar el pedido' });
+    }
+    if (customerName.length > 120) {
+      return res.status(400).json({ error: 'Nombre demasiado largo (máx 120)' });
+    }
+    if (customerPhone.length > 30) {
+      return res.status(400).json({ error: 'Teléfono inválido (máx 30)' });
+    }
+    if (customerNotes.length > 600) {
+      return res.status(400).json({ error: 'Notas demasiado largas (máx 600)' });
+    }
+    if (rawItems.length === 0) {
+      return res.status(400).json({ error: 'Agrega al menos un producto al pedido' });
+    }
+
+    const qtyBySku = new Map();
+    for (const item of rawItems) {
+      const sku = normalizeProductSku(item?.sku || '');
+      const qty = Number.parseInt(item?.qty, 10);
+      if (!sku || !Number.isInteger(qty) || qty <= 0) {
+        return res.status(400).json({ error: 'Hay productos inválidos en el pedido' });
+      }
+      qtyBySku.set(sku, (qtyBySku.get(sku) || 0) + qty);
+    }
+    const skus = [...qtyBySku.keys()];
+    const productsRes = await pool.query(
+      `SELECT sku, name, sf_price
+       FROM products
+       WHERE UPPER(sku) = ANY($1::text[])
+         AND is_active = TRUE`,
+      [skus]
+    );
+    if (productsRes.rowCount !== skus.length) {
+      return res.status(400).json({ error: 'Uno o más productos ya no están disponibles' });
+    }
+    const productsBySku = new Map(
+      productsRes.rows.map((row) => [String(row.sku || '').toUpperCase(), row])
+    );
+    const lineItems = skus.map((sku) => {
+      const product = productsBySku.get(sku);
+      const qty = Number(qtyBySku.get(sku) || 0);
+      const unitPrice = Number(product?.sf_price || 0);
+      return {
+        sku,
+        displayName: String(product?.name || sku),
+        qty,
+        unitPrice,
+        lineTotal: unitPrice * qty,
+        isCombo: false,
+        comboItems: []
+      };
+    });
+    const normalizedLineItems = parseAndNormalizeQuoteRows(lineItems);
+    const subtotal = normalizedLineItems.reduce((sum, row) => sum + Number(row.lineTotal || 0), 0);
+    const total = subtotal;
+    const cityScope = resolveInventoryScopeByCity(seller.city || '');
+    const storeLocation = cityScope?.canonical || 'Cochabamba';
+    const vendorName = resolveUserDisplayName(seller, 'Vendedor');
+
+    const insertResult = await pool.query(
+      `INSERT INTO quotes (
+        user_id, customer_name, customer_phone, department, provincia, shipping_notes,
+        alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent, line_items, subtotal,
+        total, status, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
+      RETURNING id, created_at`,
+      [
+        seller.id,
+        customerName,
+        customerPhone,
+        null,
+        null,
+        customerNotes || null,
+        null,
+        null,
+        storeLocation,
+        vendorName,
+        'sf',
+        0,
+        JSON.stringify(normalizedLineItems),
+        subtotal,
+        total,
+        'Cotizado'
+      ]
+    );
+
+    return res.status(201).json({
+      message: 'Pedido enviado correctamente',
+      quote_id: insertResult.rows[0]?.id || null,
+      created_at: insertResult.rows[0]?.created_at || null,
+      seller_name: vendorName
+    });
+  } catch (err) {
+    if (err?.name === 'TokenExpiredError') {
+      return res.status(410).json({ error: 'Este enlace expiró. Pide uno nuevo al vendedor.' });
+    }
+    if (err?.name === 'JsonWebTokenError') {
+      return res.status(400).json({ error: 'Enlace de menú inválido' });
+    }
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error(err);
+    return res.status(500).json({ error: 'No se pudo enviar el pedido' });
   }
 });
 
@@ -4031,10 +4333,10 @@ app.post('/api/product-catalog', authenticateToken, requireRole(['admin']), asyn
     const sku = validateProductSku(req.body?.sku);
     const normalized = normalizeProductPayload(req.body, { partial: false });
     const result = await pool.query(
-      `INSERT INTO products (sku, name, sf_price, cf_price, is_active, last_updated)
-       VALUES ($1, $2, $3, $4, TRUE, NOW())
-       RETURNING sku, name, sf_price, cf_price, is_active`,
-      [sku, normalized.name, normalized.sf_price, normalized.cf_price]
+      `INSERT INTO products (sku, name, sf_price, cf_price, is_active, menu_category, image_url, last_updated)
+       VALUES ($1, $2, $3, $4, TRUE, $5, $6, NOW())
+       RETURNING sku, name, sf_price, cf_price, is_active, menu_category, image_url`,
+      [sku, normalized.name, normalized.sf_price, normalized.cf_price, normalized.menu_category || null, normalized.image_url || null]
     );
     await loadProductCatalogRows();
     res.status(201).json({
@@ -4042,7 +4344,9 @@ app.post('/api/product-catalog', authenticateToken, requireRole(['admin']), asyn
       name: result.rows[0].name,
       sf: Number(result.rows[0].sf_price || 0),
       cf: Number(result.rows[0].cf_price || 0),
-      is_active: Boolean(result.rows[0].is_active)
+      is_active: Boolean(result.rows[0].is_active),
+      menu_category: String(result.rows[0].menu_category || '').trim() || null,
+      image_url: String(result.rows[0].image_url || '').trim() || null
     });
   } catch (err) {
     console.error(err);
@@ -4075,12 +4379,20 @@ app.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin'])
       values.push(Boolean(normalized.is_active));
       sets.push(`is_active = $${values.length}`);
     }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'menu_category')) {
+      values.push(normalized.menu_category || null);
+      sets.push(`menu_category = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'image_url')) {
+      values.push(normalized.image_url || null);
+      sets.push(`image_url = $${values.length}`);
+    }
     values.push(sku);
     const result = await pool.query(
       `UPDATE products
        SET ${sets.join(', ')}, last_updated = NOW()
        WHERE sku = $${values.length}
-       RETURNING sku, name, sf_price, cf_price, is_active`,
+       RETURNING sku, name, sf_price, cf_price, is_active, menu_category, image_url`,
       values
     );
     if (result.rowCount === 0) {
@@ -4092,7 +4404,9 @@ app.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin'])
       name: result.rows[0].name,
       sf: Number(result.rows[0].sf_price || 0),
       cf: Number(result.rows[0].cf_price || 0),
-      is_active: Boolean(result.rows[0].is_active)
+      is_active: Boolean(result.rows[0].is_active),
+      menu_category: String(result.rows[0].menu_category || '').trim() || null,
+      image_url: String(result.rows[0].image_url || '').trim() || null
     });
   } catch (err) {
     console.error(err);

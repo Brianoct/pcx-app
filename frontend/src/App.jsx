@@ -13,10 +13,12 @@ import TimeOffCalendar from './TimeOffCalendar';
 import QualityControlPanel from './QualityControlPanel';
 import MicrofabricaPanel from './MicrofabricaPanel';
 import ExpensesPanel from './ExpensesPanel';
+import CustomerMenuTool from './CustomerMenuTool';
+import PublicCustomerMenu from './PublicCustomerMenu';
 import ProfilePanel from './ProfilePanel';
 import logo from './assets/PCX.png';
 import './index.css';
-import { buildAccessForUser, canAccessPanel } from './roleAccess';
+import { buildAccessForUser, canAccessPanel, normalizeRole } from './roleAccess';
 import { apiRequest } from './apiClient';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useOutbox } from './OutboxProvider';
@@ -91,8 +93,13 @@ function Login({ onLogin }) {
   );
 }
 
+const isSalesDepartmentRole = (roleValue = '') => {
+  const normalized = normalizeRole(roleValue);
+  return normalized === 'ventas' || normalized === 'ventas lider' || normalized === 'sales' || normalized === 'vendedor';
+};
+
 // ─── NavMenu Component ──────────────────────────────────────────────────────
-function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, access }) {
+function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, access, role }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [desktopMoreOpen, setDesktopMoreOpen] = useState(false);
   const location = useLocation();
@@ -109,6 +116,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const canSeeAdmin = canAccessPanel(access, 'admin');
   const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
   const isAdminUser = canSeeAdmin;
+  const canUseCustomerMenu = isSalesDepartmentRole(role) && canQuote;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -140,6 +148,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
 
   const sharedNavItems = [
     canQuote ? { to: '/', label: 'Cotizar' } : null,
+    canUseCustomerMenu ? { to: '/menu-clientes', label: 'Menu Cliente' } : null,
     canSeeHistory ? { to: '/history', label: 'Historial' } : null,
     canSeePerformance ? { to: '/performance', label: 'Rendimiento' } : null,
     canSeePedidos ? { to: '/pedidos', label: 'Pedidos' } : null,
@@ -153,11 +162,12 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     { to: '/perfil', label: 'Perfil' }
   ].filter(Boolean);
 
-  const rolePreferredOrder = ['cotizar', 'history', 'pedidos', 'inventory', 'performance', 'gastos', 'calendario', 'perfil'];
+  const rolePreferredOrder = ['cotizar', 'menu-clientes', 'history', 'pedidos', 'inventory', 'performance', 'gastos', 'calendario', 'perfil'];
   const roleOrderedSharedNavItems = !isAdminUser
     ? [...sharedNavItems].sort((a, b) => {
         const keyOf = (item) => {
           if (item.to === '/') return 'cotizar';
+          if (item.to === '/menu-clientes') return 'menu-clientes';
           if (item.to === '/history') return 'history';
           if (item.to === '/pedidos') return 'pedidos';
           if (item.to === '/inventory') return 'inventory';
@@ -566,7 +576,14 @@ function App() {
   };
 
   if (!token) {
-    return <Login onLogin={handleLogin} />;
+    return (
+      <Router>
+        <Routes>
+          <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
+          <Route path="*" element={<Login onLogin={handleLogin} />} />
+        </Routes>
+      </Router>
+    );
   }
 
   const displayName = user
@@ -675,6 +692,15 @@ function App() {
           path="/"
           element={canAccessPanel(effectiveAccess, 'cotizar') ? <QuoteTool token={token} user={user} /> : <Navigate to={defaultPath} replace />}
         />
+        <Route
+          path="/menu-clientes"
+          element={
+            isSalesDepartmentRole(role) && canAccessPanel(effectiveAccess, 'cotizar')
+              ? <CustomerMenuTool token={token} user={user} />
+              : <Navigate to={defaultPath} replace />
+          }
+        />
+        <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
         <Route
           path="/history"
           element={
