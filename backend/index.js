@@ -17,14 +17,18 @@ const pool = new Pool({
   password: process.env.DB_PASS,
 });
 
-const ensureUsersIsActiveColumn = async () => {
+const ensureUsersSchema = async () => {
   try {
     await pool.query(
       `ALTER TABLE users
        ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`
     );
+    await pool.query(
+      `ALTER TABLE users
+       ADD COLUMN IF NOT EXISTS display_name TEXT`
+    );
   } catch (err) {
-    console.error('No se pudo asegurar users.is_active:', err.message);
+    console.error('No se pudo asegurar esquema users:', err.message);
   }
 };
 
@@ -1057,6 +1061,30 @@ const createHttpError = (statusCode, message) => {
   return err;
 };
 
+const normalizeDisplayName = (value, { required = false, fieldLabel = 'Nombre visible' } = {}) => {
+  if (value === undefined) {
+    if (required) throw createHttpError(400, `${fieldLabel} requerido`);
+    return undefined;
+  }
+  const name = String(value || '').trim();
+  if (!name) {
+    if (required) throw createHttpError(400, `${fieldLabel} requerido`);
+    return null;
+  }
+  if (name.length > 80) {
+    throw createHttpError(400, `${fieldLabel} demasiado largo (máx 80)`);
+  }
+  return name;
+};
+
+const resolveUserDisplayName = (row = {}, fallback = '') => {
+  const preferred = String(row?.display_name || '').trim();
+  if (preferred) return preferred;
+  const emailBase = String(row?.email || '').split('@')[0].trim();
+  if (emailBase) return emailBase;
+  return fallback || 'Usuario';
+};
+
 const normalizeExpenseDateInput = (value, fieldLabel = 'Fecha del gasto') => {
   if (value === undefined || value === null || String(value).trim() === '') return null;
   const dateText = String(value).trim();
@@ -1328,11 +1356,19 @@ const mergeAccessWithDefaults = (baseRole, panelAccess) => {
   return merged;
 };
 
+const getUserDisplayName = (userRow, fallback = 'Usuario') => {
+  const explicit = String(userRow?.display_name || '').trim();
+  if (explicit) return explicit;
+  const fromEmail = String(userRow?.email || '').split('@')[0].trim();
+  return fromEmail || fallback;
+};
+
 const buildUserPayload = (userRow) => {
   const panel_access = sanitizePanelAccess(userRow.panel_access, userRow.role);
   return {
     id: userRow.id,
     email: userRow.email,
+    display_name: getUserDisplayName(userRow),
     role: userRow.role,
     city: userRow.city,
     phone: userRow.phone,
@@ -1342,7 +1378,7 @@ const buildUserPayload = (userRow) => {
 
 const loadUserContext = async (userId) => {
   const result = await pool.query(
-    'SELECT id, email, role, city, phone, panel_access FROM users WHERE id = $1',
+    'SELECT id, email, display_name, role, city, phone, panel_access FROM users WHERE id = $1',
     [userId]
   );
   if (result.rowCount === 0) return null;
@@ -1355,7 +1391,7 @@ const resolveAssignableVendorName = async (sellerUserId, fallbackName = '') => {
     throw createHttpError(400, 'Vendedor asignado inválido');
   }
   const sellerRes = await pool.query(
-    `SELECT id, email, role
+    `SELECT id, email, display_name, role
      FROM users
      WHERE id = $1
        AND is_active = TRUE`,
@@ -1373,7 +1409,7 @@ const resolveAssignableVendorName = async (sellerUserId, fallbackName = '') => {
   if (!isAssignableSeller) {
     throw createHttpError(400, 'El usuario asignado no pertenece al equipo de ventas');
   }
-  const displayName = String(seller.email || '').split('@')[0] || fallbackName || 'Vendedor';
+  const displayName = resolveUserDisplayName(seller, fallbackName || 'Vendedor');
   return displayName;
 };
 
@@ -1441,7 +1477,7 @@ const requireRole = (roles) => (req, res, next) => {
 
 // ─── REGISTER new user (admin only) ────────────────────────────────────────
 app.post('/api/register', authenticateToken, requireRole(['admin']), async (req, res) => {
-  const { email, password, role, city, phone } = req.body;
+  const { email, password, role, city, phone, display_name } = req.body;
   if (!email || !password || !role) {
     return res.status(400).json({ error: 'Faltan campos requeridos' });
   }
@@ -1452,10 +1488,11 @@ app.post('/api/register', authenticateToken, requireRole(['admin']), async (req,
   }
 
   try {
+    const safeDisplayName = normalizeDisplayName(display_name, { required: false });
     const hashedPass = await bcrypt.hash(password, 10);
     await pool.query(
-      'INSERT INTO users (email, password_hash, role, city, phone) VALUES ($1, $2, $3, $4, $5)',
-      [email, hashedPass, role, city || null, phone || null]
+      'INSERT INTO users (email, password_hash, role, city, phone, display_name) VALUES ($1, $2, $3, $4, $5, $6)',
+      [email, hashedPass, role, city || null, phone || null, safeDisplayName]
     );
     res.status(201).json({ message: 'User created' });
   } catch (err) {
@@ -1514,7 +1551,7 @@ app.get('/api/sellers/assignable', authenticateToken, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, email, role
+      `SELECT id, email, display_name, role
        FROM users
        WHERE is_active = TRUE
          AND (role ILIKE '%ventas%' OR role ILIKE '%sales%' OR role ILIKE '%vendedor%')
@@ -1525,7 +1562,7 @@ app.get('/api/sellers/assignable', authenticateToken, async (req, res) => {
         id: row.id,
         email: row.email,
         role: row.role,
-        display_name: String(row.email || '').split('@')[0] || 'Vendedor'
+        display_name: resolveUserDisplayName(row, 'Vendedor')
       }))
     );
   } catch (err) {
@@ -1543,13 +1580,18 @@ app.get('/api/users/sales', authenticateToken, async (req, res) => {
   }
   try {
     const result = await pool.query(
-      `SELECT id, email, role
+      `SELECT id, email, display_name, role
        FROM users
        WHERE is_active = TRUE
          AND (role ILIKE '%ventas%' OR role ILIKE '%sales%' OR role ILIKE '%vendedor%')
        ORDER BY email ASC`
     );
-    res.json(result.rows.map((row) => ({ id: row.id, email: row.email, role: row.role })));
+    res.json(result.rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      role: row.role,
+      display_name: resolveUserDisplayName(row, 'Vendedor')
+    })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo cargar la lista de vendedores' });
@@ -1641,7 +1683,7 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     const creatorRole = normalizeRole(userContext.role || '');
     const isWarehouseQuoteMode = creatorRole === 'almacen' || creatorRole === 'almacen lider';
     let quoteOwnerId = req.user.id;
-    let vendorDisplayName = vendor || userContext.email?.split('@')[0] || 'Usuario';
+    let vendorDisplayName = String(vendor || '').trim() || getUserDisplayName(userContext, 'Usuario');
 
     if (isWarehouseQuoteMode) {
       const selectedSellerId = Number.parseInt(seller_user_id, 10);
@@ -1649,7 +1691,7 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
         throw createHttpError(400, 'Selecciona un vendedor válido para asignar la cotización');
       }
       const sellerRes = await client.query(
-        'SELECT id, email, role FROM users WHERE id = $1 AND is_active = TRUE',
+        'SELECT id, email, display_name, role FROM users WHERE id = $1 AND is_active = TRUE',
         [selectedSellerId]
       );
       if (sellerRes.rowCount === 0) {
@@ -1662,7 +1704,7 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
         throw createHttpError(400, 'Solo puedes asignar la cotización a un usuario de ventas');
       }
       quoteOwnerId = seller.id;
-      vendorDisplayName = String(seller.email || '').split('@')[0] || vendorDisplayName;
+      vendorDisplayName = resolveUserDisplayName(seller, vendorDisplayName);
     }
 
     const quoteResult = await client.query(
@@ -3212,7 +3254,7 @@ app.delete('/api/cupones/:id', authenticateToken, requireRole(['Marketing Lider'
 app.get('/api/users', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, role, city, phone, panel_access, created_at, is_active FROM users ORDER BY created_at DESC'
+      'SELECT id, email, display_name, role, city, phone, panel_access, created_at, is_active FROM users ORDER BY created_at DESC'
     );
     res.json(result.rows.map((u) => ({ ...u, panel_access: sanitizePanelAccess(u.panel_access, u.role) })));
   } catch (err) {
@@ -3253,7 +3295,7 @@ app.put('/api/role-access-defaults', authenticateToken, requireRole(['admin']), 
 });
 
 app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, res) => {
-  const { email, password, role, city, phone, panel_access } = req.body;
+  const { email, password, role, city, phone, panel_access, display_name } = req.body;
   if (!email || !password || !role) return res.status(400).json({ error: 'Faltan campos requeridos' });
 
   // Validate phone (optional, but if provided must be 8 digits)
@@ -3262,12 +3304,13 @@ app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, re
   }
 
   const effectivePanelAccess = sanitizePanelAccess(panel_access, role);
+  const safeDisplayName = normalizeDisplayName(display_name, { required: false });
 
   try {
     const hashedPass = await bcrypt.hash(password, 10);
     await pool.query(
-      'INSERT INTO users (email, password_hash, role, city, phone, panel_access) VALUES ($1, $2, $3, $4, $5, $6::jsonb)',
-      [email, hashedPass, role, city || null, phone || null, JSON.stringify(effectivePanelAccess)]
+      'INSERT INTO users (email, password_hash, role, city, phone, panel_access, display_name) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)',
+      [email, hashedPass, role, city || null, phone || null, JSON.stringify(effectivePanelAccess), safeDisplayName]
     );
     res.status(201).json({ message: 'User created' });
   } catch (err) {
@@ -3278,7 +3321,7 @@ app.post('/api/users', authenticateToken, requireRole(['admin']), async (req, re
 });
 
 app.patch('/api/users/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
-  const { role, city, phone, panel_access } = req.body;
+  const { role, city, phone, panel_access, display_name } = req.body;
   if (!role) return res.status(400).json({ error: 'El rol es obligatorio' });
 
   if (phone !== undefined && phone !== null && phone !== '' && !/^\d{8}$/.test(phone)) {
@@ -3287,24 +3330,67 @@ app.patch('/api/users/:id', authenticateToken, requireRole(['admin']), async (re
 
   const cityProvided = Object.prototype.hasOwnProperty.call(req.body, 'city');
   const phoneProvided = Object.prototype.hasOwnProperty.call(req.body, 'phone');
+  const displayNameProvided = Object.prototype.hasOwnProperty.call(req.body, 'display_name');
   const panelAccessProvided = Object.prototype.hasOwnProperty.call(req.body, 'panel_access');
   const cityValue = city === '' ? null : city;
   const phoneValue = phone === '' ? null : phone;
+  const displayNameValue = displayNameProvided ? normalizeDisplayName(display_name, { required: false, fieldLabel: 'Nombre visible' }) : null;
   const panelAccessValue = panelAccessProvided ? JSON.stringify(sanitizePanelAccess(panel_access, role)) : null;
 
   try {
+    const currentResult = await pool.query(
+      'SELECT display_name, email FROM users WHERE id = $1',
+      [req.params.id]
+    );
+    if (currentResult.rowCount === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+    const previousDisplayName = resolveUserDisplayName(currentResult.rows[0], '');
+    const nextDisplayName = displayNameProvided
+      ? resolveUserDisplayName({ display_name: displayNameValue, email: currentResult.rows[0].email }, previousDisplayName)
+      : previousDisplayName;
+
     const result = await pool.query(
       `UPDATE users
        SET role = $1,
            city = CASE WHEN $2::boolean THEN $3 ELSE city END,
            phone = CASE WHEN $4::boolean THEN $5 ELSE phone END,
-           panel_access = CASE WHEN $6::boolean THEN $7::jsonb ELSE panel_access END
-       WHERE id = $8
+           display_name = CASE WHEN $6::boolean THEN $7 ELSE display_name END,
+           panel_access = CASE WHEN $8::boolean THEN $9::jsonb ELSE panel_access END
+       WHERE id = $10
        RETURNING id`,
-      [role, cityProvided, cityValue, phoneProvided, phoneValue, panelAccessProvided, panelAccessValue, req.params.id]
+      [
+        role,
+        cityProvided,
+        cityValue,
+        phoneProvided,
+        phoneValue,
+        displayNameProvided,
+        displayNameValue,
+        panelAccessProvided,
+        panelAccessValue,
+        req.params.id
+      ]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
-    res.json({ message: 'User updated' });
+
+    let updatedQuotesVendor = 0;
+    if (displayNameProvided && normalizeText(previousDisplayName) !== normalizeText(nextDisplayName)) {
+      const quoteUpdate = await pool.query(
+        `UPDATE quotes
+         SET vendor = $1
+         WHERE user_id = $2
+           AND LOWER(TRIM(vendor)) = LOWER(TRIM($3))`,
+        [nextDisplayName, req.params.id, previousDisplayName]
+      );
+      updatedQuotesVendor = Number(quoteUpdate.rowCount || 0);
+    }
+
+    res.json({
+      message: 'User updated',
+      updated_quotes_vendor: updatedQuotesVendor,
+      new_display_name: nextDisplayName
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo actualizar usuario' });
@@ -4590,18 +4676,27 @@ app.patch('/api/qc/commissions', authenticateToken, requireRole(['admin']), asyn
 });
 
 app.patch('/api/me', authenticateToken, async (req, res) => {
-  const { email, city, phone } = req.body || {};
+  const { email, city, phone, display_name } = req.body || {};
   const hasEmail = email !== undefined;
   const hasCity = city !== undefined;
   const hasPhone = phone !== undefined;
+  const hasDisplayName = display_name !== undefined;
 
-  if (!hasEmail && !hasCity && !hasPhone) {
+  if (!hasEmail && !hasCity && !hasPhone && !hasDisplayName) {
     return res.status(400).json({ error: 'No se enviaron cambios para actualizar perfil' });
   }
 
   const nextEmail = hasEmail ? String(email || '').trim().toLowerCase() : undefined;
   const nextCity = hasCity ? (city ? String(city).trim() : null) : undefined;
   const nextPhone = hasPhone ? (phone ? String(phone).trim() : null) : undefined;
+  let nextDisplayName;
+  if (hasDisplayName) {
+    try {
+      nextDisplayName = normalizeDisplayName(display_name, { required: false, fieldLabel: 'Nombre visible' });
+    } catch (nameErr) {
+      return res.status(nameErr?.statusCode || 400).json({ error: nameErr.message || 'Nombre visible inválido' });
+    }
+  }
 
   if (hasEmail) {
     if (!nextEmail) {
@@ -4623,15 +4718,17 @@ app.patch('/api/me', authenticateToken, async (req, res) => {
     const updatedEmail = hasEmail ? nextEmail : currentUser.email;
     const updatedCity = hasCity ? nextCity : currentUser.city;
     const updatedPhone = hasPhone ? nextPhone : currentUser.phone;
+    const updatedDisplayName = hasDisplayName ? nextDisplayName : (currentUser.display_name || null);
 
     const result = await pool.query(
       `UPDATE users
        SET email = $1,
            city = $2,
-           phone = $3
-       WHERE id = $4
-       RETURNING id, email, role, city, phone, panel_access`,
-      [updatedEmail, updatedCity, updatedPhone, req.user.id]
+           phone = $3,
+           display_name = $4
+       WHERE id = $5
+       RETURNING id, email, display_name, role, city, phone, panel_access`,
+      [updatedEmail, updatedCity, updatedPhone, updatedDisplayName, req.user.id]
     );
 
     const updatedUser = result.rows[0];
@@ -4701,7 +4798,7 @@ app.get('/api/me', authenticateToken, async (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 const startServer = async () => {
-  await ensureUsersIsActiveColumn();
+  await ensureUsersSchema();
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });

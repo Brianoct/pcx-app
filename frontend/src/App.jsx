@@ -546,7 +546,9 @@ function App() {
     return <Login onLogin={handleLogin} />;
   }
 
-  const displayName = user ? user.email.split('@')[0] : 'Usuario';
+  const displayName = user
+    ? (String(user.display_name || '').trim() || String(user.email || '').split('@')[0] || 'Usuario')
+    : 'Usuario';
   const effectiveAccess = buildAccessForUser(role, access);
   const defaultPath = canAccessPanel(effectiveAccess, 'admin')
     ? '/admin'

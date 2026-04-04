@@ -4,6 +4,7 @@ import { useOutbox } from './OutboxProvider';
 
 export default function ProfilePanel({ token, user, onUserUpdated }) {
   const { enqueueWrite, isOnline } = useOutbox();
+  const [displayName, setDisplayName] = useState(user?.display_name || '');
   const [email, setEmail] = useState(user?.email || '');
   const [city, setCity] = useState(user?.city || '');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -21,6 +22,7 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
     setSavingProfile(true);
     try {
       const payload = {
+        display_name: String(displayName || '').trim() || null,
         email: String(email || '').trim(),
         city: city ? String(city).trim() : null,
         phone: phone ? String(phone).trim() : null
@@ -43,6 +45,7 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
         if (typeof onUserUpdated === 'function') {
           onUserUpdated({
             ...user,
+            display_name: payload.display_name,
             email: payload.email,
             city: payload.city,
             phone: payload.phone
@@ -139,6 +142,15 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
         </div>
 
         <form onSubmit={saveProfile} className="quote-edit-grid">
+          <label>
+            Nombre visible
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Ej: Wendy"
+            />
+          </label>
           <label>
             Correo
             <input
