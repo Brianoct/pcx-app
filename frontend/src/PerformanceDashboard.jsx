@@ -40,6 +40,8 @@ function PerformanceDashboard({ token, user, role, access }) {
   const canViewIndividual = canAccessPanel(access, 'rendimientoIndividual');
   const viewMode = canViewGlobal ? 'global' : 'individual';
   const isVentasLider = isVentasLiderRole(role || '');
+  const normalizedCurrentRole = normalizeRole(role || '');
+  const isAlmacenRole = normalizedCurrentRole === 'almacen' || normalizedCurrentRole === 'almacen lider';
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -56,10 +58,13 @@ function PerformanceDashboard({ token, user, role, access }) {
           year: selectedYear
         });
 
-        const [perfRes, commissionRes, settingsRes] = await Promise.all([
+        const [perfRes, commissionRes, settingsRes, ordersRes] = await Promise.all([
           apiRequest(`/api/performance?${params.toString()}`, { token }),
           apiRequest(`/api/commission/current?${commissionParams.toString()}`, { token }),
-          apiRequest('/api/commission/settings', { token })
+          apiRequest('/api/commission/settings', { token }),
+          viewMode === 'individual'
+            ? apiRequest(`/api/commission/current/orders?${commissionParams.toString()}`, { token }).catch(() => null)
+            : Promise.resolve(null)
         ]);
 
         const perfData = perfRes;
@@ -70,10 +75,14 @@ function PerformanceDashboard({ token, user, role, access }) {
 
         if (viewMode === 'individual') {
           const source = Array.isArray(perfData) ? perfData[0] : perfData;
+          const warehouseOrders = Number(ordersRes?.orders_count || 0);
+          const warehouseLocalStore = String(ordersRes?.criteria?.local_store_match || '').trim();
           setPersonal({
             vendor: user?.email || 'Mi usuario',
             cotizaciones: Number(source?.cotizaciones_confirmadas || 0),
             totalVentas: Number(source?.ventas_totales || 0),
+            pedidosEnviados: warehouseOrders,
+            localStore: warehouseLocalStore,
             comision: Number(commissionData?.commission || 0),
             rate: Number(commissionData?.breakdown?.rate || 0),
             isTopSeller: Boolean(commissionData?.isTopSeller),
@@ -149,7 +158,7 @@ function PerformanceDashboard({ token, user, role, access }) {
     };
 
     fetchDashboard();
-  }, [selectedMonth, selectedYear, viewMode, token, user?.email]);
+  }, [selectedMonth, selectedYear, viewMode, token, user?.email, role]);
 
   if (!canViewGlobal && !canViewIndividual) {
     return (
@@ -178,7 +187,9 @@ function PerformanceDashboard({ token, user, role, access }) {
         Panel de Rendimiento
       </h2>
       <p style={{ textAlign: 'center', color: '#94a3b8', marginBottom: '22px' }}>
-        {viewMode === 'global' ? 'Vista global del equipo de ventas' : 'Vista individual de vendedor'}
+        {viewMode === 'global'
+          ? 'Vista global del equipo de ventas'
+          : (isAlmacenRole ? 'Vista individual de almacén' : 'Vista individual de vendedor')}
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px', marginBottom: '20px' }}>
@@ -193,23 +204,35 @@ function PerformanceDashboard({ token, user, role, access }) {
       {viewMode === 'individual' && personal && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-            <KpiCard label="Ventas del período" value={formatMoney(personal.totalVentas)} accent="#60a5fa" />
-            <KpiCard label="Cotizaciones confirmadas" value={String(personal.cotizaciones)} accent="#f59e0b" />
-            <KpiCard label="Comisión estimada" value={formatMoney(personal.comision)} accent="#10b981" />
             <KpiCard
-              label="Tasa aplicada"
+              label={isAlmacenRole ? 'Pedidos enviados' : 'Ventas del período'}
+              value={isAlmacenRole ? String(personal.pedidosEnviados || 0) : formatMoney(personal.totalVentas)}
+              accent="#60a5fa"
+            />
+            <KpiCard
+              label={isAlmacenRole ? 'Ventas enviadas' : 'Cotizaciones confirmadas'}
+              value={isAlmacenRole ? formatMoney(personal.totalVentas) : String(personal.cotizaciones)}
+              accent="#f59e0b"
+            />
+            <KpiCard label={isAlmacenRole ? 'Comisión' : 'Comisión estimada'} value={formatMoney(personal.comision)} accent="#10b981" />
+            <KpiCard
+              label={isAlmacenRole ? 'Comisión Almacén' : 'Tasa aplicada'}
               value={`${(personal.rate * 100).toFixed(0)}%`}
-              hint={personal.isTopSeller ? 'Mejor en ventas actual' : `Tasa asesor de ventas (${Number(commissionSettings?.ventas_regular_percent ?? 8)}%)`}
+              hint={isAlmacenRole
+                ? `Sobre pedidos enviados${personal.localStore ? ` (${personal.localStore})` : ''}`
+                : (personal.isTopSeller ? 'Mejor en ventas actual' : `Tasa asesor de ventas (${Number(commissionSettings?.ventas_regular_percent ?? 8)}%)`)}
               accent={personal.isTopSeller ? '#facc15' : '#cbd5e1'}
             />
           </div>
 
           <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '16px' }}>
-            <h3 style={{ marginBottom: '8px', color: '#f1f5f9' }}>Detalle de comisión</h3>
+            <h3 style={{ marginBottom: '8px', color: '#f1f5f9' }}>
+              {isAlmacenRole ? 'Detalle de comisión de almacén' : 'Detalle de comisión'}
+            </h3>
             <p style={{ color: '#94a3b8', marginBottom: '8px' }}>
               {commissionInfo?.breakdown?.source || personal.source || 'Comisión calculada para el período seleccionado.'}
             </p>
-            {commissionInfo?.isTopSeller && (
+            {!isAlmacenRole && commissionInfo?.isTopSeller && (
               <div style={{ color: '#facc15', fontWeight: 700 }}>
                 Eres quien va mejor en ventas en el período. Se aplica {Number(commissionSettings?.ventas_top_percent ?? 12)}%.
               </div>
