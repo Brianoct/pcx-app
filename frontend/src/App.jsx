@@ -129,14 +129,14 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const adminCoreNavItems = isAdminUser
     ? [
         { to: '/admin?tab=usuarios', label: 'Usuarios' },
-        { to: '/admin?tab=productos', label: 'Productos' },
         { to: '/admin?tab=roles', label: 'Roles' },
-        { to: '/admin?tab=comisiones', label: 'Comisiones' },
-        { to: '/admin?tab=estadisticas', label: 'Estadísticas' }
+        { to: '/admin?tab=productos', label: 'Productos' },
+        { to: '/admin?tab=comisiones', label: 'Comisiones' }
       ]
     : [];
 
   const sharedNavItems = [
+    isAdminUser ? { to: '/admin?tab=estadisticas', label: 'Estadísticas' } : null,
     canQuote ? { to: '/', label: 'Cotizar' } : null,
     canSeeHistory ? { to: '/history', label: 'Historial' } : null,
     canSeePerformance ? { to: '/performance', label: 'Rendimiento' } : null,
@@ -211,7 +211,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
                   aria-haspopup="menu"
                   aria-expanded={desktopMoreOpen}
                 >
-                  {isAdminUser ? 'Operación ▾' : 'Más ▾'}
+                  {isAdminUser ? 'Operaciones ▾' : 'Más ▾'}
                 </button>
                 {desktopMoreOpen && (
                   <div className="more-menu-list" role="menu">
