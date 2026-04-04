@@ -18,7 +18,7 @@ import PublicCustomerMenu from './PublicCustomerMenu';
 import ProfilePanel from './ProfilePanel';
 import logo from './assets/PCX.png';
 import './index.css';
-import { buildAccessForUser, canAccessPanel, normalizeRole } from './roleAccess';
+import { buildAccessForUser, canAccessPanel } from './roleAccess';
 import { apiRequest } from './apiClient';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useOutbox } from './OutboxProvider';
@@ -93,13 +93,8 @@ function Login({ onLogin }) {
   );
 }
 
-const isSalesDepartmentRole = (roleValue = '') => {
-  const normalized = normalizeRole(roleValue);
-  return normalized === 'ventas' || normalized === 'ventas lider' || normalized === 'sales' || normalized === 'vendedor';
-};
-
 // ─── NavMenu Component ──────────────────────────────────────────────────────
-function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, access, role }) {
+function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, access }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [desktopMoreOpen, setDesktopMoreOpen] = useState(false);
   const location = useLocation();
@@ -116,7 +111,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const canSeeAdmin = canAccessPanel(access, 'admin');
   const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
   const isAdminUser = canSeeAdmin;
-  const canUseCustomerMenu = isSalesDepartmentRole(role) && canQuote;
+  const canUseCustomerMenu = canAccessPanel(access, 'menu_cliente');
 
   useEffect(() => {
     setMenuOpen(false);
@@ -683,7 +678,6 @@ function App() {
         handleLogout={handleLogout}
         currentCommission={currentCommission}
         isTopSeller={isTopSeller}
-        role={role}
         access={effectiveAccess}
       />
 
@@ -695,7 +689,7 @@ function App() {
         <Route
           path="/menu-clientes"
           element={
-            isSalesDepartmentRole(role) && canAccessPanel(effectiveAccess, 'cotizar')
+            canAccessPanel(effectiveAccess, 'menu_cliente')
               ? <CustomerMenuTool token={token} user={user} />
               : <Navigate to={defaultPath} replace />
           }

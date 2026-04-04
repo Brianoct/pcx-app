@@ -43,6 +43,7 @@ const normalizeRole = (value = '') => normalizeText(value);
 const COMPLETED_STATUSES = ['Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const PANEL_KEYS = [
   'cotizar',
+  'menu_cliente',
   'calendario',
   'historial_individual',
   'historial_global',
@@ -64,6 +65,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
   const role = normalizeRole(roleValue);
   const base = {
     cotizar: false,
+    menu_cliente: false,
     calendario: false,
     historial_individual: false,
     historial_global: false,
@@ -89,6 +91,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     return {
       ...base,
       cotizar: true,
+      menu_cliente: true,
       calendario: true,
       historial_individual: true,
       rendimiento_individual: true
@@ -99,6 +102,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     return {
       ...base,
       cotizar: true,
+      menu_cliente: true,
       calendario: true,
       historial_global: true,
       rendimiento_global: true
@@ -215,8 +219,6 @@ const ROLE_KEYS = {
   microfabricaLider: 'microfabrica lider',
   microfabrica: 'microfabrica'
 };
-const SALES_ROLE_KEYS = new Set([ROLE_KEYS.ventas, ROLE_KEYS.ventasLider, 'sales', 'vendedor']);
-const isSalesRole = (roleValue = '') => SALES_ROLE_KEYS.has(normalizeRole(roleValue));
 
 const EXPENSE_RECURRENCE_VALUES = ['weekly', 'monthly', 'quarterly', 'yearly'];
 const EXPENSE_DEPARTMENT_BY_ROLE = {
@@ -1660,11 +1662,8 @@ app.get('/api/users/sales', authenticateToken, async (req, res) => {
 app.post('/api/customer-menu/share-link', authenticateToken, async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
-  if (!canAccessPanel(userContext.panel_access, userContext.role, 'cotizar')) {
+  if (!canAccessPanel(userContext.panel_access, userContext.role, 'menu_cliente')) {
     return res.status(403).json({ error: 'No tienes permiso para generar enlaces de menú' });
-  }
-  if (!isSalesRole(userContext.role || '')) {
-    return res.status(403).json({ error: 'Esta herramienta es solo para el equipo de ventas' });
   }
 
   try {
@@ -1709,7 +1708,7 @@ app.get('/api/public/menu/:shareToken', async (req, res) => {
     }
 
     const sellerRes = await pool.query(
-      `SELECT id, email, display_name, role, city, is_active
+      `SELECT id, email, display_name, role, panel_access, city, is_active
        FROM users
        WHERE id = $1`,
       [sellerUserId]
@@ -1718,8 +1717,8 @@ app.get('/api/public/menu/:shareToken', async (req, res) => {
       return res.status(404).json({ error: 'Vendedor no disponible para este enlace' });
     }
     const seller = sellerRes.rows[0];
-    if (!isSalesRole(seller.role || '')) {
-      return res.status(403).json({ error: 'Este enlace no corresponde a un vendedor válido' });
+    if (!canAccessPanel(seller.panel_access, seller.role, 'menu_cliente')) {
+      return res.status(403).json({ error: 'Este enlace no corresponde a un usuario autorizado' });
     }
 
     const cityScope = resolveInventoryScopeByCity(seller.city || '');
@@ -1775,7 +1774,7 @@ app.post('/api/public/menu/:shareToken/order', async (req, res) => {
     }
 
     const sellerRes = await pool.query(
-      `SELECT id, email, display_name, role, city, is_active
+      `SELECT id, email, display_name, role, panel_access, city, is_active
        FROM users
        WHERE id = $1`,
       [sellerUserId]
@@ -1784,8 +1783,8 @@ app.post('/api/public/menu/:shareToken/order', async (req, res) => {
       return res.status(404).json({ error: 'Vendedor no disponible para este enlace' });
     }
     const seller = sellerRes.rows[0];
-    if (!isSalesRole(seller.role || '')) {
-      return res.status(403).json({ error: 'Este enlace no corresponde a un vendedor válido' });
+    if (!canAccessPanel(seller.panel_access, seller.role, 'menu_cliente')) {
+      return res.status(403).json({ error: 'Este enlace no corresponde a un usuario autorizado' });
     }
 
     const customerName = String(req.body?.customer_name || '').trim();
