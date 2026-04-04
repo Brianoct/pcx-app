@@ -96,6 +96,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const [menuOpen, setMenuOpen] = useState(false);
   const [desktopMoreOpen, setDesktopMoreOpen] = useState(false);
   const location = useLocation();
+  const isAdminTabPath = location.pathname === '/admin';
   const canQuote = canAccessPanel(access, 'cotizar');
   const canSeeHistory = canAccessPanel(access, 'historialGlobal') || canAccessPanel(access, 'historialIndividual');
   const canSeePerformance = canAccessPanel(access, 'rendimientoGlobal') || canAccessPanel(access, 'rendimientoIndividual');
@@ -151,11 +152,36 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     { to: '/perfil', label: 'Perfil' }
   ].filter(Boolean);
 
-  const allNavItems = isAdminUser
-    ? [...adminCoreNavItems, ...sharedNavItems]
+  const almacenPreferredOrder = ['cotizar', 'pedidos', 'inventario', 'rendimiento', 'calendario', 'perfil'];
+  const roleOrderedSharedNavItems = !isAdminUser
+    ? [...sharedNavItems].sort((a, b) => {
+        const keyOf = (item) => {
+          if (item.to === '/') return 'cotizar';
+          if (item.to === '/pedidos') return 'pedidos';
+          if (item.to === '/inventory') return 'inventario';
+          if (item.to === '/performance') return 'rendimiento';
+          if (item.to === '/calendario') return 'calendario';
+          if (item.to === '/perfil') return 'perfil';
+          return item.to || '';
+        };
+        const aKey = keyOf(a);
+        const bKey = keyOf(b);
+        const aIndex = almacenPreferredOrder.indexOf(aKey);
+        const bIndex = almacenPreferredOrder.indexOf(bKey);
+        if (aIndex === -1 && bIndex === -1) return 0;
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      })
     : sharedNavItems;
 
-  const MAX_DESKTOP_VISIBLE = isAdminUser ? adminCoreNavItems.length : 7;
+  const allNavItems = isAdminUser
+    ? [...adminCoreNavItems, ...sharedNavItems]
+    : roleOrderedSharedNavItems;
+
+  const MAX_DESKTOP_VISIBLE = isAdminUser
+    ? (isAdminTabPath ? adminCoreNavItems.length : 0)
+    : 7;
   const desktopPrimaryItems = allNavItems.slice(0, MAX_DESKTOP_VISIBLE);
   const desktopOverflowItems = allNavItems.slice(MAX_DESKTOP_VISIBLE);
   const isNavItemActive = (item) => {
