@@ -1,5 +1,6 @@
 // src/AdminPanel.jsx
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import AdminDashboard from './AdminDashboard';
 import { ACCESS_LABELS, buildAccessForUser, ROLE_OPTIONS } from './roleAccess';
 import { apiRequest } from './apiClient';
@@ -1596,7 +1597,7 @@ function RoleConfiguration({ token }) {
   const [loading, setLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState('Ventas');
   const [saving, setSaving] = useState(false);
-  const [applying, setApplying] = useState(false);
+  const [applyToExistingUsers, setApplyToExistingUsers] = useState(true);
   const [message, setMessage] = useState('');
 
   const loadDefaults = async () => {
@@ -1636,17 +1637,16 @@ function RoleConfiguration({ token }) {
     )));
   };
 
-  const saveRole = async (role, options = {}) => {
-    const { applyToUsers = false } = options;
+  const saveRole = async (role) => {
     const row = rows.find((r) => r.role === role);
     if (!row) return;
     setSaving(true);
     setMessage('');
     try {
-      const payload = { panel_access: row.panel_access, apply_to_users: applyToUsers };
+      const payload = { panel_access: row.panel_access, apply_to_users: applyToExistingUsers };
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         enqueueWrite({
-          label: applyToUsers
+          label: applyToExistingUsers
             ? `Guardar y aplicar rol ${role}`
             : `Guardar configuración rol ${role}`,
           path: `/api/roles/access-defaults/${encodeURIComponent(role)}`,
@@ -1655,10 +1655,10 @@ function RoleConfiguration({ token }) {
             body: payload,
             retries: 0
           },
-          meta: { role, applyToUsers }
+          meta: { role, applyToUsers: applyToExistingUsers }
         });
         const baseMsg = `Sin conexión: configuración del rol ${role} en cola para sincronizar.`;
-        setMessage(applyToUsers ? `${baseMsg} Se aplicará a usuarios al sincronizar.` : baseMsg);
+        setMessage(applyToExistingUsers ? `${baseMsg} Se aplicará a usuarios al sincronizar.` : baseMsg);
       } else {
         const data = await apiRequest(`/api/roles/access-defaults/${encodeURIComponent(role)}`, {
           method: 'PATCH',
@@ -1667,43 +1667,13 @@ function RoleConfiguration({ token }) {
         });
         const updatedUsers = Number(data?.updated_users || 0);
         const baseMsg = `Configuración guardada para rol ${role}.`;
-        setMessage(applyToUsers ? `${baseMsg} Aplicada a ${updatedUsers} usuario(s).` : baseMsg);
+        setMessage(applyToExistingUsers ? `${baseMsg} Aplicada a ${updatedUsers} usuario(s).` : baseMsg);
         await loadDefaults();
       }
     } catch (err) {
       setMessage(`Error: ${err.message}`);
     } finally {
       setSaving(false);
-    }
-  };
-
-  const applyRoleDefaultsToUsers = async (role) => {
-    if (!window.confirm(`¿Aplicar la configuración por defecto del rol "${role}" a todos los usuarios con ese rol?`)) return;
-    setApplying(true);
-    setMessage('');
-    try {
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        enqueueWrite({
-          label: `Aplicar rol ${role} a usuarios`,
-          path: `/api/roles/access-defaults/${encodeURIComponent(role)}/apply`,
-          options: {
-            method: 'POST',
-            retries: 0
-          },
-          meta: { role }
-        });
-        setMessage(`Sin conexión: aplicación de rol ${role} en cola para sincronizar.`);
-      } else {
-        const data = await apiRequest(`/api/roles/access-defaults/${encodeURIComponent(role)}/apply`, {
-          method: 'POST',
-          token
-        });
-        setMessage(`Aplicado a ${data.updated_users ?? 0} usuario(s) del rol ${role}.`);
-      }
-    } catch (err) {
-      setMessage(`Error: ${err.message}`);
-    } finally {
-      setApplying(false);
     }
   };
 
@@ -1755,19 +1725,29 @@ function RoleConfiguration({ token }) {
               </select>
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <label style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                color: '#cbd5e1',
+                border: '1px solid #334155',
+                borderRadius: '8px',
+                padding: '8px 10px',
+                background: 'rgba(15,23,42,0.7)'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={applyToExistingUsers}
+                  onChange={(e) => setApplyToExistingUsers(e.target.checked)}
+                />
+                Aplicar a usuarios existentes
+              </label>
               <button
                 onClick={() => saveRole(selectedRole)}
-                disabled={saving || applying}
-                style={{ padding: '9px 14px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: saving || applying ? 'not-allowed' : 'pointer', fontWeight: 700 }}
+                disabled={saving}
+                style={{ padding: '9px 14px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700 }}
               >
-                {saving ? 'Guardando...' : 'Guardar cambios'}
-              </button>
-              <button
-                onClick={() => saveRole(selectedRole, { applyToUsers: true })}
-                disabled={saving || applying}
-                style={{ padding: '9px 14px', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', cursor: saving || applying ? 'not-allowed' : 'pointer', fontWeight: 700 }}
-              >
-                {saving ? 'Guardando...' : 'Guardar y aplicar'}
+                {saving ? 'Guardando...' : 'Guardar configuración'}
               </button>
             </div>
           </div>
@@ -1801,7 +1781,7 @@ function RoleConfiguration({ token }) {
           </div>
 
           <div style={{ marginTop: '10px', color: '#94a3b8', fontSize: '0.9rem' }}>
-            Consejo: usa <strong>Guardar y aplicar</strong> para que el cambio se refleje inmediatamente en todos los usuarios existentes del rol.
+            Consejo: activa <strong>Aplicar a usuarios existentes</strong> si quieres que el cambio impacte inmediatamente a todo el equipo de ese rol.
           </div>
         </div>
       )}
@@ -1810,7 +1790,14 @@ function RoleConfiguration({ token }) {
 }
 
 function AdminPanel({ token }) {
-  const [activeTab, setActiveTab] = useState('usuarios');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const tabKeys = ['usuarios', 'productos', 'roles', 'comisiones', 'calendario', 'estadisticas'];
+  const resolveTab = (searchText = '') => {
+    const tab = new URLSearchParams(searchText).get('tab');
+    return tabKeys.includes(tab) ? tab : 'usuarios';
+  };
+  const [activeTab, setActiveTab] = useState(() => resolveTab(location.search));
   const tabs = [
     { key: 'usuarios', label: 'Usuarios' },
     { key: 'productos', label: 'Productos Cotizador' },
@@ -1820,42 +1807,50 @@ function AdminPanel({ token }) {
     { key: 'estadisticas', label: 'Estadísticas' }
   ];
 
+  useEffect(() => {
+    const nextTab = resolveTab(location.search);
+    if (nextTab !== activeTab) {
+      setActiveTab(nextTab);
+    }
+  }, [location.search, activeTab]);
+
+  const changeTab = (nextTab) => {
+    const safeTab = tabKeys.includes(nextTab) ? nextTab : 'usuarios';
+    setActiveTab(safeTab);
+    navigate(`/admin?tab=${safeTab}`, { replace: false });
+  };
+
   return (
     <div style={{ padding: '24px 16px 16px', maxWidth: '1400px', margin: '0 auto' }}>
       <div style={{
         display: 'flex',
-        justifyContent: 'flex-start',
-        flexWrap: 'nowrap',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
         gap: '10px',
-        marginBottom: '20px',
-        borderBottom: '1px solid #334155',
-        paddingBottom: '8px',
-        position: 'sticky',
-        top: '68px',
-        zIndex: 15,
-        background: '#0f172a',
-        overflowX: 'auto'
+        marginBottom: '16px'
       }}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+        <h2 style={{ margin: 0 }}>Panel Admin</h2>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ color: '#94a3b8', fontSize: '0.92rem' }}>Sección</span>
+          <select
+            value={activeTab}
+            onChange={(e) => changeTab(e.target.value)}
             style={{
-              padding: '10px 16px',
-              background: activeTab === tab.key ? 'rgba(248,113,113,0.14)' : 'transparent',
-              color: activeTab === tab.key ? '#fca5a5' : '#94a3b8',
-              border: activeTab === tab.key ? '1px solid rgba(248,113,113,0.45)' : '1px solid transparent',
-              borderRadius: '10px',
-              fontSize: '0.98rem',
-              fontWeight: activeTab === tab.key ? 700 : 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              flexShrink: 0
+              minWidth: '220px',
+              minHeight: '40px',
+              padding: '8px 10px',
+              borderRadius: '8px',
+              border: '1px solid #334155',
+              background: '#0f172a',
+              color: '#e2e8f0'
             }}
           >
-            {tab.label}
-          </button>
-        ))}
+            {tabs.map((tab) => (
+              <option key={tab.key} value={tab.key}>{tab.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div>

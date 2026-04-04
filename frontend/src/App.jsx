@@ -106,11 +106,12 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const canSeeMicrofabricaPanel = canAccessPanel(access, 'microfabrica_panel');
   const canSeeAdmin = canAccessPanel(access, 'admin');
   const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
+  const isAdminUser = canSeeAdmin;
 
   useEffect(() => {
     setMenuOpen(false);
     setDesktopMoreOpen(false);
-  }, [location.pathname]);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -125,7 +126,17 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [menuOpen, desktopMoreOpen]);
 
-  const primaryNavItems = [
+  const adminCoreNavItems = isAdminUser
+    ? [
+        { to: '/admin?tab=usuarios', label: 'Usuarios' },
+        { to: '/admin?tab=productos', label: 'Productos' },
+        { to: '/admin?tab=roles', label: 'Roles' },
+        { to: '/admin?tab=comisiones', label: 'Comisiones' },
+        { to: '/admin?tab=estadisticas', label: 'Estadísticas' }
+      ]
+    : [];
+
+  const sharedNavItems = [
     canQuote ? { to: '/', label: 'Cotizar' } : null,
     canSeeHistory ? { to: '/history', label: 'Historial' } : null,
     canSeePerformance ? { to: '/performance', label: 'Rendimiento' } : null,
@@ -136,17 +147,28 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     canSeeMicrofabricaPanel ? { to: '/microfabrica', label: 'Microfábrica' } : null,
     canAccessPanel(access, 'marketingCombos') ? { to: '/combos', label: 'Combos' } : null,
     canAccessPanel(access, 'marketingCupones') ? { to: '/cupones', label: 'Cupones' } : null,
-    canSeeAdmin ? { to: '/admin', label: 'Admin' } : null
-  ].filter(Boolean);
-  const trailingNavItems = [
     canSeeCalendar ? { to: '/calendario', label: 'Calendario' } : null,
     { to: '/perfil', label: 'Perfil' }
   ].filter(Boolean);
-  const allNavItems = [...primaryNavItems, ...trailingNavItems];
 
-  const MAX_DESKTOP_VISIBLE = 7;
+  const allNavItems = isAdminUser
+    ? [...adminCoreNavItems, ...sharedNavItems]
+    : sharedNavItems;
+
+  const MAX_DESKTOP_VISIBLE = isAdminUser ? adminCoreNavItems.length : 7;
   const desktopPrimaryItems = allNavItems.slice(0, MAX_DESKTOP_VISIBLE);
   const desktopOverflowItems = allNavItems.slice(MAX_DESKTOP_VISIBLE);
+  const isNavItemActive = (item) => {
+    const [itemPath, itemQuery = ''] = String(item.to || '').split('?');
+    if (location.pathname !== itemPath) return false;
+    if (!itemQuery) return true;
+    const itemParams = new URLSearchParams(itemQuery);
+    const currentParams = new URLSearchParams(location.search || '');
+    for (const [key, value] of itemParams.entries()) {
+      if (currentParams.get(key) !== value) return false;
+    }
+    return true;
+  };
 
   return (
     <>
@@ -172,7 +194,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
                 <Link
                   key={item.to}
                   to={item.to}
-                  className={`nav-link ${location.pathname === item.to ? 'active' : ''}`}
+                  className={`nav-link ${isNavItemActive(item) ? 'active' : ''}`}
                   onClick={() => setDesktopMoreOpen(false)}
                 >
                   {item.label}
@@ -184,12 +206,12 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
               <div className="more-menu">
                 <button
                   type="button"
-                  className={`more-menu-button ${desktopOverflowItems.some((item) => location.pathname === item.to) ? 'active' : ''}`}
+                  className={`more-menu-button ${desktopOverflowItems.some((item) => isNavItemActive(item)) ? 'active' : ''}`}
                   onClick={() => setDesktopMoreOpen((prev) => !prev)}
                   aria-haspopup="menu"
                   aria-expanded={desktopMoreOpen}
                 >
-                  Más ▾
+                  {isAdminUser ? 'Operación ▾' : 'Más ▾'}
                 </button>
                 {desktopMoreOpen && (
                   <div className="more-menu-list" role="menu">
@@ -197,7 +219,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
                       <Link
                         key={item.to}
                         to={item.to}
-                        className={`more-menu-item ${location.pathname === item.to ? 'active' : ''}`}
+                        className={`more-menu-item ${isNavItemActive(item) ? 'active' : ''}`}
                         onClick={() => setDesktopMoreOpen(false)}
                         role="menuitem"
                       >
@@ -240,7 +262,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
           <Link
             key={`mobile-${item.to}`}
             to={item.to}
-            className={`nav-link ${location.pathname === item.to ? 'active' : ''}`}
+            className={`nav-link ${isNavItemActive(item) ? 'active' : ''}`}
             onClick={() => setMenuOpen(false)}
           >
             {item.label}
