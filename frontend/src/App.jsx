@@ -129,7 +129,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const adminCoreNavItems = isAdminUser
     ? [
         { to: '/admin?tab=usuarios', label: 'Usuarios' },
-        { to: '/admin?tab=roles', label: 'Role' },
+        { to: '/admin?tab=roles', label: 'Roles' },
         { to: '/admin?tab=productos', label: 'Productos' },
         { to: '/admin?tab=comisiones', label: 'Comisiones' }
       ]
