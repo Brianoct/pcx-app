@@ -332,7 +332,7 @@ export default function QuoteTool({ token, user }) {
     isSavingRef.current = true;
     setIsSaving(true);
 
-    const vendedorName = user ? user.email.split('@')[0] : 'Usuario';
+    const vendedorName = user ? (user.display_name || String(user.email || '').split('@')[0]) : 'Usuario';
     const selectedSeller = isAlmacenRole
       ? salesUsers.find((seller) => String(seller.id) === String(assignedSellerId))
       : null;
@@ -663,7 +663,7 @@ export default function QuoteTool({ token, user }) {
                   <option value="" disabled>Seleccionar vendedor</option>
                   {salesUsers.map((seller) => (
                     <option key={seller.id} value={seller.id}>
-                      {String(seller.email || '').split('@')[0]} ({seller.role})
+                      {(seller.display_name || String(seller.email || '').split('@')[0] || 'Vendedor')} ({seller.role})
                     </option>
                   ))}
                 </select>

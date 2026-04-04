@@ -23,6 +23,7 @@ function UserManagement({ token }) {
   const [newUser, setNewUser] = useState({
     email: '',
     password: '',
+    display_name: '',
     role: 'Ventas',
     city: 'Santa Cruz',
     phone: '',
@@ -82,6 +83,7 @@ function UserManagement({ token }) {
       setNewUser({
         email: '',
         password: '',
+        display_name: '',
         role: 'Ventas',
         city: 'Santa Cruz',
         phone: '',
@@ -194,6 +196,7 @@ function UserManagement({ token }) {
     setEditModal({
       userId: user.id,
       email: user.email,
+      display_name: user.display_name || '',
       originalRole: user.role,
       role: user.role,
       city: user.city || '',
@@ -217,7 +220,8 @@ function UserManagement({ token }) {
       const payload = {
         role: editModal.role,
         city: editModal.city,
-        phone: editModal.phone
+        phone: editModal.phone,
+        display_name: String(editModal.display_name || '').trim() || null
       };
       if (shouldSendPanelAccess) {
         payload.panel_access = editModal.panel_access;
@@ -241,6 +245,7 @@ function UserManagement({ token }) {
                 role: payload.role,
                 city: payload.city,
                 phone: payload.phone,
+                display_name: payload.display_name,
                 panel_access: payload.panel_access || u.panel_access
               }
             : u
@@ -352,6 +357,16 @@ function UserManagement({ token }) {
               />
             </div>
             <div>
+              <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Nombre visible</label>
+              <input
+                type="text"
+                value={newUser.display_name || ''}
+                onChange={(e) => setNewUser({ ...newUser, display_name: e.target.value })}
+                placeholder="Ej: Wendy"
+                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+              />
+            </div>
+            <div>
               <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Teléfono (8 dígitos)</label>
               <input
                 type="tel"
@@ -432,6 +447,7 @@ function UserManagement({ token }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
             <thead>
               <tr style={{ background: '#0f172a' }}>
+                <th style={{ padding: '12px' }}>Nombre visible</th>
                 <th style={{ padding: '12px' }}>Email</th>
                 <th style={{ padding: '12px' }}>Teléfono</th>
                 <th style={{ padding: '12px' }}>Rol</th>
@@ -444,6 +460,7 @@ function UserManagement({ token }) {
             <tbody>
               {users.map(user => (
                 <tr key={user.id} style={{ borderBottom: '1px solid #334155' }}>
+                  <td style={{ padding: '12px' }}>{user.display_name || String(user.email || '').split('@')[0] || '—'}</td>
                   <td style={{ padding: '12px' }}>{user.email}</td>
                   <td style={{ padding: '12px' }}>
                     {user.phone ? `+591 ${user.phone}` : '—'}
@@ -547,6 +564,16 @@ function UserManagement({ token }) {
                     value={editModal.email}
                     disabled
                     style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#111827', color: '#6b7280', border: '1px solid #374151' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Nombre visible</label>
+                  <input
+                    type="text"
+                    value={editModal.display_name || ''}
+                    onChange={(e) => setEditModal({ ...editModal, display_name: e.target.value })}
+                    placeholder="Ej: Wendy"
+                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
                   />
                 </div>
                 <div>
