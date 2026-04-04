@@ -3,6 +3,7 @@ export const normalizeRole = (value = '') =>
 
 const ACCESS_TEMPLATE = {
   cotizar: false,
+  menu_cliente: false,
   calendario: false,
   historial_individual: false,
   historial_global: false,
@@ -23,18 +24,21 @@ const ACCESS_TEMPLATE = {
 const ROLE_DEFAULTS = {
   ventas: {
     cotizar: true,
+    menu_cliente: true,
     calendario: true,
     historial_individual: true,
     rendimiento_individual: true
   },
   'ventas lider': {
     cotizar: true,
+    menu_cliente: true,
     calendario: true,
     historial_global: true,
     rendimiento_global: true
   },
   admin: {
     cotizar: true,
+    menu_cliente: true,
     calendario: true,
     historial_global: true,
     rendimiento_global: true,
@@ -93,6 +97,14 @@ export const ROLE_OPTIONS = [
 const PANEL_KEY_ALIASES = {
   cotizar: 'cotizar',
   quote: 'cotizar',
+  menu_cliente: 'menu_cliente',
+  menucliente: 'menu_cliente',
+  menu_clientes: 'menu_cliente',
+  menuclientes: 'menu_cliente',
+  customer_menu: 'menu_cliente',
+  customermenu: 'menu_cliente',
+  customer_menu_tool: 'menu_cliente',
+  customerMenu: 'menu_cliente',
   calendario: 'calendario',
   calendar: 'calendario',
   timeoff: 'calendario',
@@ -225,6 +237,7 @@ export function canAccessPanel(accessOrRole, maybeAccessOrKey, maybeKey) {
 
 export const ACCESS_LABELS = [
   { key: 'cotizar', label: 'Cotizar' },
+  { key: 'menu_cliente', label: 'Menu Cliente (link clientes)' },
   { key: 'calendario', label: 'Calendario' },
   { key: 'historial_individual', label: 'Historial individual' },
   { key: 'historial_global', label: 'Historial global' },
