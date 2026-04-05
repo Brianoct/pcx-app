@@ -6,7 +6,8 @@ const CATEGORY_TABLEROS = 'Tableros';
 const CATEGORY_ACCESORIOS = 'Accesorios';
 const TABLERO_MODELS = [
   { key: 'T94x95', label: 'T94x95' },
-  { key: 'T61x95', label: 'T61x95' }
+  { key: 'T61x95', label: 'T61x95' },
+  { key: 'T1099', label: 'T1099' }
 ];
 const TABLERO_COLOR_VARIANTS = [
   { key: 'rojo', label: 'Rojo', hex: '#ef4444' },
@@ -23,6 +24,12 @@ const TABLERO_COLOR_CODES = {
   plomo: 'P'
 };
 const LOCAL_IMAGE_EXTENSIONS = ['jpg'];
+const ACCESORIO_IMAGE_FALLBACK_PATTERNS = [
+  'name',
+  'sku',
+  'name_compact',
+  'name_with_dash'
+];
 const IMAGE_FALLBACK_BACKGROUND = 'linear-gradient(135deg, #e2e8f0, #cbd5e1)';
 const CONTAIN_IMAGE_BACKGROUND = '#f8fafc';
 const FAILED_IMAGE_URLS = new Set();
@@ -57,6 +64,7 @@ function detectTableroModelKey(product) {
   const raw = normalizeSkuToken(`${String(product?.sku || '')} ${String(product?.name || '')}`);
   if (raw.includes('T94X95') || raw.includes('T9495') || raw.includes('9495')) return 'T94x95';
   if (raw.includes('T61X95') || raw.includes('T6195') || raw.includes('6195')) return 'T61x95';
+  if (raw.includes('T1099') || raw.includes('1099')) return 'T1099';
   return null;
 }
 
@@ -126,18 +134,48 @@ function getProductImageCandidates(product, options = {}) {
   return Array.from(new Set(candidates));
 }
 
+function getAccesorioImageCandidates(product) {
+  const rawName = String(product?.name || '').trim();
+  const normalizedName = normalizeText(rawName);
+  const compactName = normalizedName.replace(/\s+/g, '');
+  const dashedName = normalizedName.replace(/\s+/g, '-');
+  const sku = String(product?.sku || '').trim().toUpperCase();
+
+  const candidates = [];
+  for (const ext of LOCAL_IMAGE_EXTENSIONS) {
+    if (ACCESORIO_IMAGE_FALLBACK_PATTERNS.includes('name') && normalizedName) {
+      candidates.push(`/menu-images/${normalizedName}.${ext}`);
+    }
+    if (ACCESORIO_IMAGE_FALLBACK_PATTERNS.includes('name_compact') && compactName) {
+      candidates.push(`/menu-images/${compactName}.${ext}`);
+    }
+    if (ACCESORIO_IMAGE_FALLBACK_PATTERNS.includes('name_with_dash') && dashedName) {
+      candidates.push(`/menu-images/${dashedName}.${ext}`);
+    }
+    if (ACCESORIO_IMAGE_FALLBACK_PATTERNS.includes('sku') && sku) {
+      candidates.push(`/menu-images/${sku}.${ext}`);
+    }
+  }
+  return Array.from(new Set(candidates));
+}
+
 function ProductImage({
   product,
   height,
   enableSkuFallback = false,
   includeAliases = true,
+  accessorioFallback = false,
   fit = 'cover',
   imagePadding = 0
 }) {
   const candidates = useMemo(
-    () => getProductImageCandidates(product, { enableSkuFallback, includeAliases })
-      .filter((candidate) => !FAILED_IMAGE_URLS.has(candidate)),
-    [product, enableSkuFallback, includeAliases]
+    () => {
+      const baseCandidates = getProductImageCandidates(product, { enableSkuFallback, includeAliases });
+      const accessoryCandidates = accessorioFallback ? getAccesorioImageCandidates(product) : [];
+      return Array.from(new Set([...baseCandidates, ...accessoryCandidates]))
+        .filter((candidate) => !FAILED_IMAGE_URLS.has(candidate));
+    },
+    [product, enableSkuFallback, includeAliases, accessorioFallback]
   );
   const [candidateIndex, setCandidateIndex] = useState(0);
 
@@ -657,7 +695,11 @@ export default function PublicCustomerMenu() {
                       borderBottom: `1px solid ${LIGHT_THEME.border}`,
                       background: LIGHT_THEME.surfaceAlt
                     }}>
-                      <ProductImage product={product} height="128px" />
+                      <ProductImage
+                        product={product}
+                        height="128px"
+                        accessorioFallback
+                      />
                     </div>
                     <div style={{ padding: '10px' }}>
                       <div style={{ fontWeight: 700, marginBottom: '4px', color: LIGHT_THEME.text }}>{product.name}</div>
