@@ -16,6 +16,9 @@ const TABLERO_COLOR_VARIANTS = [
   { key: 'azul_petroleo', label: 'Azul Petroleo', hex: '#0f766e' },
   { key: 'plomo', label: 'Plomo', hex: '#6b7280' }
 ];
+const TABLERO_MODEL_COLOR_KEYS = {
+  T1099: ['negro']
+};
 const TABLERO_COLOR_CODES = {
   rojo: 'R',
   negro: 'N',
@@ -44,6 +47,13 @@ const LIGHT_THEME = {
   inputBg: '#ffffff',
   primary: '#e11d48'
 };
+
+function getTableroVariantsForModel(modelKey) {
+  const allowedKeys = TABLERO_MODEL_COLOR_KEYS[modelKey];
+  if (!Array.isArray(allowedKeys) || allowedKeys.length === 0) return TABLERO_COLOR_VARIANTS;
+  const allowedSet = new Set(allowedKeys);
+  return TABLERO_COLOR_VARIANTS.filter((variant) => allowedSet.has(variant.key));
+}
 
 function normalizeText(value) {
   return String(value || '')
@@ -293,14 +303,17 @@ export default function PublicCustomerMenu() {
       }
     }
 
-    return TABLERO_MODELS.map((model) => ({
-      key: model.key,
-      title: model.label,
-      variants: TABLERO_COLOR_VARIANTS.map((color) => ({
-        ...color,
-        product: byModelAndColor.get(`${model.key}|${color.key}`) || null
-      }))
-    }));
+    return TABLERO_MODELS.map((model) => {
+      const variantsForModel = getTableroVariantsForModel(model.key);
+      return {
+        key: model.key,
+        title: model.label,
+        variants: variantsForModel.map((color) => ({
+          ...color,
+          product: byModelAndColor.get(`${model.key}|${color.key}`) || null
+        }))
+      };
+    });
   }, [tableroProducts]);
 
   useEffect(() => {
@@ -564,6 +577,7 @@ export default function PublicCustomerMenu() {
                                 gridTemplateColumns: isCompactLayout ? '1fr' : 'minmax(0, 1fr) auto',
                                 gap: '8px',
                                 alignItems: 'center',
+                                minHeight: '84px',
                                 opacity: isUnavailable ? 0.64 : 1
                               }}
                             >
@@ -580,7 +594,8 @@ export default function PublicCustomerMenu() {
                                   cursor: isUnavailable ? 'not-allowed' : 'pointer',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: '10px'
+                                  gap: '10px',
+                                  minHeight: '68px'
                                 }}
                               >
                                 <div
@@ -606,7 +621,7 @@ export default function PublicCustomerMenu() {
                                     <div style={{ width: '100%', height: '100%', background: '#f1f5f9' }} />
                                   )}
                                 </div>
-                                <div style={{ minWidth: 0 }}>
+                                <div style={{ minWidth: 0, display: 'grid', gap: '2px', alignContent: 'center' }}>
                                   <div
                                     style={{
                                       display: 'inline-flex',
@@ -615,7 +630,7 @@ export default function PublicCustomerMenu() {
                                       fontWeight: 700,
                                       color: LIGHT_THEME.text,
                                       whiteSpace: 'nowrap',
-                                      lineHeight: 1.2
+                                      lineHeight: 1.1
                                     }}
                                   >
                                     <span
@@ -629,10 +644,10 @@ export default function PublicCustomerMenu() {
                                     />
                                     {variant.label}
                                   </div>
-                                  <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.8rem' }}>
+                                  <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.8rem', lineHeight: 1.15 }}>
                                     {variantProduct?.sku || 'No disponible'}
                                   </div>
-                                  <div style={{ color: '#10b981', fontWeight: 700, fontSize: '0.9rem' }}>
+                                  <div style={{ color: '#10b981', fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.15 }}>
                                     {variantProduct ? `${Number(variantProduct.price || 0).toFixed(2)} Bs` : '—'}
                                   </div>
                                 </div>
@@ -692,25 +707,36 @@ export default function PublicCustomerMenu() {
                     border: `1px solid ${LIGHT_THEME.border}`,
                     background: LIGHT_THEME.surface,
                     borderRadius: '12px',
-                    overflow: 'hidden'
+                    overflow: 'hidden',
+                    display: 'grid',
+                    gridTemplateRows: '156px minmax(0, 1fr)'
                   }}>
                     <div style={{
-                      height: '128px',
                       borderBottom: `1px solid ${LIGHT_THEME.border}`,
                       background: LIGHT_THEME.surfaceAlt
                     }}>
                       <ProductImage
                         product={product}
-                        height="128px"
+                        height="156px"
                         accessorioFallback
+                        fit="contain"
+                        imagePadding="10px"
                       />
                     </div>
-                    <div style={{ padding: '10px' }}>
-                      <div style={{ fontWeight: 700, marginBottom: '4px', color: LIGHT_THEME.text }}>{product.name}</div>
+                    <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', minHeight: '144px' }}>
+                      <div style={{
+                        fontWeight: 700,
+                        marginBottom: '4px',
+                        color: LIGHT_THEME.text,
+                        minHeight: '54px',
+                        lineHeight: 1.2
+                      }}>
+                        {product.name}
+                      </div>
                       <div style={{ color: '#10b981', fontWeight: 700, marginBottom: '8px' }}>
                         {Number(product.price || 0).toFixed(2)} Bs
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 'auto' }}>
                         <button type="button" className="btn" onClick={() => decrease(product.sku)} style={{ minHeight: '34px', padding: '6px 10px', background: '#e2e8f0', color: '#0f172a' }}>-</button>
                         <input
                           type="number"
