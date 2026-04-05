@@ -15,6 +15,8 @@ const TABLERO_COLOR_VARIANTS = [
   { key: 'azul_petroleo', label: 'Azul Petroleo', hex: '#0f766e' },
   { key: 'plomo', label: 'Plomo', hex: '#6b7280' }
 ];
+const LOCAL_IMAGE_EXTENSIONS = ['webp', 'png', 'jpg', 'jpeg'];
+const IMAGE_FALLBACK_BACKGROUND = 'linear-gradient(135deg, rgba(30,64,175,0.35), rgba(225,29,72,0.28))';
 
 function normalizeText(value) {
   return String(value || '')
@@ -49,6 +51,65 @@ function detectTableroColorKey(product) {
   if (normalizedSku.endsWith('N')) return 'negro';
   if (normalizedSku.endsWith('Y') || normalizedSku.endsWith('A')) return 'amarillo';
   return null;
+}
+
+function getProductImageCandidates(product, enableSkuFallback = false) {
+  const candidates = [];
+  const explicit = String(product?.image_url || '').trim();
+  if (explicit) {
+    candidates.push(explicit);
+  }
+  if (enableSkuFallback) {
+    const rawSku = String(product?.sku || '').trim();
+    const compactSku = rawSku.replace(/\s+/g, '');
+    const upperSku = compactSku.toUpperCase();
+    if (compactSku) {
+      for (const ext of LOCAL_IMAGE_EXTENSIONS) {
+        candidates.push(`/menu-images/${compactSku}.${ext}`);
+      }
+    }
+    if (upperSku && upperSku !== compactSku) {
+      for (const ext of LOCAL_IMAGE_EXTENSIONS) {
+        candidates.push(`/menu-images/${upperSku}.${ext}`);
+      }
+    }
+  }
+  return Array.from(new Set(candidates));
+}
+
+function ProductImage({ product, height, enableSkuFallback = false }) {
+  const candidates = useMemo(
+    () => getProductImageCandidates(product, enableSkuFallback),
+    [product, enableSkuFallback]
+  );
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [product?.sku, product?.image_url, enableSkuFallback]);
+
+  const src = candidates[candidateIndex] || '';
+  if (!src) {
+    return <div style={{ height, width: '100%', background: IMAGE_FALLBACK_BACKGROUND }} />;
+  }
+
+  return (
+    <img
+      src={src}
+      alt={String(product?.name || product?.sku || 'Producto')}
+      onError={() => {
+        setCandidateIndex((prev) => (prev + 1 < candidates.length ? prev + 1 : prev));
+      }}
+      style={{
+        width: '100%',
+        height,
+        objectFit: 'cover',
+        display: 'block',
+        background: IMAGE_FALLBACK_BACKGROUND
+      }}
+      loading="lazy"
+    />
+  );
 }
 
 export default function PublicCustomerMenu() {
@@ -298,12 +359,15 @@ export default function PublicCustomerMenu() {
                     <div
                       style={{
                         height: '148px',
-                        background: selectedProduct?.image_url
-                          ? `center / cover no-repeat url(${selectedProduct.image_url})`
-                          : 'linear-gradient(135deg, rgba(30,64,175,0.35), rgba(225,29,72,0.28))',
                         borderBottom: '1px solid rgba(71,85,105,0.45)'
                       }}
-                    />
+                    >
+                      <ProductImage
+                        product={selectedProduct}
+                        height="148px"
+                        enableSkuFallback
+                      />
+                    </div>
 
                     <div style={{ padding: '12px' }}>
                       <div style={{ fontWeight: 800, color: '#f1f5f9', marginBottom: '4px' }}>{group.title}</div>
@@ -413,11 +477,10 @@ export default function PublicCustomerMenu() {
                   }}>
                     <div style={{
                       height: '128px',
-                      background: product.image_url
-                        ? `center / cover no-repeat url(${product.image_url})`
-                        : 'linear-gradient(135deg, rgba(30,64,175,0.35), rgba(225,29,72,0.28))',
                       borderBottom: '1px solid rgba(71,85,105,0.45)'
-                    }} />
+                    }}>
+                      <ProductImage product={product} height="128px" />
+                    </div>
                     <div style={{ padding: '10px' }}>
                       <div style={{ fontWeight: 700, marginBottom: '4px', color: '#f1f5f9' }}>{product.name}</div>
                       <div style={{ color: '#10b981', fontWeight: 700, marginBottom: '8px' }}>
