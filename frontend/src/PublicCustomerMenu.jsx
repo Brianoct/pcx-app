@@ -4,34 +4,19 @@ import { apiRequest } from './apiClient';
 
 const CATEGORY_TABLEROS = 'Tableros';
 const CATEGORY_ACCESORIOS = 'Accesorios';
-const COLOR_BY_CODE = {
-  R: 'Rojo',
-  N: 'Negro',
-  B: 'Blanco',
-  W: 'Blanco',
-  V: 'Verde',
-  A: 'Azul',
-  Z: 'Azul',
-  G: 'Gris',
-  C: 'Cafe',
-  M: 'Marron',
-  Y: 'Amarillo',
-  O: 'Naranja'
-};
-const COLOR_HEX = {
-  rojo: '#ef4444',
-  negro: '#111827',
-  blanco: '#f8fafc',
-  verde: '#22c55e',
-  azul: '#3b82f6',
-  gris: '#6b7280',
-  cafe: '#92400e',
-  marron: '#92400e',
-  amarillo: '#facc15',
-  naranja: '#fb923c'
-};
+const TABLERO_MODELS = [
+  { key: 'T94x95', label: 'T94x95' },
+  { key: 'T61x95', label: 'T61x95' }
+];
+const TABLERO_COLOR_VARIANTS = [
+  { key: 'rojo', label: 'Rojo', hex: '#ef4444' },
+  { key: 'negro', label: 'Negro', hex: '#111827' },
+  { key: 'amarillo', label: 'Amarillo', hex: '#facc15' },
+  { key: 'azul_petroleo', label: 'Azul Petroleo', hex: '#0f766e' },
+  { key: 'plomo', label: 'Plomo', hex: '#6b7280' }
+];
 
-function normalizeColorKey(value) {
+function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -39,84 +24,31 @@ function normalizeColorKey(value) {
     .trim();
 }
 
-function detectColorFromName(name) {
-  const value = String(name || '').trim();
-  if (!value) return null;
-
-  const parenMatch = value.match(/\(([^)]+)\)\s*$/);
-  if (parenMatch?.[1]) {
-    const label = String(parenMatch[1]).trim();
-    return {
-      label,
-      source: 'name',
-      baseName: value.slice(0, parenMatch.index).trim()
-    };
-  }
-
-  const dashMatch = value.match(/\s[-/]\s([A-Za-zÁÉÍÓÚáéíóúÑñ ]+)$/);
-  if (dashMatch?.[1]) {
-    const label = String(dashMatch[1]).trim();
-    return {
-      label,
-      source: 'name',
-      baseName: value.slice(0, dashMatch.index).trim()
-    };
-  }
+function detectTableroModelKey(product) {
+  const raw = `${String(product?.sku || '')} ${String(product?.name || '')}`.toUpperCase();
+  if (/T\s*94\s*X\s*95/.test(raw)) return 'T94x95';
+  if (/T\s*61\s*X\s*95/.test(raw)) return 'T61x95';
   return null;
 }
 
-function detectColorFromSku(sku) {
-  const normalizedSku = String(sku || '')
+function detectTableroColorKey(product) {
+  const normalized = normalizeText(`${String(product?.name || '')} ${String(product?.sku || '')}`);
+  if (normalized.includes('azul petroleo') || normalized.includes('azulpetroleo')) return 'azul_petroleo';
+  if (normalized.includes('plomo')) return 'plomo';
+  if (normalized.includes('amarillo')) return 'amarillo';
+  if (normalized.includes('negro')) return 'negro';
+  if (normalized.includes('rojo')) return 'rojo';
+
+  const normalizedSku = String(product?.sku || '')
     .toUpperCase()
     .replace(/\s+/g, '')
     .trim();
-  if (!normalizedSku || normalizedSku.length < 3) return null;
-
-  const code = normalizedSku.slice(-1);
-  const baseSku = normalizedSku.slice(0, -1);
-  if (!COLOR_BY_CODE[code]) return null;
-  if (!/\d/.test(baseSku)) return null;
-
-  return {
-    label: COLOR_BY_CODE[code],
-    source: 'sku',
-    code,
-    baseSku
-  };
-}
-
-function getColorHex(label, code) {
-  const normalized = normalizeColorKey(label);
-  if (COLOR_HEX[normalized]) return COLOR_HEX[normalized];
-  if (code && COLOR_HEX[normalizeColorKey(COLOR_BY_CODE[code] || '')]) {
-    return COLOR_HEX[normalizeColorKey(COLOR_BY_CODE[code] || '')];
-  }
-  return '#94a3b8';
-}
-
-function getTableroVariantMeta(product) {
-  const name = String(product?.name || '').trim();
-  const sku = String(product?.sku || '').trim();
-  const fromName = detectColorFromName(name);
-  const fromSku = detectColorFromSku(sku);
-
-  const colorLabel = fromName?.label || fromSku?.label || null;
-  const baseName = fromName?.baseName || name;
-  const modelKey = String(fromSku?.baseSku || baseName || sku || '').trim();
-  const normalizedSku = String(sku || '').replace(/\s+/g, '').toUpperCase();
-  const modelLabel = fromName?.baseName
-    || (fromSku && normalizedSku === String(name || '').replace(/\s+/g, '').toUpperCase() ? fromSku.baseSku : null)
-    || baseName
-    || sku;
-  const colorCode = fromSku?.code || null;
-
-  return {
-    modelKey: modelKey || sku || name,
-    modelLabel,
-    colorLabel: colorLabel || 'Variante',
-    colorCode,
-    colorHex: getColorHex(colorLabel, colorCode)
-  };
+  if (normalizedSku.endsWith('AP') || normalizedSku.endsWith('AZP') || normalizedSku.endsWith('ZP')) return 'azul_petroleo';
+  if (normalizedSku.endsWith('PL') || normalizedSku.endsWith('P') || normalizedSku.endsWith('G')) return 'plomo';
+  if (normalizedSku.endsWith('R')) return 'rojo';
+  if (normalizedSku.endsWith('N')) return 'negro';
+  if (normalizedSku.endsWith('Y') || normalizedSku.endsWith('A')) return 'amarillo';
+  return null;
 }
 
 export default function PublicCustomerMenu() {
@@ -128,7 +60,7 @@ export default function PublicCustomerMenu() {
   const [menuData, setMenuData] = useState(null);
   const [activeCategory, setActiveCategory] = useState(CATEGORY_TABLEROS);
   const [quantities, setQuantities] = useState({});
-  const [selectedTableroSkuByModel, setSelectedTableroSkuByModel] = useState({});
+  const [selectedTableroColorByModel, setSelectedTableroColorByModel] = useState({});
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [notes, setNotes] = useState('');
@@ -169,40 +101,37 @@ export default function PublicCustomerMenu() {
     () => products.filter((product) => String(product.category || CATEGORY_ACCESORIOS) === activeCategory),
     [products, activeCategory]
   );
+  const tableroProducts = useMemo(
+    () => products.filter((product) => String(product.category || CATEGORY_ACCESORIOS) === CATEGORY_TABLEROS),
+    [products]
+  );
   const tableroGroups = useMemo(() => {
-    if (activeCategory !== CATEGORY_TABLEROS) return [];
-    const groups = new Map();
-    for (const product of filteredProducts) {
-      const meta = getTableroVariantMeta(product);
-      if (!groups.has(meta.modelKey)) {
-        groups.set(meta.modelKey, {
-          key: meta.modelKey,
-          title: meta.modelLabel,
-          variants: []
-        });
+    const byModelAndColor = new Map();
+    for (const product of tableroProducts) {
+      const modelKey = detectTableroModelKey(product);
+      const colorKey = detectTableroColorKey(product);
+      if (!modelKey || !colorKey) continue;
+      const compositeKey = `${modelKey}|${colorKey}`;
+      if (!byModelAndColor.has(compositeKey)) {
+        byModelAndColor.set(compositeKey, product);
       }
-      groups.get(meta.modelKey).variants.push({
-        ...product,
-        colorLabel: meta.colorLabel,
-        colorCode: meta.colorCode,
-        colorHex: meta.colorHex
-      });
     }
 
-    return Array.from(groups.values())
-      .map((group) => ({
-        ...group,
-        variants: [...group.variants].sort((a, b) => String(a.colorLabel).localeCompare(String(b.colorLabel)))
+    return TABLERO_MODELS.map((model) => ({
+      key: model.key,
+      title: model.label,
+      variants: TABLERO_COLOR_VARIANTS.map((color) => ({
+        ...color,
+        product: byModelAndColor.get(`${model.key}|${color.key}`) || null
       }))
-      .sort((a, b) => String(a.title).localeCompare(String(b.title)));
-  }, [activeCategory, filteredProducts]);
+    }));
+  }, [tableroProducts]);
 
   useEffect(() => {
-    if (activeCategory !== CATEGORY_TABLEROS) return;
-    setSelectedTableroSkuByModel((prev) => {
+    setSelectedTableroColorByModel((prev) => {
       const next = { ...prev };
       let changed = false;
-      const validModelKeys = new Set(tableroGroups.map((group) => group.key));
+      const validModelKeys = new Set(TABLERO_MODELS.map((model) => model.key));
       Object.keys(next).forEach((modelKey) => {
         if (!validModelKeys.has(modelKey)) {
           delete next[modelKey];
@@ -210,16 +139,20 @@ export default function PublicCustomerMenu() {
         }
       });
       for (const group of tableroGroups) {
-        const selectedSku = next[group.key];
-        const hasCurrent = group.variants.some((variant) => variant.sku === selectedSku);
-        if (!hasCurrent && group.variants[0]?.sku) {
-          next[group.key] = group.variants[0].sku;
+        const selectedColor = next[group.key];
+        const hasCurrent = group.variants.some((variant) => variant.key === selectedColor && variant.product);
+        if (!hasCurrent) {
+          const firstAvailable = group.variants.find((variant) => Boolean(variant.product));
+          const fallbackKey = firstAvailable?.key || group.variants[0]?.key;
+          if (fallbackKey) {
+            next[group.key] = fallbackKey;
+          }
           changed = true;
         }
       }
       return changed ? next : prev;
     });
-  }, [activeCategory, tableroGroups]);
+  }, [tableroGroups]);
   const cartItems = useMemo(() => (
     products
       .filter((product) => Number(quantities[product.sku] || 0) > 0)
@@ -250,8 +183,8 @@ export default function PublicCustomerMenu() {
 
   const increase = (sku) => setQty(sku, Number(quantities[sku] || 0) + 1);
   const decrease = (sku) => setQty(sku, Math.max(0, Number(quantities[sku] || 0) - 1));
-  const selectTableroVariant = (modelKey, sku) => {
-    setSelectedTableroSkuByModel((prev) => ({ ...prev, [modelKey]: sku }));
+  const selectTableroVariant = (modelKey, colorKey) => {
+    setSelectedTableroColorByModel((prev) => ({ ...prev, [modelKey]: colorKey }));
   };
 
   const submitOrder = async (e) => {
@@ -344,10 +277,13 @@ export default function PublicCustomerMenu() {
           {activeCategory === CATEGORY_TABLEROS ? (
             <div style={{ display: 'grid', gap: '12px' }}>
               {tableroGroups.map((group) => {
-                const selectedSku = selectedTableroSkuByModel[group.key] || group.variants[0]?.sku;
-                const selectedVariant = group.variants.find((variant) => variant.sku === selectedSku) || group.variants[0];
-                if (!selectedVariant) return null;
-                const qty = Number(quantities[selectedVariant.sku] || 0);
+                const selectedColorKey = selectedTableroColorByModel[group.key] || group.variants[0]?.key;
+                let selectedVariant = group.variants.find((variant) => variant.key === selectedColorKey) || group.variants[0];
+                if (selectedVariant && !selectedVariant.product) {
+                  selectedVariant = group.variants.find((variant) => Boolean(variant.product)) || selectedVariant;
+                }
+                const selectedProduct = selectedVariant?.product || null;
+                const qty = selectedProduct ? Number(quantities[selectedProduct.sku] || 0) : 0;
 
                 return (
                   <div
@@ -362,8 +298,8 @@ export default function PublicCustomerMenu() {
                     <div
                       style={{
                         height: '148px',
-                        background: selectedVariant.image_url
-                          ? `center / cover no-repeat url(${selectedVariant.image_url})`
+                        background: selectedProduct?.image_url
+                          ? `center / cover no-repeat url(${selectedProduct.image_url})`
                           : 'linear-gradient(135deg, rgba(30,64,175,0.35), rgba(225,29,72,0.28))',
                         borderBottom: '1px solid rgba(71,85,105,0.45)'
                       }}
@@ -372,43 +308,46 @@ export default function PublicCustomerMenu() {
                     <div style={{ padding: '12px' }}>
                       <div style={{ fontWeight: 800, color: '#f1f5f9', marginBottom: '4px' }}>{group.title}</div>
                       <div style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '10px' }}>
-                        SKU seleccionado: {selectedVariant.sku}
+                        SKU seleccionado: {selectedProduct?.sku || 'No disponible'}
                       </div>
 
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
                         {group.variants.map((variant) => {
-                          const isSelected = variant.sku === selectedVariant.sku;
-                          const variantQty = Number(quantities[variant.sku] || 0);
+                          const isSelected = variant.key === selectedVariant?.key;
+                          const variantQty = variant.product ? Number(quantities[variant.product.sku] || 0) : 0;
+                          const isUnavailable = !variant.product;
                           return (
                             <button
-                              key={variant.sku}
+                              key={`${group.key}-${variant.key}`}
                               type="button"
-                              onClick={() => selectTableroVariant(group.key, variant.sku)}
+                              onClick={() => variant.product && selectTableroVariant(group.key, variant.key)}
+                              disabled={isUnavailable}
                               style={{
                                 minHeight: '34px',
                                 padding: '6px 10px',
                                 borderRadius: '999px',
                                 border: isSelected ? '1px solid #60a5fa' : '1px solid #475569',
-                                background: isSelected ? 'rgba(37,99,235,0.22)' : '#0f172a',
-                                color: '#e2e8f0',
+                                background: isUnavailable ? '#0b1220' : (isSelected ? 'rgba(37,99,235,0.22)' : '#0f172a'),
+                                color: isUnavailable ? '#64748b' : '#e2e8f0',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '7px',
                                 fontWeight: 700,
-                                fontSize: '0.8rem'
+                                fontSize: '0.8rem',
+                                opacity: isUnavailable ? 0.6 : 1
                               }}
-                              aria-label={`Seleccionar color ${variant.colorLabel}`}
+                              aria-label={`Seleccionar color ${variant.label}`}
                             >
                               <span
                                 style={{
                                   width: '12px',
                                   height: '12px',
                                   borderRadius: '999px',
-                                  background: variant.colorHex,
-                                  border: variant.colorHex === '#f8fafc' ? '1px solid #94a3b8' : '1px solid rgba(15,23,42,0.55)'
+                                  background: variant.hex,
+                                  border: variant.hex === '#f8fafc' ? '1px solid #94a3b8' : '1px solid rgba(15,23,42,0.55)'
                                 }}
                               />
-                              <span>{variant.colorLabel}</span>
+                              <span>{variant.label}</span>
                               {variantQty > 0 && (
                                 <span style={{ color: '#86efac' }}>({variantQty})</span>
                               )}
@@ -418,13 +357,14 @@ export default function PublicCustomerMenu() {
                       </div>
 
                       <div style={{ color: '#10b981', fontWeight: 700, marginBottom: '8px' }}>
-                        {Number(selectedVariant.price || 0).toFixed(2)} Bs
+                        {selectedProduct ? `${Number(selectedProduct.price || 0).toFixed(2)} Bs` : 'No disponible'}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <button
                           type="button"
                           className="btn"
-                          onClick={() => decrease(selectedVariant.sku)}
+                          onClick={() => selectedProduct && decrease(selectedProduct.sku)}
+                          disabled={!selectedProduct}
                           style={{ minHeight: '34px', padding: '6px 10px', background: '#334155', color: 'white' }}
                         >
                           -
@@ -433,7 +373,8 @@ export default function PublicCustomerMenu() {
                           type="number"
                           min="0"
                           value={qty}
-                          onChange={(e) => setQty(selectedVariant.sku, e.target.value)}
+                          onChange={(e) => selectedProduct && setQty(selectedProduct.sku, e.target.value)}
+                          disabled={!selectedProduct}
                           style={{
                             width: '74px',
                             minHeight: '34px',
@@ -447,7 +388,8 @@ export default function PublicCustomerMenu() {
                         <button
                           type="button"
                           className="btn"
-                          onClick={() => increase(selectedVariant.sku)}
+                          onClick={() => selectedProduct && increase(selectedProduct.sku)}
+                          disabled={!selectedProduct}
                           style={{ minHeight: '34px', padding: '6px 10px', background: '#2563eb', color: 'white' }}
                         >
                           +
