@@ -42,8 +42,8 @@ function normalizeSkuToken(value) {
 
 function detectTableroModelKey(product) {
   const raw = normalizeSkuToken(`${String(product?.sku || '')} ${String(product?.name || '')}`);
-  if (raw.includes('T94X95') || raw.includes('T9495')) return 'T94x95';
-  if (raw.includes('T61X95') || raw.includes('T6195')) return 'T61x95';
+  if (raw.includes('T94X95') || raw.includes('T9495') || raw.includes('9495')) return 'T94x95';
+  if (raw.includes('T61X95') || raw.includes('T6195') || raw.includes('6195')) return 'T61x95';
   return null;
 }
 
