@@ -592,7 +592,8 @@ export default function PublicCustomerMenu() {
                                   width: '100%',
                                   textAlign: 'left',
                                   cursor: isUnavailable ? 'not-allowed' : 'pointer',
-                                  display: 'flex',
+                                  display: 'grid',
+                                  gridTemplateColumns: '56px minmax(0, 1fr)',
                                   alignItems: 'center',
                                   gap: '10px',
                                   minHeight: '68px'
@@ -621,7 +622,7 @@ export default function PublicCustomerMenu() {
                                     <div style={{ width: '100%', height: '100%', background: '#f1f5f9' }} />
                                   )}
                                 </div>
-                                <div style={{ minWidth: 0, display: 'grid', gap: '2px', alignContent: 'center' }}>
+                                <div style={{ minWidth: 0, display: 'grid', gap: '2px', alignContent: 'center', minHeight: '56px' }}>
                                   <div
                                     style={{
                                       display: 'inline-flex',
@@ -630,7 +631,8 @@ export default function PublicCustomerMenu() {
                                       fontWeight: 700,
                                       color: LIGHT_THEME.text,
                                       whiteSpace: 'nowrap',
-                                      lineHeight: 1.1
+                                      lineHeight: '18px',
+                                      minHeight: '18px'
                                     }}
                                   >
                                     <span
@@ -644,10 +646,10 @@ export default function PublicCustomerMenu() {
                                     />
                                     {variant.label}
                                   </div>
-                                  <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.8rem', lineHeight: 1.15 }}>
+                                  <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.8rem', lineHeight: '17px', minHeight: '17px' }}>
                                     {variantProduct?.sku || 'No disponible'}
                                   </div>
-                                  <div style={{ color: '#10b981', fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.15 }}>
+                                  <div style={{ color: '#10b981', fontWeight: 700, fontSize: '0.9rem', lineHeight: '19px', minHeight: '19px' }}>
                                     {variantProduct ? `${Number(variantProduct.price || 0).toFixed(2)} Bs` : '—'}
                                   </div>
                                 </div>
