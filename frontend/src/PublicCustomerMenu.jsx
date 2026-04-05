@@ -15,6 +15,13 @@ const TABLERO_COLOR_VARIANTS = [
   { key: 'azul_petroleo', label: 'Azul Petroleo', hex: '#0f766e' },
   { key: 'plomo', label: 'Plomo', hex: '#6b7280' }
 ];
+const TABLERO_COLOR_CODES = {
+  rojo: 'R',
+  negro: 'N',
+  amarillo: 'A',
+  azul_petroleo: 'AP',
+  plomo: 'P'
+};
 const LOCAL_IMAGE_EXTENSIONS = ['webp', 'png', 'jpg', 'jpeg'];
 const IMAGE_FALLBACK_BACKGROUND = 'linear-gradient(135deg, rgba(30,64,175,0.35), rgba(225,29,72,0.28))';
 
@@ -26,10 +33,17 @@ function normalizeText(value) {
     .trim();
 }
 
+function normalizeSkuToken(value) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .trim();
+}
+
 function detectTableroModelKey(product) {
-  const raw = `${String(product?.sku || '')} ${String(product?.name || '')}`.toUpperCase();
-  if (/T\s*94\s*X\s*95/.test(raw)) return 'T94x95';
-  if (/T\s*61\s*X\s*95/.test(raw)) return 'T61x95';
+  const raw = normalizeSkuToken(`${String(product?.sku || '')} ${String(product?.name || '')}`);
+  if (raw.includes('T94X95') || raw.includes('T9495')) return 'T94x95';
+  if (raw.includes('T61X95') || raw.includes('T6195')) return 'T61x95';
   return null;
 }
 
@@ -41,16 +55,29 @@ function detectTableroColorKey(product) {
   if (normalized.includes('negro')) return 'negro';
   if (normalized.includes('rojo')) return 'rojo';
 
-  const normalizedSku = String(product?.sku || '')
-    .toUpperCase()
-    .replace(/\s+/g, '')
-    .trim();
+  const normalizedSku = normalizeSkuToken(product?.sku || '');
   if (normalizedSku.endsWith('AP') || normalizedSku.endsWith('AZP') || normalizedSku.endsWith('ZP')) return 'azul_petroleo';
+  if (normalizedSku.endsWith('AM')) return 'amarillo';
   if (normalizedSku.endsWith('PL') || normalizedSku.endsWith('P') || normalizedSku.endsWith('G')) return 'plomo';
   if (normalizedSku.endsWith('R')) return 'rojo';
   if (normalizedSku.endsWith('N')) return 'negro';
   if (normalizedSku.endsWith('Y') || normalizedSku.endsWith('A')) return 'amarillo';
   return null;
+}
+
+function getTableroImageSkuAliases(product) {
+  const modelKey = detectTableroModelKey(product);
+  const colorKey = detectTableroColorKey(product);
+  const colorCode = TABLERO_COLOR_CODES[colorKey] || '';
+  if (!modelKey || !colorCode) return [];
+  const compactModel = modelKey.replace(/x/gi, '');
+  const preferred = `${modelKey}${colorCode}`;
+  return Array.from(new Set([
+    preferred,
+    preferred.toUpperCase(),
+    `${compactModel}${colorCode}`,
+    `${compactModel}${colorCode}`.toUpperCase()
+  ].filter(Boolean)));
 }
 
 function getProductImageCandidates(product, enableSkuFallback = false) {
@@ -71,6 +98,12 @@ function getProductImageCandidates(product, enableSkuFallback = false) {
     if (upperSku && upperSku !== compactSku) {
       for (const ext of LOCAL_IMAGE_EXTENSIONS) {
         candidates.push(`/menu-images/${upperSku}.${ext}`);
+      }
+    }
+    const tableroAliases = getTableroImageSkuAliases(product);
+    for (const alias of tableroAliases) {
+      for (const ext of LOCAL_IMAGE_EXTENSIONS) {
+        candidates.push(`/menu-images/${alias}.${ext}`);
       }
     }
   }
