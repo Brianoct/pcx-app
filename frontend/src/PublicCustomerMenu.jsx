@@ -5,9 +5,9 @@ import { apiRequest } from './apiClient';
 const CATEGORY_TABLEROS = 'Tableros';
 const CATEGORY_ACCESORIOS = 'Accesorios';
 const TABLERO_MODELS = [
-  { key: 'T94x95', label: 'T94x95' },
   { key: 'T61x95', label: 'T61x95' },
-  { key: 'T1099', label: 'T1099' }
+  { key: 'T94x95', label: 'T94x95' },
+  { key: 'T10x99', label: 'T10x99' }
 ];
 const TABLERO_COLOR_VARIANTS = [
   { key: 'rojo', label: 'Rojo', hex: '#ef4444' },
@@ -17,7 +17,7 @@ const TABLERO_COLOR_VARIANTS = [
   { key: 'plomo', label: 'Plomo', hex: '#6b7280' }
 ];
 const TABLERO_MODEL_COLOR_KEYS = {
-  T1099: ['negro']
+  T10x99: ['negro']
 };
 const TABLERO_COLOR_CODES = {
   rojo: 'R',
@@ -74,7 +74,7 @@ function detectTableroModelKey(product) {
   const raw = normalizeSkuToken(`${String(product?.sku || '')} ${String(product?.name || '')}`);
   if (raw.includes('T94X95') || raw.includes('T9495') || raw.includes('9495')) return 'T94x95';
   if (raw.includes('T61X95') || raw.includes('T6195') || raw.includes('6195')) return 'T61x95';
-  if (raw.includes('T1099') || raw.includes('1099')) return 'T1099';
+  if (raw.includes('T10X99') || raw.includes('T1099') || raw.includes('1099')) return 'T10x99';
   return null;
 }
 
