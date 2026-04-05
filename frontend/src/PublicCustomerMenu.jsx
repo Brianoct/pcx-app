@@ -112,14 +112,19 @@ function getProductImageCandidates(product, options = {}) {
     const rawSku = String(product?.sku || '').trim();
     const compactSku = rawSku.replace(/\s+/g, '');
     const upperSku = compactSku.toUpperCase();
-    if (compactSku) {
+    const skuBaseCandidates = [];
+    if (compactSku) skuBaseCandidates.push(compactSku);
+    if (upperSku && upperSku !== compactSku) skuBaseCandidates.push(upperSku);
+    const aliasBaseCandidates = includeAliases ? getTableroImageSkuAliases(product) : [];
+    // Prefer canonical tablero aliases (e.g. T94x95R) over legacy compact SKU names (e.g. T9495R)
+    // so updated image sets render immediately without requiring duplicate legacy filenames.
+    const orderedBaseCandidates = Array.from(new Set([
+      ...aliasBaseCandidates,
+      ...skuBaseCandidates
+    ]));
+    for (const base of orderedBaseCandidates) {
       for (const ext of LOCAL_IMAGE_EXTENSIONS) {
-        candidates.push(`/menu-images/${compactSku}.${ext}`);
-      }
-    }
-    if (upperSku && upperSku !== compactSku) {
-      for (const ext of LOCAL_IMAGE_EXTENSIONS) {
-        candidates.push(`/menu-images/${upperSku}.${ext}`);
+        candidates.push(`/menu-images/${base}.${ext}`);
       }
     }
     if (includeAliases) {
@@ -594,7 +599,6 @@ export default function PublicCustomerMenu() {
                                       product={variantProduct}
                                       height="56px"
                                       enableSkuFallback
-                                      includeAliases={false}
                                       fit="contain"
                                       imagePadding="4px"
                                     />
