@@ -22,9 +22,10 @@ const TABLERO_COLOR_CODES = {
   azul_petroleo: 'AP',
   plomo: 'P'
 };
-const LOCAL_IMAGE_EXTENSIONS = ['webp', 'png', 'jpg', 'jpeg'];
+const LOCAL_IMAGE_EXTENSIONS = ['jpg'];
 const IMAGE_FALLBACK_BACKGROUND = 'linear-gradient(135deg, #e2e8f0, #cbd5e1)';
 const CONTAIN_IMAGE_BACKGROUND = '#f8fafc';
+const FAILED_IMAGE_URLS = new Set();
 const LIGHT_THEME = {
   pageBg: '#f3f6fb',
   surface: '#ffffff',
@@ -92,7 +93,8 @@ function getTableroImageSkuAliases(product) {
   ].filter(Boolean)));
 }
 
-function getProductImageCandidates(product, enableSkuFallback = false) {
+function getProductImageCandidates(product, options = {}) {
+  const { enableSkuFallback = false, includeAliases = true } = options;
   const candidates = [];
   const explicit = String(product?.image_url || '').trim();
   if (explicit) {
@@ -112,10 +114,12 @@ function getProductImageCandidates(product, enableSkuFallback = false) {
         candidates.push(`/menu-images/${upperSku}.${ext}`);
       }
     }
-    const tableroAliases = getTableroImageSkuAliases(product);
-    for (const alias of tableroAliases) {
-      for (const ext of LOCAL_IMAGE_EXTENSIONS) {
-        candidates.push(`/menu-images/${alias}.${ext}`);
+    if (includeAliases) {
+      const tableroAliases = getTableroImageSkuAliases(product);
+      for (const alias of tableroAliases) {
+        for (const ext of LOCAL_IMAGE_EXTENSIONS) {
+          candidates.push(`/menu-images/${alias}.${ext}`);
+        }
       }
     }
   }
@@ -126,12 +130,14 @@ function ProductImage({
   product,
   height,
   enableSkuFallback = false,
+  includeAliases = true,
   fit = 'cover',
   imagePadding = 0
 }) {
   const candidates = useMemo(
-    () => getProductImageCandidates(product, enableSkuFallback),
-    [product, enableSkuFallback]
+    () => getProductImageCandidates(product, { enableSkuFallback, includeAliases })
+      .filter((candidate) => !FAILED_IMAGE_URLS.has(candidate)),
+    [product, enableSkuFallback, includeAliases]
   );
   const [candidateIndex, setCandidateIndex] = useState(0);
 
@@ -149,6 +155,7 @@ function ProductImage({
       src={src}
       alt={String(product?.name || product?.sku || 'Producto')}
       onError={() => {
+        if (src) FAILED_IMAGE_URLS.add(src);
         setCandidateIndex((prev) => (prev + 1 < candidates.length ? prev + 1 : prev));
       }}
       style={{
@@ -179,6 +186,10 @@ export default function PublicCustomerMenu() {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [notes, setNotes] = useState('');
+  const [expandedTableroKey, setExpandedTableroKey] = useState(TABLERO_MODELS[0]?.key || '');
+  const [isCompactLayout, setIsCompactLayout] = useState(() => (
+    typeof window !== 'undefined' ? window.innerWidth < 980 : false
+  ));
 
   useEffect(() => {
     const loadMenu = async () => {
@@ -201,6 +212,13 @@ export default function PublicCustomerMenu() {
     };
     loadMenu();
   }, [shareToken]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onResize = () => setIsCompactLayout(window.innerWidth < 980);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const products = useMemo(
     () => Array.isArray(menuData?.products) ? menuData.products : [],
@@ -268,6 +286,13 @@ export default function PublicCustomerMenu() {
       return changed ? next : prev;
     });
   }, [tableroGroups]);
+
+  useEffect(() => {
+    setExpandedTableroKey((prev) => {
+      if (tableroGroups.some((group) => group.key === prev)) return prev;
+      return tableroGroups[0]?.key || '';
+    });
+  }, [tableroGroups]);
   const cartItems = useMemo(() => (
     products
       .filter((product) => Number(quantities[product.sku] || 0) > 0)
@@ -300,6 +325,9 @@ export default function PublicCustomerMenu() {
   const decrease = (sku) => setQty(sku, Math.max(0, Number(quantities[sku] || 0) - 1));
   const selectTableroVariant = (modelKey, colorKey) => {
     setSelectedTableroColorByModel((prev) => ({ ...prev, [modelKey]: colorKey }));
+  };
+  const toggleTableroDropdown = (modelKey) => {
+    setExpandedTableroKey((prev) => (prev === modelKey ? '' : modelKey));
   };
 
   const submitOrder = async (e) => {
@@ -373,7 +401,14 @@ export default function PublicCustomerMenu() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: '14px' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isCompactLayout ? '1fr' : 'minmax(0, 1fr) 340px',
+          gap: isCompactLayout ? '12px' : '14px',
+          alignItems: 'start'
+        }}
+      >
         <div className="card" style={{ marginBottom: 0, background: LIGHT_THEME.surface, border: `1px solid ${LIGHT_THEME.border}`, boxShadow: '0 8px 22px rgba(15, 23, 42, 0.08)' }}>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
             {categories.map((category) => (
@@ -400,7 +435,7 @@ export default function PublicCustomerMenu() {
                   selectedVariant = group.variants.find((variant) => Boolean(variant.product)) || selectedVariant;
                 }
                 const selectedProduct = selectedVariant?.product || null;
-                const qty = selectedProduct ? Number(quantities[selectedProduct.sku] || 0) : 0;
+                const isExpanded = expandedTableroKey === group.key;
 
                 return (
                   <div
@@ -412,119 +447,177 @@ export default function PublicCustomerMenu() {
                       overflow: 'hidden'
                     }}
                   >
-                    <div
+                    <button
+                      type="button"
+                      onClick={() => toggleTableroDropdown(group.key)}
                       style={{
-                        height: '148px',
-                        borderBottom: `1px solid ${LIGHT_THEME.border}`,
-                        background: LIGHT_THEME.surfaceAlt
+                        width: '100%',
+                        border: 'none',
+                        background: 'transparent',
+                        padding: 0,
+                        textAlign: 'left',
+                        cursor: 'pointer'
                       }}
                     >
-                      <ProductImage
-                        product={selectedProduct}
-                        height="clamp(180px, 25vw, 250px)"
-                        enableSkuFallback
-                        fit="contain"
-                        imagePadding="10px"
-                      />
-                    </div>
-
-                    <div style={{ padding: '12px' }}>
-                      <div style={{ fontWeight: 800, color: LIGHT_THEME.text, marginBottom: '4px' }}>{group.title}</div>
-                      <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.85rem', marginBottom: '10px' }}>
-                        SKU seleccionado: {selectedProduct?.sku || 'No disponible'}
+                      <div
+                        style={{
+                          borderBottom: `1px solid ${LIGHT_THEME.border}`,
+                          background: LIGHT_THEME.surfaceAlt
+                        }}
+                      >
+                        <ProductImage
+                          product={selectedProduct}
+                          height={isCompactLayout ? '180px' : '220px'}
+                          enableSkuFallback
+                          fit="contain"
+                          imagePadding="10px"
+                        />
                       </div>
+                      <div style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 800, color: LIGHT_THEME.text, marginBottom: '3px' }}>
+                            Tablero {group.title}
+                          </div>
+                          <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.85rem' }}>
+                            {selectedVariant?.label || 'Variante'} · {selectedProduct?.sku || 'No disponible'}
+                          </div>
+                        </div>
+                        <div style={{ color: LIGHT_THEME.textMuted, fontSize: '1.05rem', fontWeight: 700 }}>
+                          {isExpanded ? '▲' : '▼'}
+                        </div>
+                      </div>
+                    </button>
 
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                    {isExpanded && (
+                      <div style={{ borderTop: `1px solid ${LIGHT_THEME.border}`, padding: '10px 12px', display: 'grid', gap: '8px', background: '#fff' }}>
                         {group.variants.map((variant) => {
+                          const variantProduct = variant.product;
+                          const isUnavailable = !variantProduct;
+                          const variantQty = variantProduct ? Number(quantities[variantProduct.sku] || 0) : 0;
                           const isSelected = variant.key === selectedVariant?.key;
-                          const variantQty = variant.product ? Number(quantities[variant.product.sku] || 0) : 0;
-                          const isUnavailable = !variant.product;
                           return (
-                            <button
+                            <div
                               key={`${group.key}-${variant.key}`}
-                              type="button"
-                              onClick={() => variant.product && selectTableroVariant(group.key, variant.key)}
-                              disabled={isUnavailable}
                               style={{
-                                minHeight: '34px',
-                                padding: '6px 10px',
-                                borderRadius: '999px',
-                                border: isSelected ? '1px solid #3b82f6' : `1px solid ${LIGHT_THEME.border}`,
-                                background: isUnavailable ? '#f1f5f9' : (isSelected ? 'rgba(59,130,246,0.12)' : '#fff'),
-                                color: isUnavailable ? '#94a3b8' : LIGHT_THEME.text,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '7px',
-                                fontWeight: 700,
-                                fontSize: '0.8rem',
-                                opacity: isUnavailable ? 0.6 : 1
+                                border: `1px solid ${isSelected ? '#93c5fd' : LIGHT_THEME.border}`,
+                                background: isSelected ? 'rgba(59,130,246,0.06)' : '#fff',
+                                borderRadius: '10px',
+                                padding: '8px',
+                                display: 'grid',
+                                gridTemplateColumns: isCompactLayout ? '1fr' : 'minmax(0, 1fr) auto',
+                                gap: '8px',
+                                opacity: isUnavailable ? 0.64 : 1
                               }}
-                              aria-label={`Seleccionar color ${variant.label}`}
                             >
-                              <span
+                              <button
+                                type="button"
+                                disabled={isUnavailable}
+                                onClick={() => variantProduct && selectTableroVariant(group.key, variant.key)}
                                 style={{
-                                  width: '12px',
-                                  height: '12px',
-                                  borderRadius: '999px',
-                                  background: variant.hex,
-                                  border: variant.hex === '#f8fafc' ? '1px solid #94a3b8' : '1px solid rgba(15,23,42,0.22)'
+                                  border: 'none',
+                                  background: 'transparent',
+                                  padding: 0,
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  cursor: isUnavailable ? 'not-allowed' : 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px'
                                 }}
-                              />
-                              <span>{variant.label}</span>
-                              {variantQty > 0 && (
-                                <span style={{ color: '#86efac' }}>({variantQty})</span>
-                              )}
-                            </button>
+                              >
+                                <div
+                                  style={{
+                                    width: '56px',
+                                    height: '56px',
+                                    borderRadius: '8px',
+                                    border: `1px solid ${LIGHT_THEME.border}`,
+                                    overflow: 'hidden',
+                                    background: LIGHT_THEME.surfaceAlt,
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  {variantProduct ? (
+                                    <ProductImage
+                                      product={variantProduct}
+                                      height="56px"
+                                      enableSkuFallback
+                                      includeAliases={false}
+                                      fit="contain"
+                                      imagePadding="4px"
+                                    />
+                                  ) : (
+                                    <div style={{ width: '100%', height: '100%', background: '#f1f5f9' }} />
+                                  )}
+                                </div>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: LIGHT_THEME.text }}>
+                                    <span
+                                      style={{
+                                        width: '10px',
+                                        height: '10px',
+                                        borderRadius: '999px',
+                                        background: variant.hex,
+                                        border: variant.hex === '#f8fafc' ? '1px solid #94a3b8' : '1px solid rgba(15,23,42,0.22)'
+                                      }}
+                                    />
+                                    {variant.label}
+                                  </div>
+                                  <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.8rem' }}>
+                                    {variantProduct?.sku || 'No disponible'}
+                                  </div>
+                                  <div style={{ color: '#10b981', fontWeight: 700, fontSize: '0.9rem' }}>
+                                    {variantProduct ? `${Number(variantProduct.price || 0).toFixed(2)} Bs` : '—'}
+                                  </div>
+                                </div>
+                              </button>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifySelf: isCompactLayout ? 'start' : 'end' }}>
+                                <button
+                                  type="button"
+                                  className="btn"
+                                  onClick={() => variantProduct && decrease(variantProduct.sku)}
+                                  disabled={isUnavailable}
+                                  style={{ minHeight: '34px', minWidth: '34px', padding: '6px', background: '#e2e8f0', color: '#0f172a' }}
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={variantQty}
+                                  onChange={(e) => variantProduct && setQty(variantProduct.sku, e.target.value)}
+                                  disabled={isUnavailable}
+                                  style={{
+                                    width: '68px',
+                                    minHeight: '34px',
+                                    textAlign: 'center',
+                                    borderRadius: '8px',
+                                    border: `1px solid ${LIGHT_THEME.border}`,
+                                    background: '#fff',
+                                    color: LIGHT_THEME.text
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn"
+                                  onClick={() => variantProduct && increase(variantProduct.sku)}
+                                  disabled={isUnavailable}
+                                  style={{ minHeight: '34px', minWidth: '34px', padding: '6px', background: '#2563eb', color: '#fff' }}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
                           );
                         })}
                       </div>
-
-                      <div style={{ color: '#10b981', fontWeight: 700, marginBottom: '8px' }}>
-                        {selectedProduct ? `${Number(selectedProduct.price || 0).toFixed(2)} Bs` : 'No disponible'}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => selectedProduct && decrease(selectedProduct.sku)}
-                          disabled={!selectedProduct}
-                          style={{ minHeight: '34px', padding: '6px 10px', background: '#e2e8f0', color: '#0f172a' }}
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          min="0"
-                          value={qty}
-                          onChange={(e) => selectedProduct && setQty(selectedProduct.sku, e.target.value)}
-                          disabled={!selectedProduct}
-                          style={{
-                            width: '74px',
-                            minHeight: '34px',
-                            textAlign: 'center',
-                            borderRadius: '8px',
-                            border: `1px solid ${LIGHT_THEME.border}`,
-                            background: '#fff',
-                            color: LIGHT_THEME.text
-                          }}
-                        />
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => selectedProduct && increase(selectedProduct.sku)}
-                          disabled={!selectedProduct}
-                          style={{ minHeight: '34px', padding: '6px 10px', background: '#2563eb', color: 'white' }}
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isCompactLayout ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
               {filteredProducts.map((product) => {
                 const qty = Number(quantities[product.sku] || 0);
                 return (
@@ -573,7 +666,17 @@ export default function PublicCustomerMenu() {
           )}
         </div>
 
-        <div className="card" style={{ marginBottom: 0, background: LIGHT_THEME.surface, border: `1px solid ${LIGHT_THEME.border}`, boxShadow: '0 8px 22px rgba(15, 23, 42, 0.08)' }}>
+        <div
+          className="card"
+          style={{
+            marginBottom: 0,
+            background: LIGHT_THEME.surface,
+            border: `1px solid ${LIGHT_THEME.border}`,
+            boxShadow: '0 8px 22px rgba(15, 23, 42, 0.08)',
+            position: isCompactLayout ? 'static' : 'sticky',
+            top: isCompactLayout ? 'auto' : '88px'
+          }}
+        >
           <h3 style={{ marginBottom: '8px', color: LIGHT_THEME.text }}>Tu pedido</h3>
           <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.9rem', marginBottom: '12px' }}>
             {cartUnits} unidad(es) · {cartTotal.toFixed(2)} Bs
