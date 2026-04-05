@@ -520,6 +520,7 @@ export default function PublicCustomerMenu() {
                                 display: 'grid',
                                 gridTemplateColumns: isCompactLayout ? '1fr' : 'minmax(0, 1fr) auto',
                                 gap: '8px',
+                                alignItems: 'center',
                                 opacity: isUnavailable ? 0.64 : 1
                               }}
                             >
@@ -564,7 +565,17 @@ export default function PublicCustomerMenu() {
                                   )}
                                 </div>
                                 <div style={{ minWidth: 0 }}>
-                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: LIGHT_THEME.text }}>
+                                  <div
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      fontWeight: 700,
+                                      color: LIGHT_THEME.text,
+                                      whiteSpace: 'nowrap',
+                                      lineHeight: 1.2
+                                    }}
+                                  >
                                     <span
                                       style={{
                                         width: '10px',
@@ -710,7 +721,7 @@ export default function PublicCustomerMenu() {
           <form onSubmit={submitOrder} style={{ display: 'grid', gap: '8px' }}>
             <input
               type="text"
-              placeholder="Tu nombre"
+              placeholder="Nombre/Apellidos"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               required
@@ -718,7 +729,7 @@ export default function PublicCustomerMenu() {
             />
             <input
               type="text"
-              placeholder="Tu teléfono"
+              placeholder="Telefono"
               value={customerPhone}
               onChange={(e) => setCustomerPhone(e.target.value)}
               required
