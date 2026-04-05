@@ -110,7 +110,13 @@ function getProductImageCandidates(product, enableSkuFallback = false) {
   return Array.from(new Set(candidates));
 }
 
-function ProductImage({ product, height, enableSkuFallback = false }) {
+function ProductImage({
+  product,
+  height,
+  enableSkuFallback = false,
+  fit = 'cover',
+  imagePadding = 0
+}) {
   const candidates = useMemo(
     () => getProductImageCandidates(product, enableSkuFallback),
     [product, enableSkuFallback]
@@ -136,9 +142,12 @@ function ProductImage({ product, height, enableSkuFallback = false }) {
       style={{
         width: '100%',
         height,
-        objectFit: 'cover',
+        objectFit: fit,
+        objectPosition: 'center',
         display: 'block',
-        background: IMAGE_FALLBACK_BACKGROUND
+        background: IMAGE_FALLBACK_BACKGROUND,
+        padding: imagePadding,
+        boxSizing: 'border-box'
       }}
       loading="lazy"
     />
@@ -397,8 +406,10 @@ export default function PublicCustomerMenu() {
                     >
                       <ProductImage
                         product={selectedProduct}
-                        height="148px"
+                        height="clamp(180px, 25vw, 250px)"
                         enableSkuFallback
+                        fit="contain"
+                        imagePadding="10px"
                       />
                     </div>
 
