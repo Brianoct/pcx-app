@@ -478,12 +478,26 @@ export default function PublicCustomerMenu() {
                           <div style={{ fontWeight: 800, color: LIGHT_THEME.text, marginBottom: '3px' }}>
                             Tablero {group.title}
                           </div>
-                          <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.85rem' }}>
-                            {selectedVariant?.label || 'Variante'} · {selectedProduct?.sku || 'No disponible'}
+                          <div style={{ color: '#10b981', fontSize: '0.95rem', fontWeight: 700 }}>
+                            {selectedProduct ? `${Number(selectedProduct.price || 0).toFixed(2)} Bs` : 'No disponible'}
                           </div>
                         </div>
-                        <div style={{ color: LIGHT_THEME.textMuted, fontSize: '1.05rem', fontWeight: 700 }}>
-                          {isExpanded ? '▲' : '▼'}
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            border: `1px solid ${isExpanded ? '#93c5fd' : LIGHT_THEME.border}`,
+                            borderRadius: '999px',
+                            padding: '6px 10px',
+                            background: isExpanded ? 'rgba(59,130,246,0.1)' : '#fff',
+                            color: isExpanded ? '#1d4ed8' : LIGHT_THEME.textSoft,
+                            fontSize: '0.82rem',
+                            fontWeight: 800
+                          }}
+                        >
+                          Más
+                          <span style={{ fontSize: '1rem', lineHeight: 1 }}>{isExpanded ? '▲' : '▼'}</span>
                         </div>
                       </div>
                     </button>
