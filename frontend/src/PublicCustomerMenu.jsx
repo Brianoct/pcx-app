@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiRequest } from './apiClient';
+import pdfLogo from './assets/logo.png';
 
 const CATEGORY_TABLEROS = 'Tableros';
 const CATEGORY_ACCESORIOS = 'Accesorios';
@@ -446,9 +447,17 @@ export default function PublicCustomerMenu() {
   return (
     <div className="container" style={{ maxWidth: '1120px', paddingTop: '28px', color: LIGHT_THEME.text, background: LIGHT_THEME.pageBg, borderRadius: '16px' }}>
       <div className="card" style={{ marginBottom: '14px', background: LIGHT_THEME.surface, border: `1px solid ${LIGHT_THEME.border}`, boxShadow: '0 8px 22px rgba(15, 23, 42, 0.08)' }}>
-        <h2 style={{ marginBottom: '8px', color: LIGHT_THEME.primary }}>Menú PCX</h2>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <img
+            src={pdfLogo}
+            alt="PCX"
+            style={{ width: '108px', height: 'auto', display: 'block', objectFit: 'contain' }}
+            loading="eager"
+          />
+          <h2 style={{ marginBottom: 0, color: LIGHT_THEME.primary }}>Menú PCX</h2>
+        </div>
         <p style={{ color: LIGHT_THEME.textSoft, marginBottom: '4px' }}>
-          Elige tus productos y envía tu pedido. Te contactará <strong>{sellerName}</strong>.
+          Hola, soy <strong>{sellerName}</strong>. Este es mi menú oficial de PCX para tu pedido por WhatsApp.
         </p>
         {menuData?.default_store && (
           <p style={{ color: LIGHT_THEME.textMuted, fontSize: '0.9rem' }}>
