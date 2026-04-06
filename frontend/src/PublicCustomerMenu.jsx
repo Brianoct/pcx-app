@@ -240,7 +240,6 @@ export default function PublicCustomerMenu() {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [notes, setNotes] = useState('');
-  const [expandedTableroKey, setExpandedTableroKey] = useState(TABLERO_MODELS[0]?.key || '');
   const [isCompactLayout, setIsCompactLayout] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth < 980 : false
   ));
@@ -344,12 +343,6 @@ export default function PublicCustomerMenu() {
     });
   }, [tableroGroups]);
 
-  useEffect(() => {
-    setExpandedTableroKey((prev) => {
-      if (tableroGroups.some((group) => group.key === prev)) return prev;
-      return tableroGroups[0]?.key || '';
-    });
-  }, [tableroGroups]);
   const cartItems = useMemo(() => (
     products
       .filter((product) => Number(quantities[product.sku] || 0) > 0)
@@ -382,9 +375,6 @@ export default function PublicCustomerMenu() {
   const decrease = (sku) => setQty(sku, Math.max(0, Number(quantities[sku] || 0) - 1));
   const selectTableroVariant = (modelKey, colorKey) => {
     setSelectedTableroColorByModel((prev) => ({ ...prev, [modelKey]: colorKey }));
-  };
-  const toggleTableroDropdown = (modelKey) => {
-    setExpandedTableroKey((prev) => (prev === modelKey ? '' : modelKey));
   };
 
   const submitOrder = async (e) => {
@@ -492,7 +482,7 @@ export default function PublicCustomerMenu() {
           </div>
 
           {activeCategory === CATEGORY_TABLEROS ? (
-            <div style={{ display: 'grid', gap: '12px' }}>
+            <div style={{ display: 'grid', gap: '14px' }}>
               {tableroGroups.map((group) => {
                 const selectedColorKey = selectedTableroColorByModel[group.key] || group.variants[0]?.key;
                 let selectedVariant = group.variants.find((variant) => variant.key === selectedColorKey) || group.variants[0];
@@ -500,7 +490,8 @@ export default function PublicCustomerMenu() {
                   selectedVariant = group.variants.find((variant) => Boolean(variant.product)) || selectedVariant;
                 }
                 const selectedProduct = selectedVariant?.product || null;
-                const isExpanded = expandedTableroKey === group.key;
+                const selectedQty = selectedProduct ? Number(quantities[selectedProduct.sku] || 0) : 0;
+                const availableVariants = group.variants.filter((variant) => Boolean(variant.product));
 
                 return (
                   <div
@@ -509,202 +500,141 @@ export default function PublicCustomerMenu() {
                       border: `1px solid ${LIGHT_THEME.border}`,
                       background: LIGHT_THEME.surface,
                       borderRadius: '12px',
-                      overflow: 'hidden'
+                      padding: isCompactLayout ? '12px' : '14px',
+                      display: 'grid',
+                      gap: '12px'
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => toggleTableroDropdown(group.key)}
+                    <div
                       style={{
-                        width: '100%',
-                        border: 'none',
-                        background: 'transparent',
-                        padding: 0,
-                        textAlign: 'left',
-                        cursor: 'pointer'
+                        display: 'grid',
+                        gridTemplateColumns: isCompactLayout ? '1fr' : 'minmax(0, 1.1fr) minmax(320px, 0.9fr)',
+                        gap: isCompactLayout ? '12px' : '16px',
+                        alignItems: 'start'
                       }}
                     >
                       <div
                         style={{
-                          borderBottom: `1px solid ${LIGHT_THEME.border}`,
-                          background: LIGHT_THEME.surfaceAlt
+                          border: `1px solid ${LIGHT_THEME.border}`,
+                          borderRadius: '12px',
+                          background: LIGHT_THEME.surfaceAlt,
+                          overflow: 'hidden'
                         }}
                       >
                         <ProductImage
                           product={selectedProduct}
-                          height={isCompactLayout ? '180px' : '220px'}
+                          height={isCompactLayout ? '220px' : '320px'}
                           enableSkuFallback
                           fit="contain"
-                          imagePadding="10px"
+                          imagePadding={isCompactLayout ? '10px' : '14px'}
                         />
                       </div>
-                      <div style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center' }}>
+
+                      <div style={{ display: 'grid', gap: '12px', alignContent: 'start' }}>
                         <div>
-                          <div style={{ fontWeight: 800, color: LIGHT_THEME.text, marginBottom: '3px' }}>
+                          <div style={{ fontWeight: 800, fontSize: '1.45rem', color: LIGHT_THEME.text, lineHeight: 1.1 }}>
                             Tablero {group.title}
                           </div>
-                          <div style={{ color: '#10b981', fontSize: '0.95rem', fontWeight: 700 }}>
+                          <div style={{ color: LIGHT_THEME.textMuted, marginTop: '4px' }}>
+                            Selecciona un color y ajusta cantidad
+                          </div>
+                          <div style={{ color: '#10b981', fontWeight: 800, marginTop: '8px', fontSize: '1.15rem' }}>
                             {selectedProduct ? `${Number(selectedProduct.price || 0).toFixed(2)} Bs` : 'No disponible'}
                           </div>
                         </div>
-                        <div
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            border: `1px solid ${isExpanded ? '#93c5fd' : LIGHT_THEME.border}`,
-                            borderRadius: '999px',
-                            padding: '6px 10px',
-                            background: isExpanded ? 'rgba(59,130,246,0.1)' : '#fff',
-                            color: isExpanded ? '#1d4ed8' : LIGHT_THEME.textSoft,
-                            fontSize: '0.82rem',
-                            fontWeight: 800
-                          }}
-                        >
-                          Más
-                          <span style={{ fontSize: '1rem', lineHeight: 1 }}>{isExpanded ? '▲' : '▼'}</span>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => selectedProduct && decrease(selectedProduct.sku)}
+                            disabled={!selectedProduct}
+                            style={{ minHeight: '38px', minWidth: '38px', padding: '8px', background: '#e2e8f0', color: '#0f172a', fontSize: '1rem' }}
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            value={selectedQty}
+                            onChange={(e) => selectedProduct && setQty(selectedProduct.sku, e.target.value)}
+                            disabled={!selectedProduct}
+                            style={{
+                              width: '86px',
+                              minHeight: '38px',
+                              textAlign: 'center',
+                              borderRadius: '8px',
+                              border: `1px solid ${LIGHT_THEME.border}`,
+                              background: '#fff',
+                              color: LIGHT_THEME.text,
+                              fontSize: '1rem'
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => selectedProduct && increase(selectedProduct.sku)}
+                            disabled={!selectedProduct}
+                            style={{ minHeight: '38px', minWidth: '38px', padding: '8px', background: '#2563eb', color: '#fff', fontSize: '1rem' }}
+                          >
+                            +
+                          </button>
                         </div>
                       </div>
-                    </button>
+                    </div>
 
-                    {isExpanded && (
-                      <div style={{ borderTop: `1px solid ${LIGHT_THEME.border}`, padding: '10px 12px', display: 'grid', gap: '8px', background: '#fff' }}>
-                        {group.variants.map((variant) => {
-                          const variantProduct = variant.product;
-                          const isUnavailable = !variantProduct;
-                          const variantQty = variantProduct ? Number(quantities[variantProduct.sku] || 0) : 0;
-                          const isSelected = variant.key === selectedVariant?.key;
-                          return (
-                            <div
-                              key={`${group.key}-${variant.key}`}
-                              style={{
-                                border: `1px solid ${isSelected ? '#93c5fd' : LIGHT_THEME.border}`,
-                                background: isSelected ? 'rgba(59,130,246,0.06)' : '#fff',
-                                borderRadius: '10px',
-                                padding: '8px',
-                                display: 'grid',
-                                gridTemplateColumns: isCompactLayout ? '1fr' : 'minmax(0, 1fr) auto',
-                                gap: '8px',
-                                alignItems: 'center',
-                                minHeight: '84px',
-                                opacity: isUnavailable ? 0.64 : 1
-                              }}
-                            >
-                              <button
-                                type="button"
-                                disabled={isUnavailable}
-                                onClick={() => variantProduct && selectTableroVariant(group.key, variant.key)}
-                                style={{
-                                  border: 'none',
-                                  background: 'transparent',
-                                  padding: 0,
-                                  width: '100%',
-                                  textAlign: 'left',
-                                  cursor: isUnavailable ? 'not-allowed' : 'pointer',
-                                  display: 'grid',
-                                  gridTemplateColumns: '56px minmax(0, 1fr)',
-                                  alignItems: 'center',
-                                  gap: '10px',
-                                  minHeight: '68px'
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    width: '56px',
-                                    height: '56px',
-                                    borderRadius: '8px',
-                                    border: `1px solid ${LIGHT_THEME.border}`,
-                                    overflow: 'hidden',
-                                    background: LIGHT_THEME.surfaceAlt,
-                                    flexShrink: 0
-                                  }}
-                                >
-                                  {variantProduct ? (
-                                    <ProductImage
-                                      product={variantProduct}
-                                      height="56px"
-                                      enableSkuFallback
-                                      fit="contain"
-                                      imagePadding="4px"
-                                    />
-                                  ) : (
-                                    <div style={{ width: '100%', height: '100%', background: '#f1f5f9' }} />
-                                  )}
-                                </div>
-                                <div style={{ minWidth: 0, display: 'grid', gap: '2px', alignContent: 'center', minHeight: '56px' }}>
-                                  <div
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '6px',
-                                      fontWeight: 700,
-                                      color: LIGHT_THEME.text,
-                                      whiteSpace: 'nowrap',
-                                      lineHeight: '18px',
-                                      minHeight: '18px'
-                                    }}
-                                  >
-                                    <span
-                                      style={{
-                                        width: '10px',
-                                        height: '10px',
-                                        borderRadius: '999px',
-                                        background: variant.hex,
-                                        border: variant.hex === '#f8fafc' ? '1px solid #94a3b8' : '1px solid rgba(15,23,42,0.22)'
-                                      }}
-                                    />
-                                    {variant.label}
-                                  </div>
-                                  <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.8rem', lineHeight: '17px', minHeight: '17px' }}>
-                                    {variantProduct?.sku || 'No disponible'}
-                                  </div>
-                                  <div style={{ color: '#10b981', fontWeight: 700, fontSize: '0.9rem', lineHeight: '19px', minHeight: '19px' }}>
-                                    {variantProduct ? `${Number(variantProduct.price || 0).toFixed(2)} Bs` : '—'}
-                                  </div>
-                                </div>
-                              </button>
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifySelf: isCompactLayout ? 'start' : 'end' }}>
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  onClick={() => variantProduct && decrease(variantProduct.sku)}
-                                  disabled={isUnavailable}
-                                  style={{ minHeight: '34px', minWidth: '34px', padding: '6px', background: '#e2e8f0', color: '#0f172a' }}
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={variantQty}
-                                  onChange={(e) => variantProduct && setQty(variantProduct.sku, e.target.value)}
-                                  disabled={isUnavailable}
-                                  style={{
-                                    width: '68px',
-                                    minHeight: '34px',
-                                    textAlign: 'center',
-                                    borderRadius: '8px',
-                                    border: `1px solid ${LIGHT_THEME.border}`,
-                                    background: '#fff',
-                                    color: LIGHT_THEME.text
-                                  }}
-                                />
-                                <button
-                                  type="button"
-                                  className="btn"
-                                  onClick={() => variantProduct && increase(variantProduct.sku)}
-                                  disabled={isUnavailable}
-                                  style={{ minHeight: '34px', minWidth: '34px', padding: '6px', background: '#2563eb', color: '#fff' }}
-                                >
-                                  +
-                                </button>
-                              </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {availableVariants.map((variant) => {
+                        const variantProduct = variant.product;
+                        if (!variantProduct) return null;
+                        const isSelected = variant.key === selectedVariant?.key;
+                        return (
+                          <button
+                            key={`${group.key}-thumb-${variant.key}`}
+                            type="button"
+                            onClick={() => selectTableroVariant(group.key, variant.key)}
+                            style={{
+                              border: `1px solid ${isSelected ? '#3b82f6' : LIGHT_THEME.border}`,
+                              background: isSelected ? 'rgba(59,130,246,0.08)' : '#fff',
+                              borderRadius: '10px',
+                              padding: '6px',
+                              width: isCompactLayout ? '66px' : '74px',
+                              display: 'grid',
+                              gap: '5px',
+                              justifyItems: 'center',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div style={{
+                              width: isCompactLayout ? '52px' : '60px',
+                              height: isCompactLayout ? '52px' : '60px',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              border: `1px solid ${LIGHT_THEME.border}`,
+                              background: LIGHT_THEME.surfaceAlt
+                            }}>
+                              <ProductImage
+                                product={variantProduct}
+                                height={isCompactLayout ? '52px' : '60px'}
+                                enableSkuFallback
+                                fit="contain"
+                                imagePadding="4px"
+                              />
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 700, color: LIGHT_THEME.text }}>
+                              <span style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '999px',
+                                background: variant.hex,
+                                border: variant.hex === '#f8fafc' ? '1px solid #94a3b8' : '1px solid rgba(15,23,42,0.22)'
+                              }} />
+                              {variant.label}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}
