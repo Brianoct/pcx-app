@@ -43,7 +43,7 @@ export default function CustomerMenuTool({ token, user }) {
     if (!url) return;
     const message = [
       `Hola, soy ${sellerName} de PCX 👋`,
-      'Aquí tienes nuestro menú digital para que puedas elegir productos:',
+      'Aquí tienes nuestro catálogo digital para que puedas elegir productos:',
       url,
       'Cuando envíes tu pedido yo te confirmo disponibilidad y precio final.'
     ].join('\n');
@@ -54,7 +54,7 @@ export default function CustomerMenuTool({ token, user }) {
   return (
     <div className="container">
       <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
-        Menú para Clientes
+        Catálogo para Clientes
       </h2>
       <div className="card" style={{ maxWidth: '920px', margin: '0 auto' }}>
         <h3 style={{ marginBottom: '10px' }}>Comparte tu menú personal</h3>
