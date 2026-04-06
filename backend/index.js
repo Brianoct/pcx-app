@@ -1663,7 +1663,7 @@ app.post('/api/customer-menu/share-link', authenticateToken, async (req, res) =>
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
   if (!canAccessPanel(userContext.panel_access, userContext.role, 'menu_cliente')) {
-    return res.status(403).json({ error: 'No tienes permiso para generar enlaces de menú' });
+    return res.status(403).json({ error: 'No tienes permiso para generar enlaces de catálogo' });
   }
 
   try {
@@ -1677,7 +1677,7 @@ app.post('/api/customer-menu/share-link', authenticateToken, async (req, res) =>
     );
     const requestOrigin = String(req.headers.origin || '').trim();
     const publicBase = String(process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL || requestOrigin || 'http://localhost:5173').trim();
-    const shareUrl = `${publicBase.replace(/\/+$/, '')}/#/menu/${shareToken}`;
+    const shareUrl = `${publicBase.replace(/\/+$/, '')}/#/catalogo/${shareToken}`;
     return res.json({
       share_token: shareToken,
       share_url: shareUrl,
@@ -1689,22 +1689,22 @@ app.post('/api/customer-menu/share-link', authenticateToken, async (req, res) =>
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: 'No se pudo generar el enlace de menú' });
+    return res.status(500).json({ error: 'No se pudo generar el enlace de catálogo' });
   }
 });
 
 app.get('/api/public/menu/:shareToken', async (req, res) => {
   const shareToken = String(req.params.shareToken || '').trim();
-  if (!shareToken) return res.status(400).json({ error: 'Token de menú inválido' });
+  if (!shareToken) return res.status(400).json({ error: 'Token de catálogo inválido' });
 
   try {
     const decoded = jwt.verify(shareToken, process.env.JWT_SECRET);
     if (decoded?.purpose !== CUSTOMER_MENU_TOKEN_PURPOSE) {
-      return res.status(400).json({ error: 'Enlace de menú inválido' });
+      return res.status(400).json({ error: 'Enlace de catálogo inválido' });
     }
     const sellerUserId = Number.parseInt(decoded?.seller_user_id, 10);
     if (!Number.isInteger(sellerUserId) || sellerUserId <= 0) {
-      return res.status(400).json({ error: 'Enlace de menú inválido' });
+      return res.status(400).json({ error: 'Enlace de catálogo inválido' });
     }
 
     const sellerRes = await pool.query(
@@ -1729,6 +1729,8 @@ app.get('/api/public/menu/:shareToken', async (req, res) => {
         sku: String(row.sku || '').toUpperCase(),
         name: String(row.name || '').trim(),
         price: Number(row.sf || 0),
+        price_sf: Number(row.sf || 0),
+        price_cf: Number(row.cf || row.sf || 0),
         image_url: String(row.image_url || '').trim() || null,
         category: inferProductMenuCategory(row)
       }))
@@ -1753,24 +1755,24 @@ app.get('/api/public/menu/:shareToken', async (req, res) => {
       return res.status(410).json({ error: 'Este enlace expiró. Pide uno nuevo al vendedor.' });
     }
     if (err?.name === 'JsonWebTokenError') {
-      return res.status(400).json({ error: 'Enlace de menú inválido' });
+      return res.status(400).json({ error: 'Enlace de catálogo inválido' });
     }
     console.error(err);
-    return res.status(500).json({ error: 'No se pudo cargar el menú compartido' });
+    return res.status(500).json({ error: 'No se pudo cargar el catálogo compartido' });
   }
 });
 
 app.post('/api/public/menu/:shareToken/order', async (req, res) => {
   const shareToken = String(req.params.shareToken || '').trim();
-  if (!shareToken) return res.status(400).json({ error: 'Token de menú inválido' });
+  if (!shareToken) return res.status(400).json({ error: 'Token de catálogo inválido' });
   try {
     const decoded = jwt.verify(shareToken, process.env.JWT_SECRET);
     if (decoded?.purpose !== CUSTOMER_MENU_TOKEN_PURPOSE) {
-      return res.status(400).json({ error: 'Enlace de menú inválido' });
+      return res.status(400).json({ error: 'Enlace de catálogo inválido' });
     }
     const sellerUserId = Number.parseInt(decoded?.seller_user_id, 10);
     if (!Number.isInteger(sellerUserId) || sellerUserId <= 0) {
-      return res.status(400).json({ error: 'Enlace de menú inválido' });
+      return res.status(400).json({ error: 'Enlace de catálogo inválido' });
     }
 
     const sellerRes = await pool.query(
@@ -1792,9 +1794,16 @@ app.post('/api/public/menu/:shareToken/order', async (req, res) => {
     const department = normalizeDepartmentLabel(req.body?.department || '');
     const provincia = normalizeDepartmentLabel(req.body?.provincia || '');
     const customerNotes = String(req.body?.notes || '').trim();
+    const ventaTypeRaw = normalizeText(req.body?.venta_type || 'sf').replace(/\s+/g, '');
+    const ventaType = ventaTypeRaw === 'cf' || ventaTypeRaw === 'confactura'
+      ? 'cf'
+      : (ventaTypeRaw === 'sf' || ventaTypeRaw === 'sinfactura' ? 'sf' : '');
     const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!customerName || !customerPhone) {
       return res.status(400).json({ error: 'Completa nombre y teléfono para enviar el pedido' });
+    }
+    if (!ventaType) {
+      return res.status(400).json({ error: 'Selecciona si el pedido es con factura o sin factura' });
     }
     if (!department && !provincia) {
       return res.status(400).json({ error: 'Selecciona departamento o provincia para enviar el pedido' });
@@ -1826,7 +1835,7 @@ app.post('/api/public/menu/:shareToken/order', async (req, res) => {
     }
     const skus = [...qtyBySku.keys()];
     const productsRes = await pool.query(
-      `SELECT sku, name, sf_price
+      `SELECT sku, name, sf_price, cf_price
        FROM products
        WHERE UPPER(sku) = ANY($1::text[])
          AND is_active = TRUE`,
@@ -1841,7 +1850,9 @@ app.post('/api/public/menu/:shareToken/order', async (req, res) => {
     const lineItems = skus.map((sku) => {
       const product = productsBySku.get(sku);
       const qty = Number(qtyBySku.get(sku) || 0);
-      const unitPrice = Number(product?.sf_price || 0);
+      const unitPrice = ventaType === 'cf'
+        ? Number(product?.cf_price || product?.sf_price || 0)
+        : Number(product?.sf_price || 0);
       return {
         sku,
         displayName: String(product?.name || sku),
@@ -1877,7 +1888,7 @@ app.post('/api/public/menu/:shareToken/order', async (req, res) => {
         null,
         storeLocation,
         vendorName,
-        'sf',
+        ventaType,
         0,
         JSON.stringify(normalizedLineItems),
         subtotal,
@@ -1897,7 +1908,7 @@ app.post('/api/public/menu/:shareToken/order', async (req, res) => {
       return res.status(410).json({ error: 'Este enlace expiró. Pide uno nuevo al vendedor.' });
     }
     if (err?.name === 'JsonWebTokenError') {
-      return res.status(400).json({ error: 'Enlace de menú inválido' });
+      return res.status(400).json({ error: 'Enlace de catálogo inválido' });
     }
     if (err?.statusCode) {
       return res.status(err.statusCode).json({ error: err.message });

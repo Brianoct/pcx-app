@@ -1,14 +1,45 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
+
+const DEFAULT_WHATSAPP_TEMPLATE = [
+  'Hola, soy {nombre} de PCX.',
+  'Aqui tienes nuestro catalogo digital para que puedas elegir productos:',
+  '{link}',
+  'Cuando envies tu pedido te confirmo disponibilidad y precio final.'
+].join('\n');
+const WHATSAPP_TEMPLATE_STORAGE_KEY = 'pcx.catalogo.whatsapp_template';
+
+function buildWhatsAppShareMessage(template, { sellerName, link }) {
+  const safeLink = String(link || '').trim();
+  const safeSellerName = String(sellerName || '').trim() || 'Vendedor';
+  let message = String(template || '').trim() || DEFAULT_WHATSAPP_TEMPLATE;
+  message = message
+    .replace(/\{nombre\}/gi, safeSellerName)
+    .replace(/\{name\}/gi, safeSellerName)
+    .replace(/\{sellerName\}/gi, safeSellerName)
+    .replace(/\{link\}/gi, safeLink);
+  if (safeLink && !message.includes(safeLink)) {
+    message = `${message}\n${safeLink}`;
+  }
+  return message.trim();
+}
 
 export default function CustomerMenuTool({ token, user }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [linkData, setLinkData] = useState(null);
   const [error, setError] = useState('');
+  const [whatsAppTemplate, setWhatsAppTemplate] = useState(() => {
+    if (typeof window === 'undefined') return DEFAULT_WHATSAPP_TEMPLATE;
+    return window.localStorage.getItem(WHATSAPP_TEMPLATE_STORAGE_KEY) || DEFAULT_WHATSAPP_TEMPLATE;
+  });
   const sellerName = useMemo(
     () => String(user?.display_name || '').trim() || String(user?.email || '').split('@')[0] || 'Vendedor',
     [user]
   );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(WHATSAPP_TEMPLATE_STORAGE_KEY, whatsAppTemplate);
+  }, [whatsAppTemplate]);
 
   const generateLink = async () => {
     setIsGenerating(true);
@@ -41,12 +72,7 @@ export default function CustomerMenuTool({ token, user }) {
   const openWhatsApp = () => {
     const url = String(linkData?.share_url || '').trim();
     if (!url) return;
-    const message = [
-      `Hola, soy ${sellerName} de PCX 👋`,
-      'Aquí tienes nuestro catálogo digital para que puedas elegir productos:',
-      url,
-      'Cuando envíes tu pedido yo te confirmo disponibilidad y precio final.'
-    ].join('\n');
+    const message = buildWhatsAppShareMessage(whatsAppTemplate, { sellerName, link: url });
     const waUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(waUrl, '_blank', 'noopener,noreferrer');
   };
@@ -57,10 +83,32 @@ export default function CustomerMenuTool({ token, user }) {
         Catálogo para Clientes
       </h2>
       <div className="card" style={{ maxWidth: '920px', margin: '0 auto' }}>
-        <h3 style={{ marginBottom: '10px' }}>Comparte tu menú personal</h3>
+        <h3 style={{ marginBottom: '10px' }}>Comparte tu catálogo personal</h3>
         <p style={{ color: '#94a3b8', marginBottom: '14px' }}>
           Genera un enlace único para tus clientes. Los pedidos enviados desde ese enlace se registran en tu nombre.
         </p>
+        <div style={{ marginBottom: '14px' }}>
+          <label style={{ display: 'block', marginBottom: '8px', color: '#93c5fd', fontSize: '0.9rem' }}>
+            Mensaje personalizado para WhatsApp
+          </label>
+          <textarea
+            rows={4}
+            value={whatsAppTemplate}
+            onChange={(e) => setWhatsAppTemplate(e.target.value)}
+            style={{
+              width: '100%',
+              borderRadius: '10px',
+              border: '1px solid rgba(59,130,246,0.35)',
+              background: 'rgba(15,23,42,0.7)',
+              color: '#e2e8f0',
+              padding: '10px 12px',
+              fontSize: '0.92rem'
+            }}
+          />
+          <div style={{ marginTop: '6px', color: '#93c5fd', fontSize: '0.8rem' }}>
+            Usa {'{nombre}'} para tu nombre y {'{link}'} para el enlace.
+          </div>
+        </div>
 
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
           <button
@@ -69,7 +117,7 @@ export default function CustomerMenuTool({ token, user }) {
             onClick={generateLink}
             disabled={isGenerating}
           >
-            {isGenerating ? 'Generando enlace...' : 'Generar enlace de menú'}
+            {isGenerating ? 'Generando enlace...' : 'Generar enlace de catálogo'}
           </button>
         </div>
 

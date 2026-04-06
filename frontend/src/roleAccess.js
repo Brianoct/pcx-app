@@ -237,7 +237,7 @@ export function canAccessPanel(accessOrRole, maybeAccessOrKey, maybeKey) {
 
 export const ACCESS_LABELS = [
   { key: 'cotizar', label: 'Cotizar' },
-  { key: 'menu_cliente', label: 'Menu Cliente (link clientes)' },
+  { key: 'menu_cliente', label: 'Catalogo Cliente (link clientes)' },
   { key: 'calendario', label: 'Calendario' },
   { key: 'historial_individual', label: 'Historial individual' },
   { key: 'historial_global', label: 'Historial global' },

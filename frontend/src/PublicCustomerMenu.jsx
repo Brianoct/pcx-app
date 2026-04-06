@@ -253,6 +253,7 @@ export default function PublicCustomerMenu() {
   const [department, setDepartment] = useState('');
   const [provincia, setProvincia] = useState('');
   const [isProvincia, setIsProvincia] = useState(false);
+  const [ventaType, setVentaType] = useState('sf');
   const [notes, setNotes] = useState('');
   const [isCompactLayout, setIsCompactLayout] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth < 980 : false
@@ -272,7 +273,7 @@ export default function PublicCustomerMenu() {
           : [CATEGORY_TABLEROS, CATEGORY_ACCESORIOS];
         setActiveCategory(categories.includes(CATEGORY_TABLEROS) ? CATEGORY_TABLEROS : categories[0]);
       } catch (err) {
-        setError(err.message || 'No se pudo cargar el menú');
+        setError(err.message || 'No se pudo cargar el catálogo');
       } finally {
         setLoading(false);
       }
@@ -362,14 +363,16 @@ export default function PublicCustomerMenu() {
       .filter((product) => Number(quantities[product.sku] || 0) > 0)
       .map((product) => {
         const qty = Number(quantities[product.sku] || 0);
-        const price = Number(product.price || 0);
+        const price = ventaType === 'cf'
+          ? Number(product.price_cf ?? product.cf ?? product.price ?? 0)
+          : Number(product.price_sf ?? product.sf ?? product.price ?? 0);
         return {
           ...product,
           qty,
           lineTotal: qty * price
         };
       })
-  ), [products, quantities]);
+  ), [products, quantities, ventaType]);
   const cartUnits = cartItems.reduce((sum, item) => sum + Number(item.qty || 0), 0);
   const cartTotal = cartItems.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0);
 
@@ -419,6 +422,7 @@ export default function PublicCustomerMenu() {
         customer_phone: String(customerPhone || '').trim(),
         department: isProvincia ? null : (String(department || '').trim() || null),
         provincia: isProvincia ? (String(provincia || '').trim() || null) : null,
+        venta_type: ventaType,
         notes: String(notes || '').trim() || null,
         items: cartItems.map((item) => ({
           sku: item.sku,
@@ -515,6 +519,11 @@ export default function PublicCustomerMenu() {
                 }
                 const selectedProduct = selectedVariant?.product || null;
                 const selectedQty = selectedProduct ? Number(quantities[selectedProduct.sku] || 0) : 0;
+                const selectedPrice = selectedProduct
+                  ? (ventaType === 'cf'
+                    ? Number(selectedProduct.price_cf ?? selectedProduct.cf ?? selectedProduct.price ?? 0)
+                    : Number(selectedProduct.price_sf ?? selectedProduct.sf ?? selectedProduct.price ?? 0))
+                  : 0;
                 const availableVariants = group.variants.filter((variant) => Boolean(variant.product));
 
                 return (
@@ -563,7 +572,7 @@ export default function PublicCustomerMenu() {
                             Selecciona un color y ajusta cantidad
                           </div>
                           <div style={{ color: '#10b981', fontWeight: 800, marginTop: '8px', fontSize: '1.15rem' }}>
-                            {selectedProduct ? `${Number(selectedProduct.price || 0).toFixed(2)} Bs` : 'No disponible'}
+                            {selectedProduct ? `${selectedPrice.toFixed(2)} Bs` : 'No disponible'}
                           </div>
                         </div>
 
@@ -667,6 +676,9 @@ export default function PublicCustomerMenu() {
             <div style={{ display: 'grid', gridTemplateColumns: isCompactLayout ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
               {filteredProducts.map((product) => {
                 const qty = Number(quantities[product.sku] || 0);
+                const displayPrice = ventaType === 'cf'
+                  ? Number(product.price_cf ?? product.cf ?? product.price ?? 0)
+                  : Number(product.price_sf ?? product.sf ?? product.price ?? 0);
                 return (
                   <div key={product.sku} style={{
                     border: `1px solid ${LIGHT_THEME.border}`,
@@ -699,7 +711,7 @@ export default function PublicCustomerMenu() {
                         {product.name}
                       </div>
                       <div style={{ color: '#10b981', fontWeight: 700, marginBottom: '8px' }}>
-                        {Number(product.price || 0).toFixed(2)} Bs
+                        {displayPrice.toFixed(2)} Bs
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 'auto' }}>
                         <button type="button" className="btn" onClick={() => decrease(product.sku)} style={{ minHeight: '34px', padding: '6px 10px', background: '#e2e8f0', color: '#0f172a' }}>-</button>
@@ -741,10 +753,35 @@ export default function PublicCustomerMenu() {
         >
           <h3 style={{ marginBottom: '8px', color: LIGHT_THEME.text }}>Tu pedido</h3>
           <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.9rem', marginBottom: '12px' }}>
-            {cartUnits} unidad(es) · {cartTotal.toFixed(2)} Bs
+            {cartUnits} unidad(es)
+          </div>
+          <div style={{ marginBottom: '10px' }}>
+            <div style={{ marginBottom: '6px', color: LIGHT_THEME.textSoft, fontSize: '0.9rem' }}>Tipo de venta</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setVentaType('sf')}
+                style={ventaType === 'sf'
+                  ? { background: LIGHT_THEME.primary, color: '#fff', border: `1px solid ${LIGHT_THEME.primary}` }
+                  : { background: '#fff', color: LIGHT_THEME.textSoft, border: `1px solid ${LIGHT_THEME.border}` }}
+              >
+                Sin factura
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setVentaType('cf')}
+                style={ventaType === 'cf'
+                  ? { background: LIGHT_THEME.primary, color: '#fff', border: `1px solid ${LIGHT_THEME.primary}` }
+                  : { background: '#fff', color: LIGHT_THEME.textSoft, border: `1px solid ${LIGHT_THEME.border}` }}
+              >
+                Con factura
+              </button>
+            </div>
           </div>
 
-          <div style={{ maxHeight: '180px', overflowY: 'auto', marginBottom: '12px', paddingRight: '4px' }}>
+          <div style={{ maxHeight: '180px', overflowY: 'auto', marginBottom: '8px', paddingRight: '4px' }}>
             {cartItems.length === 0 ? (
               <div style={{ color: LIGHT_THEME.textMuted }}>Aún no agregaste productos.</div>
             ) : cartItems.map((item) => (
@@ -753,6 +790,17 @@ export default function PublicCustomerMenu() {
                 <strong>{item.lineTotal.toFixed(2)} Bs</strong>
               </div>
             ))}
+          </div>
+          <div style={{
+            marginBottom: '12px',
+            paddingTop: '8px',
+            borderTop: `1px solid ${LIGHT_THEME.border}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span style={{ color: LIGHT_THEME.textSoft, fontWeight: 700 }}>Total</span>
+            <strong style={{ color: LIGHT_THEME.text, fontSize: '1rem' }}>{cartTotal.toFixed(2)} Bs</strong>
           </div>
 
           <form onSubmit={submitOrder} style={{ display: 'grid', gap: '8px' }}>
