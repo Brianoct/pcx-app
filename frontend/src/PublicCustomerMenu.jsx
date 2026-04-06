@@ -5,6 +5,17 @@ import pdfLogo from './assets/logo.png';
 
 const CATEGORY_TABLEROS = 'Tableros';
 const CATEGORY_ACCESORIOS = 'Accesorios';
+const DEPARTMENT_OPTIONS = [
+  'Beni',
+  'Chuquisaca',
+  'Cochabamba',
+  'La Paz',
+  'Oruro',
+  'Pando',
+  'Potosí',
+  'Santa Cruz',
+  'Tarija'
+];
 const TABLERO_MODELS = [
   { key: 'T61x95', label: 'T61x95' },
   { key: 'T94x95', label: 'T94x95' },
@@ -239,6 +250,9 @@ export default function PublicCustomerMenu() {
   const [selectedTableroColorByModel, setSelectedTableroColorByModel] = useState({});
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [department, setDepartment] = useState('');
+  const [provincia, setProvincia] = useState('');
+  const [isProvincia, setIsProvincia] = useState(false);
   const [notes, setNotes] = useState('');
   const [isCompactLayout, setIsCompactLayout] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth < 980 : false
@@ -387,6 +401,14 @@ export default function PublicCustomerMenu() {
       alert('Completa nombre y teléfono');
       return;
     }
+    if (isProvincia && !String(provincia || '').trim()) {
+      alert('Completa la provincia');
+      return;
+    }
+    if (!isProvincia && !String(department || '').trim()) {
+      alert('Selecciona un departamento');
+      return;
+    }
 
     setSaving(true);
     setError('');
@@ -395,6 +417,8 @@ export default function PublicCustomerMenu() {
       const payload = {
         customer_name: String(customerName || '').trim(),
         customer_phone: String(customerPhone || '').trim(),
+        department: isProvincia ? null : (String(department || '').trim() || null),
+        provincia: isProvincia ? (String(provincia || '').trim() || null) : null,
         notes: String(notes || '').trim() || null,
         items: cartItems.map((item) => ({
           sku: item.sku,
@@ -419,7 +443,7 @@ export default function PublicCustomerMenu() {
   if (loading) {
     return (
       <div className="container" style={{ maxWidth: '1080px' }}>
-        <div className="card" style={{ textAlign: 'center', color: LIGHT_THEME.textMuted, background: LIGHT_THEME.surface, border: `1px solid ${LIGHT_THEME.border}` }}>Cargando menú...</div>
+        <div className="card" style={{ textAlign: 'center', color: LIGHT_THEME.textMuted, background: LIGHT_THEME.surface, border: `1px solid ${LIGHT_THEME.border}` }}>Cargando Catalogo...</div>
       </div>
     );
   }
@@ -748,6 +772,50 @@ export default function PublicCustomerMenu() {
               required
               style={{ minHeight: '40px', borderRadius: '8px', border: `1px solid ${LIGHT_THEME.border}`, background: LIGHT_THEME.inputBg, color: LIGHT_THEME.text, padding: '8px 10px' }}
             />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: LIGHT_THEME.textSoft, fontSize: '0.9rem' }}>
+              <input
+                type="checkbox"
+                checked={isProvincia}
+                onChange={(e) => setIsProvincia(e.target.checked)}
+              />
+              Provincia (no departamento)
+            </label>
+            {isProvincia ? (
+              <input
+                type="text"
+                maxLength={26}
+                placeholder="Provincia"
+                value={provincia}
+                onChange={(e) => setProvincia(e.target.value)}
+                required
+                style={{ minHeight: '40px', borderRadius: '8px', border: `1px solid ${LIGHT_THEME.border}`, background: LIGHT_THEME.inputBg, color: LIGHT_THEME.text, padding: '8px 10px' }}
+              />
+            ) : (
+              <select
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                required
+                style={{
+                  minHeight: '40px',
+                  borderRadius: '8px',
+                  border: `1px solid ${LIGHT_THEME.border}`,
+                  background: LIGHT_THEME.inputBg,
+                  color: LIGHT_THEME.text,
+                  padding: '8px 34px 8px 10px',
+                  appearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 12px center',
+                  backgroundSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="" disabled>Departamento</option>
+                {DEPARTMENT_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            )}
             <textarea
               rows={3}
               placeholder="Nota (opcional)"

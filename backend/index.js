@@ -1789,10 +1789,18 @@ app.post('/api/public/menu/:shareToken/order', async (req, res) => {
 
     const customerName = String(req.body?.customer_name || '').trim();
     const customerPhone = String(req.body?.customer_phone || '').trim();
+    const department = normalizeDepartmentLabel(req.body?.department || '');
+    const provincia = normalizeDepartmentLabel(req.body?.provincia || '');
     const customerNotes = String(req.body?.notes || '').trim();
     const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!customerName || !customerPhone) {
       return res.status(400).json({ error: 'Completa nombre y teléfono para enviar el pedido' });
+    }
+    if (!department && !provincia) {
+      return res.status(400).json({ error: 'Selecciona departamento o provincia para enviar el pedido' });
+    }
+    if (department && provincia) {
+      return res.status(400).json({ error: 'Envía solo departamento o provincia, no ambos' });
     }
     if (customerName.length > 120) {
       return res.status(400).json({ error: 'Nombre demasiado largo (máx 120)' });
@@ -1862,8 +1870,8 @@ app.post('/api/public/menu/:shareToken/order', async (req, res) => {
         seller.id,
         customerName,
         customerPhone,
-        null,
-        null,
+        department || null,
+        provincia || null,
         customerNotes || null,
         null,
         null,
