@@ -104,10 +104,10 @@ function getTableroImageSkuAliases(product) {
   const compactModel = modelKey.replace(/x/gi, '');
   const preferred = `${modelKey}${colorCode}`;
   return Array.from(new Set([
-    preferred,
-    preferred.toUpperCase(),
     `${compactModel}${colorCode}`,
-    `${compactModel}${colorCode}`.toUpperCase()
+    `${compactModel}${colorCode}`.toUpperCase(),
+    preferred,
+    preferred.toUpperCase()
   ].filter(Boolean)));
 }
 
@@ -126,8 +126,8 @@ function getProductImageCandidates(product, options = {}) {
     if (compactSku) skuBaseCandidates.push(compactSku);
     if (upperSku && upperSku !== compactSku) skuBaseCandidates.push(upperSku);
     const aliasBaseCandidates = includeAliases ? getTableroImageSkuAliases(product) : [];
-    // Prefer canonical tablero aliases (e.g. T94x95R) over legacy compact SKU names (e.g. T9495R)
-    // so updated image sets render immediately without requiring duplicate legacy filenames.
+    // Prefer compact tablero aliases (e.g. T9495R/T6195R) first to match the
+    // filename scheme currently used in menu-images.
     const orderedBaseCandidates = Array.from(new Set([
       ...aliasBaseCandidates,
       ...skuBaseCandidates
