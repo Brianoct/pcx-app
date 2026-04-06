@@ -447,7 +447,7 @@ export default function PublicCustomerMenu() {
           <h2 style={{ marginBottom: 0, color: LIGHT_THEME.primary }}>Catálogo PCX</h2>
         </div>
         <p style={{ color: LIGHT_THEME.textSoft, marginBottom: '4px' }}>
-          Hola, soy <strong>{sellerName}</strong>. Este es mi catálogo oficial de PCX para tu pedido por WhatsApp.
+          Hola, soy <strong>{sellerName}</strong>. Este es nuestro catálogo de productos. Selecciona los productos que deseas.
         </p>
         {menuData?.default_store && (
           <p style={{ color: LIGHT_THEME.textMuted, fontSize: '0.9rem' }}>
