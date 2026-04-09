@@ -2128,7 +2128,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// ─── LIST assignable sellers for warehouse quote mode ───────────────────────
+// ─── LIST assignable sellers for delegated quote assignment ──────────────────
 app.get('/api/sellers/assignable', authenticateToken, async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
@@ -2528,11 +2528,15 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     await client.query('BEGIN');
 
     const creatorRole = normalizeRole(userContext.role || '');
-    const isWarehouseQuoteMode = creatorRole === 'almacen' || creatorRole === 'almacen lider';
+    const isSalesOwnerRole = creatorRole === ROLE_KEYS.ventas
+      || creatorRole === ROLE_KEYS.ventasLider
+      || creatorRole === 'sales'
+      || creatorRole === 'vendedor';
+    const requiresAssignedSeller = !isSalesOwnerRole;
     let quoteOwnerId = req.user.id;
     let vendorDisplayName = String(vendor || '').trim() || getUserDisplayName(userContext, 'Usuario');
 
-    if (isWarehouseQuoteMode) {
+    if (requiresAssignedSeller) {
       const selectedSellerId = Number.parseInt(seller_user_id, 10);
       if (!Number.isInteger(selectedSellerId)) {
         throw createHttpError(400, 'Selecciona un vendedor válido para asignar la cotización');

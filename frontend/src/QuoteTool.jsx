@@ -44,7 +44,11 @@ export default function QuoteTool({ token, user }) {
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
   const normalizedRole = String(user?.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-  const isAlmacenRole = normalizedRole === 'almacen' || normalizedRole === 'almacen lider';
+  const isSalesRole = normalizedRole === 'ventas'
+    || normalizedRole === 'ventas lider'
+    || normalizedRole === 'sales'
+    || normalizedRole === 'vendedor';
+  const requiresSellerAssignment = !isSalesRole;
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
@@ -95,7 +99,7 @@ export default function QuoteTool({ token, user }) {
   }, []);
 
   useEffect(() => {
-    if (!token || !isAlmacenRole) return;
+    if (!token || !requiresSellerAssignment) return;
     const fetchSalesUsers = async () => {
       try {
         const data = await apiRequest('/api/sellers/assignable', { token });
@@ -109,7 +113,7 @@ export default function QuoteTool({ token, user }) {
       }
     };
     fetchSalesUsers();
-  }, [token, isAlmacenRole]);
+  }, [token, requiresSellerAssignment]);
 
   const allItems = [
     ...products.map((p) => ({ ...p, displayName: p.name })),
@@ -297,7 +301,7 @@ export default function QuoteTool({ token, user }) {
     (!isProvincia || provincia.trim()) &&
     (isProvincia || department) &&
     (!useAlternativeName || (alternativeName.trim() && alternativePhone.trim())) &&
-    (!isAlmacenRole || assignedSellerId);
+    (!requiresSellerAssignment || assignedSellerId);
 
   const resetQuoteForm = () => {
     setStep(1);
@@ -315,7 +319,7 @@ export default function QuoteTool({ token, user }) {
     setIsProvincia(false);
     setAlmacen('');
     setShippingNotes('');
-    if (isAlmacenRole && Array.isArray(salesUsers) && salesUsers.length > 0) {
+    if (requiresSellerAssignment && Array.isArray(salesUsers) && salesUsers.length > 0) {
       setAssignedSellerId(String(salesUsers[0].id));
     } else {
       setAssignedSellerId('');
@@ -333,7 +337,7 @@ export default function QuoteTool({ token, user }) {
     setIsSaving(true);
 
     const vendedorName = user ? (user.display_name || String(user.email || '').split('@')[0]) : 'Usuario';
-    const selectedSeller = isAlmacenRole
+    const selectedSeller = requiresSellerAssignment
       ? salesUsers.find((seller) => String(seller.id) === String(assignedSellerId))
       : null;
     const assignedSellerName = selectedSeller
@@ -386,12 +390,12 @@ export default function QuoteTool({ token, user }) {
       alternative_name: useAlternativeName ? alternativeName.trim() : null,
       alternative_phone: useAlternativeName ? alternativePhone.trim() : null,
       store_location: almacen,
-      vendor: isAlmacenRole ? assignedSellerName : vendedorName,
+      vendor: requiresSellerAssignment ? assignedSellerName : vendedorName,
       venta_type: ventaType,
       discount_percent: discountPercent,
       discount_bs: 0,
       round_total: roundTotal,
-      seller_user_id: isAlmacenRole ? Number(assignedSellerId) : null,
+      seller_user_id: requiresSellerAssignment ? Number(assignedSellerId) : null,
       rows: rowsWithDisplay,
       subtotal,
       total
@@ -447,7 +451,7 @@ export default function QuoteTool({ token, user }) {
         quoteNumber,
         customerName,
         customerPhone,
-        vendorName: isAlmacenRole ? assignedSellerName : vendedorName,
+        vendorName: requiresSellerAssignment ? assignedSellerName : vendedorName,
         storeLocation: almacen,
         dateText,
         department: isProvincia ? null : department,
@@ -635,7 +639,7 @@ export default function QuoteTool({ token, user }) {
               </select>
             </div>
 
-            {isAlmacenRole && (
+            {requiresSellerAssignment && (
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
                   Vendedor asignado (comisión)
