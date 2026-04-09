@@ -45,6 +45,7 @@ const PANEL_KEYS = [
   'cotizar',
   'menu_cliente',
   'calendario',
+  'proyectos_panel',
   'historial_individual',
   'historial_global',
   'rendimiento_individual',
@@ -67,6 +68,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     cotizar: false,
     menu_cliente: false,
     calendario: false,
+    proyectos_panel: true,
     historial_individual: false,
     historial_global: false,
     rendimiento_individual: false,
@@ -1422,6 +1424,17 @@ const getExpensesAccessScope = (userContext, access) => {
     return { error: 'No se pudo determinar tu departamento para registrar gastos' };
   }
   return { isAdmin: false, department };
+};
+
+const getProjectsAccessScope = (userContext, access) => {
+  const hasProjectsPanel = Boolean(access?.proyectos_panel);
+  if (!userContext?.id) {
+    return { error: 'Usuario no encontrado' };
+  }
+  if (!hasProjectsPanel) {
+    return { error: 'No tienes permiso para proyectos' };
+  }
+  return { allowed: true };
 };
 
 const createHttpError = (statusCode, message) => {
@@ -2973,6 +2986,12 @@ app.patch('/api/timeoff/requests/:id/status', authenticateToken, requireRole(['a
 // ─── PROJECTS / TASKS COLLABORATION ──────────────────────────────────────────
 app.get('/api/projects/users', authenticateToken, async (req, res) => {
   try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const scope = getProjectsAccessScope(userContext, access);
+    if (scope.error) return res.status(403).json({ error: scope.error });
+
     await ensureProjectsTables();
     const result = await pool.query(
       `SELECT id, email, display_name, role
@@ -2994,6 +3013,12 @@ app.get('/api/projects/users', authenticateToken, async (req, res) => {
 
 app.get('/api/projects/dashboard', authenticateToken, async (req, res) => {
   try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const scope = getProjectsAccessScope(userContext, access);
+    if (scope.error) return res.status(403).json({ error: scope.error });
+
     await ensureProjectsTables();
     const [projectsRes, tasksRes] = await Promise.all([
       pool.query(
@@ -3102,6 +3127,12 @@ app.get('/api/projects/dashboard', authenticateToken, async (req, res) => {
 
 app.post('/api/projects', authenticateToken, async (req, res) => {
   try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const scope = getProjectsAccessScope(userContext, access);
+    if (scope.error) return res.status(403).json({ error: scope.error });
+
     await ensureProjectsTables();
     const normalized = normalizeProjectPayload(req.body || {}, { partial: false });
     const result = await pool.query(
@@ -3139,6 +3170,12 @@ app.post('/api/projects/:projectId/tasks', authenticateToken, async (req, res) =
 
   const client = await pool.connect();
   try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const scope = getProjectsAccessScope(userContext, access);
+    if (scope.error) return res.status(403).json({ error: scope.error });
+
     await ensureProjectsTables();
     const normalized = normalizeProjectTaskPayload(req.body || {}, { partial: false });
     await client.query('BEGIN');
@@ -3231,6 +3268,12 @@ app.patch('/api/projects/tasks/:taskId', authenticateToken, async (req, res) => 
 
   const client = await pool.connect();
   try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const scope = getProjectsAccessScope(userContext, access);
+    if (scope.error) return res.status(403).json({ error: scope.error });
+
     await ensureProjectsTables();
     const normalized = normalizeProjectTaskPayload(req.body || {}, { partial: true });
     if (Object.keys(normalized).length === 0) {

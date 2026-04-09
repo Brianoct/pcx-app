@@ -110,7 +110,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const canSeeQualityControl = canAccessPanel(access, 'control_calidad');
   const canSeeMicrofabricaPanel = canAccessPanel(access, 'microfabrica_panel');
   const canSeeAdmin = canAccessPanel(access, 'admin');
-  const canSeeProjects = true;
+  const canSeeProjects = canAccessPanel(access, 'proyectos_panel');
   const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
   const isAdminUser = canSeeAdmin;
   const canUseCustomerMenu = canAccessPanel(access, 'menu_cliente');
@@ -600,7 +600,11 @@ function App() {
         ? '/gastos'
       : canAccessPanel(effectiveAccess, 'marketing_combos')
         ? '/combos'
-        : '/proyectos';
+        : canAccessPanel(effectiveAccess, 'proyectos_panel')
+          ? '/proyectos'
+        : canAccessPanel(effectiveAccess, 'calendario')
+          ? '/calendario'
+        : '/';
 
   const openOutboxRecord = (item) => {
     if (!item) return;
@@ -784,7 +788,9 @@ function App() {
         />
         <Route
           path="/proyectos"
-          element={<ProjectsPanel token={token} user={user} />}
+          element={canAccessPanel(effectiveAccess, 'proyectos_panel')
+            ? <ProjectsPanel token={token} user={user} />
+            : <Navigate to={defaultPath} replace />}
         />
         <Route
           path="/perfil"
