@@ -15,6 +15,7 @@ import MicrofabricaPanel from './MicrofabricaPanel';
 import ExpensesPanel from './ExpensesPanel';
 import CustomerMenuTool from './CustomerMenuTool';
 import PublicCustomerMenu from './PublicCustomerMenu';
+import ProjectsPanel from './ProjectsPanel';
 import ProfilePanel from './ProfilePanel';
 import logo from './assets/PCX.png';
 import './index.css';
@@ -109,6 +110,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const canSeeQualityControl = canAccessPanel(access, 'control_calidad');
   const canSeeMicrofabricaPanel = canAccessPanel(access, 'microfabrica_panel');
   const canSeeAdmin = canAccessPanel(access, 'admin');
+  const canSeeProjects = true;
   const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
   const isAdminUser = canSeeAdmin;
   const canUseCustomerMenu = canAccessPanel(access, 'menu_cliente');
@@ -151,13 +153,14 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     canSeeExpenses ? { to: '/gastos', label: 'Gastos' } : null,
     canSeeQualityControl ? { to: '/control-calidad', label: 'Control Calidad' } : null,
     canSeeMicrofabricaPanel ? { to: '/microfabrica', label: 'Microfábrica' } : null,
+    canSeeProjects ? { to: '/proyectos', label: 'Proyectos' } : null,
     canAccessPanel(access, 'marketingCombos') ? { to: '/combos', label: 'Combos' } : null,
     canAccessPanel(access, 'marketingCupones') ? { to: '/cupones', label: 'Cupones' } : null,
     canSeeCalendar ? { to: '/calendario', label: 'Calendario' } : null,
     { to: '/perfil', label: 'Perfil' }
   ].filter(Boolean);
 
-  const rolePreferredOrder = ['cotizar', 'catalogo-clientes', 'history', 'pedidos', 'inventory', 'performance', 'gastos', 'calendario', 'perfil'];
+  const rolePreferredOrder = ['cotizar', 'catalogo-clientes', 'history', 'pedidos', 'inventory', 'performance', 'gastos', 'proyectos', 'calendario', 'perfil'];
   const roleOrderedSharedNavItems = !isAdminUser
     ? [...sharedNavItems].sort((a, b) => {
         const keyOf = (item) => {
@@ -168,6 +171,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
           if (item.to === '/inventory') return 'inventory';
           if (item.to === '/performance') return 'performance';
           if (item.to === '/gastos') return 'gastos';
+          if (item.to === '/proyectos') return 'proyectos';
           if (item.to === '/calendario') return 'calendario';
           if (item.to === '/perfil') return 'perfil';
           return item.to || '';
@@ -596,9 +600,7 @@ function App() {
         ? '/gastos'
       : canAccessPanel(effectiveAccess, 'marketing_combos')
         ? '/combos'
-        : canAccessPanel(effectiveAccess, 'calendario')
-          ? '/calendario'
-        : '/';
+        : '/proyectos';
 
   const openOutboxRecord = (item) => {
     if (!item) return;
@@ -629,6 +631,10 @@ function App() {
     }
     if (String(item?.request?.path || '').includes('/api/expenses')) {
       window.location.hash = '#/gastos';
+      return;
+    }
+    if (String(item?.request?.path || '').includes('/api/projects')) {
+      window.location.hash = '#/proyectos';
       return;
     }
     window.location.hash = '#/history';
@@ -775,6 +781,10 @@ function App() {
           element={canAccessPanel(effectiveAccess, 'calendario') || canAccessPanel(effectiveAccess, 'admin')
             ? <TimeOffCalendar token={token} user={user} />
             : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/proyectos"
+          element={<ProjectsPanel token={token} user={user} />}
         />
         <Route
           path="/perfil"
