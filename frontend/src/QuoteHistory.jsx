@@ -31,6 +31,12 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const canViewHistory = canAccessPanel(access, 'historialIndividual');
   const canMutateQuotes = canViewHistory || canViewGlobalHistory;
   const availableProducts = Array.isArray(productCatalog) ? productCatalog : [];
+  const getProductNameBySku = (skuValue = '') => {
+    const normalizedSku = String(skuValue || '').trim().toUpperCase();
+    if (!normalizedSku) return '';
+    const product = availableProducts.find((item) => String(item?.sku || '').trim().toUpperCase() === normalizedSku);
+    return String(product?.name || '').trim();
+  };
 
   // Pagination
   const quotesPerPage = 10;
@@ -213,7 +219,12 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         for (const comboItem of row.comboItems) {
           const componentQty = Number(comboItem?.quantity || 0) * Number(row?.qty || 1);
           const componentSku = String(comboItem?.sku || '').trim().toUpperCase();
-          const componentName = String(comboItem?.name || comboItem?.displayName || '').trim();
+          const componentName = String(
+            comboItem?.name
+            || comboItem?.displayName
+            || getProductNameBySku(componentSku)
+            || ''
+          ).trim();
           rows.push({
             sku: componentSku,
             skuDisplay: formatSkuNameLabel(componentSku, componentName || 'Componente'),

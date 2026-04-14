@@ -138,6 +138,12 @@ export default function QuoteTool({ token, user }) {
   ];
 
   const findItem = (sku) => allItems.find(item => item.sku === sku);
+  const getProductNameBySku = (skuValue = '') => {
+    const normalizedSku = String(skuValue || '').trim().toUpperCase();
+    if (!normalizedSku) return '';
+    const product = products.find((p) => String(p?.sku || '').trim().toUpperCase() === normalizedSku);
+    return String(product?.name || '').trim();
+  };
 
   const fetchStock = async (sku, store) => {
     if (!sku || !store || sku.startsWith('COMBO_')) return null;
@@ -428,7 +434,12 @@ export default function QuoteTool({ token, user }) {
 
         row.comboItems?.forEach(comboItem => {
           const componentSku = String(comboItem?.sku || '').trim().toUpperCase();
-          const componentName = String(comboItem?.name || '').trim();
+          const componentName = String(
+            comboItem?.name
+            || comboItem?.displayName
+            || getProductNameBySku(componentSku)
+            || ''
+          ).trim();
           expandedRows.push({
             sku: componentSku,
             skuDisplay: formatSkuNameLabel(componentSku, componentName || 'Componente de combo'),
@@ -510,10 +521,14 @@ export default function QuoteTool({ token, user }) {
       const quoteNumber = savedData?.id || savedData?.quote?.id || null;
       const dateParts = currentDateTime?.split(', ') || [];
       const dateText = dateParts.length > 1 ? dateParts.slice(1).join(', ') : currentDateTime;
+      const safeCustomerName = String(customerName || 'sin_nombre').trim().replace(/\s+/g, '_');
+      const pdfFilename = quoteNumber
+        ? `cotizacion_${quoteNumber}_${safeCustomerName}.pdf`
+        : `cotizacion_${safeCustomerName}.pdf`;
 
       generateModernQuotePdf({
         logo,
-        filename: `cotizacion_${customerName.replace(/\s+/g, '_') || 'sin_nombre'}_${Date.now()}.pdf`,
+        filename: pdfFilename,
         quoteNumber,
         customerName,
         customerPhone,
