@@ -206,7 +206,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
           const componentQty = Number(comboItem?.quantity || 0) * Number(row?.qty || 1);
           rows.push({
             sku: comboItem?.sku,
-            skuDisplay: `${comboItem?.sku || 'Componente'} (del combo)`,
+            skuDisplay: String(comboItem?.name || comboItem?.displayName || comboItem?.sku || 'Componente'),
             qty: componentQty,
             unitPrice: 0,
             lineTotal: 0,

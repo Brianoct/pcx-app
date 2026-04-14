@@ -39,6 +39,12 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     }
     return `${out}${suffix}`;
   };
+  const formatChecklistItemLabel = (item) => {
+    const sku = String(item?.sku || '').trim().toUpperCase();
+    const name = String(item?.displayName || '').trim() || 'Producto desconocido';
+    if (sku) return `${sku} - ${name}`;
+    return name;
+  };
   const buildWhatsAppLink = (phone = '') => {
     const digits = normalizePhone(phone);
     if (!digits) return null;
@@ -159,6 +165,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         ...item,
         displayName: String(item?.displayName || item?.sku || 'Producto desconocido').trim() || 'Producto desconocido',
         qty: Math.max(1, Number.parseInt(item?.qty, 10) || 1),
+        sku: String(item?.sku || '').trim().toUpperCase() || null,
         isComboHeader: Boolean(item?.isComboHeader),
         isIndented: Boolean(item?.isIndented),
         isCheckable: item?.isCheckable === false ? false : true
@@ -333,7 +340,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
       doc.setFontSize(6.4);
       for (const item of printableItems) {
         const prefix = item.isIndented ? '  -' : (item.isComboHeader ? '*' : '•');
-        const baseText = `${prefix} ${item.qty}x ${item.displayName || item.sku || 'Producto'}`;
+        const baseText = `${prefix} ${item.qty}x ${formatChecklistItemLabel(item)}`;
         const fitted = fitTextByWidth(doc, baseText, contentW - 4);
         doc.text(fitted, contentX + 2, y);
         y += 3;
@@ -757,7 +764,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                       }} />
                     )}
                     <span style={{ flex: 1 }}>
-                      <strong>{item.qty}</strong> × {item.displayName || item.sku || 'Producto desconocido'}
+                      <strong>{item.qty}</strong> × {formatChecklistItemLabel(item)}
                     </span>
                   </li>
                 ))}
