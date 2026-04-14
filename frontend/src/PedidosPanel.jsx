@@ -153,34 +153,91 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     }
   };
 
-  const openChecklist = (quote) => {
-    let items = quote.line_items || [];
+  const normalizeChecklistItems = (items = []) => (
+    (Array.isArray(items) ? items : [])
+      .map((item) => ({
+        ...item,
+        displayName: String(item?.displayName || item?.sku || 'Producto desconocido').trim() || 'Producto desconocido',
+        qty: Math.max(1, Number.parseInt(item?.qty, 10) || 1),
+        isComboHeader: Boolean(item?.isComboHeader),
+        isIndented: Boolean(item?.isIndented),
+        isCheckable: item?.isCheckable === false ? false : true
+      }))
+  );
 
-    if (Array.isArray(items)) {
-      // Already an array → use directly
-    } else if (typeof items === 'string') {
+  const buildChecklistItemsFromQuote = (quote) => {
+    let rawRows = quote?.line_items || [];
+    if (!Array.isArray(rawRows) && typeof rawRows === 'string') {
       try {
-        items = JSON.parse(items);
+        rawRows = JSON.parse(rawRows);
       } catch (e) {
         console.error('Error parsing line_items:', e);
-        alert('No se pudieron cargar los productos del pedido. Datos inválidos.');
-        return;
+        return [];
       }
-    } else {
-      items = [];
     }
+    if (!Array.isArray(rawRows)) return [];
 
+    const expanded = [];
+    for (const row of rawRows) {
+      const rowQty = Math.max(1, Number.parseInt(row?.qty, 10) || 1);
+      const rowLabel = String(row?.displayName || row?.skuDisplay || row?.sku || 'Producto desconocido').trim() || 'Producto desconocido';
+      const comboItems = Array.isArray(row?.comboItems) ? row.comboItems : [];
+      if (Boolean(row?.isCombo) && comboItems.length > 0) {
+        expanded.push({
+          displayName: rowLabel,
+          qty: rowQty,
+          isComboHeader: true,
+          isIndented: false,
+          isCheckable: false
+        });
+        for (const comboItem of comboItems) {
+          expanded.push({
+            displayName: String(comboItem?.name || comboItem?.displayName || comboItem?.sku || 'Componente').trim() || 'Componente',
+            sku: comboItem?.sku,
+            qty: Math.max(1, Number.parseInt(comboItem?.quantity, 10) || 1) * rowQty,
+            isComboHeader: false,
+            isIndented: true,
+            isCheckable: true
+          });
+        }
+        continue;
+      }
+      expanded.push({
+        displayName: rowLabel,
+        sku: row?.sku,
+        qty: rowQty,
+        isComboHeader: false,
+        isIndented: false,
+        isCheckable: true
+      });
+    }
+    return expanded;
+  };
+
+  const loadChecklistItems = async (quote) => {
+    try {
+      const payload = await apiRequest(`/api/quotes/${quote.id}/checklist`, { token });
+      const normalized = normalizeChecklistItems(payload?.items || []);
+      if (normalized.length > 0) return normalized;
+    } catch (err) {
+      console.warn('No se pudo cargar checklist expandido, usando fallback local:', err);
+    }
+    return normalizeChecklistItems(buildChecklistItemsFromQuote(quote));
+  };
+
+  const openChecklist = async (quote) => {
+    const items = await loadChecklistItems(quote);
     if (items.length === 0) {
       alert('Este pedido no tiene productos.');
       return;
     }
-
-    const checked = new Array(items.length).fill(false);
+    const checked = items.map((item) => (item.isCheckable ? false : true));
     setChecklistModal({ quoteId: quote.id, items, checked });
   };
 
   const toggleItem = (index) => {
     setChecklistModal(prev => {
+      if (!prev?.items?.[index]?.isCheckable) return prev;
       const newChecked = [...prev.checked];
       newChecked[index] = !newChecked[index];
       return { ...prev, checked: newChecked };
@@ -195,15 +252,19 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     setChecklistModal(null);
   };
 
-  const printLabel = (quote) => {
+  const printLabel = async (quote) => {
+    const checklistItems = await loadChecklistItems(quote);
+    const printableItems = checklistItems.slice(0, 8);
+    const hiddenItemsCount = Math.max(0, checklistItems.length - printableItems.length);
+    const dynamicHeight = Math.max(40, 42 + (printableItems.length * 3.2) + (hiddenItemsCount > 0 ? 3.2 : 0));
     const doc = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
-      format: [70, 40]
+      format: [70, dynamicHeight]
     });
 
     const pageWidth = 70;
-    const pageHeight = 40;
+    const pageHeight = dynamicHeight;
     const margin = 2.5;
     const contentX = margin;
     const contentW = pageWidth - margin * 2;
@@ -257,6 +318,30 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         const fitted = fitTextByWidth(doc, line, maxCenterWidth);
         doc.text(fitted, pageWidth / 2, y + (idx * 3.2), { align: 'center' });
       });
+      y += Math.max(3.2, noteLines.length * 3.2);
+    }
+
+    if (printableItems.length > 0) {
+      y += 2.4;
+      doc.line(contentX + 1.5, y - 1.4, contentX + contentW - 1.5, y - 1.4);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.text('Productos', contentX + 2, y + 1);
+      y += 3.4;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.4);
+      for (const item of printableItems) {
+        const prefix = item.isIndented ? '  -' : (item.isComboHeader ? '*' : '•');
+        const baseText = `${prefix} ${item.qty}x ${item.displayName || item.sku || 'Producto'}`;
+        const fitted = fitTextByWidth(doc, baseText, contentW - 4);
+        doc.text(fitted, contentX + 2, y);
+        y += 3;
+      }
+      if (hiddenItemsCount > 0) {
+        doc.setFont('helvetica', 'italic');
+        doc.text(`+${hiddenItemsCount} item(s) más`, contentX + 2, y);
+      }
     }
 
     doc.save(`etiqueta_${quote.id}_${recipientName.replace(/\s+/g, '_') || 'cliente'}.pdf`);
@@ -644,22 +729,33 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '16px',
-                    fontSize: '1.15rem',
+                    fontSize: item.isIndented ? '1rem' : '1.15rem',
                     padding: '12px',
-                    background: 'rgba(30, 41, 59, 0.6)',
+                    marginLeft: item.isIndented ? '24px' : 0,
+                    background: item.isComboHeader ? 'rgba(225, 29, 72, 0.12)' : 'rgba(30, 41, 59, 0.6)',
                     borderRadius: '8px',
-                    border: '1px solid #374151'
+                    border: item.isComboHeader ? '1px solid rgba(225, 29, 72, 0.35)' : '1px solid #374151'
                   }}>
-                    <input
-                      type="checkbox"
-                      checked={checklistModal.checked[index]}
-                      onChange={() => toggleItem(index)}
-                      style={{
+                    {item.isCheckable ? (
+                      <input
+                        type="checkbox"
+                        checked={checklistModal.checked[index]}
+                        onChange={() => toggleItem(index)}
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          accentColor: '#10b981'
+                        }}
+                      />
+                    ) : (
+                      <div style={{
                         width: '28px',
                         height: '28px',
-                        accentColor: '#10b981'
-                      }}
-                    />
+                        borderRadius: '6px',
+                        background: 'rgba(225, 29, 72, 0.25)',
+                        border: '1px solid rgba(225, 29, 72, 0.45)'
+                      }} />
+                    )}
                     <span style={{ flex: 1 }}>
                       <strong>{item.qty}</strong> × {item.displayName || item.sku || 'Producto desconocido'}
                     </span>

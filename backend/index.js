@@ -3828,10 +3828,84 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'No autorizado para ver pedidos de otra ciudad' });
     }
 
-    const items = quote.line_items.map(row => ({
-      displayName: row.displayName || row.sku || 'Producto desconocido',
-      qty: row.qty || 1
-    }));
+    const rawLineItems = Array.isArray(quote.line_items) ? quote.line_items : [];
+    const parseComboIdFromSku = (skuValue = '') => {
+      const match = String(skuValue || '').trim().toUpperCase().match(/^COMBO_(\d+)$/);
+      return match ? Number.parseInt(match[1], 10) : null;
+    };
+    const resolveComboItems = async (row) => {
+      const inlineItems = Array.isArray(row?.comboItems) ? row.comboItems : [];
+      const normalizedInline = inlineItems
+        .map((comboItem) => ({
+          sku: String(comboItem?.sku || '').trim().toUpperCase(),
+          quantity: Number.parseInt(comboItem?.quantity, 10),
+          name: String(comboItem?.name || comboItem?.displayName || '').trim()
+        }))
+        .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+      if (normalizedInline.length > 0) {
+        return normalizedInline;
+      }
+
+      const comboId = parseComboIdFromSku(row?.sku);
+      if (!Number.isInteger(comboId) || comboId <= 0) {
+        return [];
+      }
+
+      const comboItemsRes = await pool.query(
+        `SELECT ci.sku, ci.quantity, p.name
+         FROM combo_items ci
+         LEFT JOIN products p ON p.sku = ci.sku
+         WHERE ci.combo_id = $1
+         ORDER BY ci.id ASC`,
+        [comboId]
+      );
+      return (comboItemsRes.rows || [])
+        .map((comboItem) => ({
+          sku: String(comboItem?.sku || '').trim().toUpperCase(),
+          quantity: Number.parseInt(comboItem?.quantity, 10),
+          name: String(comboItem?.name || '').trim()
+        }))
+        .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+    };
+
+    const items = [];
+    for (const row of rawLineItems) {
+      const rowQty = Number.parseInt(row?.qty, 10);
+      if (!Number.isInteger(rowQty) || rowQty <= 0) continue;
+
+      const rowLabel = String(row?.displayName || row?.skuDisplay || row?.sku || 'Producto desconocido').trim() || 'Producto desconocido';
+      const comboItems = await resolveComboItems(row);
+      if (comboItems.length > 0) {
+        items.push({
+          displayName: rowLabel,
+          qty: rowQty,
+          isComboHeader: true,
+          isIndented: false,
+          isCheckable: false
+        });
+        for (const comboItem of comboItems) {
+          const componentQty = comboItem.quantity * rowQty;
+          items.push({
+            displayName: comboItem.name || comboItem.sku,
+            sku: comboItem.sku,
+            qty: componentQty,
+            isComboHeader: false,
+            isIndented: true,
+            isCheckable: true
+          });
+        }
+        continue;
+      }
+
+      items.push({
+        displayName: rowLabel,
+        sku: String(row?.sku || '').trim().toUpperCase() || null,
+        qty: rowQty,
+        isComboHeader: false,
+        isIndented: false,
+        isCheckable: true
+      });
+    }
 
     res.json({
       id: quote.id,
