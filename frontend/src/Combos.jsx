@@ -19,6 +19,7 @@ function Combos({ token }) {
   const [comboPriceCf, setComboPriceCf] = useState(0);
   const [basePriceSf, setBasePriceSf] = useState(0);
   const [basePriceCf, setBasePriceCf] = useState(0);
+  const [editingComboId, setEditingComboId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -94,7 +95,7 @@ function Combos({ token }) {
     calculatePrices(newItems);
   };
 
-  const calculatePrices = (items = comboItems) => {
+  const calculateBaseTotals = (items = comboItems) => {
     let sfTotal = 0;
     let cfTotal = 0;
     items.forEach(item => {
@@ -106,8 +107,13 @@ function Combos({ token }) {
         }
       }
     });
-    const discountRatio = Math.max(0, Math.min(100, Number(discountPercent) || 0)) / 100;
-    const discountFixed = Math.max(0, Number(discountAmount) || 0);
+    return { sfTotal, cfTotal };
+  };
+
+  const calculatePrices = (items = comboItems, overrides = {}) => {
+    const { sfTotal, cfTotal } = calculateBaseTotals(items);
+    const discountRatio = Math.max(0, Math.min(100, Number(overrides.discountPercent ?? discountPercent) || 0)) / 100;
+    const discountFixed = Math.max(0, Number(overrides.discountAmount ?? discountAmount) || 0);
     const combinedDiscount = (sfTotal * discountRatio) + discountFixed;
     const finalSf = Math.max(0, sfTotal - combinedDiscount);
     const finalCf = Math.max(0, cfTotal - combinedDiscount);
@@ -121,7 +127,45 @@ function Combos({ token }) {
     calculatePrices();
   }, [discountPercent, discountAmount, products]);
 
-  const handleCreateCombo = async () => {
+  const resetForm = () => {
+    clearDraftState(`${draftKey}:name`);
+    clearDraftState(`${draftKey}:items`);
+    clearDraftState(`${draftKey}:discountPercent`);
+    clearDraftState(`${draftKey}:discountAmount`);
+    setComboName('');
+    setComboItems([{ sku: '', quantity: 1 }]);
+    setDiscountPercent(0);
+    setDiscountAmount(0);
+    setBasePriceSf(0);
+    setBasePriceCf(0);
+    setComboPriceSf(0);
+    setComboPriceCf(0);
+    setEditingComboId(null);
+  };
+
+  const handleStartEditCombo = (combo) => {
+    const nextItems = Array.isArray(combo?.items) && combo.items.length > 0
+      ? combo.items.map((item) => ({
+        sku: String(item?.sku || '').trim().toUpperCase(),
+        quantity: Math.max(1, Number.parseInt(item?.quantity, 10) || 1)
+      }))
+      : [{ sku: '', quantity: 1 }];
+    const { sfTotal } = calculateBaseTotals(nextItems);
+    const comboFinalSf = Number(combo?.sf_price || 0);
+    const inferredDiscount = Math.max(0, Number((sfTotal - comboFinalSf).toFixed(2)));
+
+    setEditingComboId(combo?.id || null);
+    setComboName(String(combo?.name || ''));
+    setComboItems(nextItems);
+    setDiscountPercent(0);
+    setDiscountAmount(inferredDiscount);
+    calculatePrices(nextItems, { discountPercent: 0, discountAmount: inferredDiscount });
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleSaveCombo = async () => {
     if (!comboName.trim() || comboItems.every(i => !i.sku)) {
       alert('Ingrese nombre y al menos un producto válido');
       return;
@@ -134,56 +178,38 @@ function Combos({ token }) {
       cf: comboPriceCf,
       products: validItems.map(i => ({ sku: i.sku, quantity: i.quantity }))
     };
+    const isEditing = Boolean(editingComboId);
+    const endpoint = isEditing ? `/api/combos/${editingComboId}` : '/api/combos';
+    const method = isEditing ? 'PUT' : 'POST';
 
     if (!isOnline) {
       enqueueWrite({
-        label: `Crear combo ${comboName.trim()}`,
-        path: '/api/combos',
+        label: `${isEditing ? 'Editar' : 'Crear'} combo ${comboName.trim()}`,
+        path: endpoint,
         options: {
-          method: 'POST',
+          method,
           body: payload
         },
         meta: {
-          comboName: comboName.trim()
+          comboName: comboName.trim(),
+          comboId: editingComboId || null
         }
       });
-      clearDraftState(`${draftKey}:name`);
-      clearDraftState(`${draftKey}:items`);
-      clearDraftState(`${draftKey}:discountPercent`);
-      clearDraftState(`${draftKey}:discountAmount`);
-      setComboName('');
-      setComboItems([{ sku: '', quantity: 1 }]);
-      setDiscountPercent(0);
-      setDiscountAmount(0);
-      setBasePriceSf(0);
-      setBasePriceCf(0);
-      setComboPriceSf(0);
-      setComboPriceCf(0);
-      alert('Sin conexión: combo en cola para sincronizar.');
+      resetForm();
+      alert(`Sin conexión: ${isEditing ? 'edición' : 'creación'} de combo en cola para sincronizar.`);
       return;
     }
 
     try {
-      await apiRequest('/api/combos', {
-        method: 'POST',
+      await apiRequest(endpoint, {
+        method,
         token,
         body: payload,
         timeoutMs: 18000
       });
 
-      alert('Combo creado correctamente');
-      clearDraftState(`${draftKey}:name`);
-      clearDraftState(`${draftKey}:items`);
-      clearDraftState(`${draftKey}:discountPercent`);
-      clearDraftState(`${draftKey}:discountAmount`);
-      setComboName('');
-      setComboItems([{ sku: '', quantity: 1 }]);
-      setDiscountPercent(0);
-      setDiscountAmount(0);
-      setBasePriceSf(0);
-      setBasePriceCf(0);
-      setComboPriceSf(0);
-      setComboPriceCf(0);
+      alert(isEditing ? 'Combo actualizado correctamente' : 'Combo creado correctamente');
+      resetForm();
       fetchCombos();
     } catch (err) {
       alert('Error: ' + err.message);
@@ -229,7 +255,9 @@ function Combos({ token }) {
 
       {/* Create Combo Form */}
       <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '32px' }}>
-        <h3 style={{ color: '#94a3b8', marginBottom: '16px' }}>Crear Nuevo Combo</h3>
+        <h3 style={{ color: '#94a3b8', marginBottom: '16px' }}>
+          {editingComboId ? `Editar Combo #${editingComboId}` : 'Crear Nuevo Combo'}
+        </h3>
 
         <input
           type="text"
@@ -350,13 +378,23 @@ function Combos({ token }) {
           </div>
         </div>
 
-        <button
-          onClick={handleCreateCombo}
-          style={{ width: '100%', padding: '14px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', cursor: 'pointer' }}
-          disabled={!comboName.trim() || comboItems.every(i => !i.sku)}
-        >
-          Crear Combo
-        </button>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            onClick={handleSaveCombo}
+            style={{ flex: 1, minWidth: '180px', padding: '14px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', cursor: 'pointer' }}
+            disabled={!comboName.trim() || comboItems.every(i => !i.sku)}
+          >
+            {editingComboId ? 'Guardar cambios' : 'Crear Combo'}
+          </button>
+          {editingComboId && (
+            <button
+              onClick={resetForm}
+              style={{ minWidth: '160px', padding: '14px', background: '#475569', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', cursor: 'pointer' }}
+            >
+              Cancelar edición
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Existing Combos */}
@@ -385,6 +423,12 @@ function Combos({ token }) {
                     {Number(combo.cf_price).toFixed(2)} Bs
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => handleStartEditCombo(combo)}
+                      style={{ background: '#2563eb', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', marginRight: '8px' }}
+                    >
+                      Editar
+                    </button>
                     <button
                       onClick={() => handleDeleteCombo(combo.id)}
                       style={{ background: '#ef4444', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer' }}

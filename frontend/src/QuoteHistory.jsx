@@ -188,15 +188,34 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     const discountAmount = subtotal * (discountPercent / 100);
     const rawRows = Array.isArray(quote.line_items) ? quote.line_items : [];
 
-    const rows = rawRows.map((row) => ({
-      sku: row.sku,
-      skuDisplay: row.skuDisplay || row.displayName || row.sku || '—',
-      qty: Number(row.qty || 0),
-      unitPrice: Number(row.unitPrice || row.unit_price || 0),
-      lineTotal: Number(row.lineTotal || row.line_total || 0),
-      isComboHeader: Boolean(row.isComboHeader),
-      isIndented: Boolean(row.isIndented)
-    }));
+    const rows = [];
+    for (const row of rawRows) {
+      const normalized = {
+        sku: row.sku,
+        skuDisplay: row.skuDisplay || row.displayName || row.sku || '—',
+        qty: Number(row.qty || 0),
+        unitPrice: Number(row.unitPrice || row.unit_price || 0),
+        lineTotal: Number(row.lineTotal || row.line_total || 0),
+        isComboHeader: Boolean(row.isComboHeader),
+        isIndented: Boolean(row.isIndented)
+      };
+      rows.push(normalized);
+
+      if (row?.isCombo && Array.isArray(row.comboItems) && row.comboItems.length > 0) {
+        for (const comboItem of row.comboItems) {
+          const componentQty = Number(comboItem?.quantity || 0) * Number(row?.qty || 1);
+          rows.push({
+            sku: comboItem?.sku,
+            skuDisplay: `${comboItem?.sku || 'Componente'} (del combo)`,
+            qty: componentQty,
+            unitPrice: 0,
+            lineTotal: 0,
+            isComboHeader: false,
+            isIndented: true
+          });
+        }
+      }
+    }
 
     generateModernQuotePdf({
       logo,
@@ -552,7 +571,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
           qty: Number.parseInt(row.qty, 10) || 1,
           unitPrice: Number(row.unitPrice || 0),
           lineTotal: Number(row.lineTotal || 0),
-          displayName: row.displayName || row.skuDisplay || row.sku
+          displayName: row.displayName || row.skuDisplay || row.sku,
+          isCombo: Boolean(row.isCombo),
+          comboItems: Array.isArray(row.comboItems)
+            ? row.comboItems.map((comboItem) => ({
+              sku: String(comboItem?.sku || '').toUpperCase(),
+              quantity: Number.parseInt(comboItem?.quantity, 10) || 1
+            }))
+            : []
         })),
         subtotal: Number(editingQuote.subtotal || 0),
         total: Number(editingQuote.total || 0),
@@ -637,7 +663,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
             qty: Number.parseInt(row.qty, 10) || 1,
             unitPrice: Number(row.unitPrice || 0),
             lineTotal: Number(row.lineTotal || 0),
-            displayName: row.displayName || row.skuDisplay || row.sku
+            displayName: row.displayName || row.skuDisplay || row.sku,
+            isCombo: Boolean(row.isCombo),
+            comboItems: Array.isArray(row.comboItems)
+              ? row.comboItems.map((comboItem) => ({
+                sku: String(comboItem?.sku || '').toUpperCase(),
+                quantity: Number.parseInt(comboItem?.quantity, 10) || 1
+              }))
+              : []
           })),
           subtotal: Number(editingQuote.subtotal || 0),
           total: Number(editingQuote.total || 0),

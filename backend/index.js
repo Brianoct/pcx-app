@@ -4132,11 +4132,55 @@ async function deductStockForQuote(client, quoteId, storeLocation, lineItems) {
 
   if (!warehouseField) throw new Error('Almacén no válido');
 
-  for (const row of lineItems) {
-    if (row.isCombo) {
-      for (const comboItem of row.comboItems || []) {
+  const parseComboIdFromSku = (skuValue = '') => {
+    const match = String(skuValue || '').trim().toUpperCase().match(/^COMBO_(\d+)$/);
+    return match ? Number.parseInt(match[1], 10) : null;
+  };
+
+  const resolveComboItems = async (row) => {
+    const inlineItems = Array.isArray(row?.comboItems) ? row.comboItems : [];
+    const normalizedInline = inlineItems
+      .map((comboItem) => ({
+        sku: String(comboItem?.sku || '').trim().toUpperCase(),
+        quantity: Number.parseInt(comboItem?.quantity, 10)
+      }))
+      .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+    if (normalizedInline.length > 0) {
+      return normalizedInline;
+    }
+
+    const comboId = parseComboIdFromSku(row?.sku);
+    if (!Number.isInteger(comboId) || comboId <= 0) {
+      return [];
+    }
+
+    const comboItemsRes = await client.query(
+      `SELECT sku, quantity
+       FROM combo_items
+       WHERE combo_id = $1`,
+      [comboId]
+    );
+    const normalizedFromDb = (comboItemsRes.rows || [])
+      .map((comboItem) => ({
+        sku: String(comboItem?.sku || '').trim().toUpperCase(),
+        quantity: Number.parseInt(comboItem?.quantity, 10)
+      }))
+      .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+    if (normalizedFromDb.length === 0) {
+      throw new Error(`Combo COMBO_${comboId} no tiene productos configurados`);
+    }
+    return normalizedFromDb;
+  };
+
+  for (const row of lineItems || []) {
+    const rowQty = Number.parseInt(row?.qty, 10);
+    if (!Number.isInteger(rowQty) || rowQty <= 0) continue;
+
+    const comboItems = await resolveComboItems(row);
+    if (comboItems.length > 0) {
+      for (const comboItem of comboItems) {
         const sku = comboItem.sku;
-        const qty = comboItem.quantity * (row.qty || 1);
+        const qty = comboItem.quantity * rowQty;
 
         const stockCheck = await client.query(
           `SELECT ${warehouseField} FROM products WHERE sku = $1 FOR UPDATE`,
@@ -4144,7 +4188,7 @@ async function deductStockForQuote(client, quoteId, storeLocation, lineItems) {
         );
 
         if (stockCheck.rowCount === 0) throw new Error(`Producto ${sku} no encontrado`);
-        const currentStock = stockCheck.rows[0][warehouseField];
+        const currentStock = Number(stockCheck.rows[0][warehouseField] || 0);
 
         if (currentStock < qty) throw new Error(`Stock insuficiente para ${sku}`);
 
@@ -4153,25 +4197,27 @@ async function deductStockForQuote(client, quoteId, storeLocation, lineItems) {
           [qty, sku]
         );
       }
-    } else {
-      const sku = row.sku;
-      const qty = row.qty;
-
-      const stockCheck = await client.query(
-        `SELECT ${warehouseField} FROM products WHERE sku = $1 FOR UPDATE`,
-        [sku]
-      );
-
-      if (stockCheck.rowCount === 0) throw new Error(`Producto ${sku} no encontrado`);
-      const currentStock = stockCheck.rows[0][warehouseField];
-
-      if (currentStock < qty) throw new Error(`Stock insuficiente para ${sku}`);
-
-      await client.query(
-        `UPDATE products SET ${warehouseField} = ${warehouseField} - $1, last_updated = NOW() WHERE sku = $2`,
-        [qty, sku]
-      );
+      continue;
     }
+
+    const sku = String(row?.sku || '').trim().toUpperCase();
+    if (!sku) continue;
+    const qty = rowQty;
+
+    const stockCheck = await client.query(
+      `SELECT ${warehouseField} FROM products WHERE sku = $1 FOR UPDATE`,
+      [sku]
+    );
+
+    if (stockCheck.rowCount === 0) throw new Error(`Producto ${sku} no encontrado`);
+    const currentStock = Number(stockCheck.rows[0][warehouseField] || 0);
+
+    if (currentStock < qty) throw new Error(`Stock insuficiente para ${sku}`);
+
+    await client.query(
+      `UPDATE products SET ${warehouseField} = ${warehouseField} - $1, last_updated = NOW() WHERE sku = $2`,
+      [qty, sku]
+    );
   }
 }
 
@@ -4185,11 +4231,51 @@ async function restockStockForQuote(client, storeLocation, lineItems) {
 
   if (!warehouseField) throw new Error('Almacén no válido');
 
+  const parseComboIdFromSku = (skuValue = '') => {
+    const match = String(skuValue || '').trim().toUpperCase().match(/^COMBO_(\d+)$/);
+    return match ? Number.parseInt(match[1], 10) : null;
+  };
+
+  const resolveComboItems = async (row) => {
+    const inlineItems = Array.isArray(row?.comboItems) ? row.comboItems : [];
+    const normalizedInline = inlineItems
+      .map((comboItem) => ({
+        sku: String(comboItem?.sku || '').trim().toUpperCase(),
+        quantity: Number.parseInt(comboItem?.quantity, 10)
+      }))
+      .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+    if (normalizedInline.length > 0) {
+      return normalizedInline;
+    }
+
+    const comboId = parseComboIdFromSku(row?.sku);
+    if (!Number.isInteger(comboId) || comboId <= 0) {
+      return [];
+    }
+
+    const comboItemsRes = await client.query(
+      `SELECT sku, quantity
+       FROM combo_items
+       WHERE combo_id = $1`,
+      [comboId]
+    );
+    return (comboItemsRes.rows || [])
+      .map((comboItem) => ({
+        sku: String(comboItem?.sku || '').trim().toUpperCase(),
+        quantity: Number.parseInt(comboItem?.quantity, 10)
+      }))
+      .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+  };
+
   for (const row of lineItems || []) {
-    if (row?.isCombo) {
-      for (const comboItem of row.comboItems || []) {
+    const rowQty = Number.parseInt(row?.qty, 10);
+    if (!Number.isInteger(rowQty) || rowQty <= 0) continue;
+
+    const comboItems = await resolveComboItems(row);
+    if (comboItems.length > 0) {
+      for (const comboItem of comboItems) {
         const sku = String(comboItem?.sku || '').toUpperCase();
-        const qty = Number(comboItem?.quantity || 0) * Number(row?.qty || 1);
+        const qty = Number(comboItem?.quantity || 0) * rowQty;
         if (!sku || qty <= 0) continue;
 
         await client.query(
@@ -4204,7 +4290,7 @@ async function restockStockForQuote(client, storeLocation, lineItems) {
     }
 
     const sku = String(row?.sku || '').toUpperCase();
-    const qty = Number(row?.qty || 0);
+    const qty = rowQty;
     if (!sku || qty <= 0) continue;
 
     await client.query(
@@ -4418,10 +4504,17 @@ app.post('/api/combos', authenticateToken, requireRole(['Marketing Lider', 'Admi
 
   const sfNumber = Number(sf);
   const cfNumber = Number(cf);
+  const normalizedProducts = Array.isArray(products)
+    ? products
+      .map((item) => ({
+        sku: String(item?.sku || '').trim().toUpperCase(),
+        quantity: Number.parseInt(item?.quantity, 10)
+      }))
+      .filter((item) => item.sku && Number.isInteger(item.quantity) && item.quantity > 0)
+    : [];
   if (
     !String(name || '').trim() ||
-    !Array.isArray(products) ||
-    products.length === 0 ||
+    normalizedProducts.length === 0 ||
     !Number.isFinite(sfNumber) ||
     !Number.isFinite(cfNumber) ||
     sfNumber < 0 ||
@@ -4440,8 +4533,8 @@ app.post('/api/combos', authenticateToken, requireRole(['Marketing Lider', 'Admi
     );
     const comboId = comboRes.rows[0].id;
 
-    for (const item of products) {
-      const { sku, quantity = 1 } = item;
+    for (const item of normalizedProducts) {
+      const { sku, quantity } = item;
       await client.query(
         'INSERT INTO combo_items (combo_id, sku, quantity) VALUES ($1, $2, $3)',
         [comboId, sku, quantity]
@@ -4459,6 +4552,79 @@ app.post('/api/combos', authenticateToken, requireRole(['Marketing Lider', 'Admi
   }
 });
 
+// PUT update combo
+app.put('/api/combos/:id', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
+  const comboId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(comboId) || comboId <= 0) {
+    return res.status(400).json({ error: 'Combo inválido' });
+  }
+
+  const { name, sf, cf, products } = req.body;
+  const sfNumber = Number(sf);
+  const cfNumber = Number(cf);
+  const normalizedProducts = Array.isArray(products)
+    ? products
+      .map((item) => ({
+        sku: String(item?.sku || '').trim().toUpperCase(),
+        quantity: Number.parseInt(item?.quantity, 10)
+      }))
+      .filter((item) => item.sku && Number.isInteger(item.quantity) && item.quantity > 0)
+    : [];
+  if (
+    !String(name || '').trim() ||
+    normalizedProducts.length === 0 ||
+    !Number.isFinite(sfNumber) ||
+    !Number.isFinite(cfNumber) ||
+    sfNumber < 0 ||
+    cfNumber < 0
+  ) {
+    return res.status(400).json({ error: 'Faltan campos requeridos o productos vacíos' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const currentRes = await client.query(
+      'SELECT created_by FROM combos WHERE id = $1 FOR UPDATE',
+      [comboId]
+    );
+    if (currentRes.rowCount === 0) {
+      throw createHttpError(404, 'Combo no encontrado');
+    }
+
+    const creatorId = Number(currentRes.rows[0]?.created_by || 0) || null;
+    const isAdmin = normalizeRole(req.user?.role || '') === ROLE_KEYS.admin;
+    if (creatorId && creatorId !== req.user.id && !isAdmin) {
+      throw createHttpError(403, 'No autorizado para editar este combo');
+    }
+
+    await client.query(
+      `UPDATE combos
+       SET name = $1,
+           sf_price = $2,
+           cf_price = $3
+       WHERE id = $4`,
+      [String(name || '').trim(), sfNumber, cfNumber, comboId]
+    );
+    await client.query('DELETE FROM combo_items WHERE combo_id = $1', [comboId]);
+    for (const item of normalizedProducts) {
+      await client.query(
+        'INSERT INTO combo_items (combo_id, sku, quantity) VALUES ($1, $2, $3)',
+        [comboId, item.sku, item.quantity]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({ id: comboId, message: 'Combo actualizado' });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error updating combo:', err);
+    res.status(err?.statusCode || 500).json({ error: err.message || 'No se pudo actualizar combo' });
+  } finally {
+    client.release();
+  }
+});
+
 // DELETE combo
 app.delete('/api/combos/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
@@ -4470,7 +4636,7 @@ app.delete('/api/combos/:id', authenticateToken, async (req, res) => {
     }
 
     const creatorId = comboRes.rows[0].created_by;
-    const isAdmin = req.user.role.toLowerCase() === 'admin';
+    const isAdmin = normalizeRole(req.user?.role || '') === ROLE_KEYS.admin;
     if (creatorId !== req.user.id && !isAdmin) {
       return res.status(403).json({ error: 'No autorizado para eliminar este combo' });
     }
