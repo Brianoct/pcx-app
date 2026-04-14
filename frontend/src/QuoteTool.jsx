@@ -50,6 +50,13 @@ export default function QuoteTool({ token, user }) {
     || normalizedRole === 'vendedor';
   const requiresSellerAssignment = !isSalesRole;
 
+  const formatSkuNameLabel = (skuValue, nameValue) => {
+    const sku = String(skuValue || '').trim().toUpperCase();
+    const name = String(nameValue || '').trim();
+    if (sku && name) return `${sku} - ${name}`;
+    return sku || name || 'Producto';
+  };
+
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', onResize);
@@ -397,9 +404,14 @@ export default function QuoteTool({ token, user }) {
 
     const rowsWithDisplay = rows.map(row => {
       const item = findItem(row.sku);
+      const resolvedSku = String(row.sku || '').trim().toUpperCase();
+      const resolvedName = item
+        ? String(item.name || item.displayName || resolvedSku).trim()
+        : String(row.skuDisplay || row.displayName || resolvedSku).trim();
       return {
         ...row,
-        displayName: item ? item.displayName : row.skuDisplay || row.sku
+        sku: resolvedSku,
+        displayName: formatSkuNameLabel(resolvedSku, resolvedName)
       };
     });
 
@@ -414,9 +426,11 @@ export default function QuoteTool({ token, user }) {
         });
 
         row.comboItems?.forEach(comboItem => {
+          const componentSku = String(comboItem?.sku || '').trim().toUpperCase();
+          const componentName = String(comboItem?.name || '').trim();
           expandedRows.push({
-            sku: comboItem.sku,
-            skuDisplay: comboItem.sku + ' (del combo)',
+            sku: componentSku,
+            skuDisplay: formatSkuNameLabel(componentSku, componentName || 'Componente de combo'),
             qty: comboItem.quantity * (row.qty || 1),
             unitPrice: 0,
             lineTotal: 0,

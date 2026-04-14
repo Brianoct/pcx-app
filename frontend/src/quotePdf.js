@@ -13,6 +13,22 @@ const truncate = (value = '', max = 56) => {
   return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 };
 
+const normalizeLabel = (value = '') => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+const buildSkuNameDescription = (row = {}) => {
+  const sku = String(row?.sku || '').trim().toUpperCase();
+  const name = String(row?.displayName || row?.productName || row?.skuDisplay || '').trim();
+  if (sku && name) {
+    const normalizedSku = normalizeLabel(sku);
+    const normalizedName = normalizeLabel(name);
+    if (normalizedName === normalizedSku || normalizedName.startsWith(`${normalizedSku} -`)) {
+      return name;
+    }
+    return `${sku} - ${name}`;
+  }
+  return name || sku || '—';
+};
+
 export function generateModernQuotePdf({
   logo,
   filename,
@@ -182,7 +198,7 @@ export function generateModernQuotePdf({
     doc.setFillColor(idx % 2 === 0 ? 255 : 248, idx % 2 === 0 ? 255 : 250, idx % 2 === 0 ? 255 : 252);
     doc.rect(left, rowY, tableW, 8, 'F');
 
-    const descriptionBase = row.skuDisplay || row.displayName || row.sku || '—';
+    const descriptionBase = buildSkuNameDescription(row);
     const description = row.isIndented ? `- ${descriptionBase}` : descriptionBase;
 
     if (row.isComboHeader) {
