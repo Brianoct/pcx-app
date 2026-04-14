@@ -145,11 +145,44 @@ export default function QuoteTool({ token, user }) {
     }
   };
 
+  const getNormalizedComboItems = (entry) => {
+    const fromEntry = Array.isArray(entry?.comboItems)
+      ? entry.comboItems
+      : (Array.isArray(entry?.items) ? entry.items : []);
+    return fromEntry
+      .map((comboItem) => ({
+        sku: String(comboItem?.sku || '').trim().toUpperCase(),
+        quantity: Number.parseInt(comboItem?.quantity, 10)
+      }))
+      .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+  };
+
+  const fetchComboAvailableStock = async (entry, store) => {
+    if (!store) return null;
+    const comboItems = getNormalizedComboItems(entry);
+    if (comboItems.length === 0) return null;
+    const stockBySku = await Promise.all(
+      comboItems.map(async (comboItem) => {
+        const stock = await fetchStock(comboItem.sku, store);
+        return { comboItem, stock };
+      })
+    );
+    let minAvailable = Number.POSITIVE_INFINITY;
+    for (const { comboItem, stock } of stockBySku) {
+      if (!Number.isFinite(Number(stock))) return null;
+      const possibleCombos = Math.floor(Number(stock) / comboItem.quantity);
+      minAvailable = Math.min(minAvailable, possibleCombos);
+    }
+    return Number.isFinite(minAvailable) ? Math.max(0, minAvailable) : null;
+  };
+
   const handleProductSelect = async (rowId, selectedSku) => {
     const item = findItem(selectedSku);
     let availableStock = null;
-    if (item && !item.isCombo && almacen) {
-      availableStock = await fetchStock(selectedSku, almacen);
+    if (item && almacen) {
+      availableStock = item.isCombo
+        ? await fetchComboAvailableStock(item, almacen)
+        : await fetchStock(selectedSku, almacen);
     }
 
     setRows(rows.map(row =>
@@ -207,8 +240,10 @@ export default function QuoteTool({ token, user }) {
     if (!almacen || step !== 2) return;
     const refreshStock = async () => {
       for (const row of rows) {
-        if (row.sku && !row.isCombo) {
-          const stock = await fetchStock(row.sku, almacen);
+        if (row.sku) {
+          const stock = row.isCombo
+            ? await fetchComboAvailableStock(row, almacen)
+            : await fetchStock(row.sku, almacen);
           setRows(prev => prev.map(r =>
             r.id === row.id ? { ...r, availableStock: stock } : r
           ));
@@ -298,6 +333,11 @@ export default function QuoteTool({ token, user }) {
     almacen &&
     rows.length > 0 &&
     rows.every(r => r.sku && r.unitPrice > 0 && r.qty > 0) &&
+    rows.every((r) => {
+      const availableStock = Number(r.availableStock);
+      if (!Number.isFinite(availableStock)) return true;
+      return Number(r.qty || 0) <= availableStock;
+    }) &&
     (!isProvincia || provincia.trim()) &&
     (isProvincia || department) &&
     (!useAlternativeName || (alternativeName.trim() && alternativePhone.trim())) &&
@@ -331,6 +371,17 @@ export default function QuoteTool({ token, user }) {
     if (isSavingRef.current) return;
     if (!canSave) {
       alert('Completa todos los campos obligatorios del cliente y verifica que todas las líneas tengan producto y cantidad.');
+      return;
+    }
+    const insufficientStockRows = rows.filter((row) => {
+      const availableStock = Number(row.availableStock);
+      if (!Number.isFinite(availableStock)) return false;
+      return Number(row.qty || 0) > availableStock;
+    });
+    if (insufficientStockRows.length > 0) {
+      const first = insufficientStockRows[0];
+      const label = first.skuDisplay || first.sku || 'producto';
+      alert(`Stock insuficiente para ${label}. Disponible: ${Number(first.availableStock || 0)}.`);
       return;
     }
     isSavingRef.current = true;
@@ -777,8 +828,13 @@ export default function QuoteTool({ token, user }) {
             <div className="mobile-cards-list" style={{ marginBottom: '20px' }}>
               {rows.map((row) => {
                 const stock = row.availableStock;
-                const stockDisplay = row.isCombo ? 'Combo' : (stock === null ? 'Cargando...' : stock);
-                const stockColor = row.isCombo ? '#e11d48' : (stock === null ? '#9ca3af' : Number(stock) > 0 ? '#10b981' : '#ef4444');
+                const stockNumber = Number(stock);
+                const stockDisplay = stock === null || stock === undefined
+                  ? 'Cargando...'
+                  : Number.isFinite(stockNumber) ? stockNumber : 'N/D';
+                const stockColor = stock === null || stock === undefined
+                  ? '#9ca3af'
+                  : (Number.isFinite(stockNumber) && stockNumber > 0 ? '#10b981' : '#ef4444');
 
                 return (
                   <div key={row.id} className="mobile-card">
@@ -860,8 +916,13 @@ export default function QuoteTool({ token, user }) {
                   ) : (
                     rows.map((row) => {
                       const stock = row.availableStock;
-                      const stockDisplay = row.isCombo ? 'Combo' : (stock === null ? 'Cargando...' : stock);
-                      const stockColor = row.isCombo ? '#e11d48' : (stock === null ? '#9ca3af' : '#10b981');
+                      const stockNumber = Number(stock);
+                      const stockDisplay = stock === null || stock === undefined
+                        ? 'Cargando...'
+                        : Number.isFinite(stockNumber) ? stockNumber : 'N/D';
+                      const stockColor = stock === null || stock === undefined
+                        ? '#9ca3af'
+                        : (Number.isFinite(stockNumber) && stockNumber > 0 ? '#10b981' : '#ef4444');
 
                       return (
                         <tr key={row.id} style={{ borderBottom: '1px solid #374151' }}>
