@@ -42,6 +42,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const formatChecklistItemLabel = (item) => {
     const sku = String(item?.sku || '').trim().toUpperCase();
     const name = String(item?.displayName || '').trim() || 'Producto desconocido';
+    if (sku && /^COMBO_\d+$/i.test(sku)) return name;
     if (sku) return `${sku} - ${name}`;
     return name;
   };
