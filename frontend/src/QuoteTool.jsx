@@ -53,6 +53,7 @@ export default function QuoteTool({ token, user }) {
   const formatSkuNameLabel = (skuValue, nameValue) => {
     const sku = String(skuValue || '').trim().toUpperCase();
     const name = String(nameValue || '').trim();
+    if (/^COMBO_\d+$/.test(sku)) return name || 'Combo';
     if (sku && name) return `${sku} - ${name}`;
     return sku || name || 'Producto';
   };

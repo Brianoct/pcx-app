@@ -3833,6 +3833,14 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       const match = String(skuValue || '').trim().toUpperCase().match(/^COMBO_(\d+)$/);
       return match ? Number.parseInt(match[1], 10) : null;
     };
+    const formatRowLabel = (row) => {
+      const rawLabel = String(row?.displayName || row?.skuDisplay || row?.sku || 'Producto desconocido').trim() || 'Producto desconocido';
+      const comboMatch = String(row?.sku || '').trim().toUpperCase().match(/^COMBO_(\d+)$/);
+      if (!comboMatch) return rawLabel;
+      const cleaned = rawLabel.replace(/^COMBO_\d+\s*-\s*/i, '').trim();
+      return cleaned || rawLabel;
+    };
+
     const resolveComboItems = async (row) => {
       const inlineItems = Array.isArray(row?.comboItems) ? row.comboItems : [];
       const normalizedInline = inlineItems
@@ -3843,7 +3851,28 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
         }))
         .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
       if (normalizedInline.length > 0) {
-        return normalizedInline;
+        const missingNameSkus = normalizedInline
+          .filter((comboItem) => !comboItem.name)
+          .map((comboItem) => comboItem.sku);
+        if (missingNameSkus.length === 0) {
+          return normalizedInline;
+        }
+        const namesRes = await pool.query(
+          `SELECT sku, name
+           FROM products
+           WHERE sku = ANY($1::text[])`,
+          [missingNameSkus]
+        );
+        const namesBySku = new Map(
+          (namesRes.rows || []).map((productRow) => [
+            String(productRow?.sku || '').trim().toUpperCase(),
+            String(productRow?.name || '').trim()
+          ])
+        );
+        return normalizedInline.map((comboItem) => ({
+          ...comboItem,
+          name: comboItem.name || namesBySku.get(comboItem.sku) || comboItem.sku
+        }));
       }
 
       const comboId = parseComboIdFromSku(row?.sku);
@@ -3873,7 +3902,7 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       const rowQty = Number.parseInt(row?.qty, 10);
       if (!Number.isInteger(rowQty) || rowQty <= 0) continue;
 
-      const rowLabel = String(row?.displayName || row?.skuDisplay || row?.sku || 'Producto desconocido').trim() || 'Producto desconocido';
+      const rowLabel = formatRowLabel(row);
       const comboItems = await resolveComboItems(row);
       if (comboItems.length > 0) {
         items.push({

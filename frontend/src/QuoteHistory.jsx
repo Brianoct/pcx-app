@@ -182,6 +182,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     }
   };
 
+  const formatSkuNameLabel = (skuValue, nameValue) => {
+    const sku = String(skuValue || '').trim().toUpperCase();
+    const name = String(nameValue || '').trim();
+    if (sku && sku.startsWith('COMBO_')) return name || 'Combo';
+    if (sku && name) return `${sku} - ${name}`;
+    return sku || name || 'Producto';
+  };
+
   const regeneratePDF = (quote) => {
     const subtotal = Number(quote.subtotal || 0);
     const discountPercent = Number(quote.discount_percent || 0);
@@ -204,9 +212,11 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       if (row?.isCombo && Array.isArray(row.comboItems) && row.comboItems.length > 0) {
         for (const comboItem of row.comboItems) {
           const componentQty = Number(comboItem?.quantity || 0) * Number(row?.qty || 1);
+          const componentSku = String(comboItem?.sku || '').trim().toUpperCase();
+          const componentName = String(comboItem?.name || comboItem?.displayName || '').trim();
           rows.push({
-            sku: comboItem?.sku,
-            skuDisplay: String(comboItem?.name || comboItem?.displayName || comboItem?.sku || 'Componente'),
+            sku: componentSku,
+            skuDisplay: formatSkuNameLabel(componentSku, componentName || 'Componente'),
             qty: componentQty,
             unitPrice: 0,
             lineTotal: 0,
