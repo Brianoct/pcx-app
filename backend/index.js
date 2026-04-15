@@ -3,11 +3,19 @@ const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const path = require('path');
+const fs = require('fs/promises');
+const fsSync = require('fs');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+const CUSTOMER_MENU_IMAGE_DIR = path.resolve(__dirname, 'customer-menu-images');
+if (!fsSync.existsSync(CUSTOMER_MENU_IMAGE_DIR)) {
+  fsSync.mkdirSync(CUSTOMER_MENU_IMAGE_DIR, { recursive: true });
+}
+app.use('/customer-menu-images', express.static(CUSTOMER_MENU_IMAGE_DIR));
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -1107,6 +1115,33 @@ const CUSTOMER_MENU_CATEGORY_ACCESORIOS = 'Accesorios';
 const CUSTOMER_MENU_CATEGORIES = [CUSTOMER_MENU_CATEGORY_TABLEROS, CUSTOMER_MENU_CATEGORY_ACCESORIOS];
 const CUSTOMER_MENU_TOKEN_PURPOSE = 'customer_menu_share';
 const CUSTOMER_MENU_TOKEN_TTL = process.env.CUSTOMER_MENU_TOKEN_TTL || '30d';
+const CUSTOMER_MENU_IMAGE_ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+const LEGACY_MENU_IMAGE_DIR = path.resolve(__dirname, '../frontend/public/menu-images');
+const CUSTOMER_MENU_IMAGE_MIME_TO_EXT = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif'
+};
+
+const ensureCustomerMenuImageDir = async () => {
+  await fs.mkdir(CUSTOMER_MENU_IMAGE_DIR, { recursive: true });
+};
+
+const getRequestOrigin = (req) => {
+  const forwardedProtoRaw = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const forwardedHostRaw = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim();
+  const protocol = forwardedProtoRaw || req.protocol || 'http';
+  const host = forwardedHostRaw || String(req.headers.host || '').trim();
+  return host ? `${protocol}://${host}` : '';
+};
+
+const toCustomerMenuImageAbsoluteUrl = (req, relativePath) => {
+  const origin = getRequestOrigin(req);
+  if (!origin) return relativePath;
+  return `${origin}${relativePath}`;
+};
 
 let PRODUCT_CATALOG = [...DEFAULT_PRODUCT_CATALOG];
 let PRODUCT_CATALOG_BY_SKU = new Map(
@@ -1276,8 +1311,10 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
     if (!urlValue) {
       normalized.image_url = null;
     } else {
-      if (!/^https?:\/\//i.test(urlValue)) {
-        throw createHttpError(400, 'image_url debe iniciar con http:// o https://');
+      const isHttpUrl = /^https?:\/\//i.test(urlValue);
+      const isRelativePath = /^\/[a-zA-Z0-9/_\-.%]+$/.test(urlValue) && !urlValue.includes('..');
+      if (!isHttpUrl && !isRelativePath) {
+        throw createHttpError(400, 'image_url debe ser URL http(s) o ruta local iniciando con /');
       }
       if (urlValue.length > 500) {
         throw createHttpError(400, 'image_url demasiado larga (máx 500)');
@@ -2185,7 +2222,120 @@ app.get('/api/users/sales', authenticateToken, async (req, res) => {
   }
 });
 
+const loadCustomerMenuEditorContext = async (req, res) => {
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) {
+    res.status(401).json({ error: 'Usuario no encontrado' });
+    return null;
+  }
+  if (!canAccessPanel(userContext.panel_access, userContext.role, 'menu_cliente')) {
+    res.status(403).json({ error: 'No tienes permiso para gestionar el catálogo de clientes' });
+    return null;
+  }
+  return userContext;
+};
+
 // ─── CUSTOMER PUBLIC MENU (sales share link + public ordering) ───────────────
+app.get('/api/customer-menu/images', authenticateToken, async (req, res) => {
+  const userContext = await loadCustomerMenuEditorContext(req, res);
+  if (!userContext) return;
+
+  try {
+    await ensureCustomerMenuImageDir();
+    const ownFiles = await fs.readdir(CUSTOMER_MENU_IMAGE_DIR, { withFileTypes: true });
+    const legacyFiles = await fs.readdir(LEGACY_MENU_IMAGE_DIR, { withFileTypes: true }).catch(() => []);
+
+    const ownImages = ownFiles
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => CUSTOMER_MENU_IMAGE_ALLOWED_EXTENSIONS.has(path.extname(name).toLowerCase()))
+      .map((name) => {
+        const encoded = encodeURIComponent(name);
+        const relativePath = `/customer-menu-images/${encoded}`;
+        return {
+          name,
+          source: 'subidas',
+          relative_path: relativePath,
+          image_url: toCustomerMenuImageAbsoluteUrl(req, relativePath)
+        };
+      });
+
+    const legacyImages = legacyFiles
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => CUSTOMER_MENU_IMAGE_ALLOWED_EXTENSIONS.has(path.extname(name).toLowerCase()))
+      .map((name) => ({
+        name,
+        source: 'menu-images',
+        relative_path: `/menu-images/${encodeURIComponent(name)}`,
+        image_url: `/menu-images/${encodeURIComponent(name)}`
+      }));
+
+    const merged = [...ownImages, ...legacyImages].sort((a, b) => (
+      `${a.source}:${a.name}`.localeCompare(`${b.source}:${b.name}`)
+    ));
+    return res.json(merged);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'No se pudieron listar imágenes del catálogo' });
+  }
+});
+
+app.post('/api/customer-menu/images', authenticateToken, async (req, res) => {
+  const userContext = await loadCustomerMenuEditorContext(req, res);
+  if (!userContext) return;
+
+  try {
+    const rawFilename = String(req.body?.filename || '').trim();
+    const dataUrl = String(req.body?.data_url || '').trim();
+    if (!rawFilename || !dataUrl) {
+      return res.status(400).json({ error: 'Debes enviar filename y data_url' });
+    }
+
+    const dataUrlMatch = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i);
+    if (!dataUrlMatch) {
+      return res.status(400).json({ error: 'Formato de imagen inválido' });
+    }
+    const mimeType = String(dataUrlMatch[1] || '').toLowerCase();
+    const base64Payload = String(dataUrlMatch[2] || '').replace(/\s+/g, '');
+    const mimeExt = CUSTOMER_MENU_IMAGE_MIME_TO_EXT[mimeType];
+    if (!mimeExt || !CUSTOMER_MENU_IMAGE_ALLOWED_EXTENSIONS.has(mimeExt)) {
+      return res.status(400).json({ error: 'Formato no soportado. Usa JPG, PNG, WEBP o GIF' });
+    }
+
+    const sourceExt = path.extname(rawFilename).toLowerCase();
+    const finalExt = CUSTOMER_MENU_IMAGE_ALLOWED_EXTENSIONS.has(sourceExt) ? sourceExt : mimeExt;
+    const baseName = path.basename(rawFilename, path.extname(rawFilename))
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 64) || 'catalogo';
+    const finalFilename = `${Date.now()}-${baseName}${finalExt}`;
+    const buffer = Buffer.from(base64Payload, 'base64');
+    if (!buffer || buffer.length === 0) {
+      return res.status(400).json({ error: 'Imagen vacía' });
+    }
+    if (buffer.length > 8 * 1024 * 1024) {
+      return res.status(400).json({ error: 'La imagen supera 8MB' });
+    }
+
+    await ensureCustomerMenuImageDir();
+    const absolutePath = path.join(CUSTOMER_MENU_IMAGE_DIR, finalFilename);
+    await fs.writeFile(absolutePath, buffer);
+
+    const relativePath = `/customer-menu-images/${encodeURIComponent(finalFilename)}`;
+    return res.status(201).json({
+      filename: finalFilename,
+      relative_path: relativePath,
+      image_url: toCustomerMenuImageAbsoluteUrl(req, relativePath),
+      uploaded_by: resolveUserDisplayName(userContext, 'Usuario')
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'No se pudo subir la imagen' });
+  }
+});
+
 app.post('/api/customer-menu/share-link', authenticateToken, async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { apiRequest } from './apiClient';
+import { API_BASE, apiRequest } from './apiClient';
 import pdfLogo from './assets/logo.png';
 
 const CATEGORY_TABLEROS = 'Tableros';
@@ -16,27 +16,34 @@ const DEPARTMENT_OPTIONS = [
   'Santa Cruz',
   'Tarija'
 ];
-const TABLERO_MODELS = [
-  { key: 'T61x95', label: 'T61x95' },
-  { key: 'T94x95', label: 'T94x95' },
-  { key: 'T10x99', label: 'T10x99' }
-];
 const TABLERO_COLOR_VARIANTS = [
   { key: 'rojo', label: 'Rojo', hex: '#ef4444' },
   { key: 'negro', label: 'Negro', hex: '#111827' },
   { key: 'amarillo', label: 'Amarillo', hex: '#facc15' },
   { key: 'azul_petroleo', label: 'Azul Petroleo', hex: '#0f766e' },
-  { key: 'plomo', label: 'Plomo', hex: '#6b7280' }
+  { key: 'plomo', label: 'Plomo', hex: '#6b7280' },
+  { key: 'blanco', label: 'Blanco', hex: '#f8fafc' }
 ];
-const TABLERO_MODEL_COLOR_KEYS = {
-  T10x99: ['negro']
-};
 const TABLERO_COLOR_CODES = {
   rojo: 'R',
   negro: 'N',
   amarillo: 'A',
   azul_petroleo: 'AP',
-  plomo: 'P'
+  plomo: 'P',
+  blanco: 'B'
+};
+const TABLERO_COLOR_BY_KEY = Object.fromEntries(TABLERO_COLOR_VARIANTS.map((item) => [item.key, item]));
+const TABLERO_KNOWN_COLOR_KEYS = TABLERO_COLOR_VARIANTS.map((item) => item.key);
+const TABLERO_SKU_SUFFIX_TO_COLOR_KEY = {
+  AP: 'azul_petroleo',
+  AM: 'amarillo',
+  PL: 'plomo',
+  BL: 'blanco',
+  R: 'rojo',
+  N: 'negro',
+  A: 'amarillo',
+  P: 'plomo',
+  B: 'blanco'
 };
 const LOCAL_IMAGE_EXTENSIONS = ['jpg'];
 const ACCESORIO_IMAGE_FALLBACK_PATTERNS = [
@@ -60,13 +67,6 @@ const LIGHT_THEME = {
   primary: '#e11d48'
 };
 
-function getTableroVariantsForModel(modelKey) {
-  const allowedKeys = TABLERO_MODEL_COLOR_KEYS[modelKey];
-  if (!Array.isArray(allowedKeys) || allowedKeys.length === 0) return TABLERO_COLOR_VARIANTS;
-  const allowedSet = new Set(allowedKeys);
-  return TABLERO_COLOR_VARIANTS.filter((variant) => allowedSet.has(variant.key));
-}
-
 function normalizeText(value) {
   return String(value || '')
     .normalize('NFD')
@@ -82,16 +82,50 @@ function normalizeSkuToken(value) {
     .trim();
 }
 
+function extractTableroDimensionsToken(value) {
+  const normalized = normalizeSkuToken(value);
+  let match = normalized.match(/T(\d{2,3})X(\d{2,3})/);
+  if (match) return `${match[1]}x${match[2]}`;
+
+  match = normalized.match(/T(\d{4,6})/);
+  if (!match) return null;
+  const digits = String(match[1] || '');
+  if (digits.length === 4) return `${digits.slice(0, 2)}x${digits.slice(2)}`;
+  if (digits.length === 5) return `${digits.slice(0, 2)}x${digits.slice(2)}`;
+  if (digits.length >= 6) return `${digits.slice(0, 3)}x${digits.slice(3, 6)}`;
+  return null;
+}
+
+function formatTableroModelLabel(modelKey) {
+  const dimensions = String(modelKey || '').replace(/^T/i, '').trim();
+  if (!dimensions) return String(modelKey || '').trim() || 'Modelo';
+  return dimensions;
+}
+
+function getTableroModelSortValue(modelKey) {
+  const dimensions = String(modelKey || '').replace(/^T/i, '').trim();
+  const match = dimensions.match(/^(\d{2,3})x(\d{2,3})$/i);
+  if (!match) return Number.POSITIVE_INFINITY;
+  const width = Number.parseInt(match[1], 10);
+  const height = Number.parseInt(match[2], 10);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return Number.POSITIVE_INFINITY;
+  return width * 1000 + height;
+}
+
 function detectTableroModelKey(product) {
-  const raw = normalizeSkuToken(`${String(product?.sku || '')} ${String(product?.name || '')}`);
-  if (raw.includes('T94X95') || raw.includes('T9495') || raw.includes('9495')) return 'T94x95';
-  if (raw.includes('T61X95') || raw.includes('T6195') || raw.includes('6195')) return 'T61x95';
-  if (raw.includes('T10X99') || raw.includes('T1099') || raw.includes('1099')) return 'T10x99';
+  const combined = `${String(product?.sku || '')} ${String(product?.name || '')}`;
+  const dimensions = extractTableroDimensionsToken(combined);
+  if (dimensions) return `T${dimensions}`;
+  const rawSku = normalizeSkuToken(product?.sku || '');
+  if (rawSku.startsWith('T') && rawSku.length >= 3) {
+    return rawSku;
+  }
   return null;
 }
 
 function detectTableroColorKey(product) {
   const normalized = normalizeText(`${String(product?.name || '')} ${String(product?.sku || '')}`);
+  if (normalized.includes('blanco')) return 'blanco';
   if (normalized.includes('azul petroleo') || normalized.includes('azulpetroleo')) return 'azul_petroleo';
   if (normalized.includes('plomo')) return 'plomo';
   if (normalized.includes('amarillo')) return 'amarillo';
@@ -99,13 +133,19 @@ function detectTableroColorKey(product) {
   if (normalized.includes('rojo')) return 'rojo';
 
   const normalizedSku = normalizeSkuToken(product?.sku || '');
-  if (normalizedSku.endsWith('AP') || normalizedSku.endsWith('AZP') || normalizedSku.endsWith('ZP')) return 'azul_petroleo';
-  if (normalizedSku.endsWith('AM')) return 'amarillo';
-  if (normalizedSku.endsWith('PL') || normalizedSku.endsWith('P') || normalizedSku.endsWith('G')) return 'plomo';
-  if (normalizedSku.endsWith('R')) return 'rojo';
-  if (normalizedSku.endsWith('N')) return 'negro';
-  if (normalizedSku.endsWith('Y') || normalizedSku.endsWith('A')) return 'amarillo';
+  const suffixChecks = Object.keys(TABLERO_SKU_SUFFIX_TO_COLOR_KEY).sort((a, b) => b.length - a.length);
+  for (const suffix of suffixChecks) {
+    if (normalizedSku.endsWith(suffix)) {
+      return TABLERO_SKU_SUFFIX_TO_COLOR_KEY[suffix];
+    }
+  }
   return null;
+}
+
+function getTableroVariantLabel(product, colorKey) {
+  if (TABLERO_COLOR_BY_KEY[colorKey]) return TABLERO_COLOR_BY_KEY[colorKey].label;
+  const fallback = String(product?.name || product?.sku || '').trim();
+  return fallback || 'Variante';
 }
 
 function getTableroImageSkuAliases(product) {
@@ -126,7 +166,10 @@ function getTableroImageSkuAliases(product) {
 function getProductImageCandidates(product, options = {}) {
   const { enableSkuFallback = false, includeAliases = true } = options;
   const candidates = [];
-  const explicit = String(product?.image_url || '').trim();
+  const explicitRaw = String(product?.image_url || '').trim();
+  const explicit = explicitRaw.startsWith('/customer-menu-images/')
+    ? `${String(API_BASE || '').replace(/\/+$/, '')}${explicitRaw}`
+    : explicitRaw;
   if (explicit) {
     candidates.push(explicit);
   }
@@ -307,35 +350,64 @@ export default function PublicCustomerMenu() {
     [products]
   );
   const tableroGroups = useMemo(() => {
-    const byModelAndColor = new Map();
+    const byModel = new Map();
     for (const product of tableroProducts) {
       const modelKey = detectTableroModelKey(product);
-      const colorKey = detectTableroColorKey(product);
-      if (!modelKey || !colorKey) continue;
-      const compositeKey = `${modelKey}|${colorKey}`;
-      if (!byModelAndColor.has(compositeKey)) {
-        byModelAndColor.set(compositeKey, product);
+      if (!modelKey) continue;
+      if (!byModel.has(modelKey)) {
+        byModel.set(modelKey, {
+          key: modelKey,
+          title: formatTableroModelLabel(modelKey),
+          variantsByKey: new Map()
+        });
+      }
+      const group = byModel.get(modelKey);
+      const colorKey = detectTableroColorKey(product) || `variant-${normalizeSkuToken(product?.sku || product?.name || '')}`;
+      const colorMeta = TABLERO_COLOR_BY_KEY[colorKey] || {
+        key: colorKey,
+        label: getTableroVariantLabel(product, colorKey),
+        hex: '#cbd5e1'
+      };
+      if (!group.variantsByKey.has(colorMeta.key)) {
+        group.variantsByKey.set(colorMeta.key, {
+          ...colorMeta,
+          product
+        });
       }
     }
 
-    return TABLERO_MODELS.map((model) => {
-      const variantsForModel = getTableroVariantsForModel(model.key);
-      return {
-        key: model.key,
-        title: model.label,
-        variants: variantsForModel.map((color) => ({
-          ...color,
-          product: byModelAndColor.get(`${model.key}|${color.key}`) || null
-        }))
-      };
-    });
+    return [...byModel.values()]
+      .map((group) => {
+        const variants = [...group.variantsByKey.values()]
+          .sort((a, b) => {
+            const colorRankA = TABLERO_KNOWN_COLOR_KEYS.indexOf(a.key);
+            const colorRankB = TABLERO_KNOWN_COLOR_KEYS.indexOf(b.key);
+            if (colorRankA !== -1 || colorRankB !== -1) {
+              if (colorRankA === -1) return 1;
+              if (colorRankB === -1) return -1;
+              return colorRankA - colorRankB;
+            }
+            return String(a.label || '').localeCompare(String(b.label || ''));
+          });
+        return {
+          key: group.key,
+          title: group.title,
+          variants
+        };
+      })
+      .sort((a, b) => {
+        const aScore = getTableroModelSortValue(a.key);
+        const bScore = getTableroModelSortValue(b.key);
+        if (aScore !== bScore) return aScore - bScore;
+        return String(a.title || '').localeCompare(String(b.title || ''));
+      });
   }, [tableroProducts]);
 
   useEffect(() => {
     setSelectedTableroColorByModel((prev) => {
       const next = { ...prev };
       let changed = false;
-      const validModelKeys = new Set(TABLERO_MODELS.map((model) => model.key));
+      const validModelKeys = new Set(tableroGroups.map((group) => group.key));
       Object.keys(next).forEach((modelKey) => {
         if (!validModelKeys.has(modelKey)) {
           delete next[modelKey];
