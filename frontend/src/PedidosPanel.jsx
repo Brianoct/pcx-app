@@ -260,19 +260,15 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     setChecklistModal(null);
   };
 
-  const printLabel = async (quote) => {
-    const checklistItems = await loadChecklistItems(quote);
-    const printableItems = checklistItems.slice(0, 8);
-    const hiddenItemsCount = Math.max(0, checklistItems.length - printableItems.length);
-    const dynamicHeight = Math.max(40, 42 + (printableItems.length * 3.2) + (hiddenItemsCount > 0 ? 3.2 : 0));
+  const printLabel = (quote) => {
     const doc = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
-      format: [70, dynamicHeight]
+      format: [70, 40]
     });
 
     const pageWidth = 70;
-    const pageHeight = dynamicHeight;
+    const pageHeight = 40;
     const margin = 2.5;
     const contentX = margin;
     const contentW = pageWidth - margin * 2;
@@ -327,29 +323,6 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         doc.text(fitted, pageWidth / 2, y + (idx * 3.2), { align: 'center' });
       });
       y += Math.max(3.2, noteLines.length * 3.2);
-    }
-
-    if (printableItems.length > 0) {
-      y += 2.4;
-      doc.line(contentX + 1.5, y - 1.4, contentX + contentW - 1.5, y - 1.4);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7);
-      doc.text('Productos', contentX + 2, y + 1);
-      y += 3.4;
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(6.4);
-      for (const item of printableItems) {
-        const prefix = item.isIndented ? '  -' : (item.isComboHeader ? '*' : '•');
-        const baseText = `${prefix} ${item.qty}x ${formatChecklistItemLabel(item)}`;
-        const fitted = fitTextByWidth(doc, baseText, contentW - 4);
-        doc.text(fitted, contentX + 2, y);
-        y += 3;
-      }
-      if (hiddenItemsCount > 0) {
-        doc.setFont('helvetica', 'italic');
-        doc.text(`+${hiddenItemsCount} item(s) más`, contentX + 2, y);
-      }
     }
 
     doc.save(`etiqueta_${quote.id}_${recipientName.replace(/\s+/g, '_') || 'cliente'}.pdf`);
