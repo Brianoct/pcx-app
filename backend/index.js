@@ -10,7 +10,7 @@ require('dotenv').config();
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 const CUSTOMER_MENU_IMAGE_DIR = path.resolve(__dirname, 'customer-menu-images');
 if (!fsSync.existsSync(CUSTOMER_MENU_IMAGE_DIR)) {
   fsSync.mkdirSync(CUSTOMER_MENU_IMAGE_DIR, { recursive: true });
@@ -6512,6 +6512,16 @@ app.get('/api/me', authenticateToken, async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'No se pudo cargar sesión' });
   }
+});
+
+app.use((err, _req, res, next) => {
+  if (!err) return next();
+  if (err.type === 'entity.too.large' || err.status === 413) {
+    return res.status(413).json({
+      error: 'La imagen es demasiado pesada para subir. Intenta con una imagen más liviana (máx ~8MB).'
+    });
+  }
+  return next(err);
 });
 
 const PORT = process.env.PORT || 4000;
