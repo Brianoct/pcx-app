@@ -196,13 +196,55 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     return sku || name || 'Producto';
   };
 
-  const regeneratePDF = (quote) => {
+  const normalizeLabelToken = (value = '') => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const buildChecklistComboBlocks = (items = []) => {
+    const blocks = [];
+    let currentBlock = null;
+    for (const rawItem of Array.isArray(items) ? items : []) {
+      const item = rawItem && typeof rawItem === 'object' ? rawItem : {};
+      const isHeader = Boolean(item.isComboHeader);
+      if (isHeader) {
+        const headerText = formatSkuNameLabel(item.sku, item.displayName || item.sku || 'Combo');
+        currentBlock = {
+          header: headerText,
+          headerNorm: normalizeLabelToken(headerText),
+          components: []
+        };
+        blocks.push(currentBlock);
+        continue;
+      }
+      if (currentBlock && Boolean(item.isIndented)) {
+        currentBlock.components.push({
+          sku: String(item.sku || '').trim().toUpperCase(),
+          name: String(item.displayName || item.sku || 'Componente').trim(),
+          absoluteQty: Number(item.qty || 0)
+        });
+      }
+    }
+    return blocks;
+  };
+
+  const regeneratePDF = async (quote) => {
     const subtotal = Number(quote.subtotal || 0);
     const discountPercent = Number(quote.discount_percent || 0);
     const discountAmount = subtotal * (discountPercent / 100);
     const rawRows = Array.isArray(quote.line_items) ? quote.line_items : [];
+    let checklistComboBlocks = [];
+    try {
+      const checklistPayload = await apiRequest(`/api/quotes/${quote.id}/checklist`, { token });
+      checklistComboBlocks = buildChecklistComboBlocks(checklistPayload?.items || []);
+    } catch (_err) {
+      checklistComboBlocks = [];
+    }
 
     const rows = [];
+    let comboBlockCursor = 0;
     for (const row of rawRows) {
       const normalized = {
         sku: row.sku,
@@ -215,9 +257,49 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       };
       rows.push(normalized);
 
-      if (row?.isCombo && Array.isArray(row.comboItems) && row.comboItems.length > 0) {
-        for (const comboItem of row.comboItems) {
-          const componentQty = Number(comboItem?.quantity || 0) * Number(row?.qty || 1);
+      if (row?.isCombo) {
+        let effectiveComboItems = Array.isArray(row.comboItems)
+          ? row.comboItems
+            .map((comboItem) => ({
+              sku: String(comboItem?.sku || '').trim().toUpperCase(),
+              name: String(comboItem?.name || comboItem?.displayName || '').trim(),
+              quantity: Number(comboItem?.quantity || 0),
+              absoluteQty: null
+            }))
+            .filter((comboItem) => comboItem.sku && comboItem.quantity > 0)
+          : [];
+
+        if (effectiveComboItems.length === 0 && checklistComboBlocks.length > 0) {
+          const rowLabelNorm = normalizeLabelToken(formatSkuNameLabel(
+            row?.sku,
+            row?.skuDisplay || row?.displayName || row?.name || row?.sku
+          ));
+          let selectedBlockIndex = checklistComboBlocks.findIndex((block, idx) => (
+            idx >= comboBlockCursor
+            && block?.headerNorm
+            && rowLabelNorm
+            && (block.headerNorm === rowLabelNorm || block.headerNorm.includes(rowLabelNorm) || rowLabelNorm.includes(block.headerNorm))
+          ));
+          if (selectedBlockIndex < 0) {
+            selectedBlockIndex = checklistComboBlocks.findIndex((_, idx) => idx >= comboBlockCursor);
+          }
+          if (selectedBlockIndex >= 0) {
+            comboBlockCursor = selectedBlockIndex + 1;
+            effectiveComboItems = (checklistComboBlocks[selectedBlockIndex]?.components || [])
+              .map((component) => ({
+                sku: String(component?.sku || '').trim().toUpperCase(),
+                name: String(component?.name || component?.displayName || '').trim(),
+                quantity: 0,
+                absoluteQty: Number(component?.absoluteQty || component?.qty || 0)
+              }))
+              .filter((component) => component.sku && component.absoluteQty > 0);
+          }
+        }
+
+        for (const comboItem of effectiveComboItems) {
+          const componentQty = comboItem.absoluteQty > 0
+            ? comboItem.absoluteQty
+            : (Number(comboItem?.quantity || 0) * Number(row?.qty || 1));
           const componentSku = String(comboItem?.sku || '').trim().toUpperCase();
           const componentName = String(
             comboItem?.name

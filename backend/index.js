@@ -3992,6 +3992,28 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
     };
 
     const resolveComboItems = async (row) => {
+      const comboId = parseComboIdFromSku(row?.sku);
+      if (Number.isInteger(comboId) && comboId > 0) {
+        const comboItemsRes = await pool.query(
+          `SELECT ci.sku, ci.quantity, p.name
+           FROM combo_items ci
+           LEFT JOIN products p ON p.sku = ci.sku
+           WHERE ci.combo_id = $1
+           ORDER BY ci.sku ASC`,
+          [comboId]
+        );
+        const normalizedFromDb = (comboItemsRes.rows || [])
+          .map((comboItem) => ({
+            sku: String(comboItem?.sku || '').trim().toUpperCase(),
+            quantity: Number.parseInt(comboItem?.quantity, 10),
+            name: String(comboItem?.name || '').trim()
+          }))
+          .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+        if (normalizedFromDb.length > 0) {
+          return normalizedFromDb;
+        }
+      }
+
       const inlineItems = Array.isArray(row?.comboItems) ? row.comboItems : [];
       const normalizedInline = inlineItems
         .map((comboItem) => ({
@@ -4000,51 +4022,31 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
           name: String(comboItem?.name || comboItem?.displayName || '').trim()
         }))
         .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
-      if (normalizedInline.length > 0) {
-        const missingNameSkus = normalizedInline
-          .filter((comboItem) => !comboItem.name)
-          .map((comboItem) => comboItem.sku);
-        if (missingNameSkus.length === 0) {
-          return normalizedInline;
-        }
-        const namesRes = await pool.query(
-          `SELECT sku, name
-           FROM products
-           WHERE sku = ANY($1::text[])`,
-          [missingNameSkus]
-        );
-        const namesBySku = new Map(
-          (namesRes.rows || []).map((productRow) => [
-            String(productRow?.sku || '').trim().toUpperCase(),
-            String(productRow?.name || '').trim()
-          ])
-        );
-        return normalizedInline.map((comboItem) => ({
-          ...comboItem,
-          name: comboItem.name || namesBySku.get(comboItem.sku) || comboItem.sku
-        }));
-      }
-
-      const comboId = parseComboIdFromSku(row?.sku);
-      if (!Number.isInteger(comboId) || comboId <= 0) {
+      if (normalizedInline.length === 0) {
         return [];
       }
-
-      const comboItemsRes = await pool.query(
-        `SELECT ci.sku, ci.quantity, p.name
-         FROM combo_items ci
-         LEFT JOIN products p ON p.sku = ci.sku
-         WHERE ci.combo_id = $1
-         ORDER BY ci.id ASC`,
-        [comboId]
+      const missingNameSkus = normalizedInline
+        .filter((comboItem) => !comboItem.name)
+        .map((comboItem) => comboItem.sku);
+      if (missingNameSkus.length === 0) {
+        return normalizedInline;
+      }
+      const namesRes = await pool.query(
+        `SELECT sku, name
+         FROM products
+         WHERE sku = ANY($1::text[])`,
+        [missingNameSkus]
       );
-      return (comboItemsRes.rows || [])
-        .map((comboItem) => ({
-          sku: String(comboItem?.sku || '').trim().toUpperCase(),
-          quantity: Number.parseInt(comboItem?.quantity, 10),
-          name: String(comboItem?.name || '').trim()
-        }))
-        .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+      const namesBySku = new Map(
+        (namesRes.rows || []).map((productRow) => [
+          String(productRow?.sku || '').trim().toUpperCase(),
+          String(productRow?.name || '').trim()
+        ])
+      );
+      return normalizedInline.map((comboItem) => ({
+        ...comboItem,
+        name: comboItem.name || namesBySku.get(comboItem.sku) || comboItem.sku
+      }));
     };
 
     const items = [];
@@ -4391,38 +4393,33 @@ async function deductStockForQuote(client, quoteId, storeLocation, lineItems) {
   };
 
   const resolveComboItems = async (row) => {
-    const inlineItems = Array.isArray(row?.comboItems) ? row.comboItems : [];
-    const normalizedInline = inlineItems
-      .map((comboItem) => ({
-        sku: String(comboItem?.sku || '').trim().toUpperCase(),
-        quantity: Number.parseInt(comboItem?.quantity, 10)
-      }))
-      .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
-    if (normalizedInline.length > 0) {
-      return normalizedInline;
-    }
-
     const comboId = parseComboIdFromSku(row?.sku);
-    if (!Number.isInteger(comboId) || comboId <= 0) {
-      return [];
-    }
-
-    const comboItemsRes = await client.query(
-      `SELECT sku, quantity
-       FROM combo_items
-       WHERE combo_id = $1`,
-      [comboId]
-    );
-    const normalizedFromDb = (comboItemsRes.rows || [])
-      .map((comboItem) => ({
-        sku: String(comboItem?.sku || '').trim().toUpperCase(),
-        quantity: Number.parseInt(comboItem?.quantity, 10)
-      }))
-      .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
-    if (normalizedFromDb.length === 0) {
+    if (Number.isInteger(comboId) && comboId > 0) {
+      const comboItemsRes = await client.query(
+        `SELECT sku, quantity
+         FROM combo_items
+         WHERE combo_id = $1`,
+        [comboId]
+      );
+      const normalizedFromDb = (comboItemsRes.rows || [])
+        .map((comboItem) => ({
+          sku: String(comboItem?.sku || '').trim().toUpperCase(),
+          quantity: Number.parseInt(comboItem?.quantity, 10)
+        }))
+        .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+      if (normalizedFromDb.length > 0) {
+        return normalizedFromDb;
+      }
       throw new Error(`Combo COMBO_${comboId} no tiene productos configurados`);
     }
-    return normalizedFromDb;
+
+    const inlineItems = Array.isArray(row?.comboItems) ? row.comboItems : [];
+    return inlineItems
+      .map((comboItem) => ({
+        sku: String(comboItem?.sku || '').trim().toUpperCase(),
+        quantity: Number.parseInt(comboItem?.quantity, 10)
+      }))
+      .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
   };
 
   for (const row of lineItems || []) {
@@ -4490,29 +4487,27 @@ async function restockStockForQuote(client, storeLocation, lineItems) {
   };
 
   const resolveComboItems = async (row) => {
-    const inlineItems = Array.isArray(row?.comboItems) ? row.comboItems : [];
-    const normalizedInline = inlineItems
-      .map((comboItem) => ({
-        sku: String(comboItem?.sku || '').trim().toUpperCase(),
-        quantity: Number.parseInt(comboItem?.quantity, 10)
-      }))
-      .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
-    if (normalizedInline.length > 0) {
-      return normalizedInline;
-    }
-
     const comboId = parseComboIdFromSku(row?.sku);
-    if (!Number.isInteger(comboId) || comboId <= 0) {
-      return [];
+    if (Number.isInteger(comboId) && comboId > 0) {
+      const comboItemsRes = await client.query(
+        `SELECT sku, quantity
+         FROM combo_items
+         WHERE combo_id = $1`,
+        [comboId]
+      );
+      const normalizedFromDb = (comboItemsRes.rows || [])
+        .map((comboItem) => ({
+          sku: String(comboItem?.sku || '').trim().toUpperCase(),
+          quantity: Number.parseInt(comboItem?.quantity, 10)
+        }))
+        .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
+      if (normalizedFromDb.length > 0) {
+        return normalizedFromDb;
+      }
     }
 
-    const comboItemsRes = await client.query(
-      `SELECT sku, quantity
-       FROM combo_items
-       WHERE combo_id = $1`,
-      [comboId]
-    );
-    return (comboItemsRes.rows || [])
+    const inlineItems = Array.isArray(row?.comboItems) ? row.comboItems : [];
+    return inlineItems
       .map((comboItem) => ({
         sku: String(comboItem?.sku || '').trim().toUpperCase(),
         quantity: Number.parseInt(comboItem?.quantity, 10)
