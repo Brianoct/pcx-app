@@ -3971,11 +3971,16 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
     }
 
     const quote = result.rows[0];
-    if (!canAccessAllQuotes && quote.user_id !== req.user.id) {
+    const isPedidosIndividualScoped = Boolean(access?.pedidos_individual)
+      && !canAccessAllQuotes
+      && !Boolean(access?.historial_individual)
+      && !pedidosScope.isGlobal;
+    if (isPedidosIndividualScoped) {
+      if (quote.store_location !== pedidosScope.city) {
+        return res.status(403).json({ error: 'No autorizado para ver pedidos de otra ciudad' });
+      }
+    } else if (!canAccessAllQuotes && quote.user_id !== req.user.id) {
       return res.status(403).json({ error: 'No autorizado para ver este pedido' });
-    }
-    if (!canAccessAllQuotes && access.pedidos_individual && !access.historial_individual && !pedidosScope.isGlobal && quote.store_location !== pedidosScope.city) {
-      return res.status(403).json({ error: 'No autorizado para ver pedidos de otra ciudad' });
     }
 
     const rawLineItems = Array.isArray(quote.line_items) ? quote.line_items : [];
