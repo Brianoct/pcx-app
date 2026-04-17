@@ -269,7 +269,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
             .filter((comboItem) => comboItem.sku && comboItem.quantity > 0)
           : [];
 
-        if (effectiveComboItems.length === 0 && checklistComboBlocks.length > 0) {
+        // Prefer checklist expansion when available. It reflects the current
+        // combo definition in DB and avoids partial legacy combo snapshots.
+        if (checklistComboBlocks.length > 0) {
           const rowLabelNorm = normalizeLabelToken(formatSkuNameLabel(
             row?.sku,
             row?.skuDisplay || row?.displayName || row?.name || row?.sku
@@ -285,7 +287,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
           }
           if (selectedBlockIndex >= 0) {
             comboBlockCursor = selectedBlockIndex + 1;
-            effectiveComboItems = (checklistComboBlocks[selectedBlockIndex]?.components || [])
+            const checklistComponents = (checklistComboBlocks[selectedBlockIndex]?.components || [])
               .map((component) => ({
                 sku: String(component?.sku || '').trim().toUpperCase(),
                 name: String(component?.name || component?.displayName || '').trim(),
@@ -293,6 +295,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                 absoluteQty: Number(component?.absoluteQty || component?.qty || 0)
               }))
               .filter((component) => component.sku && component.absoluteQty > 0);
+            if (checklistComponents.length > 0) {
+              effectiveComboItems = checklistComponents;
+            }
           }
         }
 
