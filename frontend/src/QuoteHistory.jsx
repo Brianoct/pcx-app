@@ -230,6 +230,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     return blocks;
   };
 
+  const isComboSku = (skuValue = '') => /^COMBO_\d+$/i.test(String(skuValue || '').trim());
+
   const regeneratePDF = async (quote) => {
     const subtotal = Number(quote.subtotal || 0);
     const discountPercent = Number(quote.discount_percent || 0);
@@ -246,18 +248,23 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     const rows = [];
     let comboBlockCursor = 0;
     for (const row of rawRows) {
+      const rowSku = String(row?.sku || '').trim().toUpperCase();
+      const rowIsCombo = Boolean(row?.isCombo) || isComboSku(rowSku);
+      const rowDisplayName = String(
+        row?.skuDisplay || row?.displayName || row?.name || rowSku || '—'
+      ).trim();
       const normalized = {
-        sku: row.sku,
-        skuDisplay: row.skuDisplay || row.displayName || row.sku || '—',
+        sku: rowSku,
+        skuDisplay: formatSkuNameLabel(rowSku, rowDisplayName),
         qty: Number(row.qty || 0),
         unitPrice: Number(row.unitPrice || row.unit_price || 0),
         lineTotal: Number(row.lineTotal || row.line_total || 0),
-        isComboHeader: Boolean(row.isComboHeader),
+        isComboHeader: Boolean(row.isComboHeader) || rowIsCombo,
         isIndented: Boolean(row.isIndented)
       };
       rows.push(normalized);
 
-      if (row?.isCombo) {
+      if (rowIsCombo) {
         let effectiveComboItems = Array.isArray(row.comboItems)
           ? row.comboItems
             .map((comboItem) => ({
@@ -273,8 +280,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         // combo definition in DB and avoids partial legacy combo snapshots.
         if (checklistComboBlocks.length > 0) {
           const rowLabelNorm = normalizeLabelToken(formatSkuNameLabel(
-            row?.sku,
-            row?.skuDisplay || row?.displayName || row?.name || row?.sku
+            rowSku,
+            rowDisplayName
           ));
           let selectedBlockIndex = checklistComboBlocks.findIndex((block, idx) => (
             idx >= comboBlockCursor
@@ -680,7 +687,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
           unitPrice: Number(row.unitPrice || 0),
           lineTotal: Number(row.lineTotal || 0),
           displayName: row.displayName || row.skuDisplay || row.sku,
-          isCombo: Boolean(row.isCombo),
+          isCombo: Boolean(row.isCombo) || isComboSku(row.sku),
           comboItems: Array.isArray(row.comboItems)
             ? row.comboItems.map((comboItem) => ({
               sku: String(comboItem?.sku || '').toUpperCase(),
@@ -772,7 +779,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
             unitPrice: Number(row.unitPrice || 0),
             lineTotal: Number(row.lineTotal || 0),
             displayName: row.displayName || row.skuDisplay || row.sku,
-            isCombo: Boolean(row.isCombo),
+            isCombo: Boolean(row.isCombo) || isComboSku(row.sku),
             comboItems: Array.isArray(row.comboItems)
               ? row.comboItems.map((comboItem) => ({
                 sku: String(comboItem?.sku || '').toUpperCase(),
