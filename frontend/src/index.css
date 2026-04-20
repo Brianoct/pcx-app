@@ -1205,24 +1205,20 @@ button, .btn {
   font-weight: 600;
   transition: var(--transition);
   position: relative;
-  padding: 6px 2px;
-  border-radius: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
 }
 
 .nav-link.active {
-  color: var(--accent-primary);
+  color: #fff;
   font-weight: 700;
+  background: linear-gradient(135deg, rgba(255, 127, 48, 0.28), rgba(255, 100, 30, 0.16));
+  box-shadow: inset 0 0 0 1px rgba(255, 127, 48, 0.48);
 }
 
 .nav-link.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 8%;
-  width: 84%;
-  height: 2.5px;
-  background: var(--accent-primary);
-  border-radius: 3px 3px 0 0;
+  display: none;
+  content: none;
 }
 
 /* Fixed navigation */
@@ -1232,13 +1228,13 @@ nav {
   left: 0;
   right: 0;
   z-index: 1000;
-  background: rgba(15, 23, 42, 0.86);
-  border-bottom: 1px solid rgba(71, 85, 105, 0.55);
+  background: linear-gradient(180deg, rgba(6, 10, 18, 0.98), rgba(8, 14, 26, 0.95));
+  border-bottom: 1px solid rgba(45, 56, 82, 0.88);
   padding: 10px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35);
+  box-shadow: 0 10px 26px rgba(2, 6, 23, 0.55);
   backdrop-filter: blur(10px);
 }
 
@@ -1345,22 +1341,23 @@ nav {
 .more-menu-button {
   min-height: 34px;
   padding: 6px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(71, 85, 105, 0.6);
-  background: #162238;
+  border-radius: 999px;
+  border: 1px solid rgba(45, 56, 82, 0.9);
+  background: #121a2a;
   color: #cbd5e1;
   font-weight: 700;
   font-size: 0.9rem;
 }
 
 .more-menu-button:hover {
-  background: #1f2d45;
+  background: #19243a;
   color: #f1f5f9;
 }
 
 .more-menu-button.active {
-  color: #f87171;
-  border-color: rgba(248, 113, 113, 0.7);
+  color: #fff;
+  border-color: rgba(255, 127, 48, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 127, 48, 0.42);
 }
 
 .more-menu-list {
@@ -1370,8 +1367,8 @@ nav {
   min-width: 190px;
   padding: 8px;
   border-radius: 12px;
-  border: 1px solid rgba(71, 85, 105, 0.7);
-  background: #0f172a;
+  border: 1px solid rgba(45, 56, 82, 0.9);
+  background: linear-gradient(180deg, #0e1524 0%, #0a101b 100%);
   box-shadow: 0 16px 30px rgba(2, 6, 23, 0.45);
   display: grid;
   gap: 4px;
@@ -1392,8 +1389,174 @@ nav {
 }
 
 .more-menu-item.active {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.12);
+  color: #fff;
+  background: linear-gradient(135deg, rgba(255, 127, 48, 0.26), rgba(255, 100, 30, 0.14));
+}
+
+.admin-shell {
+  max-width: 1420px;
+  margin: 0 auto;
+  padding: 90px 16px 22px;
+}
+
+.admin-hero-card {
+  border-radius: 18px;
+  border: 1px solid rgba(45, 56, 82, 0.92);
+  background:
+    radial-gradient(circle at 82% 10%, rgba(255, 126, 45, 0.24), transparent 32%),
+    radial-gradient(circle at 2% -28%, rgba(73, 103, 159, 0.24), transparent 42%),
+    linear-gradient(180deg, #111a2b 0%, #0b1220 100%);
+  box-shadow: 0 14px 32px rgba(2, 6, 23, 0.45);
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.admin-hero-eyebrow {
+  margin: 0;
+  color: #f89a62;
+  font-size: 0.83rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.admin-hero-title {
+  margin: 6px 0 6px;
+  color: #f8fafc;
+  font-size: clamp(1.25rem, 2.6vw, 1.75rem);
+}
+
+.admin-hero-subtitle {
+  margin: 0;
+  color: #95a5bf;
+  font-size: 0.95rem;
+  max-width: 700px;
+}
+
+.admin-active-section-badge {
+  border: 1px solid rgba(255, 127, 48, 0.5);
+  border-radius: 12px;
+  background: rgba(255, 127, 48, 0.12);
+  padding: 10px 12px;
+  min-width: 172px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.admin-active-section-badge span {
+  display: block;
+  font-size: 0.78rem;
+  color: #fdba8c;
+  margin-bottom: 2px;
+}
+
+.admin-active-section-badge strong {
+  color: #fff;
+  font-size: 1rem;
+}
+
+.admin-tabs-nav {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.admin-tab-btn {
+  min-height: 86px;
+  border: 1px solid rgba(45, 56, 82, 0.92);
+  background: linear-gradient(180deg, #111a2b 0%, #0b1220 100%);
+  border-radius: 14px;
+  color: #d9e2f0;
+  padding: 12px;
+  justify-content: flex-start;
+  align-items: flex-start;
+  text-align: left;
+  gap: 10px;
+}
+
+.admin-tab-btn:hover {
+  border-color: rgba(255, 127, 48, 0.5);
+  transform: translateY(-1px);
+}
+
+.admin-tab-btn.active {
+  color: #fff;
+  border-color: rgba(255, 127, 48, 0.8);
+  background:
+    radial-gradient(circle at 90% 5%, rgba(255, 127, 48, 0.28), transparent 36%),
+    linear-gradient(180deg, #172238 0%, #0f1829 100%);
+  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.42), inset 0 0 0 1px rgba(255, 127, 48, 0.28);
+}
+
+.admin-tab-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.admin-tab-btn.active .admin-tab-icon {
+  background: rgba(255, 127, 48, 0.2);
+  color: #fff;
+}
+
+.admin-tab-content {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-tab-content strong {
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.admin-tab-content small {
+  color: #8fa3bf;
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.admin-mobile-tab-select {
+  display: none;
+  margin-bottom: 12px;
+}
+
+.admin-mobile-tab-select label {
+  display: block;
+  margin-bottom: 6px;
+  color: #a5b4cf;
+  font-size: 0.85rem;
+}
+
+.admin-mobile-tab-select select {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 8px 10px;
+}
+
+.admin-content-shell {
+  border: 1px solid rgba(45, 56, 82, 0.9);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(13, 22, 36, 0.94), rgba(9, 15, 25, 0.96));
+  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.4);
+  padding: 16px;
 }
 
 /* Responsive adjustments */
@@ -1450,6 +1613,29 @@ nav {
   .mobile-user-inline .commission-chip {
     font-size: 0.84rem;
     padding: 4px 9px;
+  }
+
+  .admin-shell {
+    padding-top: 82px;
+  }
+
+  .admin-hero-card {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px;
+  }
+
+  .admin-active-section-badge {
+    text-align: left;
+    width: 100%;
+  }
+
+  .admin-tabs-nav {
+    display: none;
+  }
+
+  .admin-mobile-tab-select {
+    display: block;
   }
 
   .filter-bar {
