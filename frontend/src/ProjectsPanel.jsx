@@ -40,6 +40,15 @@ const toDateText = (value) => {
   return `${year}-${month}-${day}`;
 };
 
+const compareDateText = (a, b) => String(a || '').localeCompare(String(b || ''));
+
+const clampDateTextToRange = (value, minDateText, maxDateText) => {
+  if (!value) return minDateText;
+  if (compareDateText(value, minDateText) < 0) return minDateText;
+  if (compareDateText(value, maxDateText) > 0) return maxDateText;
+  return value;
+};
+
 const formatDate = (value) => {
   if (!value) return '—';
   const date = new Date(`${value}T00:00:00`);
@@ -144,6 +153,7 @@ export default function ProjectsPanel({ token, user }) {
     version_bump: 'none',
     cost: ''
   });
+  const [editingTaskId, setEditingTaskId] = useState(null);
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -276,6 +286,105 @@ export default function ProjectsPanel({ token, user }) {
     }
     return map;
   }, [visibleTasks]);
+
+  const monthDateBounds = useMemo(() => {
+    if (!Array.isArray(calendarCells) || calendarCells.length === 0) {
+      const fallback = toDateText(new Date());
+      return { min: fallback, max: fallback };
+    }
+    return {
+      min: toDateText(calendarCells[0]),
+      max: toDateText(calendarCells[calendarCells.length - 1])
+    };
+  }, [calendarCells]);
+
+  const tasksByDayKey = useMemo(() => {
+    const grouped = new Map();
+    for (const task of visibleTasks) {
+      const startDate = task.start_date || task.due_date || null;
+      const dueDate = task.due_date || task.start_date || null;
+      if (!startDate && !dueDate) continue;
+      const normalizedStart = startDate && dueDate
+        ? (compareDateText(startDate, dueDate) <= 0 ? startDate : dueDate)
+        : (startDate || dueDate);
+      const normalizedEnd = startDate && dueDate
+        ? (compareDateText(startDate, dueDate) <= 0 ? dueDate : startDate)
+        : (dueDate || startDate);
+      if (!normalizedStart || !normalizedEnd) continue;
+      if (compareDateText(normalizedEnd, monthDateBounds.min) < 0) continue;
+      if (compareDateText(normalizedStart, monthDateBounds.max) > 0) continue;
+      const effectiveStart = clampDateTextToRange(normalizedStart, monthDateBounds.min, monthDateBounds.max);
+      const effectiveEnd = clampDateTextToRange(normalizedEnd, monthDateBounds.min, monthDateBounds.max);
+      const startIndex = Math.max(0, Math.floor(compareDateText(effectiveStart, monthDateBounds.min) === 0 ? 0 : (new Date(`${effectiveStart}T00:00:00`) - new Date(`${monthDateBounds.min}T00:00:00`)) / 86400000));
+      const endIndex = Math.max(startIndex, Math.floor(compareDateText(effectiveEnd, monthDateBounds.min) === 0 ? 0 : (new Date(`${effectiveEnd}T00:00:00`) - new Date(`${monthDateBounds.min}T00:00:00`)) / 86400000));
+      const safeStart = Math.max(0, Math.min(41, startIndex));
+      const safeEnd = Math.max(safeStart, Math.min(41, endIndex));
+      for (let day = safeStart; day <= safeEnd; day += 1) {
+        if (!grouped.has(day)) grouped.set(day, []);
+        grouped.get(day).push({
+          task,
+          startIndex: safeStart,
+          endIndex: safeEnd,
+          isStart: day === safeStart,
+          isEnd: day === safeEnd
+        });
+      }
+    }
+    for (const [key, entries] of grouped.entries()) {
+      entries.sort((a, b) => {
+        if (a.startIndex !== b.startIndex) return a.startIndex - b.startIndex;
+        if (a.endIndex !== b.endIndex) return b.endIndex - a.endIndex;
+        return String(a.task.title || '').localeCompare(String(b.task.title || ''), 'es', { sensitivity: 'base' });
+      });
+      grouped.set(key, entries);
+    }
+    return grouped;
+  }, [visibleTasks, monthDateBounds]);
+
+  const calendarRowsByDay = useMemo(() => {
+    const rowsByDay = Array.from({ length: 42 }, () => []);
+    const rangeEntries = [];
+    const seen = new Set();
+    for (const dayEntries of tasksByDayKey.values()) {
+      for (const entry of dayEntries) {
+        if (!entry?.task?.id) continue;
+        if (seen.has(entry.task.id)) continue;
+        seen.add(entry.task.id);
+        rangeEntries.push({
+          task: entry.task,
+          startIndex: entry.startIndex,
+          endIndex: entry.endIndex
+        });
+      }
+    }
+    rangeEntries.sort((a, b) => {
+      if (a.startIndex !== b.startIndex) return a.startIndex - b.startIndex;
+      if (a.endIndex !== b.endIndex) return b.endIndex - a.endIndex;
+      return String(a.task.title || '').localeCompare(String(b.task.title || ''), 'es', { sensitivity: 'base' });
+    });
+    for (const item of rangeEntries) {
+      let lane = 0;
+      for (; lane < 8; lane += 1) {
+        let overlaps = false;
+        for (let day = item.startIndex; day <= item.endIndex; day += 1) {
+          if (rowsByDay[day][lane]) {
+            overlaps = true;
+            break;
+          }
+        }
+        if (!overlaps) break;
+      }
+      const chosenLane = Math.min(lane, 7);
+      for (let day = item.startIndex; day <= item.endIndex; day += 1) {
+        rowsByDay[day][chosenLane] = {
+          ...item,
+          isStart: day === item.startIndex,
+          isEnd: day === item.endIndex
+        };
+      }
+    }
+    return rowsByDay;
+  }, [tasksByDayKey]);
 
   const selectedDateTasks = useMemo(
     () => tasksByDate.get(selectedDate) || [],
@@ -412,6 +521,67 @@ export default function ProjectsPanel({ token, user }) {
       await loadDashboard();
     } catch (err) {
       setError(err.message || 'No se pudo actualizar la tarea');
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  };
+
+  const startEditTask = (task) => {
+    if (!task) return;
+    setEditingTaskId(task.id);
+    setSelectedProjectId(String(task.project_id || selectedProjectId || ''));
+    setTaskForm({
+      project_id: String(task.project_id || ''),
+      title: String(task.title || ''),
+      description: String(task.description || ''),
+      assignee_user_id: task.assignee_user_id ? String(task.assignee_user_id) : '',
+      start_date: task.start_date || '',
+      due_date: task.due_date || '',
+      status: normalizeStatusForForm(task.status),
+      progress_percent: Number(task.progress_percent || 0),
+      task_type: normalizeTaskTypeForForm(task.task_type),
+      version_bump: normalizeVersionBumpForForm(task.version_bump),
+      cost: task.cost !== null && task.cost !== undefined ? String(task.cost) : ''
+    });
+    setEditorMode('tasks');
+    setSidePanelOpen(true);
+  };
+
+  const cancelEditTask = () => {
+    setEditingTaskId(null);
+    setTaskForm((prev) => ({
+      ...prev,
+      title: '',
+      description: '',
+      assignee_user_id: '',
+      start_date: '',
+      due_date: '',
+      status: 'pendiente',
+      progress_percent: 0,
+      task_type: 'rutina',
+      version_bump: 'none',
+      cost: ''
+    }));
+  };
+
+  const deleteTask = async (task) => {
+    if (!task?.id) return;
+    if (!window.confirm(`¿Eliminar la tarea "${task.title}"?`)) return;
+    setUpdatingTaskId(task.id);
+    setError('');
+    setNotice('');
+    try {
+      await apiRequest(`/api/projects/tasks/${task.id}`, {
+        method: 'DELETE',
+        token
+      });
+      if (editingTaskId === task.id) {
+        cancelEditTask();
+      }
+      setNotice(`Tarea "${task.title}" eliminada`);
+      await loadDashboard();
+    } catch (err) {
+      setError(err.message || 'No se pudo eliminar la tarea');
     } finally {
       setUpdatingTaskId(null);
     }
@@ -587,8 +757,57 @@ export default function ProjectsPanel({ token, user }) {
                 </button>
               </form>
             ) : (
-              <form onSubmit={submitTask} style={{ display: 'grid', gap: '8px' }}>
-                <h4 style={{ margin: 0, color: '#e2e8f0' }}>Nueva tarea</h4>
+              <form
+                onSubmit={async (event) => {
+                  if (!editingTaskId) {
+                    await submitTask(event);
+                    return;
+                  }
+                  event.preventDefault();
+                  const projectId = Number.parseInt(taskForm.project_id || selectedProjectId, 10);
+                  if (!Number.isInteger(projectId) || projectId <= 0) {
+                    setError('Selecciona un proyecto para guardar la tarea');
+                    return;
+                  }
+                  if (!taskForm.title.trim()) {
+                    setError('Escribe un título para la tarea');
+                    return;
+                  }
+                  setSavingTask(true);
+                  setError('');
+                  setNotice('');
+                  try {
+                    await apiRequest(`/api/projects/tasks/${editingTaskId}`, {
+                      method: 'PATCH',
+                      token,
+                      body: {
+                        project_id: projectId,
+                        title: taskForm.title.trim(),
+                        description: taskForm.description.trim() || null,
+                        assignee_user_id: taskForm.assignee_user_id ? Number(taskForm.assignee_user_id) : null,
+                        start_date: taskForm.start_date || null,
+                        due_date: taskForm.due_date || null,
+                        status: taskForm.status,
+                        progress_percent: Number(taskForm.progress_percent || 0),
+                        task_type: taskForm.task_type,
+                        version_bump: taskForm.version_bump,
+                        cost: parseMoney(taskForm.cost)
+                      }
+                    });
+                    setNotice('Tarea actualizada correctamente');
+                    cancelEditTask();
+                    await loadDashboard();
+                  } catch (err) {
+                    setError(err.message || 'No se pudo actualizar la tarea');
+                  } finally {
+                    setSavingTask(false);
+                  }
+                }}
+                style={{ display: 'grid', gap: '8px' }}
+              >
+                <h4 style={{ margin: 0, color: '#e2e8f0' }}>
+                  {editingTaskId ? `Editando tarea #${editingTaskId}` : 'Nueva tarea'}
+                </h4>
                 <select
                   value={taskForm.project_id || selectedProjectId}
                   onChange={(event) => {
@@ -689,9 +908,26 @@ export default function ProjectsPanel({ token, user }) {
                     <option key={value} value={value}>{VERSION_BUMP_LABELS[value] || value}</option>
                   ))}
                 </select>
-                <button type="submit" className="btn" disabled={savingTask || projects.length === 0} style={{ background: ACCENT, color: '#fff' }}>
-                  {savingTask ? 'Guardando...' : 'Crear tarea'}
-                </button>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {editingTaskId && (
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={cancelEditTask}
+                      style={{ background: '#475569', color: '#fff', minHeight: '36px', padding: '8px 12px' }}
+                    >
+                      Cancelar edición
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="btn"
+                    disabled={savingTask || projects.length === 0}
+                    style={{ background: ACCENT, color: '#fff', minHeight: '36px', padding: '8px 14px' }}
+                  >
+                    {savingTask ? 'Guardando...' : editingTaskId ? 'Guardar cambios' : 'Crear tarea'}
+                  </button>
+                </div>
               </form>
             )}
 
@@ -827,16 +1063,35 @@ export default function ProjectsPanel({ token, user }) {
                       ) : (
                         <span style={{ color: '#86efac', fontSize: '0.74rem' }}>Con fecha</span>
                       )}
-                      {hasDate && (
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {hasDate && (
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => focusTaskOnCalendar(task)}
+                            style={{ minHeight: '30px', padding: '5px 9px', background: '#1f3b70', color: '#dbeafe', fontSize: '0.76rem' }}
+                          >
+                            Ver en calendario
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="btn"
-                          onClick={() => focusTaskOnCalendar(task)}
-                          style={{ minHeight: '30px', padding: '5px 9px', background: '#1f3b70', color: '#dbeafe', fontSize: '0.76rem' }}
+                          onClick={() => startEditTask(task)}
+                          style={{ minHeight: '30px', padding: '5px 9px', background: '#1e40af', color: '#dbeafe', fontSize: '0.76rem' }}
                         >
-                          Ver en calendario
+                          Editar
                         </button>
-                      )}
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => deleteTask(task)}
+                          disabled={updatingTaskId === task.id}
+                          style={{ minHeight: '30px', padding: '5px 9px', background: '#7f1d1d', color: '#fecaca', fontSize: '0.76rem' }}
+                        >
+                          {updatingTaskId === task.id ? '...' : 'Eliminar'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -870,9 +1125,10 @@ export default function ProjectsPanel({ token, user }) {
             {DAY_LABELS.map((day) => (
               <div key={day} style={{ textAlign: 'center', color: '#96aac6', fontWeight: 700, fontSize: '0.78rem' }}>{day}</div>
             ))}
-            {calendarCells.map((day) => {
+            {calendarCells.map((day, dayIndex) => {
               const dateText = toDateText(day);
               const dayTasks = tasksByDate.get(dateText) || [];
+              const dayRows = calendarRowsByDay[dayIndex] || [];
               const isCurrentMonth = day.getMonth() === monthCursor.getMonth();
               const isSelected = dateText === selectedDate;
               return (
@@ -884,7 +1140,7 @@ export default function ProjectsPanel({ token, user }) {
                     border: `1px solid ${isSelected ? 'rgba(255, 127, 48, 0.9)' : 'rgba(71, 85, 105, 0.62)'}`,
                     borderRadius: '11px',
                     background: isSelected ? 'rgba(255, 127, 48, 0.16)' : '#0f172a',
-                    minHeight: '110px',
+                    minHeight: '136px',
                     padding: '8px 7px',
                     display: 'grid',
                     alignContent: 'start',
@@ -895,25 +1151,35 @@ export default function ProjectsPanel({ token, user }) {
                 >
                   <div style={{ fontSize: '0.82rem', fontWeight: 700 }}>{day.getDate()}</div>
                   <div style={{ display: 'grid', gap: '3px' }}>
-                    {dayTasks.slice(0, 3).map((task) => (
-                      <div
-                        key={`calendar-${dateText}-${task.id}`}
-                        style={{
-                          background: STATUS_COLORS[task.status] || '#2563eb',
-                          color: '#fff',
-                          borderRadius: '999px',
-                          padding: '2px 7px',
-                          fontSize: '0.67rem',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
-                        }}
-                      >
-                        {task.title}
-                      </div>
-                    ))}
-                    {dayTasks.length > 3 && (
-                      <div style={{ fontSize: '0.68rem', color: '#9cb0cb' }}>+{dayTasks.length - 3} más</div>
+                    {dayRows.slice(0, 5).map((row, rowIndex) => {
+                      if (!row) return <div key={`empty-${dateText}-${rowIndex}`} style={{ minHeight: '18px' }} />;
+                      const color = STATUS_COLORS[row.task.status] || '#2563eb';
+                      return (
+                        <div
+                          key={`bar-${dateText}-${row.task.id}-${rowIndex}`}
+                          style={{
+                            background: color,
+                            color: '#fff',
+                            borderRadius: row.isStart || row.isEnd ? '999px' : '3px',
+                            padding: row.isStart || row.isEnd ? '2px 7px' : '2px 4px',
+                            fontSize: '0.66rem',
+                            minHeight: '18px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: row.isStart ? 'flex-start' : 'center',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            opacity: row.task.status === 'completada' ? 0.9 : 1
+                          }}
+                          title={`${row.task.title} (${formatDate(row.task.start_date)} - ${formatDate(row.task.due_date)})`}
+                        >
+                          {row.isStart ? row.task.title : ''}
+                        </div>
+                      );
+                    })}
+                    {dayTasks.length > 5 && (
+                      <div style={{ fontSize: '0.68rem', color: '#9cb0cb' }}>+{dayTasks.length - 5} más</div>
                     )}
                   </div>
                 </button>
