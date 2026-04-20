@@ -27,6 +27,8 @@ const STATUS_COLORS = {
 };
 const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
 const MONTH_LABELS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const PRIMARY = '#ff7f30';
+const ACCENT = '#2563eb';
 
 const toDateText = (value) => {
   if (!value) return '';
