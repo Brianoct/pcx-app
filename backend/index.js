@@ -1023,6 +1023,20 @@ const formatProjectVersion = (row = {}) => {
   return `${major}.${minor}.${patch}`;
 };
 
+const normalizeProjectDateOutput = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return value.toISOString().slice(0, 10);
+  }
+  const text = String(value).trim();
+  const directMatch = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (directMatch) return directMatch[1];
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+};
+
 const mapProjectRow = (row = {}) => ({
   id: Number(row.id),
   name: String(row.name || '').trim(),
@@ -1053,8 +1067,8 @@ const mapProjectTaskRow = (row = {}) => ({
   assignee_name: row.assignee_user_id
     ? resolveUserDisplayName({ display_name: row.assignee_name, email: row.assignee_email }, 'Sin asignar')
     : 'Sin asignar',
-  start_date: row.start_date || null,
-  due_date: row.due_date || null,
+  start_date: normalizeProjectDateOutput(row.start_date),
+  due_date: normalizeProjectDateOutput(row.due_date),
   status: normalizeProjectTaskStatus(row.status || '') || 'pendiente',
   progress_percent: Math.max(0, Math.min(100, Number.parseInt(row.progress_percent, 10) || 0)),
   task_type: normalizeProjectTaskType(row.task_type || '') || 'rutina',
