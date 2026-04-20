@@ -40,6 +40,16 @@ const toDateText = (value) => {
   return `${year}-${month}-${day}`;
 };
 
+const normalizeTaskDateText = (value) => {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (match?.[1]) return match[1];
+  const parsed = toDateText(raw);
+  return parsed || null;
+};
+
 const compareDateText = (a, b) => String(a || '').localeCompare(String(b || ''));
 
 const clampDateTextToRange = (value, minDateText, maxDateText) => {
@@ -50,8 +60,9 @@ const clampDateTextToRange = (value, minDateText, maxDateText) => {
 };
 
 const formatDate = (value) => {
-  if (!value) return '—';
-  const date = new Date(`${value}T00:00:00`);
+  const normalized = normalizeTaskDateText(value);
+  if (!normalized) return '—';
+  const date = new Date(`${normalized}T00:00:00`);
   if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleDateString('es-BO', { day: '2-digit', month: 'short', year: 'numeric' });
 };
@@ -265,8 +276,10 @@ export default function ProjectsPanel({ token, user }) {
       map.get(dateText).push(task);
     };
     for (const task of visibleTasks) {
-      const startDate = task.start_date || task.due_date || null;
-      const dueDate = task.due_date || task.start_date || null;
+      const startRaw = normalizeTaskDateText(task.start_date);
+      const dueRaw = normalizeTaskDateText(task.due_date);
+      const startDate = startRaw || dueRaw || null;
+      const dueDate = dueRaw || startRaw || null;
       if (!startDate && !dueDate) continue;
       if (startDate && dueDate && startDate <= dueDate) {
         const start = new Date(`${startDate}T00:00:00`);
@@ -301,8 +314,10 @@ export default function ProjectsPanel({ token, user }) {
   const tasksByDayKey = useMemo(() => {
     const grouped = new Map();
     for (const task of visibleTasks) {
-      const startDate = task.start_date || task.due_date || null;
-      const dueDate = task.due_date || task.start_date || null;
+      const startRaw = normalizeTaskDateText(task.start_date);
+      const dueRaw = normalizeTaskDateText(task.due_date);
+      const startDate = startRaw || dueRaw || null;
+      const dueDate = dueRaw || startRaw || null;
       if (!startDate && !dueDate) continue;
       const normalizedStart = startDate && dueDate
         ? (compareDateText(startDate, dueDate) <= 0 ? startDate : dueDate)
@@ -392,7 +407,7 @@ export default function ProjectsPanel({ token, user }) {
   );
 
   const tasksWithoutDate = useMemo(
-    () => visibleTasks.filter((task) => !task.start_date && !task.due_date),
+    () => visibleTasks.filter((task) => !normalizeTaskDateText(task.start_date) && !normalizeTaskDateText(task.due_date)),
     [visibleTasks]
   );
 
@@ -535,8 +550,8 @@ export default function ProjectsPanel({ token, user }) {
       title: String(task.title || ''),
       description: String(task.description || ''),
       assignee_user_id: task.assignee_user_id ? String(task.assignee_user_id) : '',
-      start_date: task.start_date || '',
-      due_date: task.due_date || '',
+      start_date: normalizeTaskDateText(task.start_date) || '',
+      due_date: normalizeTaskDateText(task.due_date) || '',
       status: normalizeStatusForForm(task.status),
       progress_percent: Number(task.progress_percent || 0),
       task_type: normalizeTaskTypeForForm(task.task_type),
@@ -588,7 +603,7 @@ export default function ProjectsPanel({ token, user }) {
   };
 
   const focusTaskOnCalendar = (task) => {
-    const targetDate = task?.due_date || task?.start_date;
+    const targetDate = normalizeTaskDateText(task?.due_date) || normalizeTaskDateText(task?.start_date);
     if (!targetDate) return;
     setSelectedDate(targetDate);
     const date = new Date(`${targetDate}T00:00:00`);
@@ -1047,7 +1062,7 @@ export default function ProjectsPanel({ token, user }) {
               ) : visibleTasks.length === 0 ? (
                 <div style={{ color: '#9fb2cc' }}>No hay tareas registradas para esta vista.</div>
               ) : visibleTasks.map((task) => {
-                const hasDate = Boolean(task.start_date || task.due_date);
+                const hasDate = Boolean(normalizeTaskDateText(task.start_date) || normalizeTaskDateText(task.due_date));
                 return (
                   <div key={`list-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.6)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
