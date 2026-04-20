@@ -282,6 +282,11 @@ export default function ProjectsPanel({ token, user }) {
     [tasksByDate, selectedDate]
   );
 
+  const tasksWithoutDate = useMemo(
+    () => visibleTasks.filter((task) => !task.start_date && !task.due_date),
+    [visibleTasks]
+  );
+
   const submitProject = async (event) => {
     event.preventDefault();
     if (!projectForm.name.trim()) {
@@ -336,6 +341,11 @@ export default function ProjectsPanel({ token, user }) {
     setError('');
     setNotice('');
     try {
+      const fallbackDate = selectedDate || toDateText(new Date());
+      const hasProvidedDate = Boolean(taskForm.start_date || taskForm.due_date);
+      const createStartDate = taskForm.start_date || (!hasProvidedDate ? fallbackDate : null);
+      const createDueDate = taskForm.due_date || (!hasProvidedDate ? fallbackDate : null);
+
       await apiRequest(`/api/projects/${projectId}/tasks`, {
         method: 'POST',
         token,
@@ -343,8 +353,8 @@ export default function ProjectsPanel({ token, user }) {
           title: taskForm.title.trim(),
           description: taskForm.description.trim() || null,
           assignee_user_id: taskForm.assignee_user_id ? Number(taskForm.assignee_user_id) : null,
-          start_date: taskForm.start_date || null,
-          due_date: taskForm.due_date || null,
+          start_date: createStartDate,
+          due_date: createDueDate,
           status: taskForm.status,
           progress_percent: Number(taskForm.progress_percent || 0),
           task_type: taskForm.task_type,
@@ -366,6 +376,14 @@ export default function ProjectsPanel({ token, user }) {
         version_bump: 'none',
         cost: ''
       }));
+      const focusDate = createDueDate || createStartDate;
+      if (focusDate) {
+        setSelectedDate(focusDate);
+        const focus = new Date(`${focusDate}T00:00:00`);
+        if (!Number.isNaN(focus.getTime())) {
+          setMonthCursor(new Date(focus.getFullYear(), focus.getMonth(), 1));
+        }
+      }
       await loadDashboard();
     } catch (err) {
       setError(err.message || 'No se pudo crear la tarea');
@@ -397,6 +415,15 @@ export default function ProjectsPanel({ token, user }) {
     } finally {
       setUpdatingTaskId(null);
     }
+  };
+
+  const focusTaskOnCalendar = (task) => {
+    const targetDate = task?.due_date || task?.start_date;
+    if (!targetDate) return;
+    setSelectedDate(targetDate);
+    const date = new Date(`${targetDate}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return;
+    setMonthCursor(new Date(date.getFullYear(), date.getMonth(), 1));
   };
 
   return (
@@ -766,6 +793,54 @@ export default function ProjectsPanel({ token, user }) {
             <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
               <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Progreso medio</div>
               <strong style={{ color: '#60a5fa', fontSize: '1.08rem' }}>{tasksSummary.avgProgress}%</strong>
+            </div>
+          </div>
+
+          <div style={{ border: '1px solid rgba(71, 85, 105, 0.62)', borderRadius: '12px', background: '#0f172a', padding: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+              <h4 style={{ margin: 0, color: '#f8fafc' }}>Lista de tareas ({visibleTasks.length})</h4>
+              {tasksWithoutDate.length > 0 && (
+                <span style={{ color: '#fbbf24', fontSize: '0.78rem' }}>
+                  {tasksWithoutDate.length} sin fecha (no salen en calendario)
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'grid', gap: '8px', maxHeight: '220px', overflowY: 'auto', paddingRight: '2px' }}>
+              {loading ? (
+                <div style={{ color: '#9fb2cc' }}>Cargando tareas...</div>
+              ) : visibleTasks.length === 0 ? (
+                <div style={{ color: '#9fb2cc' }}>No hay tareas registradas para esta vista.</div>
+              ) : visibleTasks.map((task) => {
+                const hasDate = Boolean(task.start_date || task.due_date);
+                return (
+                  <div key={`list-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.6)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                      <strong style={{ color: '#f8fafc' }}>{task.title}</strong>
+                      <span style={{ color: '#93a5be', fontSize: '0.75rem' }}>{task.project_name}</span>
+                    </div>
+                    <div style={{ marginTop: '4px', color: '#94a9c3', fontSize: '0.76rem' }}>
+                      Estado: {STATUS_LABELS[task.status] || task.status} · Inicio: {formatDate(task.start_date)} · Entrega: {formatDate(task.due_date)}
+                    </div>
+                    <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                      {!hasDate ? (
+                        <span style={{ color: '#fbbf24', fontSize: '0.74rem' }}>Sin fecha en calendario</span>
+                      ) : (
+                        <span style={{ color: '#86efac', fontSize: '0.74rem' }}>Con fecha</span>
+                      )}
+                      {hasDate && (
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => focusTaskOnCalendar(task)}
+                          style={{ minHeight: '30px', padding: '5px 9px', background: '#1f3b70', color: '#dbeafe', fontSize: '0.76rem' }}
+                        >
+                          Ver en calendario
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
