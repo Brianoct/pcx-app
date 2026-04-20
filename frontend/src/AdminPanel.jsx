@@ -1826,13 +1826,44 @@ function AdminPanel({ token }) {
   };
   const [activeTab, setActiveTab] = useState(() => resolveTab(location.search));
   const tabs = [
-    { key: 'usuarios', label: 'Usuarios' },
-    { key: 'productos', label: 'Productos Cotizador' },
-    { key: 'roles', label: 'Configuración de Roles' },
-    { key: 'comisiones', label: 'Comisiones' },
-    { key: 'calendario', label: 'Calendario' },
-    { key: 'estadisticas', label: 'Estadísticas' }
+    {
+      key: 'usuarios',
+      label: 'Usuarios',
+      icon: 'U',
+      hint: 'Altas, edición y estado del equipo'
+    },
+    {
+      key: 'roles',
+      label: 'Roles',
+      icon: 'R',
+      hint: 'Permisos por panel y perfil'
+    },
+    {
+      key: 'productos',
+      label: 'Productos',
+      icon: 'P',
+      hint: 'Catálogo usado por cotizador'
+    },
+    {
+      key: 'comisiones',
+      label: 'Comisiones',
+      icon: 'C',
+      hint: 'Reglas por rol y control calidad'
+    },
+    {
+      key: 'calendario',
+      label: 'Calendario',
+      icon: 'K',
+      hint: 'Permisos y ausencias del equipo'
+    },
+    {
+      key: 'estadisticas',
+      label: 'Estadísticas',
+      icon: 'E',
+      hint: 'Indicadores mensuales de negocio'
+    }
   ];
+  const activeTabMeta = tabs.find((tab) => tab.key === activeTab) || tabs[0];
 
   useEffect(() => {
     const nextTab = resolveTab(location.search);
@@ -1848,39 +1879,54 @@ function AdminPanel({ token }) {
   };
 
   return (
-    <div style={{ padding: '24px 16px 16px', maxWidth: '1400px', margin: '0 auto' }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '10px',
-        marginBottom: '16px'
-      }}>
-        <h2 style={{ margin: 0 }}>Panel Admin</h2>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ color: '#94a3b8', fontSize: '0.92rem' }}>Sección</span>
-          <select
-            value={activeTab}
-            onChange={(e) => changeTab(e.target.value)}
-            style={{
-              minWidth: '220px',
-              minHeight: '40px',
-              padding: '8px 10px',
-              borderRadius: '8px',
-              border: '1px solid #334155',
-              background: '#0f172a',
-              color: '#e2e8f0'
-            }}
-          >
-            {tabs.map((tab) => (
-              <option key={tab.key} value={tab.key}>{tab.label}</option>
-            ))}
-          </select>
+    <div className="admin-shell">
+      <div className="admin-hero-card">
+        <div>
+          <p className="admin-hero-eyebrow">Administración PCX</p>
+          <h2 className="admin-hero-title">Centro de control</h2>
+          <p className="admin-hero-subtitle">
+            Gestiona usuarios, permisos, catálogo, comisiones y métricas desde una sola vista clara.
+          </p>
+        </div>
+        <div className="admin-active-section-badge">
+          <span>Sección activa</span>
+          <strong>{activeTabMeta.label}</strong>
         </div>
       </div>
 
-      <div>
+      <div className="admin-tabs-nav" role="tablist" aria-label="Secciones del panel admin">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.key}
+            className={`admin-tab-btn ${activeTab === tab.key ? 'active' : ''}`}
+            onClick={() => changeTab(tab.key)}
+          >
+            <span className="admin-tab-icon" aria-hidden="true">{tab.icon}</span>
+            <span className="admin-tab-content">
+              <strong>{tab.label}</strong>
+              <small>{tab.hint}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="admin-mobile-tab-select">
+        <label htmlFor="admin-tab-select">Sección</label>
+        <select
+          id="admin-tab-select"
+          value={activeTab}
+          onChange={(e) => changeTab(e.target.value)}
+        >
+          {tabs.map((tab) => (
+            <option key={tab.key} value={tab.key}>{tab.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="admin-content-shell">
         {activeTab === 'usuarios' && <UserManagement token={token} />}
         {activeTab === 'productos' && <ProductCatalogAdmin token={token} />}
         {activeTab === 'roles' && <RoleConfiguration token={token} />}

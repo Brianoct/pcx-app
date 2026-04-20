@@ -100,7 +100,6 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const [desktopMoreOpen, setDesktopMoreOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const isAdminTabPath = location.pathname === '/admin';
   const canQuote = canAccessPanel(access, 'cotizar');
   const canSeeHistory = canAccessPanel(access, 'historialGlobal') || canAccessPanel(access, 'historialIndividual');
   const canSeePerformance = canAccessPanel(access, 'rendimientoGlobal') || canAccessPanel(access, 'rendimientoIndividual');
@@ -135,11 +134,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
 
   const adminCoreNavItems = isAdminUser
     ? [
-        { to: '/admin?tab=usuarios', label: 'Usuarios' },
-        { to: '/admin?tab=roles', label: 'Roles' },
-        { to: '/admin?tab=productos', label: 'Productos' },
-        { to: '/admin?tab=comisiones', label: 'Comisiones' },
-        { to: '/admin?tab=estadisticas', label: 'Estadísticas' }
+        { to: '/admin', label: 'Admin' }
       ]
     : [];
 
@@ -192,7 +187,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     : roleOrderedSharedNavItems;
 
   const MAX_DESKTOP_VISIBLE = isAdminUser
-    ? (isAdminTabPath ? adminCoreNavItems.length : 0)
+    ? adminCoreNavItems.length
     : 7;
   const desktopPrimaryItems = allNavItems.slice(0, MAX_DESKTOP_VISIBLE);
   const desktopOverflowItems = allNavItems.slice(MAX_DESKTOP_VISIBLE);
