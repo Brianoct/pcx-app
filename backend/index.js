@@ -3414,6 +3414,57 @@ app.post('/api/projects/:projectId/tasks', authenticateToken, async (req, res) =
   }
 });
 
+app.delete('/api/projects/tasks/:taskId', authenticateToken, async (req, res) => {
+  const taskId = Number.parseInt(req.params.taskId, 10);
+  if (!Number.isInteger(taskId) || taskId <= 0) {
+    return res.status(400).json({ error: 'Tarea inválida' });
+  }
+
+  const client = await pool.connect();
+  try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const scope = getProjectsAccessScope(userContext, access);
+    if (scope.error) return res.status(403).json({ error: scope.error });
+
+    await ensureProjectsTables();
+    await client.query('BEGIN');
+    const currentRes = await client.query(
+      `SELECT t.id, t.title, t.project_id, p.is_active
+       FROM project_tasks t
+       INNER JOIN projects p ON p.id = t.project_id
+       WHERE t.id = $1
+       FOR UPDATE`,
+      [taskId]
+    );
+    if (currentRes.rowCount === 0) {
+      throw createHttpError(404, 'Tarea no encontrada');
+    }
+    const current = currentRes.rows[0];
+    if (current.is_active === false) {
+      throw createHttpError(400, 'No se puede eliminar una tarea de un proyecto inactivo');
+    }
+
+    await client.query(
+      `DELETE FROM project_tasks
+       WHERE id = $1`,
+      [taskId]
+    );
+    await client.query('COMMIT');
+    res.json({
+      message: 'Tarea eliminada',
+      task_id: taskId
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(err?.statusCode || 500).json({ error: err.message || 'No se pudo eliminar la tarea' });
+  } finally {
+    client.release();
+  }
+});
+
 app.patch('/api/projects/tasks/:taskId', authenticateToken, async (req, res) => {
   const taskId = Number.parseInt(req.params.taskId, 10);
   if (!Number.isInteger(taskId) || taskId <= 0) {
