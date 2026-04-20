@@ -27,13 +27,6 @@ const STATUS_COLORS = {
 };
 const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
 const MONTH_LABELS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-const WINDOW_BG = '#f8fafc';
-const CARD_BG = '#ffffff';
-const CARD_BORDER = '#dbe4ee';
-const TEXT_DARK = '#0f172a';
-const TEXT_MUTED = '#64748b';
-const PRIMARY = '#1d4ed8';
-const ACCENT = '#0ea5e9';
 
 const toDateText = (value) => {
   if (!value) return '';
@@ -81,6 +74,27 @@ const moneyFormatter = new Intl.NumberFormat('es-BO', {
   maximumFractionDigits: 2
 });
 
+const baseFieldStyle = {
+  minHeight: '38px',
+  borderRadius: '10px',
+  border: '1px solid rgba(71, 85, 105, 0.72)',
+  background: '#0f172a',
+  color: '#f8fafc',
+  padding: '8px 10px'
+};
+
+const splitColumns = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: '8px'
+};
+
+const tripleColumns = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: '8px'
+};
+
 export default function ProjectsPanel({ token, user }) {
   const [loading, setLoading] = useState(true);
   const [savingProject, setSavingProject] = useState(false);
@@ -104,6 +118,8 @@ export default function ProjectsPanel({ token, user }) {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [selectedDate, setSelectedDate] = useState(() => toDateText(new Date()));
+  const [editorMode, setEditorMode] = useState('tasks');
+  const [sidePanelOpen, setSidePanelOpen] = useState(true);
   const [projectForm, setProjectForm] = useState({
     name: '',
     description: '',
@@ -215,9 +231,6 @@ export default function ProjectsPanel({ token, user }) {
     const base = {
       total: visibleTasks.length,
       completed: 0,
-      pending: 0,
-      in_progress: 0,
-      blocked: 0,
       avgProgress: 0
     };
     if (visibleTasks.length === 0) return base;
@@ -225,9 +238,6 @@ export default function ProjectsPanel({ token, user }) {
     for (const task of visibleTasks) {
       progressSum += Number(task.progress_percent || 0);
       if (task.status === 'completada') base.completed += 1;
-      if (task.status === 'pendiente') base.pending += 1;
-      if (task.status === 'en_progreso') base.in_progress += 1;
-      if (task.status === 'bloqueada') base.blocked += 1;
     }
     base.avgProgress = Math.round(progressSum / visibleTasks.length);
     return base;
@@ -387,28 +397,27 @@ export default function ProjectsPanel({ token, user }) {
     }
   };
 
-  const panelStyle = {
-    background: WINDOW_BG,
-    border: `1px solid ${CARD_BORDER}`,
-    borderRadius: '14px',
-    boxShadow: '0 14px 30px rgba(15, 23, 42, 0.1)',
-    padding: '14px',
-    display: 'grid',
-    gap: '12px',
-    alignContent: 'start'
-  };
-
   return (
-    <div className="container" style={{ color: TEXT_DARK }}>
-      <h2 style={{ textAlign: 'center', margin: '18px 0', color: '#f87171' }}>Proyectos y Tareas</h2>
-      <p style={{ textAlign: 'center', color: '#94a3b8', marginBottom: '14px' }}>
-        Vista colaborativa para toda la empresa. Puedes crear proyectos por área, asignar tareas con costo y seguimiento por calendario.
-      </p>
+    <div className="container">
+      <section className="admin-hero-card" style={{ marginBottom: '14px' }}>
+        <div>
+          <p className="admin-hero-eyebrow">Gestión de proyectos</p>
+          <h2 className="admin-hero-title">Proyectos y Tareas</h2>
+          <p className="admin-hero-subtitle">
+            Calendario colaborativo con foco operativo. Administra proyectos y tareas desde un panel contextual.
+          </p>
+        </div>
+        <div className="admin-active-section-badge" style={{ textAlign: 'left', minWidth: '220px' }}>
+          <span>Vista actual</span>
+          <strong>Calendario mensual + tareas</strong>
+        </div>
+      </section>
 
       {(error || notice) && (
         <div
           className="card"
           style={{
+            marginBottom: '12px',
             border: `1px solid ${error ? '#ef4444' : '#16a34a'}`,
             background: error ? 'rgba(127,29,29,0.35)' : 'rgba(16,185,129,0.16)',
             color: error ? '#fecaca' : '#bbf7d0'
@@ -421,368 +430,368 @@ export default function ProjectsPanel({ token, user }) {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gridTemplateColumns: sidePanelOpen ? 'minmax(340px, 410px) minmax(0, 1fr)' : 'minmax(0, 1fr)',
           gap: '12px',
           alignItems: 'start'
         }}
       >
-        <section style={panelStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <h3 style={{ margin: 0, color: TEXT_DARK }}>1) Proyectos activos</h3>
-            <span style={{ color: TEXT_MUTED, fontSize: '0.86rem' }}>Liderado por áreas y versiones</span>
-          </div>
+        {sidePanelOpen && (
+          <aside
+            style={{
+              border: '1px solid rgba(45, 56, 82, 0.9)',
+              borderRadius: '16px',
+              background: 'linear-gradient(180deg, rgba(13, 22, 36, 0.96), rgba(9, 15, 25, 0.98))',
+              boxShadow: '0 14px 28px rgba(2, 6, 23, 0.42)',
+              padding: '12px',
+              display: 'grid',
+              gap: '10px',
+              position: 'sticky',
+              top: '76px',
+              maxHeight: 'calc(100vh - 96px)',
+              overflowY: 'auto'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <h3 style={{ margin: 0, color: '#f8fafc' }}>Panel de edición</h3>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setSidePanelOpen(false)}
+                style={{ minHeight: '32px', padding: '6px 10px', background: '#1f2a40', color: '#dbe7ff' }}
+              >
+                Ocultar
+              </button>
+            </div>
 
-          <form onSubmit={submitProject} style={{ display: 'grid', gap: '8px' }}>
-            <input
-              type="text"
-              value={projectForm.name}
-              onChange={(event) => setProjectForm((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="Nombre del proyecto"
-              style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-            />
-            <textarea
-              rows={2}
-              value={projectForm.description}
-              onChange={(event) => setProjectForm((prev) => ({ ...prev, description: event.target.value }))}
-              placeholder="Descripción / objetivo"
-              style={{ borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-            />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
-              <select
-                value={projectForm.area}
-                onChange={(event) => setProjectForm((prev) => ({ ...prev, area: event.target.value }))}
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
+            <div style={{ display: 'inline-flex', border: '1px solid rgba(71, 85, 105, 0.75)', borderRadius: '999px', overflow: 'hidden' }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setEditorMode('projects')}
+                style={{
+                  minHeight: '36px',
+                  borderRadius: 0,
+                  background: editorMode === 'projects' ? PRIMARY : 'transparent',
+                  color: editorMode === 'projects' ? '#fff' : '#9fb2cc'
+                }}
               >
-                {areas.map((area) => <option key={area} value={area}>{area}</option>)}
-              </select>
-              <select
-                value={projectForm.work_type}
-                onChange={(event) => setProjectForm((prev) => ({ ...prev, work_type: event.target.value }))}
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
+                Proyectos
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setEditorMode('tasks')}
+                style={{
+                  minHeight: '36px',
+                  borderRadius: 0,
+                  background: editorMode === 'tasks' ? PRIMARY : 'transparent',
+                  color: editorMode === 'tasks' ? '#fff' : '#9fb2cc'
+                }}
               >
-                {taskTypeValues.map((type) => (
-                  <option key={type} value={type}>{TASK_TYPE_LABELS[type] || type}</option>
-                ))}
-              </select>
+                Tareas
+              </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
-              <input
-                type="number"
-                min="0"
-                value={projectForm.version_major}
-                onChange={(event) => setProjectForm((prev) => ({ ...prev, version_major: event.target.value }))}
-                placeholder="Major"
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-              />
-              <input
-                type="number"
-                min="0"
-                value={projectForm.version_minor}
-                onChange={(event) => setProjectForm((prev) => ({ ...prev, version_minor: event.target.value }))}
-                placeholder="Minor"
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-              />
-              <input
-                type="number"
-                min="0"
-                value={projectForm.version_patch}
-                onChange={(event) => setProjectForm((prev) => ({ ...prev, version_patch: event.target.value }))}
-                placeholder="Patch"
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-              />
-            </div>
-            <button type="submit" className="btn" disabled={savingProject} style={{ background: PRIMARY, color: 'white' }}>
-              {savingProject ? 'Creando...' : 'Crear proyecto'}
-            </button>
-          </form>
 
-          <div style={{ height: '1px', background: CARD_BORDER, margin: '2px 0' }} />
+            {editorMode === 'projects' ? (
+              <form onSubmit={submitProject} style={{ display: 'grid', gap: '8px' }}>
+                <h4 style={{ margin: 0, color: '#e2e8f0' }}>Nuevo proyecto</h4>
+                <input
+                  type="text"
+                  value={projectForm.name}
+                  onChange={(event) => setProjectForm((prev) => ({ ...prev, name: event.target.value }))}
+                  placeholder="Nombre del proyecto"
+                  style={baseFieldStyle}
+                />
+                <textarea
+                  rows={2}
+                  value={projectForm.description}
+                  onChange={(event) => setProjectForm((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="Descripción / objetivo"
+                  style={{ ...baseFieldStyle, minHeight: '72px', resize: 'vertical' }}
+                />
+                <div style={splitColumns}>
+                  <select
+                    value={projectForm.area}
+                    onChange={(event) => setProjectForm((prev) => ({ ...prev, area: event.target.value }))}
+                    style={baseFieldStyle}
+                  >
+                    {areas.map((area) => <option key={area} value={area}>{area}</option>)}
+                  </select>
+                  <select
+                    value={projectForm.work_type}
+                    onChange={(event) => setProjectForm((prev) => ({ ...prev, work_type: event.target.value }))}
+                    style={baseFieldStyle}
+                  >
+                    {taskTypeValues.map((type) => (
+                      <option key={type} value={type}>{TASK_TYPE_LABELS[type] || type}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={tripleColumns}>
+                  <input
+                    type="number"
+                    min="0"
+                    value={projectForm.version_major}
+                    onChange={(event) => setProjectForm((prev) => ({ ...prev, version_major: event.target.value }))}
+                    placeholder="Major"
+                    style={baseFieldStyle}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    value={projectForm.version_minor}
+                    onChange={(event) => setProjectForm((prev) => ({ ...prev, version_minor: event.target.value }))}
+                    placeholder="Minor"
+                    style={baseFieldStyle}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    value={projectForm.version_patch}
+                    onChange={(event) => setProjectForm((prev) => ({ ...prev, version_patch: event.target.value }))}
+                    placeholder="Patch"
+                    style={baseFieldStyle}
+                  />
+                </div>
+                <button type="submit" className="btn" disabled={savingProject} style={{ background: PRIMARY, color: '#fff' }}>
+                  {savingProject ? 'Creando...' : 'Crear proyecto'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={submitTask} style={{ display: 'grid', gap: '8px' }}>
+                <h4 style={{ margin: 0, color: '#e2e8f0' }}>Nueva tarea</h4>
+                <select
+                  value={taskForm.project_id || selectedProjectId}
+                  onChange={(event) => {
+                    setSelectedProjectId(event.target.value);
+                    setTaskForm((prev) => ({ ...prev, project_id: event.target.value }));
+                  }}
+                  style={baseFieldStyle}
+                >
+                  <option value="" disabled>Selecciona proyecto</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>{project.name} · v{project.version}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={taskForm.title}
+                  onChange={(event) => setTaskForm((prev) => ({ ...prev, title: event.target.value }))}
+                  placeholder="Título de tarea"
+                  style={baseFieldStyle}
+                />
+                <textarea
+                  rows={2}
+                  value={taskForm.description}
+                  onChange={(event) => setTaskForm((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="Detalle de tarea"
+                  style={{ ...baseFieldStyle, minHeight: '72px', resize: 'vertical' }}
+                />
+                <div style={splitColumns}>
+                  <select
+                    value={taskForm.assignee_user_id}
+                    onChange={(event) => setTaskForm((prev) => ({ ...prev, assignee_user_id: event.target.value }))}
+                    style={baseFieldStyle}
+                  >
+                    <option value="">Sin asignar</option>
+                    {users.map((row) => (
+                      <option key={row.id} value={row.id}>{row.display_name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={taskForm.task_type}
+                    onChange={(event) => setTaskForm((prev) => ({ ...prev, task_type: event.target.value }))}
+                    style={baseFieldStyle}
+                  >
+                    {taskTypeValues.map((type) => (
+                      <option key={type} value={type}>{TASK_TYPE_LABELS[type] || type}</option>
+                    ))}
+                  </select>
+                </div>
+                <div style={splitColumns}>
+                  <input
+                    type="date"
+                    value={taskForm.start_date}
+                    onChange={(event) => setTaskForm((prev) => ({ ...prev, start_date: event.target.value }))}
+                    style={baseFieldStyle}
+                  />
+                  <input
+                    type="date"
+                    value={taskForm.due_date}
+                    onChange={(event) => setTaskForm((prev) => ({ ...prev, due_date: event.target.value }))}
+                    style={baseFieldStyle}
+                  />
+                </div>
+                <div style={tripleColumns}>
+                  <select
+                    value={taskForm.status}
+                    onChange={(event) => setTaskForm((prev) => ({ ...prev, status: event.target.value }))}
+                    style={baseFieldStyle}
+                  >
+                    {statusValues.map((status) => (
+                      <option key={status} value={status}>{STATUS_LABELS[status] || status}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={taskForm.progress_percent}
+                    onChange={(event) => setTaskForm((prev) => ({ ...prev, progress_percent: event.target.value }))}
+                    placeholder="%"
+                    style={baseFieldStyle}
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={taskForm.cost}
+                    onChange={(event) => setTaskForm((prev) => ({ ...prev, cost: event.target.value }))}
+                    placeholder="Costo Bs"
+                    style={baseFieldStyle}
+                  />
+                </div>
+                <select
+                  value={taskForm.version_bump}
+                  onChange={(event) => setTaskForm((prev) => ({ ...prev, version_bump: event.target.value }))}
+                  style={baseFieldStyle}
+                >
+                  {versionBumpValues.map((value) => (
+                    <option key={value} value={value}>{VERSION_BUMP_LABELS[value] || value}</option>
+                  ))}
+                </select>
+                <button type="submit" className="btn" disabled={savingTask || projects.length === 0} style={{ background: ACCENT, color: '#fff' }}>
+                  {savingTask ? 'Guardando...' : 'Crear tarea'}
+                </button>
+              </form>
+            )}
 
-          <form onSubmit={submitTask} style={{ display: 'grid', gap: '8px' }}>
-            <h4 style={{ margin: 0, color: TEXT_DARK }}>Crear tarea</h4>
-            <select
-              value={taskForm.project_id || selectedProjectId}
-              onChange={(event) => {
-                setSelectedProjectId(event.target.value);
-                setTaskForm((prev) => ({ ...prev, project_id: event.target.value }));
-              }}
-              style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-            >
-              <option value="" disabled>Selecciona proyecto</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>{project.name} · v{project.version}</option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={taskForm.title}
-              onChange={(event) => setTaskForm((prev) => ({ ...prev, title: event.target.value }))}
-              placeholder="Título de tarea"
-              style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-            />
-            <textarea
-              rows={2}
-              value={taskForm.description}
-              onChange={(event) => setTaskForm((prev) => ({ ...prev, description: event.target.value }))}
-              placeholder="Detalle de tarea"
-              style={{ borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-            />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
-              <select
-                value={taskForm.assignee_user_id}
-                onChange={(event) => setTaskForm((prev) => ({ ...prev, assignee_user_id: event.target.value }))}
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-              >
-                <option value="">Sin asignar</option>
-                {users.map((row) => (
-                  <option key={row.id} value={row.id}>{row.display_name}</option>
+            <div style={{ borderTop: '1px solid rgba(71, 85, 105, 0.46)', paddingTop: '10px', display: 'grid', gap: '8px' }}>
+              <h4 style={{ margin: 0, color: '#f8fafc' }}>Mis proyectos ({myProjects.length})</h4>
+              <div style={{ display: 'grid', gap: '8px', maxHeight: '260px', overflowY: 'auto', paddingRight: '2px' }}>
+                {loading ? (
+                  <div style={{ color: '#9fb2cc' }}>Cargando proyectos...</div>
+                ) : myProjects.length === 0 ? (
+                  <div style={{ color: '#9fb2cc' }}>Todavía no participas en proyectos.</div>
+                ) : myProjects.map((project) => (
+                  <div key={project.id} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#0f172a', padding: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                      <strong style={{ color: '#f8fafc' }}>{project.name}</strong>
+                      <span style={{ fontSize: '0.78rem', color: '#9fb2cc' }}>v{project.version}</span>
+                    </div>
+                    <div style={{ marginTop: '3px', fontSize: '0.82rem', color: '#93a4bc' }}>
+                      {project.area} · {TASK_TYPE_LABELS[project.work_type] || project.work_type}
+                    </div>
+                    <div style={{ marginTop: '7px', height: '7px', borderRadius: '999px', background: '#1e293b', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.max(0, Math.min(100, Number(project.progress_percent || 0)))}%`, height: '100%', background: '#2563eb' }} />
+                    </div>
+                  </div>
                 ))}
-              </select>
-              <select
-                value={taskForm.task_type}
-                onChange={(event) => setTaskForm((prev) => ({ ...prev, task_type: event.target.value }))}
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-              >
-                {taskTypeValues.map((type) => (
-                  <option key={type} value={type}>{TASK_TYPE_LABELS[type] || type}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
-              <input
-                type="date"
-                value={taskForm.start_date}
-                onChange={(event) => setTaskForm((prev) => ({ ...prev, start_date: event.target.value }))}
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-              />
-              <input
-                type="date"
-                value={taskForm.due_date}
-                onChange={(event) => setTaskForm((prev) => ({ ...prev, due_date: event.target.value }))}
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-              />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
-              <select
-                value={taskForm.status}
-                onChange={(event) => setTaskForm((prev) => ({ ...prev, status: event.target.value }))}
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-              >
-                {statusValues.map((status) => (
-                  <option key={status} value={status}>{STATUS_LABELS[status] || status}</option>
-                ))}
-              </select>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={taskForm.progress_percent}
-                onChange={(event) => setTaskForm((prev) => ({ ...prev, progress_percent: event.target.value }))}
-                placeholder="%"
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-              />
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={taskForm.cost}
-                onChange={(event) => setTaskForm((prev) => ({ ...prev, cost: event.target.value }))}
-                placeholder="Costo Bs"
-                style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-              />
-            </div>
-            <select
-              value={taskForm.version_bump}
-              onChange={(event) => setTaskForm((prev) => ({ ...prev, version_bump: event.target.value }))}
-              style={{ minHeight: '38px', borderRadius: '10px', border: `1px solid ${CARD_BORDER}`, background: CARD_BG, color: TEXT_DARK, padding: '8px 10px' }}
-            >
-              {versionBumpValues.map((value) => (
-                <option key={value} value={value}>{VERSION_BUMP_LABELS[value] || value}</option>
-              ))}
-            </select>
-            <button type="submit" className="btn" disabled={savingTask || projects.length === 0} style={{ background: ACCENT, color: 'white' }}>
-              {savingTask ? 'Guardando...' : 'Crear tarea'}
-            </button>
-          </form>
-
-          <div style={{ height: '1px', background: CARD_BORDER, margin: '2px 0' }} />
-          <h4 style={{ margin: 0, color: TEXT_DARK }}>Proyectos en los que trabajas ({myProjects.length})</h4>
-          <div style={{ display: 'grid', gap: '8px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
-            {loading ? (
-              <div style={{ color: TEXT_MUTED }}>Cargando proyectos...</div>
-            ) : myProjects.length === 0 ? (
-              <div style={{ color: TEXT_MUTED }}>Todavía no participas en proyectos.</div>
-            ) : myProjects.map((project) => (
-              <div key={project.id} style={{ border: `1px solid ${CARD_BORDER}`, borderRadius: '10px', background: CARD_BG, padding: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                  <strong style={{ color: TEXT_DARK }}>{project.name}</strong>
-                  <span style={{ fontSize: '0.78rem', color: TEXT_MUTED }}>v{project.version}</span>
-                </div>
-                <div style={{ marginTop: '3px', fontSize: '0.82rem', color: TEXT_MUTED }}>
-                  {project.area} · {TASK_TYPE_LABELS[project.work_type] || project.work_type}
-                </div>
-                <div style={{ marginTop: '7px', height: '7px', borderRadius: '999px', background: '#dbeafe', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.max(0, Math.min(100, Number(project.progress_percent || 0)))}%`, height: '100%', background: '#2563eb' }} />
-                </div>
-                <div style={{ marginTop: '6px', fontSize: '0.8rem', color: TEXT_MUTED }}>
-                  {project.completed_tasks}/{project.total_tasks} tareas completadas · Costo {moneyFormatter.format(Number(project.total_cost || 0))}
-                </div>
               </div>
-            ))}
-          </div>
-        </section>
+            </div>
+          </aside>
+        )}
 
-        <section style={panelStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <h3 style={{ margin: 0, color: TEXT_DARK }}>2) Avance de tareas</h3>
-            <div style={{ display: 'inline-flex', border: `1px solid ${CARD_BORDER}`, borderRadius: '999px', overflow: 'hidden' }}>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setViewScope('all')}
-                style={viewScope === 'all'
-                  ? { background: PRIMARY, color: 'white', border: 'none', borderRadius: 0 }
-                  : { background: CARD_BG, color: TEXT_MUTED, border: 'none', borderRadius: 0 }}
-              >
-                Todo el equipo
-              </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setViewScope('mine')}
-                style={viewScope === 'mine'
-                  ? { background: PRIMARY, color: 'white', border: 'none', borderRadius: 0 }
-                  : { background: CARD_BG, color: TEXT_MUTED, border: 'none', borderRadius: 0 }}
-              >
-                Mis tareas
-              </button>
+        <section
+          style={{
+            border: '1px solid rgba(45, 56, 82, 0.9)',
+            borderRadius: '16px',
+            background: 'linear-gradient(180deg, rgba(13, 22, 36, 0.96), rgba(9, 15, 25, 0.98))',
+            boxShadow: '0 14px 28px rgba(2, 6, 23, 0.42)',
+            padding: '14px',
+            display: 'grid',
+            gap: '10px'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={{ margin: 0, color: '#f8fafc' }}>Calendario de tareas</h3>
+              <div style={{ color: '#98acc8', fontSize: '0.84rem', marginTop: '2px' }}>
+                Vista mensual prioritaria para planificación y seguimiento
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {!sidePanelOpen && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setSidePanelOpen(true)}
+                  style={{ minHeight: '34px', padding: '7px 12px', background: '#1f2a40', color: '#dbe7ff' }}
+                >
+                  Mostrar panel
+                </button>
+              )}
+              <div style={{ display: 'inline-flex', border: '1px solid rgba(71, 85, 105, 0.75)', borderRadius: '999px', overflow: 'hidden' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setViewScope('all')}
+                  style={{
+                    minHeight: '34px',
+                    borderRadius: 0,
+                    background: viewScope === 'all' ? '#2563eb' : 'transparent',
+                    color: viewScope === 'all' ? '#fff' : '#9fb2cc'
+                  }}
+                >
+                  Todo el equipo
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setViewScope('mine')}
+                  style={{
+                    minHeight: '34px',
+                    borderRadius: 0,
+                    background: viewScope === 'mine' ? '#2563eb' : 'transparent',
+                    color: viewScope === 'mine' ? '#fff' : '#9fb2cc'
+                  }}
+                >
+                  Mis tareas
+                </button>
+              </div>
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
-            <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: '10px', padding: '8px' }}>
-              <div style={{ color: TEXT_MUTED, fontSize: '0.78rem' }}>Total</div>
-              <strong style={{ color: TEXT_DARK }}>{tasksSummary.total}</strong>
+            <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
+              <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Tareas visibles</div>
+              <strong style={{ color: '#f8fafc', fontSize: '1.08rem' }}>{tasksSummary.total}</strong>
             </div>
-            <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: '10px', padding: '8px' }}>
-              <div style={{ color: TEXT_MUTED, fontSize: '0.78rem' }}>Completadas</div>
-              <strong style={{ color: '#10b981' }}>{tasksSummary.completed}</strong>
+            <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
+              <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Completadas</div>
+              <strong style={{ color: '#34d399', fontSize: '1.08rem' }}>{tasksSummary.completed}</strong>
             </div>
-            <div style={{ background: CARD_BG, border: `1px solid ${CARD_BORDER}`, borderRadius: '10px', padding: '8px' }}>
-              <div style={{ color: TEXT_MUTED, fontSize: '0.78rem' }}>Progreso medio</div>
-              <strong style={{ color: '#2563eb' }}>{tasksSummary.avgProgress}%</strong>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gap: '8px', maxHeight: '640px', overflowY: 'auto', paddingRight: '4px' }}>
-            {loading ? (
-              <div style={{ color: TEXT_MUTED }}>Cargando tareas...</div>
-            ) : visibleTasks.length === 0 ? (
-              <div style={{ color: TEXT_MUTED }}>No hay tareas para esta vista.</div>
-            ) : visibleTasks.map((task) => {
-              const draft = taskDrafts[task.id] || {
-                status: task.status,
-                progress_percent: Number(task.progress_percent || 0),
-                cost: task.cost ?? ''
-              };
-              return (
-                <div key={task.id} style={{ border: `1px solid ${CARD_BORDER}`, borderRadius: '10px', background: CARD_BG, padding: '10px', display: 'grid', gap: '7px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                    <strong style={{ color: TEXT_DARK }}>{task.title}</strong>
-                    <span style={{ fontSize: '0.78rem', color: TEXT_MUTED }}>{task.project_name}</span>
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', fontSize: '0.8rem', color: TEXT_MUTED }}>
-                    <span>Responsable: {task.assignee_name}</span>
-                    <span>Entrega: {formatDate(task.due_date)}</span>
-                    <span>Costo: {task.cost !== null ? moneyFormatter.format(Number(task.cost || 0)) : '—'}</span>
-                  </div>
-                  <div style={{ height: '8px', borderRadius: '999px', background: '#dbeafe', overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.max(0, Math.min(100, Number(task.progress_percent || 0)))}%`, height: '100%', background: STATUS_COLORS[task.status] || '#2563eb' }} />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 110px auto', gap: '7px', alignItems: 'center' }}>
-                    <select
-                      value={draft.status}
-                      onChange={(event) => setTaskDrafts((prev) => ({
-                        ...prev,
-                        [task.id]: { ...prev[task.id], status: event.target.value }
-                      }))}
-                      style={{ minHeight: '34px', borderRadius: '9px', border: `1px solid ${CARD_BORDER}`, background: '#fff', color: TEXT_DARK, padding: '6px 8px' }}
-                    >
-                      {statusValues.map((status) => (
-                        <option key={status} value={status}>{STATUS_LABELS[status] || status}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={draft.progress_percent}
-                      onChange={(event) => setTaskDrafts((prev) => ({
-                        ...prev,
-                        [task.id]: { ...prev[task.id], progress_percent: event.target.value }
-                      }))}
-                      style={{ minHeight: '34px', borderRadius: '9px', border: `1px solid ${CARD_BORDER}`, background: '#fff', color: TEXT_DARK, padding: '6px 8px' }}
-                    />
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={draft.cost}
-                      onChange={(event) => setTaskDrafts((prev) => ({
-                        ...prev,
-                        [task.id]: { ...prev[task.id], cost: event.target.value }
-                      }))}
-                      placeholder="Costo"
-                      style={{ minHeight: '34px', borderRadius: '9px', border: `1px solid ${CARD_BORDER}`, background: '#fff', color: TEXT_DARK, padding: '6px 8px' }}
-                    />
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => saveTaskDraft(task)}
-                      disabled={updatingTaskId === task.id}
-                      style={{ background: ACCENT, color: 'white', minHeight: '34px' }}
-                    >
-                      {updatingTaskId === task.id ? '...' : 'Guardar'}
-                    </button>
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: TEXT_MUTED }}>
-                    Tipo: {TASK_TYPE_LABELS[task.task_type] || task.task_type} · Cambio versión: {VERSION_BUMP_LABELS[task.version_bump] || task.version_bump}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section style={panelStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <h3 style={{ margin: 0, color: TEXT_DARK }}>3) Calendario de tareas</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                style={{ background: '#e2e8f0', color: TEXT_DARK }}
-              >
-                ◀
-              </button>
-              <strong style={{ color: TEXT_DARK, minWidth: '150px', textAlign: 'center' }}>
-                {MONTH_LABELS[monthCursor.getMonth()]} {monthCursor.getFullYear()}
-              </strong>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                style={{ background: '#e2e8f0', color: TEXT_DARK }}
-              >
-                ▶
-              </button>
+            <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
+              <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Progreso medio</div>
+              <strong style={{ color: '#60a5fa', fontSize: '1.08rem' }}>{tasksSummary.avgProgress}%</strong>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+              style={{ minHeight: '34px', minWidth: '40px', padding: '0 10px', background: '#1e293b', color: '#f8fafc' }}
+            >
+              ◀
+            </button>
+            <strong style={{ color: '#f8fafc', minWidth: '170px', textAlign: 'center', fontSize: '1.05rem' }}>
+              {MONTH_LABELS[monthCursor.getMonth()]} {monthCursor.getFullYear()}
+            </strong>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+              style={{ minHeight: '34px', minWidth: '40px', padding: '0 10px', background: '#1e293b', color: '#f8fafc' }}
+            >
+              ▶
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '8px' }}>
             {DAY_LABELS.map((day) => (
-              <div key={day} style={{ textAlign: 'center', color: TEXT_MUTED, fontWeight: 700, fontSize: '0.78rem' }}>{day}</div>
+              <div key={day} style={{ textAlign: 'center', color: '#96aac6', fontWeight: 700, fontSize: '0.78rem' }}>{day}</div>
             ))}
             {calendarCells.map((day) => {
               const dateText = toDateText(day);
@@ -795,29 +804,29 @@ export default function ProjectsPanel({ token, user }) {
                   type="button"
                   onClick={() => setSelectedDate(dateText)}
                   style={{
-                    border: `1px solid ${isSelected ? '#60a5fa' : CARD_BORDER}`,
-                    borderRadius: '10px',
-                    background: isSelected ? '#dbeafe' : '#fff',
-                    minHeight: '74px',
-                    padding: '6px',
+                    border: `1px solid ${isSelected ? 'rgba(255, 127, 48, 0.9)' : 'rgba(71, 85, 105, 0.62)'}`,
+                    borderRadius: '11px',
+                    background: isSelected ? 'rgba(255, 127, 48, 0.16)' : '#0f172a',
+                    minHeight: '110px',
+                    padding: '8px 7px',
                     display: 'grid',
                     alignContent: 'start',
-                    gap: '4px',
-                    color: isCurrentMonth ? TEXT_DARK : '#94a3b8',
+                    gap: '5px',
+                    color: isCurrentMonth ? '#f8fafc' : '#6f84a3',
                     cursor: 'pointer'
                   }}
                 >
-                  <div style={{ fontSize: '0.78rem', fontWeight: 700 }}>{day.getDate()}</div>
-                  <div style={{ display: 'grid', gap: '2px' }}>
-                    {dayTasks.slice(0, 2).map((task) => (
+                  <div style={{ fontSize: '0.82rem', fontWeight: 700 }}>{day.getDate()}</div>
+                  <div style={{ display: 'grid', gap: '3px' }}>
+                    {dayTasks.slice(0, 3).map((task) => (
                       <div
                         key={`calendar-${dateText}-${task.id}`}
                         style={{
-                          background: STATUS_COLORS[task.status] || PRIMARY,
-                          color: 'white',
+                          background: STATUS_COLORS[task.status] || '#2563eb',
+                          color: '#fff',
                           borderRadius: '999px',
-                          padding: '1px 6px',
-                          fontSize: '0.66rem',
+                          padding: '2px 7px',
+                          fontSize: '0.67rem',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis'
@@ -826,8 +835,8 @@ export default function ProjectsPanel({ token, user }) {
                         {task.title}
                       </div>
                     ))}
-                    {dayTasks.length > 2 && (
-                      <div style={{ fontSize: '0.68rem', color: TEXT_MUTED }}>+{dayTasks.length - 2} más</div>
+                    {dayTasks.length > 3 && (
+                      <div style={{ fontSize: '0.68rem', color: '#9cb0cb' }}>+{dayTasks.length - 3} más</div>
                     )}
                   </div>
                 </button>
@@ -835,25 +844,87 @@ export default function ProjectsPanel({ token, user }) {
             })}
           </div>
 
-          <div style={{ height: '1px', background: CARD_BORDER }} />
-          <h4 style={{ margin: 0, color: TEXT_DARK }}>Tareas del {formatDate(selectedDate)}</h4>
-          <div style={{ display: 'grid', gap: '8px', maxHeight: '290px', overflowY: 'auto', paddingRight: '4px' }}>
-            {selectedDateTasks.length === 0 ? (
-              <div style={{ color: TEXT_MUTED }}>No hay tareas en esta fecha.</div>
-            ) : selectedDateTasks.map((task) => (
-              <div key={`selected-${task.id}`} style={{ border: `1px solid ${CARD_BORDER}`, borderRadius: '10px', background: '#fff', padding: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
-                  <strong style={{ color: TEXT_DARK }}>{task.title}</strong>
-                  <span style={{ color: TEXT_MUTED, fontSize: '0.76rem' }}>{task.project_name}</span>
-                </div>
-                <div style={{ color: TEXT_MUTED, fontSize: '0.78rem', marginTop: '3px' }}>
-                  {task.assignee_name} · {STATUS_LABELS[task.status] || task.status}
-                </div>
-                <div style={{ marginTop: '6px', height: '7px', borderRadius: '999px', background: '#dbeafe', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.max(0, Math.min(100, Number(task.progress_percent || 0)))}%`, height: '100%', background: STATUS_COLORS[task.status] || PRIMARY }} />
-                </div>
-              </div>
-            ))}
+          <div style={{ borderTop: '1px solid rgba(71, 85, 105, 0.5)', paddingTop: '10px', display: 'grid', gap: '8px' }}>
+            <h4 style={{ margin: 0, color: '#f8fafc' }}>Tareas del {formatDate(selectedDate)}</h4>
+            <div style={{ display: 'grid', gap: '8px', maxHeight: '280px', overflowY: 'auto', paddingRight: '2px' }}>
+              {selectedDateTasks.length === 0 ? (
+                <div style={{ color: '#9fb2cc' }}>No hay tareas en esta fecha.</div>
+              ) : selectedDateTasks.map((task) => {
+                const draft = taskDrafts[task.id] || {
+                  status: task.status,
+                  progress_percent: Number(task.progress_percent || 0),
+                  cost: task.cost ?? ''
+                };
+                return (
+                  <div key={`selected-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#0f172a', padding: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                      <strong style={{ color: '#f8fafc' }}>{task.title}</strong>
+                      <span style={{ color: '#93a5be', fontSize: '0.76rem' }}>{task.project_name}</span>
+                    </div>
+                    <div style={{ color: '#94a9c3', fontSize: '0.78rem', marginTop: '3px' }}>
+                      {task.assignee_name} · {STATUS_LABELS[task.status] || task.status} · Entrega: {formatDate(task.due_date)}
+                    </div>
+                    <div style={{ marginTop: '6px', height: '7px', borderRadius: '999px', background: '#1e293b', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.max(0, Math.min(100, Number(task.progress_percent || 0)))}%`, height: '100%', background: STATUS_COLORS[task.status] || '#2563eb' }} />
+                    </div>
+                    <div
+                      style={{
+                        marginTop: '8px',
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(0, 1fr) 82px 100px auto',
+                        gap: '6px',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <select
+                        value={draft.status}
+                        onChange={(event) => setTaskDrafts((prev) => ({
+                          ...prev,
+                          [task.id]: { ...prev[task.id], status: event.target.value }
+                        }))}
+                        style={{ ...baseFieldStyle, minHeight: '32px', padding: '5px 8px' }}
+                      >
+                        {statusValues.map((status) => (
+                          <option key={status} value={status}>{STATUS_LABELS[status] || status}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={draft.progress_percent}
+                        onChange={(event) => setTaskDrafts((prev) => ({
+                          ...prev,
+                          [task.id]: { ...prev[task.id], progress_percent: event.target.value }
+                        }))}
+                        style={{ ...baseFieldStyle, minHeight: '32px', padding: '5px 8px' }}
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={draft.cost}
+                        onChange={(event) => setTaskDrafts((prev) => ({
+                          ...prev,
+                          [task.id]: { ...prev[task.id], cost: event.target.value }
+                        }))}
+                        placeholder="Costo"
+                        style={{ ...baseFieldStyle, minHeight: '32px', padding: '5px 8px' }}
+                      />
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => saveTaskDraft(task)}
+                        disabled={updatingTaskId === task.id}
+                        style={{ minHeight: '32px', padding: '5px 10px', background: '#2563eb', color: '#fff' }}
+                      >
+                        {updatingTaskId === task.id ? '...' : 'Guardar'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </section>
       </div>
