@@ -10,6 +10,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [filteredPedidos, setFilteredPedidos] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
@@ -26,6 +27,14 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const { isOnline, enqueueWrite } = useOutbox();
   const canViewPedidosGlobal = canAccessPanel(panelAccess, 'pedidosGlobal');
   const canManageStatus = canAccessPanel(panelAccess, 'pedidosIndividual') || canViewPedidosGlobal;
+  const vendorOptions = useMemo(() => {
+    const uniqueVendors = new Set();
+    for (const quote of pedidos) {
+      const vendorName = String(quote?.vendor || '').trim();
+      if (vendorName) uniqueVendors.add(vendorName);
+    }
+    return Array.from(uniqueVendors).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  }, [pedidos]);
 
   const normalizePhone = (phone = '') => String(phone).replace(/\D/g, '');
   const fitTextByWidth = (doc, text = '', maxWidth = 0, suffix = '...') => {
@@ -86,7 +95,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     }
   };
 
-  // Apply filters (search + estado)
+  // Apply filters (cliente/teléfono + vendedor + estado)
   useEffect(() => {
     let filtered = pedidos;
 
@@ -94,10 +103,12 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(q => 
         q.customer_name?.toLowerCase().includes(term) ||
-        q.customer_phone?.toLowerCase().includes(term) ||
-        (q.provincia || q.department || '').toLowerCase().includes(term) ||
-        q.vendor?.toLowerCase().includes(term)
+        q.customer_phone?.toLowerCase().includes(term)
       );
+    }
+
+    if (vendorFilter) {
+      filtered = filtered.filter((q) => String(q.vendor || '').trim() === vendorFilter);
     }
 
     if (statusFilter) {
@@ -106,11 +117,12 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
 
     setFilteredPedidos(filtered);
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, pedidos]);
+  }, [searchTerm, statusFilter, vendorFilter, pedidos]);
 
   const clearFilters = () => {
     setSearchTerm('');
     setStatusFilter('');
+    setVendorFilter('');
   };
 
   const handleStatusChange = async (quoteId, newStatus) => {
@@ -412,10 +424,23 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         <input
           className="filter-input"
           type="text"
-          placeholder="Buscar por cliente, teléfono, provincia/departamento, vendedor o estado..."
+          placeholder="Buscar por cliente o teléfono..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
+
+        <select
+          className="filter-select"
+          value={vendorFilter}
+          onChange={(e) => setVendorFilter(e.target.value)}
+        >
+          <option value="">Todos los vendedores</option>
+          {vendorOptions.map((vendorName) => (
+            <option key={vendorName} value={vendorName}>
+              {vendorName}
+            </option>
+          ))}
+        </select>
 
         <select
           className="filter-select"
