@@ -50,10 +50,14 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   };
   const formatChecklistItemLabel = (item) => {
     const sku = String(item?.sku || '').trim().toUpperCase();
-    const name = String(item?.displayName || '').trim() || 'Producto desconocido';
-    if (sku && /^COMBO_\d+$/i.test(sku)) return name;
-    if (sku) return `${sku} - ${name}`;
-    return name;
+    const rawName = String(item?.displayName || '').trim() || 'Producto desconocido';
+    if (sku && /^COMBO_\d+$/i.test(sku)) return rawName;
+    if (!sku) return rawName;
+
+    // Avoid rendering duplicated SKU prefix like "SKU - SKU - Nombre".
+    const duplicatePrefixPattern = new RegExp(`^${sku}\\s*-\\s*`, 'i');
+    const normalizedName = rawName.replace(duplicatePrefixPattern, '').trim() || rawName;
+    return `${sku} - ${normalizedName}`;
   };
   const buildWhatsAppLink = (phone = '') => {
     const digits = normalizePhone(phone);
@@ -252,7 +256,13 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
       return;
     }
     const checked = items.map((item) => (item.isCheckable ? false : true));
-    setChecklistModal({ quoteId: quote.id, items, checked });
+    setChecklistModal({
+      quoteId: quote.id,
+      items,
+      checked,
+      giftName: quote.customer_gift || null,
+      couponCode: quote.coupon_code || null
+    });
   };
 
   const toggleItem = (index) => {
@@ -699,47 +709,89 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0,0,0,0.75)',
+          background: 'linear-gradient(135deg, rgba(2, 6, 23, 0.86), rgba(15, 23, 42, 0.88))',
+          backdropFilter: 'blur(2px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1000
         }}>
           <div style={{
-            background: '#1e293b',
-            padding: '32px',
-            borderRadius: '12px',
+            background: 'radial-gradient(120% 140% at 20% 0%, rgba(30, 58, 138, 0.2), rgba(15, 23, 42, 0.95) 50%), #0f172a',
+            padding: '26px',
+            borderRadius: '16px',
             width: '90%',
-            maxWidth: '700px',
-            maxHeight: '85vh',
+            maxWidth: '760px',
+            maxHeight: '88vh',
             overflowY: 'auto',
             color: '#f1f5f9',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
-            border: '1px solid #374151'
+            boxShadow: '0 24px 48px rgba(2, 6, 23, 0.65)',
+            border: '1px solid rgba(71, 85, 105, 0.8)'
           }}>
-            <h3 style={{
-              margin: '0 0 24px',
-              color: '#e11d48',
-              fontSize: '1.5rem',
-              fontWeight: '700',
-              textAlign: 'center'
-            }}>
-              Lista de Empaque - Pedido #{checklistModal.quoteId}
-            </h3>
+            <div style={{ marginBottom: '16px', textAlign: 'center' }}>
+              <h3 style={{
+                margin: '0 0 6px',
+                color: '#f43f5e',
+                fontSize: '1.75rem',
+                fontWeight: '800',
+                letterSpacing: '0.2px'
+              }}>
+                Lista de Empaque
+              </h3>
+              <div style={{ color: '#bfdbfe', fontSize: '0.95rem', fontWeight: 600 }}>
+                Pedido #{checklistModal.quoteId}
+              </div>
+            </div>
 
-            <div style={{ marginBottom: '32px' }}>
+            {(checklistModal.couponCode || checklistModal.giftName) && (
+              <div style={{
+                marginBottom: '16px',
+                display: 'grid',
+                gap: '8px',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))'
+              }}>
+                {checklistModal.couponCode && (
+                  <div style={{
+                    background: 'rgba(37, 99, 235, 0.16)',
+                    border: '1px solid rgba(96, 165, 250, 0.5)',
+                    borderRadius: '10px',
+                    padding: '10px 12px'
+                  }}>
+                    <div style={{ color: '#93c5fd', fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                      Cupón aplicado
+                    </div>
+                    <strong style={{ color: '#e0f2fe', fontSize: '1rem' }}>{checklistModal.couponCode}</strong>
+                  </div>
+                )}
+                {checklistModal.giftName && (
+                  <div style={{
+                    background: 'rgba(16, 185, 129, 0.16)',
+                    border: '1px solid rgba(52, 211, 153, 0.5)',
+                    borderRadius: '10px',
+                    padding: '10px 12px'
+                  }}>
+                    <div style={{ color: '#6ee7b7', fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                      Regalo para cliente
+                    </div>
+                    <strong style={{ color: '#d1fae5', fontSize: '1rem' }}>{checklistModal.giftName}</strong>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ marginBottom: '24px' }}>
               <ul style={{ listStyle: 'none', padding: 0 }}>
                 {checklistModal.items.map((item, index) => (
                   <li key={index} style={{
-                    marginBottom: '20px',
+                    marginBottom: '12px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '16px',
-                    fontSize: item.isIndented ? '1rem' : '1.15rem',
-                    padding: '12px',
+                    gap: '14px',
+                    fontSize: item.isIndented ? '0.98rem' : '1.12rem',
+                    padding: '11px 12px',
                     marginLeft: item.isIndented ? '24px' : 0,
                     background: item.isComboHeader ? 'rgba(225, 29, 72, 0.12)' : 'rgba(30, 41, 59, 0.6)',
-                    borderRadius: '8px',
+                    borderRadius: '10px',
                     border: item.isComboHeader ? '1px solid rgba(225, 29, 72, 0.35)' : '1px solid #374151'
                   }}>
                     {item.isCheckable ? (
@@ -773,20 +825,20 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
             <div style={{
               display: 'flex',
               justifyContent: 'center',
-              gap: '24px',
-              marginTop: '32px'
+              gap: '16px',
+              marginTop: '22px'
             }}>
               <button
                 onClick={() => setChecklistModal(null)}
                 style={{
-                  padding: '12px 32px',
-                  background: '#64748b',
+                  padding: '11px 28px',
+                  background: 'linear-gradient(180deg, #64748b, #475569)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '8px',
                   cursor: 'pointer',
-                  fontSize: '1.1rem',
-                  fontWeight: '600'
+                  fontSize: '1rem',
+                  fontWeight: '700'
                 }}
               >
                 Cancelar
@@ -796,14 +848,16 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                 onClick={confirmPacking}
                 disabled={!checklistModal.checked.every(Boolean)}
                 style={{
-                  padding: '12px 32px',
-                  background: checklistModal.checked.every(Boolean) ? '#10b981' : '#4b5563',
+                  padding: '11px 28px',
+                  background: checklistModal.checked.every(Boolean)
+                    ? 'linear-gradient(180deg, #10b981, #059669)'
+                    : '#4b5563',
                   color: 'white',
                   border: 'none',
                   borderRadius: '8px',
                   cursor: checklistModal.checked.every(Boolean) ? 'pointer' : 'not-allowed',
-                  fontSize: '1.1rem',
-                  fontWeight: '600'
+                  fontSize: '1rem',
+                  fontWeight: '800'
                 }}
               >
                 Confirmar
