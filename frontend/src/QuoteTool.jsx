@@ -615,6 +615,11 @@ export default function QuoteTool({ token, user }) {
     setDiscountInput(nextValue);
   };
 
+  const clearDiscounts = () => {
+    setDiscountMode('percent');
+    setDiscountInput(0);
+  };
+
   return (
     <div className="container" style={{ paddingTop: '90px' }}>
       {draftNotice && (
@@ -1150,6 +1155,16 @@ export default function QuoteTool({ token, user }) {
                 <span style={{ color: '#e11d48', fontWeight: '600', fontSize: '0.88rem' }}>
                   Descuento aplicado: {discountAmountApplied.toFixed(2)} Bs ({effectiveDiscountPercent.toFixed(2)}%)
                 </span>
+                <div>
+                  <button
+                    type="button"
+                    onClick={clearDiscounts}
+                    className="btn btn-secondary"
+                    style={{ minHeight: '34px', padding: '6px 12px', fontSize: '0.84rem' }}
+                  >
+                    Limpiar descuento
+                  </button>
+                </div>
               </div>
 
               <div>
