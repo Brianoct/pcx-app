@@ -40,7 +40,7 @@ const ensureUsersSchema = async () => {
   }
 };
 
-const ensureQuotesSchema = async () => {
+const ensureQuotesMarketingSchema = async () => {
   try {
     await pool.query(
       `ALTER TABLE quotes
@@ -52,25 +52,10 @@ const ensureQuotesSchema = async () => {
     );
     await pool.query(
       `ALTER TABLE quotes
-       ADD COLUMN IF NOT EXISTS gift_selection TEXT`
+       ADD COLUMN IF NOT EXISTS gift_name TEXT`
     );
   } catch (err) {
-    console.error('No se pudo asegurar esquema quotes:', err.message);
-  }
-};
-
-const ensureQuoteMarketingFields = async () => {
-  try {
-    await pool.query(
-      `ALTER TABLE quotes
-       ADD COLUMN IF NOT EXISTS coupon_code TEXT`
-    );
-    await pool.query(
-      `ALTER TABLE quotes
-       ADD COLUMN IF NOT EXISTS gift_option TEXT`
-    );
-  } catch (err) {
-    console.error('No se pudo asegurar campos marketing en quotes:', err.message);
+    console.error('No se pudo asegurar esquema marketing en quotes:', err.message);
   }
 };
 
@@ -2658,6 +2643,9 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     seller_user_id,
     venta_type,
     discount_percent,
+    coupon_code,
+    coupon_discount_percent,
+    gift_name,
     rows,
     subtotal,
     total,
@@ -2762,9 +2750,9 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     const quoteResult = await client.query(
       `INSERT INTO quotes (
         user_id, customer_name, customer_phone, department, provincia, shipping_notes,
-        alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent, line_items, subtotal,
-        total, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
+        alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
+        coupon_code, coupon_discount_percent, gift_name, line_items, subtotal, total, status, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW())
       RETURNING id`,
       [
         quoteOwnerId,
@@ -2779,6 +2767,9 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
         vendorDisplayName,
         venta_type,
         discountPercentValue,
+        coupon_code ? String(coupon_code).trim().toUpperCase() : null,
+        Number.isFinite(Number(coupon_discount_percent)) ? Number(coupon_discount_percent) : 0,
+        gift_name ? String(gift_name).trim() : null,
         JSON.stringify(lineItemsWithDisplay),
         subtotalValue,
         totalValue,
@@ -4098,6 +4089,19 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       const cleaned = rawLabel.replace(/^COMBO_\d+\s*-\s*/i, '').trim();
       return cleaned || rawLabel;
     };
+    const normalizeSkuName = (skuValue = '', nameValue = '') => {
+      const normalizedSku = String(skuValue || '').trim().toUpperCase();
+      const rawName = String(nameValue || '').trim();
+      if (!normalizedSku) return rawName || 'Producto desconocido';
+      if (!rawName) return 'Producto desconocido';
+      const duplicatePrefixPattern = new RegExp(`^${normalizedSku}\\s*-\\s*`, 'i');
+      const withoutDuplicatePrefix = rawName.replace(duplicatePrefixPattern, '').trim();
+      if (!withoutDuplicatePrefix) return 'Producto desconocido';
+      const normalizedName = withoutDuplicatePrefix.toUpperCase() === normalizedSku
+        ? 'Producto desconocido'
+        : withoutDuplicatePrefix;
+      return normalizedName || 'Producto desconocido';
+    };
 
     const resolveComboItems = async (row) => {
       const comboId = parseComboIdFromSku(row?.sku);
@@ -4105,7 +4109,7 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
         const comboItemsRes = await pool.query(
           `SELECT ci.sku, ci.quantity, p.name
            FROM combo_items ci
-           LEFT JOIN products p ON p.sku = ci.sku
+           LEFT JOIN products p ON UPPER(p.sku) = UPPER(ci.sku)
            WHERE ci.combo_id = $1
            ORDER BY ci.sku ASC`,
           [comboId]
@@ -4142,7 +4146,7 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       const namesRes = await pool.query(
         `SELECT sku, name
          FROM products
-         WHERE sku = ANY($1::text[])`,
+         WHERE UPPER(sku) = ANY($1::text[])`,
         [missingNameSkus]
       );
       const namesBySku = new Map(
@@ -4175,7 +4179,7 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
         for (const comboItem of comboItems) {
           const componentQty = comboItem.quantity * rowQty;
           items.push({
-            displayName: comboItem.name || comboItem.sku,
+            displayName: normalizeSkuName(comboItem.sku, comboItem.name),
             sku: comboItem.sku,
             qty: componentQty,
             isComboHeader: false,
@@ -4328,6 +4332,9 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     seller_user_id,
     venta_type,
     discount_percent,
+    coupon_code,
+    coupon_discount_percent,
+    gift_name,
     rows,
     subtotal,
     total,
@@ -4436,11 +4443,14 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
            vendor = $10,
            venta_type = $11,
            discount_percent = $12,
-           line_items = $13,
-           subtotal = $14,
-           total = $15,
-           status = $16
-      WHERE id = $17`,
+           coupon_code = $13,
+           coupon_discount_percent = $14,
+           gift_name = $15,
+           line_items = $16,
+           subtotal = $17,
+           total = $18,
+           status = $19
+      WHERE id = $20`,
       [
         customer_name,
         customer_phone,
@@ -4454,6 +4464,9 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         nextVendorName,
         venta_type,
         discountPercentValue,
+        coupon_code ? String(coupon_code).trim().toUpperCase() : null,
+        Number.isFinite(Number(coupon_discount_percent)) ? Number(coupon_discount_percent) : 0,
+        gift_name ? String(gift_name).trim() : null,
         JSON.stringify(lineItemsWithDisplay),
         subtotalValue,
         totalValue,
@@ -6661,6 +6674,7 @@ app.use((err, _req, res, next) => {
 const PORT = process.env.PORT || 4000;
 const startServer = async () => {
   await ensureUsersSchema();
+  await ensureQuotesMarketingSchema();
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
