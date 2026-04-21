@@ -364,7 +364,6 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       subtotal,
       discountPercent,
       discountAmount,
-      roundTotal: Boolean(quote.round_total),
       total: Number(quote.total || 0)
     });
   };
