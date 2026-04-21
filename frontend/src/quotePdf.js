@@ -48,7 +48,6 @@ export function generateModernQuotePdf({
   subtotal = 0,
   discountPercent = 0,
   discountAmount,
-  roundTotal = false,
   total = 0
 }) {
   const doc = new jsPDF();
@@ -236,8 +235,7 @@ export function generateModernQuotePdf({
     { label: 'Subtotal', value: `${toMoney(subtotal)} Bs` },
     ...(Number(discountPercent || 0) > 0
       ? [{ label: `Descuento (${Number(discountPercent)}%)`, value: `${toMoney(discountValue)} Bs` }]
-      : []),
-    ...(roundTotal ? [{ label: 'Redondeo', value: 'Aplicado' }] : [])
+      : [])
   ];
   const summaryH = 18 + summaryLines.length * 7.5 + 10;
 

@@ -2663,6 +2663,9 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     if (!Number.isFinite(discountPercentValue) || discountPercentValue < 0 || discountPercentValue > 100) {
       throw createHttpError(400, 'Descuento inválido');
     }
+    if (totalValue - subtotalValue > 0.01) {
+      throw createHttpError(400, 'El total no puede ser mayor al subtotal');
+    }
   } catch (err) {
     const statusCode = err?.statusCode || 400;
     return res.status(statusCode).json({ error: err.message || 'Datos inválidos en la cotización' });
@@ -4298,6 +4301,9 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     if (!Number.isFinite(discountPercentValue) || discountPercentValue < 0 || discountPercentValue > 100) {
       throw createHttpError(400, 'Descuento inválido');
     }
+    if (totalValue - subtotalValue > 0.01) {
+      throw createHttpError(400, 'El total no puede ser mayor al subtotal');
+    }
   } catch (err) {
     const statusCode = err?.statusCode || 400;
     return res.status(statusCode).json({ error: err.message || 'Datos inválidos en la cotización' });
@@ -4391,7 +4397,6 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         quoteId
       ]
     );
-
     await client.query('COMMIT');
     return res.json({ message: 'Cotización actualizada', id: quoteId });
   } catch (err) {

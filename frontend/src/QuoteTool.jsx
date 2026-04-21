@@ -6,6 +6,12 @@ import { apiRequest } from './apiClient';
 import { clearDraftState, useDraftState } from './useDraftState';
 import { useOutbox } from './OutboxProvider';
 
+const clampNumber = (value, min, max) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return min;
+  return Math.min(max, Math.max(min, numeric));
+};
+
 export default function QuoteTool({ token, user }) {
   const [combos, setCombos] = useState([]);
   const [products, setProducts] = useState([]);
@@ -20,8 +26,8 @@ export default function QuoteTool({ token, user }) {
 
   const [rows, setRows] = useState([]);
   const [ventaType, setVentaType] = useState('sf');
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [roundTotal, setRoundTotal] = useState(false);
+  const [discountMode, setDiscountMode] = useState('percent');
+  const [discountInput, setDiscountInput] = useState(0);
   const [useAlternativeName, setUseAlternativeName] = useState(false);
   const [alternativeName, setAlternativeName] = useState('');
   const [alternativePhone, setAlternativePhone] = useState('');
@@ -232,13 +238,33 @@ export default function QuoteTool({ token, user }) {
   };
 
   const subtotal = rows.reduce((sum, r) => sum + (r.lineTotal || 0), 0);
+  const getDiscountMetrics = (subtotalValue, modeValue, rawValue) => {
+    const safeSubtotal = Math.max(0, Number(subtotalValue) || 0);
+    const safeInput = Number(rawValue) || 0;
 
-  const discountPercentApplied = subtotal * (discountPercent / 100);
-  let total = subtotal - discountPercentApplied;
+    let discountAmount = 0;
+    if (safeSubtotal > 0) {
+      if (modeValue === 'amount') {
+        discountAmount = clampNumber(safeInput, 0, safeSubtotal);
+      } else if (modeValue === 'target') {
+        const targetTotal = clampNumber(safeInput, 0, safeSubtotal);
+        discountAmount = safeSubtotal - targetTotal;
+      } else {
+        const discountPercent = clampNumber(safeInput, 0, 100);
+        discountAmount = safeSubtotal * (discountPercent / 100);
+      }
+    }
 
-  if (roundTotal) {
-    total = Math.round(total / 10) * 10;
-  }
+    discountAmount = clampNumber(discountAmount, 0, safeSubtotal);
+    const discountPercent = safeSubtotal > 0 ? (discountAmount / safeSubtotal) * 100 : 0;
+    const targetTotal = Math.max(0, safeSubtotal - discountAmount);
+
+    return { discountAmount, discountPercent, targetTotal };
+  };
+  const discountMetrics = getDiscountMetrics(subtotal, discountMode, discountInput);
+  const discountAmountApplied = discountMetrics.discountAmount;
+  const effectiveDiscountPercent = discountMetrics.discountPercent;
+  const total = discountMetrics.targetTotal;
 
   useEffect(() => {
     setRows(prev => prev.map(row => {
@@ -275,8 +301,16 @@ export default function QuoteTool({ token, user }) {
     if (values.step) setStep(values.step);
     if (Array.isArray(values.rows)) setRows(values.rows);
     if (values.ventaType) setVentaType(values.ventaType);
-    if (typeof values.discountPercent === 'number') setDiscountPercent(values.discountPercent);
-    if (typeof values.roundTotal === 'boolean') setRoundTotal(values.roundTotal);
+    if (typeof values.discountMode === 'string') {
+      setDiscountMode(['percent', 'amount', 'target'].includes(values.discountMode) ? values.discountMode : 'percent');
+    }
+    if (typeof values.discountInput === 'number') {
+      setDiscountInput(values.discountInput);
+    } else if (typeof values.discountPercent === 'number') {
+      // Backward compatibility with older draft schema.
+      setDiscountMode('percent');
+      setDiscountInput(values.discountPercent);
+    }
     if (typeof values.useAlternativeName === 'boolean') setUseAlternativeName(values.useAlternativeName);
     if (typeof values.alternativeName === 'string') setAlternativeName(values.alternativeName);
     if (typeof values.alternativePhone === 'string') setAlternativePhone(values.alternativePhone);
@@ -307,8 +341,8 @@ export default function QuoteTool({ token, user }) {
         step,
         rows,
         ventaType,
-        discountPercent,
-        roundTotal,
+        discountMode,
+        discountInput,
         useAlternativeName,
         alternativeName,
         alternativePhone,
@@ -326,8 +360,8 @@ export default function QuoteTool({ token, user }) {
     step,
     rows,
     ventaType,
-    discountPercent,
-    roundTotal,
+    discountMode,
+    discountInput,
     useAlternativeName,
     alternativeName,
     alternativePhone,
@@ -361,8 +395,8 @@ export default function QuoteTool({ token, user }) {
     setStep(1);
     setRows([]);
     setVentaType('sf');
-    setDiscountPercent(0);
-    setRoundTotal(false);
+    setDiscountMode('percent');
+    setDiscountInput(0);
     setUseAlternativeName(false);
     setAlternativeName('');
     setAlternativePhone('');
@@ -458,6 +492,7 @@ export default function QuoteTool({ token, user }) {
       }
     }
 
+    const discountPercentForStorage = Math.round(effectiveDiscountPercent);
     const payload = {
       customer_name: customerName,
       customer_phone: customerPhone,
@@ -469,9 +504,7 @@ export default function QuoteTool({ token, user }) {
       store_location: almacen,
       vendor: requiresSellerAssignment ? assignedSellerName : vendedorName,
       venta_type: ventaType,
-      discount_percent: discountPercent,
-      discount_bs: 0,
-      round_total: roundTotal,
+      discount_percent: discountPercentForStorage,
       seller_user_id: requiresSellerAssignment ? Number(assignedSellerId) : null,
       rows: rowsWithDisplay,
       subtotal,
@@ -542,9 +575,8 @@ export default function QuoteTool({ token, user }) {
         alternativePhone: useAlternativeName ? alternativePhone.trim() : null,
         rows: expandedRows,
         subtotal,
-        discountPercent,
-        discountAmount: discountPercentApplied,
-        roundTotal,
+        discountPercent: effectiveDiscountPercent,
+        discountAmount: discountAmountApplied,
         total
       });
 
@@ -561,6 +593,27 @@ export default function QuoteTool({ token, user }) {
 
   const selectedItemsCount = rows.filter((row) => row.sku).length;
   const totalUnits = rows.reduce((sum, row) => sum + (Number(row.qty) || 0), 0);
+  const discountPercentFieldValue = subtotal > 0 ? effectiveDiscountPercent.toFixed(2) : '0.00';
+  const discountAmountFieldValue = discountAmountApplied.toFixed(2);
+  const targetTotalFieldValue = total.toFixed(2);
+
+  const handleDiscountPercentChange = (rawValue) => {
+    const nextValue = clampNumber(Number.parseFloat(rawValue), 0, 100);
+    setDiscountMode('percent');
+    setDiscountInput(nextValue);
+  };
+
+  const handleDiscountAmountChange = (rawValue) => {
+    const nextValue = clampNumber(Number.parseFloat(rawValue), 0, Math.max(0, subtotal));
+    setDiscountMode('amount');
+    setDiscountInput(nextValue);
+  };
+
+  const handleTargetTotalChange = (rawValue) => {
+    const nextValue = clampNumber(Number.parseFloat(rawValue), 0, Math.max(0, subtotal));
+    setDiscountMode('target');
+    setDiscountInput(nextValue);
+  };
 
   return (
     <div className="container" style={{ paddingTop: '90px' }}>
@@ -1015,7 +1068,7 @@ export default function QuoteTool({ token, user }) {
             </button>
           </div>
 
-          {/* Summary - only % discount and rounding */}
+          {/* Summary - negotiation friendly discount controls */}
           <div className="quote-summary-panel" style={{
             position: 'sticky',
             bottom: 0,
@@ -1033,32 +1086,74 @@ export default function QuoteTool({ token, user }) {
                 <div style={{ fontSize: '1.4rem', fontWeight: '600' }}>{subtotal.toFixed(2)} Bs</div>
               </div>
 
-              <div>
-                <small style={{ color: '#9ca3af' }}>Descuento %</small>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button onClick={() => setDiscountPercent(Math.max(0, discountPercent - 1))} style={{ padding: '8px 12px', background: '#374151', color: 'white', border: 'none', borderRadius: '6px' }}>-</button>
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={discountPercent}
-                    onChange={(e) => {
-                      let v = parseInt(e.target.value) || 0;
-                      v = Math.max(0, Math.min(10, v));
-                      setDiscountPercent(v);
-                    }}
-                    style={{ width: '60px', padding: '8px', textAlign: 'center', background: '#0f172a', color: 'white', border: '1px solid #374151', borderRadius: '6px' }}
-                  />
-                  <button onClick={() => setDiscountPercent(Math.min(10, discountPercent + 1))} style={{ padding: '8px 12px', background: '#374151', color: 'white', border: 'none', borderRadius: '6px' }}>+</button>
+              <div style={{ display: 'grid', gap: '8px', flex: '1 1 320px', minWidth: '280px' }}>
+                <small style={{ color: '#9ca3af' }}>Negociación de descuento</small>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: '8px' }}>
+                  <label style={{ display: 'grid', gap: '4px' }}>
+                    <span style={{ color: '#9ca3af', fontSize: '0.78rem' }}>Descuento %</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={discountPercentFieldValue}
+                      onChange={(e) => handleDiscountPercentChange(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        background: '#0f172a',
+                        color: 'white',
+                        border: `1px solid ${discountMode === 'percent' ? '#e11d48' : '#374151'}`,
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: '4px' }}>
+                    <span style={{ color: '#9ca3af', fontSize: '0.78rem' }}>Descuento Bs</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max={Math.max(0, subtotal)}
+                      step="0.01"
+                      value={discountAmountFieldValue}
+                      onChange={(e) => handleDiscountAmountChange(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        background: '#0f172a',
+                        color: 'white',
+                        border: `1px solid ${discountMode === 'amount' ? '#e11d48' : '#374151'}`,
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: '4px' }}>
+                    <span style={{ color: '#9ca3af', fontSize: '0.78rem' }}>Total objetivo Bs</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max={Math.max(0, subtotal)}
+                      step="0.01"
+                      value={targetTotalFieldValue}
+                      onChange={(e) => handleTargetTotalChange(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        background: '#0f172a',
+                        color: 'white',
+                        border: `1px solid ${discountMode === 'target' ? '#e11d48' : '#374151'}`,
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </label>
                 </div>
-                <span style={{ color: '#e11d48', fontWeight: '600' }}>{discountPercentApplied.toFixed(2)} Bs</span>
+                <span style={{ color: '#e11d48', fontWeight: '600', fontSize: '0.88rem' }}>
+                  Descuento aplicado: {discountAmountApplied.toFixed(2)} Bs ({effectiveDiscountPercent.toFixed(2)}%)
+                </span>
               </div>
 
               <div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
-                  <input type="checkbox" checked={roundTotal} onChange={(e) => setRoundTotal(e.target.checked)} />
-                  Redondear total
-                </label>
+                <small style={{ color: '#9ca3af' }}>Total negociado</small>
                 <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#e11d48' }}>
                   {total.toFixed(2)} Bs
                 </div>
