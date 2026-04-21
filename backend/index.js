@@ -40,6 +40,40 @@ const ensureUsersSchema = async () => {
   }
 };
 
+const ensureQuotesSchema = async () => {
+  try {
+    await pool.query(
+      `ALTER TABLE quotes
+       ADD COLUMN IF NOT EXISTS coupon_code TEXT`
+    );
+    await pool.query(
+      `ALTER TABLE quotes
+       ADD COLUMN IF NOT EXISTS coupon_discount_percent NUMERIC(10,4) DEFAULT 0`
+    );
+    await pool.query(
+      `ALTER TABLE quotes
+       ADD COLUMN IF NOT EXISTS gift_selection TEXT`
+    );
+  } catch (err) {
+    console.error('No se pudo asegurar esquema quotes:', err.message);
+  }
+};
+
+const ensureQuoteMarketingFields = async () => {
+  try {
+    await pool.query(
+      `ALTER TABLE quotes
+       ADD COLUMN IF NOT EXISTS coupon_code TEXT`
+    );
+    await pool.query(
+      `ALTER TABLE quotes
+       ADD COLUMN IF NOT EXISTS gift_option TEXT`
+    );
+  } catch (err) {
+    console.error('No se pudo asegurar campos marketing en quotes:', err.message);
+  }
+};
+
 const normalizeText = (value = '') =>
   String(value || '')
     .trim()
@@ -4028,8 +4062,9 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, user_id, customer_name, customer_phone, department, provincia, store_location, 
-              vendor, status, line_items, created_at, alternative_name, alternative_phone
+      `SELECT id, user_id, customer_name, customer_phone, department, provincia, store_location,
+              vendor, status, line_items, created_at, alternative_name, alternative_phone,
+              coupon_code, coupon_discount_percent, gift_name
        FROM quotes WHERE id = $1`,
       [id]
     );
@@ -4161,6 +4196,32 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       });
     }
 
+    if (quote.coupon_code) {
+      const couponPercent = Number(quote.coupon_discount_percent || 0);
+      const couponLabel = Number.isFinite(couponPercent) && couponPercent > 0
+        ? `Cupón ${String(quote.coupon_code).trim().toUpperCase()} (${couponPercent}%)`
+        : `Cupón ${String(quote.coupon_code).trim().toUpperCase()}`;
+      items.push({
+        displayName: couponLabel,
+        sku: 'CUPON',
+        qty: 1,
+        isComboHeader: false,
+        isIndented: false,
+        isCheckable: false
+      });
+    }
+
+    if (quote.gift_name) {
+      items.push({
+        displayName: `Regalo: ${String(quote.gift_name).trim()}`,
+        sku: 'REGALO',
+        qty: 1,
+        isComboHeader: false,
+        isIndented: false,
+        isCheckable: false
+      });
+    }
+
     res.json({
       id: quote.id,
       customer_name: quote.customer_name,
@@ -4173,6 +4234,9 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       vendor: quote.vendor,
       status: quote.status,
       created_at: quote.created_at,
+      coupon_code: quote.coupon_code,
+      coupon_discount_percent: quote.coupon_discount_percent,
+      gift_name: quote.gift_name,
       items
     });
   } catch (err) {

@@ -12,6 +12,15 @@ const clampNumber = (value, min, max) => {
   return Math.min(max, Math.max(min, numeric));
 };
 
+const GIFT_OPTIONS = [
+  'Llaverito de cortesía',
+  'Gancho 5cm (docena)',
+  'Gancho 10cm (docena)',
+  'Porta llave grande',
+  'Set de tornillos',
+  'Sticker PCX'
+];
+
 export default function QuoteTool({ token, user }) {
   const [combos, setCombos] = useState([]);
   const [products, setProducts] = useState([]);
@@ -28,6 +37,9 @@ export default function QuoteTool({ token, user }) {
   const [ventaType, setVentaType] = useState('sf');
   const [discountMode, setDiscountMode] = useState('percent');
   const [discountInput, setDiscountInput] = useState(0);
+  const [coupons, setCoupons] = useState([]);
+  const [selectedCouponCode, setSelectedCouponCode] = useState('');
+  const [selectedGiftLabel, setSelectedGiftLabel] = useState('');
   const [useAlternativeName, setUseAlternativeName] = useState(false);
   const [alternativeName, setAlternativeName] = useState('');
   const [alternativePhone, setAlternativePhone] = useState('');
@@ -60,7 +72,11 @@ export default function QuoteTool({ token, user }) {
     const sku = String(skuValue || '').trim().toUpperCase();
     const name = String(nameValue || '').trim();
     if (/^COMBO_\d+$/.test(sku)) return name || 'Combo';
-    if (sku && name) return `${sku} - ${name}`;
+    if (sku && name) {
+      const upperName = name.toUpperCase();
+      if (upperName === sku || upperName.startsWith(`${sku} -`)) return name;
+      return `${sku} - ${name}`;
+    }
     return sku || name || 'Producto';
   };
 
@@ -128,6 +144,29 @@ export default function QuoteTool({ token, user }) {
     };
     fetchSalesUsers();
   }, [token, requiresSellerAssignment]);
+
+  useEffect(() => {
+    if (!token) return;
+    const fetchCoupons = async () => {
+      try {
+        const data = await apiRequest('/api/cupones', { token });
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const activeCoupons = (Array.isArray(data) ? data : [])
+          .filter((coupon) => {
+            const rawDate = String(coupon?.valid_until || '');
+            const validUntilDate = new Date(`${rawDate}T00:00:00`);
+            return !Number.isNaN(validUntilDate.getTime()) && validUntilDate >= now;
+          })
+          .sort((a, b) => String(a.valid_until || '').localeCompare(String(b.valid_until || '')));
+        setCoupons(activeCoupons);
+      } catch (err) {
+        console.error('Error fetching cupones activos:', err);
+        setCoupons([]);
+      }
+    };
+    fetchCoupons();
+  }, [token]);
 
   const allItems = [
     ...products.map((p) => ({ ...p, displayName: p.name })),
@@ -322,6 +361,8 @@ export default function QuoteTool({ token, user }) {
     if (typeof values.almacen === 'string') setAlmacen(values.almacen);
     if (typeof values.shippingNotes === 'string') setShippingNotes(values.shippingNotes);
     if (typeof values.assignedSellerId === 'string') setAssignedSellerId(values.assignedSellerId);
+    if (typeof values.selectedCouponCode === 'string') setSelectedCouponCode(values.selectedCouponCode);
+    if (typeof values.selectedGiftLabel === 'string') setSelectedGiftLabel(values.selectedGiftLabel);
     setDraftNotice('Se recuperó un borrador local.');
   }, [draftStorageKey, draft]);
 
@@ -343,6 +384,8 @@ export default function QuoteTool({ token, user }) {
         ventaType,
         discountMode,
         discountInput,
+        selectedCouponCode,
+        selectedGiftLabel,
         useAlternativeName,
         alternativeName,
         alternativePhone,
@@ -362,6 +405,8 @@ export default function QuoteTool({ token, user }) {
     ventaType,
     discountMode,
     discountInput,
+    selectedCouponCode,
+    selectedGiftLabel,
     useAlternativeName,
     alternativeName,
     alternativePhone,
@@ -397,6 +442,8 @@ export default function QuoteTool({ token, user }) {
     setVentaType('sf');
     setDiscountMode('percent');
     setDiscountInput(0);
+    setSelectedCouponCode('');
+    setSelectedGiftLabel('');
     setUseAlternativeName(false);
     setAlternativeName('');
     setAlternativePhone('');
@@ -505,6 +552,8 @@ export default function QuoteTool({ token, user }) {
       vendor: requiresSellerAssignment ? assignedSellerName : vendedorName,
       venta_type: ventaType,
       discount_percent: discountPercentForStorage,
+      coupon_code: selectedCouponCode || null,
+      gift_label: selectedGiftLabel || null,
       seller_user_id: requiresSellerAssignment ? Number(assignedSellerId) : null,
       rows: rowsWithDisplay,
       subtotal,
@@ -620,7 +669,7 @@ export default function QuoteTool({ token, user }) {
   };
 
   return (
-    <div className="container" style={{ paddingTop: '90px' }}>
+    <div className="container" style={{ paddingTop: '78px' }}>
       {draftNotice && (
         <div style={{
           marginBottom: '12px',
@@ -633,7 +682,7 @@ export default function QuoteTool({ token, user }) {
           {draftNotice}
         </div>
       )}
-      <header style={{ textAlign: 'center', marginBottom: '24px' }}>
+      <header style={{ textAlign: 'center', marginBottom: '14px' }}>
         {currentDateTime && (
           <div style={{ color: '#9ca3af', fontSize: '1.1rem', fontWeight: '500' }}>
             {currentDateTime}
@@ -811,6 +860,68 @@ export default function QuoteTool({ token, user }) {
                 </select>
               </div>
             )}
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
+                Cupón marketing activo
+              </label>
+              <select
+                value={selectedCouponCode}
+                onChange={(e) => setSelectedCouponCode(e.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: '44px',
+                  padding: '12px 36px 12px 12px',
+                  fontSize: '0.95rem',
+                  borderRadius: '8px',
+                  border: '1px solid #374151',
+                  background: '#0f172a',
+                  color: 'white',
+                  appearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 12px center',
+                  backgroundSize: '12px'
+                }}
+              >
+                <option value="">Sin cupón</option>
+                {coupons.map((coupon) => (
+                  <option key={coupon.id} value={coupon.code}>
+                    {coupon.code} ({coupon.discount_percent}% · hasta {coupon.valid_until})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
+                Regalo para cliente
+              </label>
+              <select
+                value={selectedGiftLabel}
+                onChange={(e) => setSelectedGiftLabel(e.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: '44px',
+                  padding: '12px 36px 12px 12px',
+                  fontSize: '0.95rem',
+                  borderRadius: '8px',
+                  border: '1px solid #374151',
+                  background: '#0f172a',
+                  color: 'white',
+                  appearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 12px center',
+                  backgroundSize: '12px'
+                }}
+              >
+                <option value="">Sin regalo</option>
+                {GIFT_OPTIONS.map((giftLabel) => (
+                  <option key={giftLabel} value={giftLabel}>{giftLabel}</option>
+                ))}
+              </select>
+            </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
