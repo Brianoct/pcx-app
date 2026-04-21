@@ -614,7 +614,6 @@ export default function QuoteTool({ token, user }) {
     setDiscountMode('target');
     setDiscountInput(nextValue);
   };
-
   const clearDiscounts = () => {
     setDiscountMode('percent');
     setDiscountInput(0);
