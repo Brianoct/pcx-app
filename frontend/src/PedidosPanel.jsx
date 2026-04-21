@@ -57,6 +57,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     // Avoid rendering duplicated SKU prefix like "SKU - SKU - Nombre".
     const duplicatePrefixPattern = new RegExp(`^${sku}\\s*-\\s*`, 'i');
     const normalizedName = rawName.replace(duplicatePrefixPattern, '').trim() || rawName;
+    if (normalizedName.toUpperCase() === sku) return `${sku} - Componente`;
     return `${sku} - ${normalizedName}`;
   };
   const buildWhatsAppLink = (phone = '') => {

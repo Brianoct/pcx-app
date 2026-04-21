@@ -154,12 +154,23 @@ export default function QuoteTool({ token, user }) {
         now.setHours(0, 0, 0, 0);
         const activeCoupons = (Array.isArray(data) ? data : [])
           .filter((coupon) => {
-            const rawDate = String(coupon?.valid_until || '');
-            const validUntilDate = new Date(`${rawDate}T00:00:00`);
-            return !Number.isNaN(validUntilDate.getTime()) && validUntilDate >= now;
+            const rawDate = String(coupon?.valid_until || '').trim();
+            if (!rawDate) return false;
+            const isoDateMatch = rawDate.match(/^(\d{4}-\d{2}-\d{2})/);
+            const parsed = isoDateMatch?.[1]
+              ? new Date(`${isoDateMatch[1]}T00:00:00`)
+              : new Date(rawDate);
+            if (Number.isNaN(parsed.getTime())) return false;
+            parsed.setHours(0, 0, 0, 0);
+            return parsed >= now;
           })
           .sort((a, b) => String(a.valid_until || '').localeCompare(String(b.valid_until || '')));
         setCoupons(activeCoupons);
+        setSelectedCouponCode((prev) => {
+          if (!prev) return prev;
+          const stillAvailable = activeCoupons.some((coupon) => String(coupon.code || '').toUpperCase() === String(prev).toUpperCase());
+          return stillAvailable ? prev : '';
+        });
       } catch (err) {
         console.error('Error fetching cupones activos:', err);
         setCoupons([]);
@@ -553,7 +564,7 @@ export default function QuoteTool({ token, user }) {
       venta_type: ventaType,
       discount_percent: discountPercentForStorage,
       coupon_code: selectedCouponCode || null,
-      gift_label: selectedGiftLabel || null,
+      gift_name: selectedGiftLabel || null,
       seller_user_id: requiresSellerAssignment ? Number(assignedSellerId) : null,
       rows: rowsWithDisplay,
       subtotal,
