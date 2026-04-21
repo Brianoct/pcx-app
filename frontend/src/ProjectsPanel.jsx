@@ -117,6 +117,12 @@ const tripleColumns = {
   gap: '8px'
 };
 
+const normalizeValueFromOptions = (value, options, fallback) => {
+  const normalized = String(value || '');
+  if (Array.isArray(options) && options.includes(normalized)) return normalized;
+  return fallback;
+};
+
 export default function ProjectsPanel({ token, user }) {
   const [loading, setLoading] = useState(true);
   const [savingProject, setSavingProject] = useState(false);
@@ -140,8 +146,7 @@ export default function ProjectsPanel({ token, user }) {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [selectedDate, setSelectedDate] = useState(() => toDateText(new Date()));
-  const [editorMode, setEditorMode] = useState('tasks');
-  const [sidePanelOpen, setSidePanelOpen] = useState(true);
+  const [workspaceTab, setWorkspaceTab] = useState('calendar');
   const [projectForm, setProjectForm] = useState({
     name: '',
     description: '',
@@ -165,6 +170,14 @@ export default function ProjectsPanel({ token, user }) {
     cost: ''
   });
   const [editingTaskId, setEditingTaskId] = useState(null);
+  const [calendarEditTaskId, setCalendarEditTaskId] = useState(null);
+  const [calendarEditForm, setCalendarEditForm] = useState({
+    status: 'pendiente',
+    progress_percent: 0,
+    cost: '',
+    start_date: '',
+    due_date: ''
+  });
 
   const loadDashboard = async () => {
     setLoading(true);
@@ -552,14 +565,13 @@ export default function ProjectsPanel({ token, user }) {
       assignee_user_id: task.assignee_user_id ? String(task.assignee_user_id) : '',
       start_date: normalizeTaskDateText(task.start_date) || '',
       due_date: normalizeTaskDateText(task.due_date) || '',
-      status: normalizeStatusForForm(task.status),
+      status: normalizeValueFromOptions(task.status, statusValues, statusValues[0] || 'pendiente'),
       progress_percent: Number(task.progress_percent || 0),
-      task_type: normalizeTaskTypeForForm(task.task_type),
-      version_bump: normalizeVersionBumpForForm(task.version_bump),
+      task_type: normalizeValueFromOptions(task.task_type, taskTypeValues, taskTypeValues[0] || 'rutina'),
+      version_bump: normalizeValueFromOptions(task.version_bump, versionBumpValues, versionBumpValues[0] || 'none'),
       cost: task.cost !== null && task.cost !== undefined ? String(task.cost) : ''
     });
-    setEditorMode('tasks');
-    setSidePanelOpen(true);
+    setWorkspaceTab('task');
   };
 
   const cancelEditTask = () => {
@@ -605,10 +617,131 @@ export default function ProjectsPanel({ token, user }) {
   const focusTaskOnCalendar = (task) => {
     const targetDate = normalizeTaskDateText(task?.due_date) || normalizeTaskDateText(task?.start_date);
     if (!targetDate) return;
+    setWorkspaceTab('calendar');
     setSelectedDate(targetDate);
     const date = new Date(`${targetDate}T00:00:00`);
     if (Number.isNaN(date.getTime())) return;
     setMonthCursor(new Date(date.getFullYear(), date.getMonth(), 1));
+  };
+
+  const startCalendarEdit = (task) => {
+    if (!task?.id) return;
+    setCalendarEditTaskId(task.id);
+    setCalendarEditForm({
+      status: normalizeValueFromOptions(task.status, statusValues, statusValues[0] || 'pendiente'),
+      progress_percent: Number(task.progress_percent || 0),
+      cost: task.cost !== null && task.cost !== undefined ? String(task.cost) : '',
+      start_date: normalizeTaskDateText(task.start_date) || '',
+      due_date: normalizeTaskDateText(task.due_date) || ''
+    });
+    const targetDate = normalizeTaskDateText(task.due_date) || normalizeTaskDateText(task.start_date);
+    if (targetDate) {
+      setSelectedDate(targetDate);
+      const date = new Date(`${targetDate}T00:00:00`);
+      if (!Number.isNaN(date.getTime())) {
+        setMonthCursor(new Date(date.getFullYear(), date.getMonth(), 1));
+      }
+    }
+  };
+
+  const cancelCalendarEdit = () => {
+    setCalendarEditTaskId(null);
+    setCalendarEditForm({
+      status: statusValues[0] || 'pendiente',
+      progress_percent: 0,
+      cost: '',
+      start_date: '',
+      due_date: ''
+    });
+  };
+
+  const saveCalendarEdit = async () => {
+    if (!calendarEditTaskId) return;
+    const task = tasks.find((row) => row.id === calendarEditTaskId);
+    setUpdatingTaskId(calendarEditTaskId);
+    setError('');
+    setNotice('');
+    try {
+      await apiRequest(`/api/projects/tasks/${calendarEditTaskId}`, {
+        method: 'PATCH',
+        token,
+        body: {
+          status: calendarEditForm.status,
+          progress_percent: Number(calendarEditForm.progress_percent || 0),
+          cost: parseMoney(calendarEditForm.cost),
+          start_date: calendarEditForm.start_date || null,
+          due_date: calendarEditForm.due_date || null
+        }
+      });
+      setNotice(`Tarea "${task?.title || calendarEditTaskId}" actualizada`);
+      await loadDashboard();
+      setCalendarEditTaskId(null);
+    } catch (err) {
+      setError(err.message || 'No se pudo actualizar la tarea desde calendario');
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  };
+
+  const handleTaskFormSubmit = async (event) => {
+    if (!editingTaskId) {
+      await submitTask(event);
+      return;
+    }
+    event.preventDefault();
+    const projectId = Number.parseInt(taskForm.project_id || selectedProjectId, 10);
+    if (!Number.isInteger(projectId) || projectId <= 0) {
+      setError('Selecciona un proyecto para guardar la tarea');
+      return;
+    }
+    if (!taskForm.title.trim()) {
+      setError('Escribe un título para la tarea');
+      return;
+    }
+    setSavingTask(true);
+    setError('');
+    setNotice('');
+    try {
+      await apiRequest(`/api/projects/tasks/${editingTaskId}`, {
+        method: 'PATCH',
+        token,
+        body: {
+          project_id: projectId,
+          title: taskForm.title.trim(),
+          description: taskForm.description.trim() || null,
+          assignee_user_id: taskForm.assignee_user_id ? Number(taskForm.assignee_user_id) : null,
+          start_date: taskForm.start_date || null,
+          due_date: taskForm.due_date || null,
+          status: taskForm.status,
+          progress_percent: Number(taskForm.progress_percent || 0),
+          task_type: taskForm.task_type,
+          version_bump: taskForm.version_bump,
+          cost: parseMoney(taskForm.cost)
+        }
+      });
+      setNotice('Tarea actualizada correctamente');
+      cancelEditTask();
+      await loadDashboard();
+    } catch (err) {
+      setError(err.message || 'No se pudo actualizar la tarea');
+    } finally {
+      setSavingTask(false);
+    }
+  };
+
+  const workspaceTabs = [
+    { key: 'project', label: 'Proyecto', hint: 'Crear y versionar proyectos' },
+    { key: 'task', label: 'Tarea', hint: 'Crear y editar tareas' },
+    { key: 'calendar', label: 'Calendario', hint: 'Vista mensual y edición visual' },
+    { key: 'dashboard', label: 'Dashboard', hint: 'Progreso global y métricas' }
+  ];
+  const activeTabMeta = workspaceTabs.find((tab) => tab.key === workspaceTab) || workspaceTabs[2];
+  const calendarEditingTask = tasks.find((task) => task.id === calendarEditTaskId) || null;
+  const calendarBodyStyle = {
+    border: '1px solid rgba(71, 85, 105, 0.62)',
+    borderRadius: '12px',
+    background: '#0f172a',
+    padding: '10px'
   };
 
   return (
@@ -618,12 +751,12 @@ export default function ProjectsPanel({ token, user }) {
           <p className="admin-hero-eyebrow">Gestión de proyectos</p>
           <h2 className="admin-hero-title">Proyectos y Tareas</h2>
           <p className="admin-hero-subtitle">
-            Calendario colaborativo con foco operativo. Administra proyectos y tareas desde un panel contextual.
+            Alterna entre proyecto, tarea, calendario y dashboard para trabajar a pantalla completa.
           </p>
         </div>
         <div className="admin-active-section-badge" style={{ textAlign: 'left', minWidth: '220px' }}>
           <span>Vista actual</span>
-          <strong>Calendario mensual + tareas</strong>
+          <strong>{activeTabMeta.label}</strong>
         </div>
       </section>
 
@@ -641,74 +774,84 @@ export default function ProjectsPanel({ token, user }) {
         </div>
       )}
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: sidePanelOpen ? 'minmax(340px, 410px) minmax(0, 1fr)' : 'minmax(0, 1fr)',
-          gap: '12px',
-          alignItems: 'start'
-        }}
-      >
-        {sidePanelOpen && (
-          <aside
-            style={{
-              border: '1px solid rgba(45, 56, 82, 0.9)',
-              borderRadius: '16px',
-              background: 'linear-gradient(180deg, rgba(13, 22, 36, 0.96), rgba(9, 15, 25, 0.98))',
-              boxShadow: '0 14px 28px rgba(2, 6, 23, 0.42)',
-              padding: '12px',
-              display: 'grid',
-              gap: '10px',
-              position: 'sticky',
-              top: '76px',
-              maxHeight: 'calc(100vh - 96px)',
-              overflowY: 'auto'
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-              <h3 style={{ margin: 0, color: '#f8fafc' }}>Panel de edición</h3>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setSidePanelOpen(false)}
-                style={{ minHeight: '32px', padding: '6px 10px', background: '#1f2a40', color: '#dbe7ff' }}
-              >
-                Ocultar
-              </button>
+      <div style={{ display: 'grid', gap: '12px' }}>
+        <section
+          style={{
+            border: '1px solid rgba(45, 56, 82, 0.9)',
+            borderRadius: '14px',
+            background: 'rgba(8, 13, 23, 0.9)',
+            padding: '10px',
+            display: 'grid',
+            gap: '10px'
+          }}
+        >
+          <div style={{ display: 'grid', gap: '8px' }}>
+            <div style={{ display: 'inline-flex', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '999px', overflow: 'hidden', flexWrap: 'wrap' }}>
+              {workspaceTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  className="btn"
+                  onClick={() => setWorkspaceTab(tab.key)}
+                  style={{
+                    minHeight: '36px',
+                    borderRadius: 0,
+                    background: workspaceTab === tab.key ? PRIMARY : 'transparent',
+                    color: workspaceTab === tab.key ? '#fff' : '#9fb2cc',
+                    padding: '8px 14px'
+                  }}
+                  title={tab.hint}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
-
             <div style={{ display: 'inline-flex', border: '1px solid rgba(71, 85, 105, 0.75)', borderRadius: '999px', overflow: 'hidden' }}>
               <button
                 type="button"
                 className="btn"
-                onClick={() => setEditorMode('projects')}
+                onClick={() => setViewScope('all')}
                 style={{
-                  minHeight: '36px',
+                  minHeight: '32px',
                   borderRadius: 0,
-                  background: editorMode === 'projects' ? PRIMARY : 'transparent',
-                  color: editorMode === 'projects' ? '#fff' : '#9fb2cc'
+                  background: viewScope === 'all' ? ACCENT : 'transparent',
+                  color: viewScope === 'all' ? '#fff' : '#9fb2cc'
                 }}
               >
-                Proyectos
+                Todo el equipo
               </button>
               <button
                 type="button"
                 className="btn"
-                onClick={() => setEditorMode('tasks')}
+                onClick={() => setViewScope('mine')}
                 style={{
-                  minHeight: '36px',
+                  minHeight: '32px',
                   borderRadius: 0,
-                  background: editorMode === 'tasks' ? PRIMARY : 'transparent',
-                  color: editorMode === 'tasks' ? '#fff' : '#9fb2cc'
+                  background: viewScope === 'mine' ? ACCENT : 'transparent',
+                  color: viewScope === 'mine' ? '#fff' : '#9fb2cc'
                 }}
               >
-                Tareas
+                Mis tareas
               </button>
             </div>
+          </div>
+        </section>
 
-            {editorMode === 'projects' ? (
-              <form onSubmit={submitProject} style={{ display: 'grid', gap: '8px' }}>
-                <h4 style={{ margin: 0, color: '#e2e8f0' }}>Nuevo proyecto</h4>
+        <section
+          style={{
+            border: '1px solid rgba(45, 56, 82, 0.9)',
+            borderRadius: '16px',
+            background: 'linear-gradient(180deg, rgba(13, 22, 36, 0.96), rgba(9, 15, 25, 0.98))',
+            boxShadow: '0 14px 28px rgba(2, 6, 23, 0.42)',
+            padding: '14px',
+            display: 'grid',
+            gap: '12px'
+          }}
+        >
+          {workspaceTab === 'project' && (
+            <>
+              <h3 style={{ margin: 0, color: '#f8fafc' }}>Entrada de proyecto</h3>
+              <form onSubmit={submitProject} style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
                 <input
                   type="text"
                   value={projectForm.name}
@@ -717,11 +860,11 @@ export default function ProjectsPanel({ token, user }) {
                   style={baseFieldStyle}
                 />
                 <textarea
-                  rows={2}
+                  rows={3}
                   value={projectForm.description}
                   onChange={(event) => setProjectForm((prev) => ({ ...prev, description: event.target.value }))}
                   placeholder="Descripción / objetivo"
-                  style={{ ...baseFieldStyle, minHeight: '72px', resize: 'vertical' }}
+                  style={{ ...baseFieldStyle, minHeight: '88px', resize: 'vertical' }}
                 />
                 <div style={splitColumns}>
                   <select
@@ -771,55 +914,34 @@ export default function ProjectsPanel({ token, user }) {
                   {savingProject ? 'Creando...' : 'Crear proyecto'}
                 </button>
               </form>
-            ) : (
-              <form
-                onSubmit={async (event) => {
-                  if (!editingTaskId) {
-                    await submitTask(event);
-                    return;
-                  }
-                  event.preventDefault();
-                  const projectId = Number.parseInt(taskForm.project_id || selectedProjectId, 10);
-                  if (!Number.isInteger(projectId) || projectId <= 0) {
-                    setError('Selecciona un proyecto para guardar la tarea');
-                    return;
-                  }
-                  if (!taskForm.title.trim()) {
-                    setError('Escribe un título para la tarea');
-                    return;
-                  }
-                  setSavingTask(true);
-                  setError('');
-                  setNotice('');
-                  try {
-                    await apiRequest(`/api/projects/tasks/${editingTaskId}`, {
-                      method: 'PATCH',
-                      token,
-                      body: {
-                        project_id: projectId,
-                        title: taskForm.title.trim(),
-                        description: taskForm.description.trim() || null,
-                        assignee_user_id: taskForm.assignee_user_id ? Number(taskForm.assignee_user_id) : null,
-                        start_date: taskForm.start_date || null,
-                        due_date: taskForm.due_date || null,
-                        status: taskForm.status,
-                        progress_percent: Number(taskForm.progress_percent || 0),
-                        task_type: taskForm.task_type,
-                        version_bump: taskForm.version_bump,
-                        cost: parseMoney(taskForm.cost)
-                      }
-                    });
-                    setNotice('Tarea actualizada correctamente');
-                    cancelEditTask();
-                    await loadDashboard();
-                  } catch (err) {
-                    setError(err.message || 'No se pudo actualizar la tarea');
-                  } finally {
-                    setSavingTask(false);
-                  }
-                }}
-                style={{ display: 'grid', gap: '8px' }}
-              >
+              <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
+                <h4 style={{ margin: 0, color: '#f8fafc' }}>Mis proyectos ({myProjects.length})</h4>
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {myProjects.length === 0 ? (
+                    <div style={{ color: '#9fb2cc' }}>Todavía no participas en proyectos.</div>
+                  ) : myProjects.map((project) => (
+                    <div key={project.id} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                        <strong style={{ color: '#f8fafc' }}>{project.name}</strong>
+                        <span style={{ fontSize: '0.78rem', color: '#9fb2cc' }}>v{project.version}</span>
+                      </div>
+                      <div style={{ marginTop: '3px', fontSize: '0.82rem', color: '#93a4bc' }}>
+                        {project.area} · {TASK_TYPE_LABELS[project.work_type] || project.work_type}
+                      </div>
+                      <div style={{ marginTop: '7px', height: '7px', borderRadius: '999px', background: '#1e293b', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.max(0, Math.min(100, Number(project.progress_percent || 0)))}%`, height: '100%', background: '#2563eb' }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {workspaceTab === 'task' && (
+            <>
+              <h3 style={{ margin: 0, color: '#f8fafc' }}>Entrada de tarea</h3>
+              <form onSubmit={handleTaskFormSubmit} style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
                 <h4 style={{ margin: 0, color: '#e2e8f0' }}>
                   {editingTaskId ? `Editando tarea #${editingTaskId}` : 'Nueva tarea'}
                 </h4>
@@ -944,17 +1066,343 @@ export default function ProjectsPanel({ token, user }) {
                   </button>
                 </div>
               </form>
-            )}
 
-            <div style={{ borderTop: '1px solid rgba(71, 85, 105, 0.46)', paddingTop: '10px', display: 'grid', gap: '8px' }}>
-              <h4 style={{ margin: 0, color: '#f8fafc' }}>Mis proyectos ({myProjects.length})</h4>
-              <div style={{ display: 'grid', gap: '8px', maxHeight: '260px', overflowY: 'auto', paddingRight: '2px' }}>
-                {loading ? (
-                  <div style={{ color: '#9fb2cc' }}>Cargando proyectos...</div>
-                ) : myProjects.length === 0 ? (
+              <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
+                <h4 style={{ margin: 0, color: '#f8fafc' }}>Lista de tareas ({visibleTasks.length})</h4>
+                {tasksWithoutDate.length > 0 && (
+                  <span style={{ color: '#fbbf24', fontSize: '0.78rem' }}>
+                    {tasksWithoutDate.length} sin fecha (no salen en calendario)
+                  </span>
+                )}
+                <div style={{ display: 'grid', gap: '8px', maxHeight: '320px', overflowY: 'auto', paddingRight: '2px' }}>
+                  {loading ? (
+                    <div style={{ color: '#9fb2cc' }}>Cargando tareas...</div>
+                  ) : visibleTasks.length === 0 ? (
+                    <div style={{ color: '#9fb2cc' }}>No hay tareas registradas para esta vista.</div>
+                  ) : visibleTasks.map((task) => {
+                    const hasDate = Boolean(normalizeTaskDateText(task.start_date) || normalizeTaskDateText(task.due_date));
+                    return (
+                      <div key={`task-tab-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.6)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                          <strong style={{ color: '#f8fafc' }}>{task.title}</strong>
+                          <span style={{ color: '#93a5be', fontSize: '0.75rem' }}>{task.project_name}</span>
+                        </div>
+                        <div style={{ marginTop: '4px', color: '#94a9c3', fontSize: '0.76rem' }}>
+                          Estado: {STATUS_LABELS[task.status] || task.status} · Inicio: {formatDate(task.start_date)} · Entrega: {formatDate(task.due_date)}
+                        </div>
+                        <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'flex-end', gap: '6px', flexWrap: 'wrap' }}>
+                          {hasDate && (
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={() => focusTaskOnCalendar(task)}
+                              style={{ minHeight: '30px', padding: '5px 9px', background: '#1f3b70', color: '#dbeafe', fontSize: '0.76rem' }}
+                            >
+                              Ver calendario
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => startEditTask(task)}
+                            style={{ minHeight: '30px', padding: '5px 9px', background: '#1e40af', color: '#dbeafe', fontSize: '0.76rem' }}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => deleteTask(task)}
+                            disabled={updatingTaskId === task.id}
+                            style={{ minHeight: '30px', padding: '5px 9px', background: '#7f1d1d', color: '#fecaca', fontSize: '0.76rem' }}
+                          >
+                            {updatingTaskId === task.id ? '...' : 'Eliminar'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
+
+          {workspaceTab === 'calendar' && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>
+                  <h3 style={{ margin: 0, color: '#f8fafc' }}>Calendario de tareas</h3>
+                  <div style={{ color: '#98acc8', fontSize: '0.84rem', marginTop: '2px' }}>
+                    Haz clic en la barra de una tarea para editarla en vista de pajarito.
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(120px, 1fr))', gap: '8px', minWidth: 'min(420px, 100%)' }}>
+                  <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
+                    <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Tareas visibles</div>
+                    <strong style={{ color: '#f8fafc', fontSize: '1.08rem' }}>{tasksSummary.total}</strong>
+                  </div>
+                  <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
+                    <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Completadas</div>
+                    <strong style={{ color: '#34d399', fontSize: '1.08rem' }}>{tasksSummary.completed}</strong>
+                  </div>
+                  <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
+                    <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Progreso medio</div>
+                    <strong style={{ color: '#60a5fa', fontSize: '1.08rem' }}>{tasksSummary.avgProgress}%</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                  style={{ minHeight: '34px', minWidth: '40px', padding: '0 10px', background: '#1e293b', color: '#f8fafc' }}
+                >
+                  ◀
+                </button>
+                <strong style={{ color: '#f8fafc', minWidth: '200px', textAlign: 'center', fontSize: '1.05rem' }}>
+                  {MONTH_LABELS[monthCursor.getMonth()]} {monthCursor.getFullYear()}
+                </strong>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                  style={{ minHeight: '34px', minWidth: '40px', padding: '0 10px', background: '#1e293b', color: '#f8fafc' }}
+                >
+                  ▶
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '8px' }}>
+                {DAY_LABELS.map((day) => (
+                  <div key={day} style={{ textAlign: 'center', color: '#96aac6', fontWeight: 700, fontSize: '0.78rem' }}>{day}</div>
+                ))}
+                {calendarCells.map((day, dayIndex) => {
+                  const dateText = toDateText(day);
+                  const dayTasks = tasksByDate.get(dateText) || [];
+                  const dayRows = calendarRowsByDay[dayIndex] || [];
+                  const isCurrentMonth = day.getMonth() === monthCursor.getMonth();
+                  const isSelected = dateText === selectedDate;
+                  return (
+                    <div
+                      key={dateText}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedDate(dateText)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedDate(dateText);
+                        }
+                      }}
+                      style={{
+                        border: `1px solid ${isSelected ? 'rgba(255, 127, 48, 0.9)' : 'rgba(71, 85, 105, 0.62)'}`,
+                        borderRadius: '11px',
+                        background: isSelected ? 'rgba(255, 127, 48, 0.16)' : '#0f172a',
+                        minHeight: '138px',
+                        padding: '8px 7px',
+                        display: 'grid',
+                        alignContent: 'start',
+                        gap: '5px',
+                        color: isCurrentMonth ? '#f8fafc' : '#6f84a3',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700 }}>{day.getDate()}</div>
+                      <div style={{ display: 'grid', gap: '3px' }}>
+                        {dayRows.slice(0, 5).map((row, rowIndex) => {
+                          if (!row) return <div key={`empty-${dateText}-${rowIndex}`} style={{ minHeight: '18px' }} />;
+                          const color = STATUS_COLORS[row.task.status] || '#2563eb';
+                          return (
+                            <button
+                              key={`bar-${dateText}-${row.task.id}-${rowIndex}`}
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                startCalendarEdit(row.task);
+                              }}
+                              style={{
+                                background: color,
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: row.isStart || row.isEnd ? '999px' : '3px',
+                                padding: row.isStart || row.isEnd ? '2px 7px' : '2px 4px',
+                                fontSize: '0.66rem',
+                                minHeight: '18px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: row.isStart ? 'flex-start' : 'center',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                opacity: row.task.status === 'completada' ? 0.9 : 1,
+                                cursor: 'pointer'
+                              }}
+                              title={`Editar: ${row.task.title} (${formatDate(row.task.start_date)} - ${formatDate(row.task.due_date)})`}
+                            >
+                              {row.isStart ? row.task.title : ''}
+                            </button>
+                          );
+                        })}
+                        {dayTasks.length > 5 && (
+                          <div style={{ fontSize: '0.68rem', color: '#9cb0cb' }}>+{dayTasks.length - 5} más</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '10px' }}>
+                <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
+                  <h4 style={{ margin: 0, color: '#f8fafc' }}>Tareas del {formatDate(selectedDate)}</h4>
+                  <div style={{ display: 'grid', gap: '8px', maxHeight: '220px', overflowY: 'auto', paddingRight: '2px' }}>
+                    {selectedDateTasks.length === 0 ? (
+                      <div style={{ color: '#9fb2cc' }}>No hay tareas en esta fecha.</div>
+                    ) : selectedDateTasks.map((task) => (
+                      <div key={`selected-date-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                          <strong style={{ color: '#f8fafc' }}>{task.title}</strong>
+                          <span style={{ color: '#93a5be', fontSize: '0.75rem' }}>{task.project_name}</span>
+                        </div>
+                        <div style={{ marginTop: '4px', color: '#94a9c3', fontSize: '0.76rem' }}>
+                          {task.assignee_name || 'Sin asignar'} · Estado: {STATUS_LABELS[task.status] || task.status}
+                        </div>
+                        <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'flex-end', gap: '6px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => startCalendarEdit(task)}
+                            style={{ minHeight: '30px', padding: '5px 9px', background: '#1e40af', color: '#dbeafe', fontSize: '0.76rem' }}
+                          >
+                            Editar en calendario
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => deleteTask(task)}
+                            disabled={updatingTaskId === task.id}
+                            style={{ minHeight: '30px', padding: '5px 9px', background: '#7f1d1d', color: '#fecaca', fontSize: '0.76rem' }}
+                          >
+                            {updatingTaskId === task.id ? '...' : 'Eliminar'}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
+                  <h4 style={{ margin: 0, color: '#f8fafc' }}>
+                    {calendarEditingTask ? `Editando: ${calendarEditingTask.title}` : 'Selecciona una barra para editar'}
+                  </h4>
+                  {calendarEditingTask ? (
+                    <>
+                      <div style={splitColumns}>
+                        <input
+                          type="date"
+                          value={calendarEditForm.start_date}
+                          onChange={(event) => setCalendarEditForm((prev) => ({ ...prev, start_date: event.target.value }))}
+                          style={baseFieldStyle}
+                        />
+                        <input
+                          type="date"
+                          value={calendarEditForm.due_date}
+                          onChange={(event) => setCalendarEditForm((prev) => ({ ...prev, due_date: event.target.value }))}
+                          style={baseFieldStyle}
+                        />
+                      </div>
+                      <div style={tripleColumns}>
+                        <select
+                          value={calendarEditForm.status}
+                          onChange={(event) => setCalendarEditForm((prev) => ({ ...prev, status: event.target.value }))}
+                          style={baseFieldStyle}
+                        >
+                          {statusValues.map((status) => (
+                            <option key={status} value={status}>{STATUS_LABELS[status] || status}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={calendarEditForm.progress_percent}
+                          onChange={(event) => setCalendarEditForm((prev) => ({ ...prev, progress_percent: event.target.value }))}
+                          style={baseFieldStyle}
+                          placeholder="%"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={calendarEditForm.cost}
+                          onChange={(event) => setCalendarEditForm((prev) => ({ ...prev, cost: event.target.value }))}
+                          style={baseFieldStyle}
+                          placeholder="Costo Bs"
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={saveCalendarEdit}
+                          disabled={updatingTaskId === calendarEditTaskId}
+                          style={{ background: ACCENT, color: '#fff', minHeight: '36px', padding: '8px 14px' }}
+                        >
+                          {updatingTaskId === calendarEditTaskId ? 'Guardando...' : 'Guardar cambios'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={cancelCalendarEdit}
+                          style={{ background: '#475569', color: '#fff', minHeight: '36px', padding: '8px 14px' }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => startEditTask(calendarEditingTask)}
+                          style={{ background: '#1f3b70', color: '#dbeafe', minHeight: '36px', padding: '8px 14px' }}
+                        >
+                          Abrir en tab Tarea
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p style={{ margin: 0, color: '#9fb2cc' }}>
+                      Consejo: usa esta vista para ajustes rapidos de fechas, estado y progreso sin salir del calendario.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          {workspaceTab === 'dashboard' && (
+            <>
+              <h3 style={{ margin: 0, color: '#f8fafc' }}>Dashboard de progreso</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
+                <div style={calendarBodyStyle}>
+                  <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Tareas visibles</div>
+                  <strong style={{ color: '#f8fafc', fontSize: '1.14rem' }}>{tasksSummary.total}</strong>
+                </div>
+                <div style={calendarBodyStyle}>
+                  <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Completadas</div>
+                  <strong style={{ color: '#34d399', fontSize: '1.14rem' }}>{tasksSummary.completed}</strong>
+                </div>
+                <div style={calendarBodyStyle}>
+                  <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Progreso medio</div>
+                  <strong style={{ color: '#60a5fa', fontSize: '1.14rem' }}>{tasksSummary.avgProgress}%</strong>
+                </div>
+              </div>
+              <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
+                <h4 style={{ margin: 0, color: '#f8fafc' }}>Proyectos activos ({myProjects.length})</h4>
+                {myProjects.length === 0 ? (
                   <div style={{ color: '#9fb2cc' }}>Todavía no participas en proyectos.</div>
                 ) : myProjects.map((project) => (
-                  <div key={project.id} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#0f172a', padding: '8px' }}>
+                  <div key={`dash-project-${project.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
                       <strong style={{ color: '#f8fafc' }}>{project.name}</strong>
                       <span style={{ fontSize: '0.78rem', color: '#9fb2cc' }}>v{project.version}</span>
@@ -968,322 +1416,32 @@ export default function ProjectsPanel({ token, user }) {
                   </div>
                 ))}
               </div>
-            </div>
-          </aside>
-        )}
-
-        <section
-          style={{
-            border: '1px solid rgba(45, 56, 82, 0.9)',
-            borderRadius: '16px',
-            background: 'linear-gradient(180deg, rgba(13, 22, 36, 0.96), rgba(9, 15, 25, 0.98))',
-            boxShadow: '0 14px 28px rgba(2, 6, 23, 0.42)',
-            padding: '14px',
-            display: 'grid',
-            gap: '10px'
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div>
-              <h3 style={{ margin: 0, color: '#f8fafc' }}>Calendario de tareas</h3>
-              <div style={{ color: '#98acc8', fontSize: '0.84rem', marginTop: '2px' }}>
-                Vista mensual prioritaria para planificación y seguimiento
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              {!sidePanelOpen && (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setSidePanelOpen(true)}
-                  style={{ minHeight: '34px', padding: '7px 12px', background: '#1f2a40', color: '#dbe7ff' }}
-                >
-                  Mostrar panel
-                </button>
-              )}
-              <div style={{ display: 'inline-flex', border: '1px solid rgba(71, 85, 105, 0.75)', borderRadius: '999px', overflow: 'hidden' }}>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setViewScope('all')}
-                  style={{
-                    minHeight: '34px',
-                    borderRadius: 0,
-                    background: viewScope === 'all' ? '#2563eb' : 'transparent',
-                    color: viewScope === 'all' ? '#fff' : '#9fb2cc'
-                  }}
-                >
-                  Todo el equipo
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setViewScope('mine')}
-                  style={{
-                    minHeight: '34px',
-                    borderRadius: 0,
-                    background: viewScope === 'mine' ? '#2563eb' : 'transparent',
-                    color: viewScope === 'mine' ? '#fff' : '#9fb2cc'
-                  }}
-                >
-                  Mis tareas
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
-            <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
-              <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Tareas visibles</div>
-              <strong style={{ color: '#f8fafc', fontSize: '1.08rem' }}>{tasksSummary.total}</strong>
-            </div>
-            <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
-              <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Completadas</div>
-              <strong style={{ color: '#34d399', fontSize: '1.08rem' }}>{tasksSummary.completed}</strong>
-            </div>
-            <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
-              <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Progreso medio</div>
-              <strong style={{ color: '#60a5fa', fontSize: '1.08rem' }}>{tasksSummary.avgProgress}%</strong>
-            </div>
-          </div>
-
-          <div style={{ border: '1px solid rgba(71, 85, 105, 0.62)', borderRadius: '12px', background: '#0f172a', padding: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
-              <h4 style={{ margin: 0, color: '#f8fafc' }}>Lista de tareas ({visibleTasks.length})</h4>
-              {tasksWithoutDate.length > 0 && (
-                <span style={{ color: '#fbbf24', fontSize: '0.78rem' }}>
-                  {tasksWithoutDate.length} sin fecha (no salen en calendario)
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'grid', gap: '8px', maxHeight: '220px', overflowY: 'auto', paddingRight: '2px' }}>
-              {loading ? (
-                <div style={{ color: '#9fb2cc' }}>Cargando tareas...</div>
-              ) : visibleTasks.length === 0 ? (
-                <div style={{ color: '#9fb2cc' }}>No hay tareas registradas para esta vista.</div>
-              ) : visibleTasks.map((task) => {
-                const hasDate = Boolean(normalizeTaskDateText(task.start_date) || normalizeTaskDateText(task.due_date));
-                return (
-                  <div key={`list-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.6)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
+              <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
+                <h4 style={{ margin: 0, color: '#f8fafc' }}>Ultimas tareas ({Math.min(visibleTasks.length, 8)})</h4>
+                {visibleTasks.slice(0, 8).map((task) => (
+                  <div key={`dash-task-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
                       <strong style={{ color: '#f8fafc' }}>{task.title}</strong>
-                      <span style={{ color: '#93a5be', fontSize: '0.75rem' }}>{task.project_name}</span>
+                      <span style={{ color: '#93a5be', fontSize: '0.75rem' }}>{STATUS_LABELS[task.status] || task.status}</span>
                     </div>
                     <div style={{ marginTop: '4px', color: '#94a9c3', fontSize: '0.76rem' }}>
-                      Estado: {STATUS_LABELS[task.status] || task.status} · Inicio: {formatDate(task.start_date)} · Entrega: {formatDate(task.due_date)}
+                      {task.project_name} · {formatDate(task.start_date)} - {formatDate(task.due_date)} · {Number(task.progress_percent || 0)}%
                     </div>
-                    <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                      {!hasDate ? (
-                        <span style={{ color: '#fbbf24', fontSize: '0.74rem' }}>Sin fecha en calendario</span>
-                      ) : (
-                        <span style={{ color: '#86efac', fontSize: '0.74rem' }}>Con fecha</span>
-                      )}
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        {hasDate && (
-                          <button
-                            type="button"
-                            className="btn"
-                            onClick={() => focusTaskOnCalendar(task)}
-                            style={{ minHeight: '30px', padding: '5px 9px', background: '#1f3b70', color: '#dbeafe', fontSize: '0.76rem' }}
-                          >
-                            Ver en calendario
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => startEditTask(task)}
-                          style={{ minHeight: '30px', padding: '5px 9px', background: '#1e40af', color: '#dbeafe', fontSize: '0.76rem' }}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => deleteTask(task)}
-                          disabled={updatingTaskId === task.id}
-                          style={{ minHeight: '30px', padding: '5px 9px', background: '#7f1d1d', color: '#fecaca', fontSize: '0.76rem' }}
-                        >
-                          {updatingTaskId === task.id ? '...' : 'Eliminar'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-              style={{ minHeight: '34px', minWidth: '40px', padding: '0 10px', background: '#1e293b', color: '#f8fafc' }}
-            >
-              ◀
-            </button>
-            <strong style={{ color: '#f8fafc', minWidth: '170px', textAlign: 'center', fontSize: '1.05rem' }}>
-              {MONTH_LABELS[monthCursor.getMonth()]} {monthCursor.getFullYear()}
-            </strong>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-              style={{ minHeight: '34px', minWidth: '40px', padding: '0 10px', background: '#1e293b', color: '#f8fafc' }}
-            >
-              ▶
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '8px' }}>
-            {DAY_LABELS.map((day) => (
-              <div key={day} style={{ textAlign: 'center', color: '#96aac6', fontWeight: 700, fontSize: '0.78rem' }}>{day}</div>
-            ))}
-            {calendarCells.map((day, dayIndex) => {
-              const dateText = toDateText(day);
-              const dayTasks = tasksByDate.get(dateText) || [];
-              const dayRows = calendarRowsByDay[dayIndex] || [];
-              const isCurrentMonth = day.getMonth() === monthCursor.getMonth();
-              const isSelected = dateText === selectedDate;
-              return (
-                <button
-                  key={dateText}
-                  type="button"
-                  onClick={() => setSelectedDate(dateText)}
-                  style={{
-                    border: `1px solid ${isSelected ? 'rgba(255, 127, 48, 0.9)' : 'rgba(71, 85, 105, 0.62)'}`,
-                    borderRadius: '11px',
-                    background: isSelected ? 'rgba(255, 127, 48, 0.16)' : '#0f172a',
-                    minHeight: '136px',
-                    padding: '8px 7px',
-                    display: 'grid',
-                    alignContent: 'start',
-                    gap: '5px',
-                    color: isCurrentMonth ? '#f8fafc' : '#6f84a3',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{ fontSize: '0.82rem', fontWeight: 700 }}>{day.getDate()}</div>
-                  <div style={{ display: 'grid', gap: '3px' }}>
-                    {dayRows.slice(0, 5).map((row, rowIndex) => {
-                      if (!row) return <div key={`empty-${dateText}-${rowIndex}`} style={{ minHeight: '18px' }} />;
-                      const color = STATUS_COLORS[row.task.status] || '#2563eb';
-                      return (
-                        <div
-                          key={`bar-${dateText}-${row.task.id}-${rowIndex}`}
-                          style={{
-                            background: color,
-                            color: '#fff',
-                            borderRadius: row.isStart || row.isEnd ? '999px' : '3px',
-                            padding: row.isStart || row.isEnd ? '2px 7px' : '2px 4px',
-                            fontSize: '0.66rem',
-                            minHeight: '18px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: row.isStart ? 'flex-start' : 'center',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            opacity: row.task.status === 'completada' ? 0.9 : 1
-                          }}
-                          title={`${row.task.title} (${formatDate(row.task.start_date)} - ${formatDate(row.task.due_date)})`}
-                        >
-                          {row.isStart ? row.task.title : ''}
-                        </div>
-                      );
-                    })}
-                    {dayTasks.length > 5 && (
-                      <div style={{ fontSize: '0.68rem', color: '#9cb0cb' }}>+{dayTasks.length - 5} más</div>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <div style={{ borderTop: '1px solid rgba(71, 85, 105, 0.5)', paddingTop: '10px', display: 'grid', gap: '8px' }}>
-            <h4 style={{ margin: 0, color: '#f8fafc' }}>Tareas del {formatDate(selectedDate)}</h4>
-            <div style={{ display: 'grid', gap: '8px', maxHeight: '280px', overflowY: 'auto', paddingRight: '2px' }}>
-              {selectedDateTasks.length === 0 ? (
-                <div style={{ color: '#9fb2cc' }}>No hay tareas en esta fecha.</div>
-              ) : selectedDateTasks.map((task) => {
-                const draft = taskDrafts[task.id] || {
-                  status: task.status,
-                  progress_percent: Number(task.progress_percent || 0),
-                  cost: task.cost ?? ''
-                };
-                return (
-                  <div key={`selected-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#0f172a', padding: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                      <strong style={{ color: '#f8fafc' }}>{task.title}</strong>
-                      <span style={{ color: '#93a5be', fontSize: '0.76rem' }}>{task.project_name}</span>
-                    </div>
-                    <div style={{ color: '#94a9c3', fontSize: '0.78rem', marginTop: '3px' }}>
-                      {task.assignee_name} · {STATUS_LABELS[task.status] || task.status} · Entrega: {formatDate(task.due_date)}
-                    </div>
-                    <div style={{ marginTop: '6px', height: '7px', borderRadius: '999px', background: '#1e293b', overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.max(0, Math.min(100, Number(task.progress_percent || 0)))}%`, height: '100%', background: STATUS_COLORS[task.status] || '#2563eb' }} />
-                    </div>
-                    <div
-                      style={{
-                        marginTop: '8px',
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(0, 1fr) 82px 100px auto',
-                        gap: '6px',
-                        alignItems: 'center'
-                      }}
-                    >
-                      <select
-                        value={draft.status}
-                        onChange={(event) => setTaskDrafts((prev) => ({
-                          ...prev,
-                          [task.id]: { ...prev[task.id], status: event.target.value }
-                        }))}
-                        style={{ ...baseFieldStyle, minHeight: '32px', padding: '5px 8px' }}
-                      >
-                        {statusValues.map((status) => (
-                          <option key={status} value={status}>{STATUS_LABELS[status] || status}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={draft.progress_percent}
-                        onChange={(event) => setTaskDrafts((prev) => ({
-                          ...prev,
-                          [task.id]: { ...prev[task.id], progress_percent: event.target.value }
-                        }))}
-                        style={{ ...baseFieldStyle, minHeight: '32px', padding: '5px 8px' }}
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={draft.cost}
-                        onChange={(event) => setTaskDrafts((prev) => ({
-                          ...prev,
-                          [task.id]: { ...prev[task.id], cost: event.target.value }
-                        }))}
-                        placeholder="Costo"
-                        style={{ ...baseFieldStyle, minHeight: '32px', padding: '5px 8px' }}
-                      />
+                    <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'flex-end' }}>
                       <button
                         type="button"
                         className="btn"
-                        onClick={() => saveTaskDraft(task)}
-                        disabled={updatingTaskId === task.id}
-                        style={{ minHeight: '32px', padding: '5px 10px', background: '#2563eb', color: '#fff' }}
+                        onClick={() => focusTaskOnCalendar(task)}
+                        style={{ minHeight: '30px', padding: '5px 9px', background: '#1f3b70', color: '#dbeafe', fontSize: '0.76rem' }}
                       >
-                        {updatingTaskId === task.id ? '...' : 'Guardar'}
+                        Ver en calendario
                       </button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       </div>
     </div>
