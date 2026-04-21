@@ -14,6 +14,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const [filteredQuotes, setFilteredQuotes] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [editingQuote, setEditingQuote] = useState(null);
@@ -117,13 +118,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      const isLeader = canViewGlobalHistory;
-
-      filtered = filtered.filter(q => 
+      filtered = filtered.filter(q =>
         q.customer_name?.toLowerCase().includes(term) ||
-        q.customer_phone?.toLowerCase().includes(term) ||
-        (isLeader && q.vendor?.toLowerCase().includes(term))
+        q.customer_phone?.toLowerCase().includes(term)
       );
+    }
+
+    if (vendorFilter) {
+      filtered = filtered.filter((q) => (q.vendor || '') === vendorFilter);
     }
 
     if (statusFilter) {
@@ -132,11 +134,22 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
 
     setFilteredQuotes(filtered);
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, quotes, canViewGlobalHistory]);
+  }, [searchTerm, vendorFilter, statusFilter, quotes]);
+
+  const vendorOptions = useMemo(() => {
+    const unique = Array.from(new Set(
+      quotes
+        .map((q) => String(q.vendor || '').trim())
+        .filter(Boolean)
+    ));
+    unique.sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+    return unique;
+  }, [quotes]);
 
   const clearFilters = () => {
     setSearchTerm('');
     setStatusFilter('');
+    setVendorFilter('');
   };
 
   const updateStatus = async (quoteId, newStatus) => {
@@ -952,12 +965,23 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         <input
           className="filter-input"
           type="text"
-          placeholder={isLeader 
-            ? "Buscar por cliente, teléfono o vendedor..." 
-            : "Buscar por cliente o teléfono..."}
+          placeholder="Buscar por cliente o teléfono..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
+
+        <select
+          className="filter-select"
+          value={vendorFilter}
+          onChange={(e) => setVendorFilter(e.target.value)}
+        >
+          <option value="">Todos los vendedores</option>
+          {vendorOptions.map((vendorName) => (
+            <option key={vendorName} value={vendorName}>
+              {vendorName}
+            </option>
+          ))}
+        </select>
 
         <select
           className="filter-select"
