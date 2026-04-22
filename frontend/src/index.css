@@ -1312,6 +1312,18 @@ nav {
   border-bottom: none;
 }
 
+.mobile-menu-group {
+  margin-bottom: 12px;
+}
+
+.mobile-menu-group-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  padding: 2px 4px 6px;
+}
+
 /* Desktop nav links */
 .nav-links:not(.mobile) {
   display: flex;
