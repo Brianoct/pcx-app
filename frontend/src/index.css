@@ -1336,7 +1336,7 @@ nav {
 .nav-links.desktop {
   flex: 0 1 auto;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   white-space: nowrap;
   padding-bottom: 0;
 }
