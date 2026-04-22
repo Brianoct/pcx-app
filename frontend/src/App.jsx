@@ -279,7 +279,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
 
           <div className="desktop-nav-cluster">
             {isAdminUser ? (
-              <div className="desktop-admin-menus">
+              <div className="nav-links desktop">
                 {adminMenuSections.map((section) => {
                   const sectionIsActive = section.items.some((item) => isNavItemActive(item));
                   return (
