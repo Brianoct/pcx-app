@@ -6156,21 +6156,29 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
       salesRankingRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
     );
 
-    const salesTeamTotalsRes = await pool.query(
+    const ownSalesByUserRes = await pool.query(
       `SELECT
          q.user_id,
          COALESCE(SUM(q.total), 0) AS total_sales
        FROM quotes q
+       WHERE q.status = ANY($1::text[])${dateFilterWithStatus.sql}
+       GROUP BY q.user_id`,
+      [COMPLETED_STATUSES, ...dateFilterWithStatus.params]
+    );
+    const ownSalesByUserId = new Map(
+      ownSalesByUserRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
+    );
+
+    const salesRoleOnlyRes = await pool.query(
+      `SELECT COALESCE(SUM(q.total), 0) AS total_sales
+       FROM quotes q
        JOIN users u ON u.id = q.user_id
        WHERE q.status = ANY($1::text[])
          AND u.is_active = TRUE
-         AND LOWER(u.role) = $2${dateFilterWithStatusAndRole.sql}
-       GROUP BY q.user_id`,
+         AND LOWER(u.role) = $2${dateFilterWithStatusAndRole.sql}`,
       [COMPLETED_STATUSES, ROLE_KEYS.ventas, ...dateFilterWithStatusAndRole.params]
     );
-    const salesTeamTotalsByUserId = new Map(
-      salesTeamTotalsRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
-    );
+    const salesRoleOnlyTotal = Number(salesRoleOnlyRes.rows[0]?.total_sales || 0);
 
     const localSalesRes = await pool.query(
       `SELECT
@@ -6192,6 +6200,12 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]+/g, '');
 
+    const qcCommissionResult = await computeQualityControlCommissionTotal(month, year);
+    if (qcCommissionResult?.error) {
+      return res.status(400).json({ error: qcCommissionResult.error });
+    }
+    const qcCommissionTotal = Number(qcCommissionResult?.total || 0);
+
     const commissionByUser = activeUsers.map((userRow) => {
       const userId = Number(userRow.id);
       const roleNormalized = normalizeRole(userRow.role || '');
@@ -6200,18 +6214,22 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
       const localStore = cityScope?.canonical || userRow.city || '';
       let commission = 0;
 
-      if (roleNormalized === ROLE_KEYS.admin || roleNormalized === ROLE_KEYS.almacenLider || roleNormalized === ROLE_KEYS.microfabrica || roleNormalized === ROLE_KEYS.microfabricaLider) {
-        commission = 0;
+      const ownSales = Number(ownSalesByUserId.get(userId) || 0);
+      if (
+        roleNormalized === ROLE_KEYS.admin
+        || roleNormalized === ROLE_KEYS.almacenLider
+        || roleNormalized === ROLE_KEYS.microfabrica
+        || roleNormalized === ROLE_KEYS.microfabricaLider
+      ) {
+        commission = qcCommissionTotal;
       } else if (roleNormalized === ROLE_KEYS.marketingLider) {
         commission = allSales * rateMarketingLider;
       } else if (roleNormalized === ROLE_KEYS.ventasLider) {
-        const ownSales = Number(salesTotalsByUserId.get(userId) || 0);
-        const teamSalesOnly = Number(salesTeamTotalsByUserId.get(userId) || 0);
-        commission = (teamSalesOnly + ownSales) * rateVentasLider;
+        commission = (salesRoleOnlyTotal + ownSales) * rateVentasLider;
       } else if (roleNormalized === ROLE_KEYS.ventas || roleNormalized === 'sales' || roleNormalized === 'vendedor') {
-        const ownSales = Number(salesTotalsByUserId.get(userId) || 0);
+        const salesOwnTotal = Number(salesTotalsByUserId.get(userId) || ownSales);
         const rate = topSalesUserId === userId && ownSales > 0 ? rateVentasTop : rateVentasRegular;
-        commission = ownSales * rate;
+        commission = salesOwnTotal * rate;
       } else if (roleNormalized === ROLE_KEYS.almacen) {
         const storeKey = normalizeStoreKey(localStore);
         const localSales = Number(localSalesByStoreKey.get(storeKey) || 0);
