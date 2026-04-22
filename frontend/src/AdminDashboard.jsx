@@ -31,9 +31,24 @@ function AdminDashboard({ token }) {
   const topSalespeople = Array.isArray(stats.topSalespeople) ? stats.topSalespeople : [];
   const topLocations = Array.isArray(stats.topLocations) ? stats.topLocations : [];
   const topWarehouses = Array.isArray(stats.topWarehouses) ? stats.topWarehouses : [];
-  const activeUserCommissions = Array.isArray(stats.activeUserCommissions) ? stats.activeUserCommissions : [];
-  const totalCommissionsToDate = Number(stats.totalCommissionsToDate || 0);
+  const activeUserCommissions = Array.isArray(stats.activeUserCommissions)
+    ? stats.activeUserCommissions
+    : (Array.isArray(stats.commissionPayout?.rows) ? stats.commissionPayout.rows : []);
+  const totalCommissionsToDate = Number(
+    stats.totalCommissionToDate
+    ?? stats.totalCommissionsToDate
+    ?? stats.commissionPayout?.total
+    ?? 0
+  );
   const maxQty = Math.max(...popularProducts.map((p) => Number(p.total_quantity || 0)), 1);
+  const maxSales = Math.max(...topSalespeople.map((seller) => Number(seller.total_sales || 0)), 1);
+  const maxWarehouseSales = Math.max(...topWarehouses.map((warehouse) => Number(warehouse.total_sales || 0)), 1);
+  const commissionRows = [...activeUserCommissions]
+    .map((row, index) => ({
+      ...row,
+      rowKey: row.user_id || row.id || row.email || `commission-${index}`
+    }))
+    .sort((a, b) => Number(b.commission || 0) - Number(a.commission || 0));
   const formatBs = (value) => `${Number(value || 0).toFixed(2)} Bs`;
 
   return (
@@ -99,10 +114,19 @@ function AdminDashboard({ token }) {
           {topSalespeople.length === 0 ? (
             <p className="dashboard-empty">Sin datos este periodo</p>
           ) : (
-            <ol className="dashboard-list">
+            <ol className="dashboard-list dashboard-list-bars">
               {topSalespeople.map((seller, index) => (
                 <li key={`${seller.vendor}-${index}`}>
-                  <strong>{seller.vendor}</strong> — {seller.order_count} pedidos — {formatBs(seller.total_sales)}
+                  <div className="dashboard-list-bar-head">
+                    <strong>{seller.vendor}</strong>
+                    <span>{seller.order_count} pedidos · {formatBs(seller.total_sales)}</span>
+                  </div>
+                  <div className="dashboard-bar-track">
+                    <div
+                      className="dashboard-bar-fill"
+                      style={{ width: `${Math.min(100, (Number(seller.total_sales || 0) / maxSales) * 100)}%` }}
+                    />
+                  </div>
                 </li>
               ))}
             </ol>
@@ -129,10 +153,19 @@ function AdminDashboard({ token }) {
           {topWarehouses.length === 0 ? (
             <p className="dashboard-empty">Sin datos este periodo</p>
           ) : (
-            <ol className="dashboard-list">
+            <ol className="dashboard-list dashboard-list-bars">
               {topWarehouses.map((warehouse, index) => (
                 <li key={`${warehouse.store_location}-${index}`}>
-                  <strong>{warehouse.store_location}</strong> — {warehouse.order_count} pedidos — {formatBs(warehouse.total_sales)}
+                  <div className="dashboard-list-bar-head">
+                    <strong>{warehouse.store_location}</strong>
+                    <span>{warehouse.order_count} pedidos · {formatBs(warehouse.total_sales)}</span>
+                  </div>
+                  <div className="dashboard-bar-track">
+                    <div
+                      className="dashboard-bar-fill"
+                      style={{ width: `${Math.min(100, (Number(warehouse.total_sales || 0) / maxWarehouseSales) * 100)}%` }}
+                    />
+                  </div>
                 </li>
               ))}
             </ol>
@@ -146,16 +179,16 @@ function AdminDashboard({ token }) {
               Total por pagar: <strong>{formatBs(totalCommissionsToDate)}</strong>
             </div>
           </div>
-          {activeUserCommissions.length === 0 ? (
+          {commissionRows.length === 0 ? (
             <p className="dashboard-empty">No hay usuarios activos con comisión para el periodo</p>
           ) : (
             <div className="dashboard-commission-table">
-              {activeUserCommissions.map((row) => {
+              {commissionRows.map((row) => {
                 const displayName = String(row.user_label || '').trim()
                   || String(row.display_name || '').trim()
                   || String(row.email || '').split('@')[0];
                 return (
-                  <div key={row.user_id || row.id} className="dashboard-commission-row">
+                  <div key={row.rowKey} className="dashboard-commission-row">
                     <div>
                       <strong>{displayName}</strong>
                       <span>{row.role || 'Sin rol'}</span>
