@@ -4,6 +4,7 @@ import { HashRouter as Router, Routes, Route, Link, Navigate, useLocation, useNa
 import QuoteTool from './QuoteTool'; // Separated component
 import QuoteHistory from './QuoteHistory';
 import PerformanceDashboard from './PerformanceDashboard';
+import AdminDashboard from './AdminDashboard';
 import AdminPanel from './AdminPanel';
 import InventoryPanel from './InventoryPanel';
 import PedidosPanel from './PedidosPanel';
@@ -253,7 +254,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
           key: 'dashboard',
           label: 'Dashboard',
           items: [
-            { to: '/admin?tab=estadisticas', label: 'Estadísticas' }
+            { to: '/dashboard', label: 'Estadísticas' }
           ].filter(Boolean)
         }
       ].filter((section) => section.items.length > 0)
@@ -854,6 +855,10 @@ function App() {
         <Route
           path="/admin"
           element={canAccessPanel(effectiveAccess, 'admin') ? <AdminPanel token={token} /> : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/dashboard"
+          element={canAccessPanel(effectiveAccess, 'admin') ? <AdminDashboard token={token} /> : <Navigate to={defaultPath} replace />}
         />
         <Route
           path="/inventory"

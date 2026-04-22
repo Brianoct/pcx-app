@@ -1,7 +1,6 @@
 // src/AdminPanel.jsx
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import AdminDashboard from './AdminDashboard';
 import { ACCESS_LABELS, buildAccessForUser, ROLE_OPTIONS } from './roleAccess';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
@@ -1081,10 +1080,6 @@ function ProductCatalogAdmin({ token }) {
   );
 }
 
-function StatisticsPanel({ token }) {
-  return <AdminDashboard token={token} />;
-}
-
 function TimeOffAdminPanel({ token }) {
   const { enqueueWrite } = useOutbox();
   const [year, setYear] = useState(new Date().getFullYear());
@@ -1819,7 +1814,7 @@ function RoleConfiguration({ token }) {
 function AdminPanel({ token }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const tabKeys = ['usuarios', 'productos', 'roles', 'comisiones', 'calendario', 'estadisticas'];
+  const tabKeys = ['usuarios', 'productos', 'roles', 'comisiones', 'calendario'];
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
     return tabKeys.includes(tab) ? tab : 'usuarios';
@@ -1856,12 +1851,6 @@ function AdminPanel({ token }) {
       icon: 'K',
       hint: 'Permisos y ausencias del equipo'
     },
-    {
-      key: 'estadisticas',
-      label: 'Estadísticas',
-      icon: 'E',
-      hint: 'Indicadores mensuales de negocio'
-    }
   ];
   const activeTabMeta = tabs.find((tab) => tab.key === activeTab) || tabs[0];
 
@@ -1885,7 +1874,7 @@ function AdminPanel({ token }) {
           <p className="admin-hero-eyebrow">Administración PCX</p>
           <h2 className="admin-hero-title">Centro de control</h2>
           <p className="admin-hero-subtitle">
-            Gestiona usuarios, permisos, catálogo, comisiones y métricas desde una sola vista clara.
+            Gestiona usuarios, permisos, catálogo y comisiones desde una sola vista clara.
           </p>
         </div>
         <div className="admin-active-section-badge">
@@ -1937,7 +1926,6 @@ function AdminPanel({ token }) {
           </div>
         )}
         {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}
-        {activeTab === 'estadisticas' && <StatisticsPanel token={token} />}
       </div>
     </div>
   );
