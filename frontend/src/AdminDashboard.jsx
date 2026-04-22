@@ -151,9 +151,11 @@ function AdminDashboard({ token }) {
           ) : (
             <div className="dashboard-commission-table">
               {activeUserCommissions.map((row) => {
-                const displayName = String(row.display_name || '').trim() || String(row.email || '').split('@')[0];
+                const displayName = String(row.user_label || '').trim()
+                  || String(row.display_name || '').trim()
+                  || String(row.email || '').split('@')[0];
                 return (
-                  <div key={row.id} className="dashboard-commission-row">
+                  <div key={row.user_id || row.id} className="dashboard-commission-row">
                     <div>
                       <strong>{displayName}</strong>
                       <span>{row.role || 'Sin rol'}</span>
