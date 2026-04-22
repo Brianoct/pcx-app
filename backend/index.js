@@ -6052,6 +6052,12 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
 
   const dateFilter = buildDateFilter(month, year, 'q', 1);
   if (dateFilter.error) return res.status(400).json({ error: dateFilter.error });
+  // Queries below use different leading params ($1 status, $2 role, etc),
+  // so they need matching filter placeholder offsets.
+  const dateFilterWithStatus = buildDateFilter(month, year, 'q', 2);
+  if (dateFilterWithStatus.error) return res.status(400).json({ error: dateFilterWithStatus.error });
+  const dateFilterWithStatusAndRole = buildDateFilter(month, year, 'q', 3);
+  if (dateFilterWithStatusAndRole.error) return res.status(400).json({ error: dateFilterWithStatusAndRole.error });
 
   try {
     // 1. Most popular products
@@ -6126,8 +6132,8 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
     const allSalesRes = await pool.query(
       `SELECT COALESCE(SUM(q.total), 0) AS total_sales
        FROM quotes q
-       WHERE q.status = ANY($1::text[])${dateFilter.sql}`,
-      [COMPLETED_STATUSES, ...dateFilter.params]
+       WHERE q.status = ANY($1::text[])${dateFilterWithStatus.sql}`,
+      [COMPLETED_STATUSES, ...dateFilterWithStatus.params]
     );
     const allSales = Number(allSalesRes.rows[0]?.total_sales || 0);
 
@@ -6138,12 +6144,12 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
        FROM users u
        LEFT JOIN quotes q
          ON q.user_id = u.id
-         AND q.status = ANY($1::text[])${dateFilter.sql}
+         AND q.status = ANY($1::text[])${dateFilterWithStatus.sql}
        WHERE LOWER(u.role) IN ('ventas', 'sales', 'vendedor')
          AND u.is_active = TRUE
        GROUP BY u.id
        ORDER BY total_sales DESC, u.id ASC`,
-      [COMPLETED_STATUSES, ...dateFilter.params]
+      [COMPLETED_STATUSES, ...dateFilterWithStatus.params]
     );
     const topSalesUserId = Number(salesRankingRes.rows[0]?.user_id || 0) || null;
     const salesTotalsByUserId = new Map(
@@ -6158,9 +6164,9 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
        JOIN users u ON u.id = q.user_id
        WHERE q.status = ANY($1::text[])
          AND u.is_active = TRUE
-         AND LOWER(u.role) = $2${dateFilter.sql}
+         AND LOWER(u.role) = $2${dateFilterWithStatusAndRole.sql}
        GROUP BY q.user_id`,
-      [COMPLETED_STATUSES, ROLE_KEYS.ventas, ...dateFilter.params]
+      [COMPLETED_STATUSES, ROLE_KEYS.ventas, ...dateFilterWithStatusAndRole.params]
     );
     const salesTeamTotalsByUserId = new Map(
       salesTeamTotalsRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
@@ -6217,6 +6223,9 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
       }
 
       return {
+        id: userId,
+        email: String(userRow.email || '').trim(),
+        display_name: String(userRow.display_name || '').trim(),
         user_id: userId,
         user_label: label || 'Usuario',
         role: String(userRow.role || '').trim() || 'Sin rol',
