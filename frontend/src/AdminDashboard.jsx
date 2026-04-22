@@ -30,7 +30,26 @@ function AdminDashboard({ token }) {
   const maxQty = Math.max(...stats.popularProducts.map(p => p.total_quantity || 0), 1);
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1420px', margin: '0 auto', padding: '90px 16px 22px' }}>
+      <div
+        style={{
+          borderRadius: '18px',
+          border: '1px solid rgba(45, 56, 82, 0.92)',
+          background:
+            'radial-gradient(circle at 82% 10%, rgba(255, 126, 45, 0.24), transparent 32%), radial-gradient(circle at 2% -28%, rgba(73, 103, 159, 0.24), transparent 42%), linear-gradient(180deg, #111a2b 0%, #0b1220 100%)',
+          boxShadow: '0 14px 32px rgba(2, 6, 23, 0.45)',
+          padding: '20px',
+          marginBottom: '16px'
+        }}
+      >
+        <p style={{ margin: 0, color: '#ff7f30', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Dashboard PCX
+        </p>
+        <h2 style={{ margin: '8px 0 6px', fontSize: '2.1rem' }}>Salud del negocio</h2>
+        <p style={{ margin: 0, color: '#94a3b8' }}>
+          Vista ejecutiva de ventas, vendedores y ubicaciones para evaluar el rendimiento de la empresa.
+        </p>
+      </div>
       <h1 style={{ textAlign: 'center', color: '#f87171', marginBottom: '30px' }}>
         Panel de Estadísticas Mensuales
       </h1>
