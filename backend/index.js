@@ -6050,17 +6050,8 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
     return res.status(400).json({ error: 'Año inválido' });
   }
 
-  const params = [];
-  const dateClauses = [];
-  if (monthNum !== null) {
-    params.push(monthNum);
-    dateClauses.push(`EXTRACT(MONTH FROM q.created_at) = $${params.length}`);
-  }
-  if (yearNum !== null) {
-    params.push(yearNum);
-    dateClauses.push(`EXTRACT(YEAR FROM q.created_at) = $${params.length}`);
-  }
-  const dateFilter = dateClauses.length ? ` AND ${dateClauses.join(' AND ')}` : '';
+  const dateFilter = buildDateFilter(month, year, 'q', 1);
+  if (dateFilter.error) return res.status(400).json({ error: dateFilter.error });
 
   try {
     // 1. Most popular products
@@ -6072,11 +6063,11 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
       FROM quotes q,
       LATERAL jsonb_array_elements(q.line_items) li
       WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
-        ${dateFilter}
+        ${dateFilter.sql}
       GROUP BY sku, name
       ORDER BY total_quantity DESC
       LIMIT 10
-    `, params);
+    `, dateFilter.params);
 
     // 2. Top salespeople
     const salesRes = await pool.query(`
@@ -6086,11 +6077,11 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
         SUM(q.total) as total_sales
       FROM quotes q
       WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
-        ${dateFilter}
+        ${dateFilter.sql}
       GROUP BY q.vendor
       ORDER BY total_sales DESC
       LIMIT 10
-    `, params);
+    `, dateFilter.params);
 
     // 3. Top locations (departamento/provincia)
     const locRes = await pool.query(`
@@ -6100,10 +6091,10 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
         SUM(q.total) as total_sales
       FROM quotes q
       WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
-        ${dateFilter}
+        ${dateFilter.sql}
       GROUP BY location
       ORDER BY total_sales DESC
-    `, params);
+    `, dateFilter.params);
 
     // 4. Top almacenes by traffic (order count)
     const whRes = await pool.query(`
@@ -6113,16 +6104,135 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
         SUM(q.total) as total_sales
       FROM quotes q
       WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
-        ${dateFilter}
+        ${dateFilter.sql}
       GROUP BY q.store_location
       ORDER BY order_count DESC
-    `, params);
+    `, dateFilter.params);
+
+    const activeUsersRes = await pool.query(
+      `SELECT id, email, display_name, role, city
+       FROM users
+       WHERE is_active = TRUE
+       ORDER BY display_name NULLS LAST, email ASC`
+    );
+    const activeUsers = activeUsersRes.rows || [];
+    const commissionSettings = await loadCommissionSettings();
+    const rateVentasLider = Number(commissionSettings.ventas_lider_percent || 0) / 100;
+    const rateVentasTop = Number(commissionSettings.ventas_top_percent || 0) / 100;
+    const rateVentasRegular = Number(commissionSettings.ventas_regular_percent || 0) / 100;
+    const rateAlmacen = Number(commissionSettings.almacen_percent || 0) / 100;
+    const rateMarketingLider = Number(commissionSettings.marketing_lider_percent || 0) / 100;
+
+    const allSalesRes = await pool.query(
+      `SELECT COALESCE(SUM(q.total), 0) AS total_sales
+       FROM quotes q
+       WHERE q.status = ANY($1::text[])${dateFilter.sql}`,
+      [COMPLETED_STATUSES, ...dateFilter.params]
+    );
+    const allSales = Number(allSalesRes.rows[0]?.total_sales || 0);
+
+    const salesRankingRes = await pool.query(
+      `SELECT
+         u.id AS user_id,
+         COALESCE(SUM(q.total), 0) AS total_sales
+       FROM users u
+       LEFT JOIN quotes q
+         ON q.user_id = u.id
+         AND q.status = ANY($1::text[])${dateFilter.sql}
+       WHERE LOWER(u.role) IN ('ventas', 'sales', 'vendedor')
+         AND u.is_active = TRUE
+       GROUP BY u.id
+       ORDER BY total_sales DESC, u.id ASC`,
+      [COMPLETED_STATUSES, ...dateFilter.params]
+    );
+    const topSalesUserId = Number(salesRankingRes.rows[0]?.user_id || 0) || null;
+    const salesTotalsByUserId = new Map(
+      salesRankingRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
+    );
+
+    const salesTeamTotalsRes = await pool.query(
+      `SELECT
+         q.user_id,
+         COALESCE(SUM(q.total), 0) AS total_sales
+       FROM quotes q
+       JOIN users u ON u.id = q.user_id
+       WHERE q.status = ANY($1::text[])
+         AND u.is_active = TRUE
+         AND LOWER(u.role) = $2${dateFilter.sql}
+       GROUP BY q.user_id`,
+      [COMPLETED_STATUSES, ROLE_KEYS.ventas, ...dateFilter.params]
+    );
+    const salesTeamTotalsByUserId = new Map(
+      salesTeamTotalsRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
+    );
+
+    const localSalesRes = await pool.query(
+      `SELECT
+         LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '[^a-z0-9]+', '', 'g')) AS store_key,
+         COALESCE(SUM(q.total), 0) AS total_sales
+       FROM quotes q
+       WHERE q.status = 'Enviado'${dateFilter.sql}
+       GROUP BY store_key`,
+      dateFilter.params
+    );
+    const localSalesByStoreKey = new Map(
+      localSalesRes.rows.map((row) => [String(row.store_key || ''), Number(row.total_sales || 0)])
+    );
+
+    const normalizeStoreKey = (value = '') =>
+      String(value || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '');
+
+    const commissionByUser = activeUsers.map((userRow) => {
+      const userId = Number(userRow.id);
+      const roleNormalized = normalizeRole(userRow.role || '');
+      const label = String(userRow.display_name || '').trim() || String(userRow.email || '').trim();
+      const cityScope = resolveInventoryScopeByCity(userRow.city || '');
+      const localStore = cityScope?.canonical || userRow.city || '';
+      let commission = 0;
+
+      if (roleNormalized === ROLE_KEYS.admin || roleNormalized === ROLE_KEYS.almacenLider || roleNormalized === ROLE_KEYS.microfabrica || roleNormalized === ROLE_KEYS.microfabricaLider) {
+        commission = 0;
+      } else if (roleNormalized === ROLE_KEYS.marketingLider) {
+        commission = allSales * rateMarketingLider;
+      } else if (roleNormalized === ROLE_KEYS.ventasLider) {
+        const ownSales = Number(salesTotalsByUserId.get(userId) || 0);
+        const teamSalesOnly = Number(salesTeamTotalsByUserId.get(userId) || 0);
+        commission = (teamSalesOnly + ownSales) * rateVentasLider;
+      } else if (roleNormalized === ROLE_KEYS.ventas || roleNormalized === 'sales' || roleNormalized === 'vendedor') {
+        const ownSales = Number(salesTotalsByUserId.get(userId) || 0);
+        const rate = topSalesUserId === userId && ownSales > 0 ? rateVentasTop : rateVentasRegular;
+        commission = ownSales * rate;
+      } else if (roleNormalized === ROLE_KEYS.almacen) {
+        const storeKey = normalizeStoreKey(localStore);
+        const localSales = Number(localSalesByStoreKey.get(storeKey) || 0);
+        commission = localSales * rateAlmacen;
+      } else if (roleNormalized === ROLE_KEYS.marketing) {
+        commission = 0;
+      } else {
+        commission = 0;
+      }
+
+      return {
+        user_id: userId,
+        user_label: label || 'Usuario',
+        role: String(userRow.role || '').trim() || 'Sin rol',
+        city: String(userRow.city || '').trim() || '',
+        commission: Number(commission || 0)
+      };
+    });
+    const totalCommissionToDate = commissionByUser.reduce((sum, row) => sum + Number(row.commission || 0), 0);
 
     res.json({
       popularProducts: popularRes.rows,
       topSalespeople: salesRes.rows,
       topLocations: locRes.rows,
-      topWarehouses: whRes.rows
+      topWarehouses: whRes.rows,
+      activeUserCommissions: commissionByUser,
+      totalCommissionToDate
     });
   } catch (err) {
     console.error(err);
