@@ -1992,7 +1992,6 @@ const buildAdminAiExpandedDataset = async ({ month, year }) => {
     rows: rows.slice(0, 220)
   };
 };
-
 const runAdminAnalyticsQuery = async ({ queryKey, month, year }) => {
   const monthNum = month !== undefined ? Number.parseInt(month, 10) : null;
   const yearNum = year !== undefined ? Number.parseInt(year, 10) : null;
