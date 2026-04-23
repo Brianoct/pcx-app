@@ -1811,10 +1811,307 @@ function RoleConfiguration({ token }) {
   );
 }
 
+const AI_ANALYTICS_QUICK_PROMPTS = [
+  {
+    id: 'monthly-overview',
+    label: 'Resumen mensual',
+    prompt: 'Dame un resumen ejecutivo del periodo seleccionado con top productos, top vendedores, ubicaciones, almacenes y el riesgo principal.'
+  },
+  {
+    id: 'commission-focus',
+    label: 'Enfoque comisiones',
+    prompt: 'Analiza la distribución de comisiones activas por rol y destaca posibles outliers o inequidades para revisar.'
+  },
+  {
+    id: 'sales-action-plan',
+    label: 'Plan de acción ventas',
+    prompt: 'Con base en los datos del periodo, dame 5 acciones concretas para aumentar ventas y reducir pérdidas operativas.'
+  }
+];
+
+function AdminAiAnalytics({ token }) {
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [prompt, setPrompt] = useState(AI_ANALYTICS_QUICK_PROMPTS[0].prompt);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
+
+  const runAnalysis = async () => {
+    if (!prompt.trim()) {
+      setError('Escribe una consulta para analizar.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const payload = await apiRequest('/api/admin/ai-analytics', {
+        method: 'POST',
+        token,
+        body: {
+          month,
+          year,
+          prompt
+        }
+      });
+      setResult(payload);
+    } catch (err) {
+      setError(err.message || 'No se pudo ejecutar el análisis con IA');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: '12px' }}>
+      <div
+        style={{
+          border: '1px solid rgba(45, 56, 82, 0.9)',
+          borderRadius: '14px',
+          background: 'rgba(8, 13, 23, 0.86)',
+          padding: '14px',
+          display: 'grid',
+          gap: '10px'
+        }}
+      >
+        <div>
+          <h3 style={{ margin: 0, color: '#f8fafc' }}>Asistente IA de Analítica</h3>
+          <p style={{ margin: '6px 0 0', color: '#94a3b8' }}>
+            Consulta tus métricas con Grok usando datos agregados y controlados (sin exponer SQL ni credenciales en el frontend).
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {AI_ANALYTICS_QUICK_PROMPTS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="btn"
+              style={{
+                background: 'rgba(37, 99, 235, 0.16)',
+                border: '1px solid rgba(59, 130, 246, 0.45)',
+                color: '#bfdbfe'
+              }}
+              onClick={() => setPrompt(item.prompt)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
+          <select value={month} onChange={(event) => setMonth(Number(event.target.value))} style={{ minHeight: '38px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', padding: '6px 10px' }}>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+              <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('es-BO', { month: 'long' })}</option>
+            ))}
+          </select>
+          <select value={year} onChange={(event) => setYear(Number(event.target.value))} style={{ minHeight: '38px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#f8fafc', padding: '6px 10px' }}>
+            {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <button
+            type="button"
+            className="btn"
+            style={{ background: '#ff7f30', color: '#fff', border: 'none' }}
+            onClick={runAnalysis}
+            disabled={loading}
+          >
+            {loading ? 'Analizando...' : 'Analizar con IA'}
+          </button>
+        </div>
+
+        <textarea
+          rows={4}
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder="Ej: ¿Qué áreas bajaron ventas este mes y qué acciones recomiendas?"
+          style={{
+            width: '100%',
+            borderRadius: '10px',
+            border: '1px solid #334155',
+            background: '#0f172a',
+            color: '#f8fafc',
+            padding: '10px',
+            resize: 'vertical'
+          }}
+        />
+        {error && (
+          <div style={{ color: '#fecaca', background: 'rgba(127,29,29,0.32)', border: '1px solid rgba(248,113,113,0.45)', borderRadius: '10px', padding: '8px 10px' }}>
+            {error}
+          </div>
+        )}
+      </div>
+
+      {result && (
+        <div style={{ display: 'grid', gap: '10px' }}>
+          <div
+            style={{
+              border: '1px solid rgba(45, 56, 82, 0.9)',
+              borderRadius: '14px',
+              background: 'linear-gradient(180deg, rgba(13,22,36,0.94), rgba(9,15,25,0.96))',
+              padding: '14px'
+            }}
+          >
+            <h4 style={{ margin: 0, color: '#f8fafc' }}>Respuesta IA</h4>
+            <div style={{ marginTop: '8px', whiteSpace: 'pre-wrap', color: '#cbd5e1', lineHeight: 1.45 }}>
+              {String(result?.analysis || 'Sin respuesta')}
+            </div>
+          </div>
+          <details
+            style={{
+              border: '1px solid rgba(45, 56, 82, 0.9)',
+              borderRadius: '12px',
+              background: 'rgba(8,13,23,0.86)',
+              padding: '10px 12px',
+              color: '#9fb2cc'
+            }}
+          >
+            <summary style={{ cursor: 'pointer', color: '#cbd5e1', fontWeight: 700 }}>Ver datos usados (agregados)</summary>
+            <pre style={{ margin: '10px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.78rem', color: '#93a4bc' }}>
+              {JSON.stringify(result?.data || {}, null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const AI_QUICK_PROMPTS = [
+  'Resumen general del periodo',
+  'Top productos vendidos',
+  'Ranking de vendedores por ventas',
+  'Ranking por departamento/provincia',
+  'Comisiones activas por usuario'
+];
+
+function AdminAiAnalyticsPanel({ token }) {
+  const [question, setQuestion] = useState('');
+  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
+
+  const runQuery = async (promptValue = question) => {
+    const prompt = String(promptValue || '').trim();
+    if (!prompt) {
+      setError('Escribe una pregunta para analizar.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const payload = await apiRequest('/api/admin/ai-analytics', {
+        method: 'POST',
+        token,
+        body: {
+          question: prompt,
+          month,
+          year
+        }
+      });
+      setResult(payload || null);
+      setQuestion(prompt);
+    } catch (err) {
+      setError(err.message || 'No se pudo generar el análisis');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const rows = Array.isArray(result?.data?.rows) ? result.data.rows : [];
+  const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+
+  return (
+    <div style={{ display: 'grid', gap: '12px' }}>
+      <div className="admin-ai-card">
+        <h3 style={{ margin: 0 }}>Asistente AI (Grok)</h3>
+        <p style={{ margin: 0, color: '#9fb2cc', fontSize: '0.88rem' }}>
+          Haz preguntas del negocio. El sistema usa consultas seguras preaprobadas (solo lectura) y Grok resume los hallazgos.
+        </p>
+        <div className="admin-ai-toolbar">
+          {AI_QUICK_PROMPTS.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              className="admin-ai-pill"
+              onClick={() => {
+                setQuestion(prompt);
+                runQuery(prompt);
+              }}
+              disabled={loading}
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+        <div className="admin-ai-form">
+          <textarea
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="Ej: ¿Qué áreas crecieron más en ventas este mes y qué comisión total debemos pagar?"
+          />
+          <div className="admin-ai-controls">
+            <select value={month} onChange={(event) => setMonth(Number(event.target.value))}>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>
+                  {new Date(0, m - 1).toLocaleString('es-BO', { month: 'long' })}
+                </option>
+              ))}
+            </select>
+            <select value={year} onChange={(event) => setYear(Number(event.target.value))}>
+              {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <button type="button" className="btn" disabled={loading} onClick={() => runQuery()}>
+              {loading ? 'Analizando...' : 'Analizar'}
+            </button>
+          </div>
+          {error && <div className="admin-ai-error">{error}</div>}
+        </div>
+      </div>
+
+      {result && (
+        <div className="admin-ai-card">
+          <div className="admin-ai-result-head">
+            <strong>{result.intent_label || 'Resultado'}</strong>
+            <span>{result.period?.label || 'Periodo actual'}</span>
+          </div>
+          <p style={{ marginTop: '6px', color: '#d2e1f6', whiteSpace: 'pre-wrap' }}>
+            {result.summary || 'Sin resumen disponible.'}
+          </p>
+          {rows.length > 0 && (
+            <div className="admin-ai-table-wrap">
+              <table className="admin-ai-table">
+                <thead>
+                  <tr>
+                    {columns.map((col) => <th key={col}>{col}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 20).map((row, index) => (
+                    <tr key={`ai-row-${index}`}>
+                      {columns.map((col) => <td key={`${index}-${col}`}>{String(row[col] ?? '')}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {rows.length > 20 && (
+                <div style={{ marginTop: '6px', color: '#9fb2cc', fontSize: '0.78rem' }}>
+                  Mostrando 20 de {rows.length} filas.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminPanel({ token }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const tabKeys = ['usuarios', 'productos', 'roles', 'comisiones', 'calendario'];
+  const tabKeys = ['usuarios', 'productos', 'roles', 'comisiones', 'calendario', 'ai_analytics'];
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
     return tabKeys.includes(tab) ? tab : 'usuarios';
@@ -1850,6 +2147,12 @@ function AdminPanel({ token }) {
       label: 'Calendario',
       icon: 'K',
       hint: 'Permisos y ausencias del equipo'
+    },
+    {
+      key: 'ai_analytics',
+      label: 'AI Analytics',
+      icon: 'AI',
+      hint: 'Preguntas de negocio con Grok'
     },
   ];
   const activeTabMeta = tabs.find((tab) => tab.key === activeTab) || tabs[0];
@@ -1926,6 +2229,7 @@ function AdminPanel({ token }) {
           </div>
         )}
         {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}
+        {activeTab === 'ai_analytics' && <AdminAiAnalyticsPanel token={token} />}
       </div>
     </div>
   );
