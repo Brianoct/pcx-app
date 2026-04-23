@@ -55,11 +55,7 @@ function AdminDashboard({ token }) {
     <div className="dashboard-workspace">
       <div className="admin-hero-card">
         <p style={{ margin: 0, color: '#ff7f30', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Dashboard PCX
-        </p>
-        <h2 style={{ margin: '8px 0 6px', fontSize: '2.1rem' }}>Salud del negocio</h2>
-        <p style={{ margin: 0, color: '#94a3b8' }}>
-          Monitorea ventas, vendedores, ubicaciones y comisiones para entender cómo está corriendo la empresa.
+          Dashboard
         </p>
       </div>
 

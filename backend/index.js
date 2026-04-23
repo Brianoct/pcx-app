@@ -6180,25 +6180,35 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
     );
     const salesRoleOnlyTotal = Number(salesRoleOnlyRes.rows[0]?.total_sales || 0);
 
-    const localSalesRes = await pool.query(
+    const warehouseSalesByUserIdRes = await pool.query(
       `SELECT
-         LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '[^a-z0-9]+', '', 'g')) AS store_key,
+         u.id AS user_id,
          COALESCE(SUM(q.total), 0) AS total_sales
-       FROM quotes q
-       WHERE q.status = 'Enviado'${dateFilter.sql}
-       GROUP BY store_key`,
-      dateFilter.params
+       FROM users u
+       LEFT JOIN quotes q
+         ON q.status = $1
+         AND LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '[^a-z0-9]+', '', 'g'))
+             LIKE '%' || LOWER(REGEXP_REPLACE((CASE
+               WHEN LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%santacruz%'
+                 OR LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%santacruzde%lasierra%'
+                 OR LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%scz%'
+               THEN 'Santa Cruz'
+               WHEN LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%cochabamba%'
+                 OR LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%cbba%'
+               THEN 'Cochabamba'
+               WHEN LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%lima%'
+               THEN 'Lima'
+               ELSE COALESCE(u.city, '')
+             END), '[^a-z0-9]+', '', 'g')) || '%'
+         AND q.user_id IS NOT NULL${dateFilterWithStatusAndRole.sql}
+       WHERE u.is_active = TRUE
+         AND LOWER(u.role) = $2
+       GROUP BY u.id`,
+      ['Enviado', ROLE_KEYS.almacen, ...dateFilterWithStatusAndRole.params]
     );
-    const localSalesByStoreKey = new Map(
-      localSalesRes.rows.map((row) => [String(row.store_key || ''), Number(row.total_sales || 0)])
+    const warehouseSalesByUserId = new Map(
+      warehouseSalesByUserIdRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
     );
-
-    const normalizeStoreKey = (value = '') =>
-      String(value || '')
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]+/g, '');
 
     const qcCommissionResult = await computeQualityControlCommissionTotal(month, year);
     if (qcCommissionResult?.error) {
@@ -6231,8 +6241,7 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
         const rate = topSalesUserId === userId && ownSales > 0 ? rateVentasTop : rateVentasRegular;
         commission = salesOwnTotal * rate;
       } else if (roleNormalized === ROLE_KEYS.almacen) {
-        const storeKey = normalizeStoreKey(localStore);
-        const localSales = Number(localSalesByStoreKey.get(storeKey) || 0);
+        const localSales = Number(warehouseSalesByUserId.get(userId) || 0);
         commission = localSales * rateAlmacen;
       } else if (roleNormalized === ROLE_KEYS.marketing) {
         commission = 0;
