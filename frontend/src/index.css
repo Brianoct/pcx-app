@@ -1571,6 +1571,133 @@ nav {
   padding: 16px;
 }
 
+.admin-ai-card {
+  border: 1px solid rgba(45, 56, 82, 0.9);
+  border-radius: 14px;
+  background: rgba(8, 13, 23, 0.86);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.admin-ai-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-ai-pill {
+  min-height: 32px;
+  border-radius: 999px;
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  background: rgba(37, 99, 235, 0.16);
+  color: #bfdbfe;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.admin-ai-pill:disabled {
+  opacity: 0.55;
+}
+
+.admin-ai-form {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-ai-form textarea {
+  width: 100%;
+  min-height: 110px;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 10px;
+  resize: vertical;
+}
+
+.admin-ai-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.admin-ai-controls select {
+  min-height: 38px;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 6px 10px;
+}
+
+.admin-ai-controls .btn {
+  min-height: 38px;
+  border-radius: 10px;
+  background: #ff7f30;
+  color: #fff;
+  border: none;
+  font-weight: 700;
+}
+
+.admin-ai-error {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.32);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.admin-ai-result-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  color: #f8fafc;
+  flex-wrap: wrap;
+}
+
+.admin-ai-result-head span {
+  color: #9fb2cc;
+  font-size: 0.82rem;
+}
+
+.admin-ai-table-wrap {
+  border: 1px solid rgba(45, 56, 82, 0.85);
+  border-radius: 10px;
+  overflow: auto;
+}
+
+.admin-ai-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+}
+
+.admin-ai-table th,
+.admin-ai-table td {
+  border-bottom: 1px solid rgba(51, 65, 85, 0.52);
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.82rem;
+}
+
+.admin-ai-table th {
+  color: #cbd5e1;
+  font-weight: 700;
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.admin-ai-table td {
+  color: #9fb2cc;
+}
+
+.admin-ai-table tbody tr:nth-child(even) td {
+  background: rgba(15, 23, 42, 0.45);
+}
+
 .dashboard-workspace {
   max-width: 1450px;
   margin: 0 auto;

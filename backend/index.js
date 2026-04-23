@@ -1513,6 +1513,303 @@ const createHttpError = (statusCode, message) => {
   return err;
 };
 
+const GROK_API_URL = process.env.GROK_API_URL || 'https://api.x.ai/v1/chat/completions';
+const GROK_MODEL = process.env.GROK_MODEL || 'grok-2-latest';
+
+const formatAnalyticsRowsMarkdown = (rows = []) => {
+  if (!Array.isArray(rows) || rows.length === 0) return '_Sin resultados_';
+  const columns = Object.keys(rows[0] || {});
+  if (columns.length === 0) return '_Sin resultados_';
+  const header = `| ${columns.join(' | ')} |`;
+  const divider = `| ${columns.map(() => '---').join(' | ')} |`;
+  const body = rows
+    .slice(0, 30)
+    .map((row) => `| ${columns.map((col) => String(row?.[col] ?? '')).join(' | ')} |`)
+    .join('\n');
+  return `${header}\n${divider}\n${body}`;
+};
+
+const runAdminAnalyticsQuery = async ({ queryKey, month, year }) => {
+  const monthNum = month !== undefined ? Number.parseInt(month, 10) : null;
+  const yearNum = year !== undefined ? Number.parseInt(year, 10) : null;
+  if (month !== undefined && (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12)) {
+    throw createHttpError(400, 'Mes inválido. Debe estar entre 1 y 12');
+  }
+  if (year !== undefined && (!Number.isInteger(yearNum) || yearNum < 2000 || yearNum > 3000)) {
+    throw createHttpError(400, 'Año inválido');
+  }
+  const dateFilter = buildDateFilter(month, year, 'q', 2);
+  if (dateFilter.error) {
+    throw createHttpError(400, dateFilter.error);
+  }
+  const dateFilterWithStatusAndRole = buildDateFilter(month, year, 'q', 3);
+  if (dateFilterWithStatusAndRole.error) {
+    throw createHttpError(400, dateFilterWithStatusAndRole.error);
+  }
+
+  switch (queryKey) {
+    case 'sales_summary': {
+      const result = await pool.query(
+        `SELECT
+           COUNT(*) AS orders_count,
+           COALESCE(SUM(q.total), 0) AS total_sales_bs,
+           COALESCE(AVG(q.total), 0) AS avg_order_bs
+         FROM quotes q
+         WHERE q.status = ANY($1::text[])${dateFilter.sql}`,
+        [COMPLETED_STATUSES, ...dateFilter.params]
+      );
+      return {
+        title: 'Resumen de ventas',
+        rows: result.rows || []
+      };
+    }
+    case 'top_products': {
+      const result = await pool.query(
+        `SELECT
+           li->>'sku' AS sku,
+           li->>'displayName' AS product_name,
+           SUM(CAST(li->>'qty' AS INTEGER)) AS total_qty
+         FROM quotes q,
+         LATERAL jsonb_array_elements(q.line_items) li
+         WHERE q.status = ANY($1::text[])${dateFilter.sql}
+         GROUP BY sku, product_name
+         ORDER BY total_qty DESC
+         LIMIT 15`,
+        [COMPLETED_STATUSES, ...dateFilter.params]
+      );
+      return {
+        title: 'Top productos por cantidad',
+        rows: result.rows || []
+      };
+    }
+    case 'top_sellers': {
+      const result = await pool.query(
+        `SELECT
+           COALESCE(q.vendor, u.display_name, u.email, 'Sin vendedor') AS seller,
+           COUNT(*) AS order_count,
+           COALESCE(SUM(q.total), 0) AS total_sales_bs
+         FROM quotes q
+         LEFT JOIN users u ON u.id = q.user_id
+         WHERE q.status = ANY($1::text[])${dateFilter.sql}
+         GROUP BY seller
+         ORDER BY total_sales_bs DESC
+         LIMIT 15`,
+        [COMPLETED_STATUSES, ...dateFilter.params]
+      );
+      return {
+        title: 'Top vendedores',
+        rows: result.rows || []
+      };
+    }
+    case 'commission_projection': {
+      const result = await pool.query(
+        `SELECT
+           COALESCE(u.display_name, u.email) AS user_name,
+           u.role,
+           COALESCE(SUM(q.total), 0) AS shipped_sales_bs
+         FROM users u
+         LEFT JOIN quotes q ON q.user_id = u.id
+           AND q.status = 'Enviado'${dateFilter.sql}
+         WHERE u.is_active = TRUE
+         GROUP BY user_name, u.role
+         ORDER BY shipped_sales_bs DESC, user_name ASC
+         LIMIT 20`,
+        dateFilter.params
+      );
+      return {
+        title: 'Proyección base por ventas enviadas',
+        rows: result.rows || []
+      };
+    }
+    case 'warehouse_throughput': {
+      const result = await pool.query(
+        `SELECT
+           COALESCE(q.store_location, 'Sin almacén') AS warehouse,
+           COUNT(*) AS order_count,
+           COALESCE(SUM(q.total), 0) AS total_sales_bs
+         FROM quotes q
+         WHERE q.status = 'Enviado'${dateFilter.sql}
+         GROUP BY warehouse
+         ORDER BY order_count DESC`,
+        dateFilter.params
+      );
+      return {
+        title: 'Rendimiento por almacén',
+        rows: result.rows || []
+      };
+    }
+    case 'leader_team_sales': {
+      const result = await pool.query(
+        `SELECT
+           COALESCE(leader.display_name, leader.email) AS leader_name,
+           COALESCE(SUM(q.total), 0) AS team_sales_bs
+         FROM users leader
+         LEFT JOIN quotes q ON q.user_id = leader.id
+           AND q.status = ANY($1::text[])${dateFilterWithStatusAndRole.sql}
+         WHERE leader.is_active = TRUE
+           AND LOWER(leader.role) = $2
+         GROUP BY leader_name
+         ORDER BY team_sales_bs DESC`,
+        [COMPLETED_STATUSES, ROLE_KEYS.ventasLider, ...dateFilterWithStatusAndRole.params]
+      );
+      return {
+        title: 'Ventas de líderes de ventas',
+        rows: result.rows || []
+      };
+    }
+    default:
+      throw createHttpError(400, 'Consulta analítica no permitida');
+  }
+};
+
+const ADMIN_AI_INTENTS = [
+  {
+    key: 'sales_summary',
+    label: 'Resumen general',
+    keywords: ['resumen', 'general', 'total', 'ventas']
+  },
+  {
+    key: 'top_products',
+    label: 'Top productos',
+    keywords: ['producto', 'productos', 'sku', 'mas vendido', 'top productos']
+  },
+  {
+    key: 'top_sellers',
+    label: 'Ranking vendedores',
+    keywords: ['vendedor', 'vendedores', 'asesor', 'ranking vendedor']
+  },
+  {
+    key: 'warehouse_throughput',
+    label: 'Rendimiento almacén',
+    keywords: ['almacen', 'almacenes', 'warehouse', 'despacho', 'enviado']
+  },
+  {
+    key: 'commission_projection',
+    label: 'Comisiones',
+    keywords: ['comision', 'comisiones', 'pagar', 'payout', 'proyeccion']
+  },
+  {
+    key: 'leader_team_sales',
+    label: 'Líderes de ventas',
+    keywords: ['lider', 'líder', 'equipo ventas', 'ventas lider']
+  }
+];
+
+const detectAdminAiIntent = (questionText = '') => {
+  const normalizedQuestion = normalizeText(questionText);
+  const scored = ADMIN_AI_INTENTS.map((intent) => {
+    const score = intent.keywords.reduce((sum, keyword) => (
+      normalizedQuestion.includes(normalizeText(keyword)) ? sum + 1 : sum
+    ), 0);
+    return { intent, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.score > 0 ? scored[0].intent : ADMIN_AI_INTENTS[0];
+};
+
+const formatPeriodLabel = (month, year) => {
+  const monthNum = Number.parseInt(month, 10);
+  const yearNum = Number.parseInt(year, 10);
+  if (Number.isInteger(monthNum) && monthNum >= 1 && monthNum <= 12 && Number.isInteger(yearNum)) {
+    const monthLabel = new Date(0, monthNum - 1).toLocaleString('es-BO', { month: 'long' });
+    return `${monthLabel} ${yearNum}`;
+  }
+  return 'Periodo actual';
+};
+
+const buildFallbackAdminAiSummary = ({ intentLabel, periodLabel, datasetTitle, rows }) => {
+  const safeIntent = String(intentLabel || 'Análisis').trim();
+  const safePeriod = String(periodLabel || 'Periodo actual').trim();
+  const safeDataset = String(datasetTitle || 'dataset').trim();
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return `${safeIntent} (${safePeriod}): no se encontraron registros en ${safeDataset}.`;
+  }
+
+  const topRows = rows.slice(0, 3);
+  const columns = Object.keys(topRows[0] || {});
+  const topPreview = topRows.map((row, index) => {
+    const principal = columns
+      .slice(0, 3)
+      .map((col) => `${col}: ${String(row?.[col] ?? '')}`)
+      .join(' · ');
+    return `${index + 1}) ${principal}`;
+  }).join('\n');
+
+  return [
+    `${safeIntent} (${safePeriod}) basado en ${safeDataset}.`,
+    `Registros analizados: ${rows.length}.`,
+    'Top resultados:',
+    topPreview
+  ].join('\n');
+};
+
+const generateAdminAiSummary = async ({ question, intentLabel, periodLabel, datasetTitle, rows }) => {
+  const apiKey = String(process.env.GROK_API_KEY || '').trim();
+  if (!apiKey) {
+    return {
+      summary: buildFallbackAdminAiSummary({ intentLabel, periodLabel, datasetTitle, rows }),
+      provider: 'fallback'
+    };
+  }
+
+  const prompt = [
+    `Pregunta del usuario: ${String(question || '').trim()}`,
+    `Intent detectado: ${String(intentLabel || '').trim() || 'General'}`,
+    `Periodo: ${String(periodLabel || '').trim() || 'Periodo actual'}`,
+    `Dataset: ${String(datasetTitle || '').trim() || 'Sin título'}`,
+    'Datos agregados (tabla markdown):',
+    formatAnalyticsRowsMarkdown(rows),
+    '',
+    'Responde en español con: (1) resumen ejecutivo, (2) hallazgos clave, (3) 3 acciones sugeridas.'
+  ].join('\n');
+
+  try {
+    const response = await fetch(GROK_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: GROK_MODEL,
+        temperature: 0.2,
+        max_tokens: 650,
+        messages: [
+          {
+            role: 'system',
+            content: 'Eres un analista senior de negocio. Usa solo los datos proporcionados y no inventes cifras.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Grok HTTP ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const content = String(payload?.choices?.[0]?.message?.content || '').trim();
+    if (!content) {
+      throw new Error('Grok sin contenido');
+    }
+
+    return {
+      summary: content,
+      provider: 'grok'
+    };
+  } catch (err) {
+    console.error('Grok analytics fallback:', err.message || err);
+    return {
+      summary: buildFallbackAdminAiSummary({ intentLabel, periodLabel, datasetTitle, rows }),
+      provider: 'fallback'
+    };
+  }
+};
+
 const normalizeDisplayName = (value, { required = false, fieldLabel = 'Nombre visible' } = {}) => {
   if (value === undefined) {
     if (required) throw createHttpError(400, `${fieldLabel} requerido`);
@@ -6273,6 +6570,53 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Error al obtener estadísticas' });
+  }
+});
+
+app.post('/api/admin/ai-analytics', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const question = String(req.body?.question || req.body?.prompt || '').trim();
+  const month = req.body?.month;
+  const year = req.body?.year;
+  if (!question) {
+    return res.status(400).json({ error: 'Pregunta requerida para análisis IA' });
+  }
+
+  try {
+    const intent = detectAdminAiIntent(question);
+    const dataset = await runAdminAnalyticsQuery({
+      queryKey: intent.key,
+      month,
+      year
+    });
+    const periodLabel = formatPeriodLabel(month, year);
+    const summaryPayload = await generateAdminAiSummary({
+      question,
+      intentLabel: intent.label,
+      periodLabel,
+      datasetTitle: dataset.title,
+      rows: dataset.rows || []
+    });
+    return res.json({
+      intent_key: intent.key,
+      intent_label: intent.label,
+      period: {
+        month: Number.isInteger(Number.parseInt(month, 10)) ? Number.parseInt(month, 10) : null,
+        year: Number.isInteger(Number.parseInt(year, 10)) ? Number.parseInt(year, 10) : null,
+        label: periodLabel
+      },
+      summary: summaryPayload.summary,
+      provider: summaryPayload.provider,
+      data: {
+        title: dataset.title,
+        rows: Array.isArray(dataset.rows) ? dataset.rows : []
+      }
+    });
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error('Admin AI analytics error:', err);
+    return res.status(500).json({ error: 'No se pudo ejecutar el análisis IA' });
   }
 });
 
