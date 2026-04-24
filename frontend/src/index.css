@@ -1747,6 +1747,7 @@ nav {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 12px;
+  align-items: start;
 }
 
 .dashboard-card {
@@ -1756,13 +1757,19 @@ nav {
   box-shadow: 0 14px 28px rgba(2, 6, 23, 0.36);
   padding: 12px;
   display: grid;
-  gap: 9px;
+  gap: 10px;
+  position: relative;
+  align-content: start;
+  text-align: left;
+  line-height: 1.35;
 }
 
 .dashboard-card h3 {
   margin: 0;
   color: #f8fafc;
-  font-size: 1rem;
+  font-size: 0.98rem;
+  line-height: 1.25;
+  padding-right: 24px;
 }
 
 .dashboard-card-wide {
@@ -1773,6 +1780,7 @@ nav {
   margin: 0;
   color: #94a3b8;
   font-size: 0.88rem;
+  line-height: 1.35;
 }
 
 .dashboard-bars {
@@ -1783,7 +1791,7 @@ nav {
 .dashboard-bar-row {
   display: grid;
   grid-template-columns: minmax(120px, 220px) minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
 }
 
@@ -1791,6 +1799,7 @@ nav {
   color: #cfe0ff;
   font-size: 0.85rem;
   line-height: 1.3;
+  margin: 0;
 }
 
 .dashboard-bar-track {
@@ -1809,18 +1818,40 @@ nav {
   color: #f8fafc;
   font-weight: 700;
   font-size: 0.82rem;
+  text-align: right;
 }
 
 .dashboard-list {
   margin: 0;
   padding-left: 18px;
   display: grid;
-  gap: 7px;
+  gap: 8px;
 }
 
 .dashboard-list li {
   color: #d2e1f6;
   font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.dashboard-list-bar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.dashboard-list-bar-head strong {
+  color: #f8fafc;
+  font-size: 0.87rem;
+  font-weight: 700;
+}
+
+.dashboard-list-bar-head span {
+  color: #b7c7de;
+  font-size: 0.8rem;
+  text-align: right;
 }
 
 .dashboard-commission-header {
@@ -1865,6 +1896,34 @@ nav {
 .dashboard-commission-row span {
   color: #9fb2cc;
   font-size: 0.76rem;
+}
+
+.dashboard-draggable-card {
+  cursor: grab;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.dashboard-draggable-card.is-dragging {
+  opacity: 0.78;
+  transform: scale(0.99);
+  cursor: grabbing;
+}
+
+.dashboard-draggable-card.is-drop-target {
+  border-color: rgba(255, 127, 48, 0.95);
+  box-shadow: 0 0 0 2px rgba(255, 127, 48, 0.2), 0 14px 28px rgba(2, 6, 23, 0.36);
+}
+
+.dashboard-card-drag-handle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: #8ca0be;
+  font-size: 0.9rem;
+  line-height: 1;
+  letter-spacing: 1px;
+  user-select: none;
+  pointer-events: none;
 }
 
 .dashboard-map-card {
