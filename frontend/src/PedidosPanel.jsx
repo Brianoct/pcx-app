@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import jsPDF from 'jspdf';
 import logo from './assets/logo.png';
-import { buildAccessForUser, canAccessPanel } from './roleAccess';
+import { buildAccessForUser, canAccessPanel, normalizeRole } from './roleAccess';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
 
@@ -11,6 +11,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [vendorFilter, setVendorFilter] = useState('');
+  const [warehouseFilter, setWarehouseFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
@@ -26,6 +27,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const panelAccess = useMemo(() => buildAccessForUser(role, access), [role, access]);
   const { isOnline, enqueueWrite } = useOutbox();
   const canViewPedidosGlobal = canAccessPanel(panelAccess, 'pedidosGlobal');
+  const isAlmacenLider = normalizeRole(role) === 'almacen lider';
   const canManageStatus = canAccessPanel(panelAccess, 'pedidosIndividual') || canViewPedidosGlobal;
   const vendorOptions = useMemo(() => {
     const uniqueVendors = new Set();
@@ -37,6 +39,19 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   }, [pedidos]);
 
   const normalizePhone = (phone = '') => String(phone).replace(/\D/g, '');
+  const normalizeText = (value = '') =>
+    String(value || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '');
+  const canonicalWarehouse = (value = '') => {
+    const normalized = normalizeText(value);
+    if (normalized.includes('santacruz') || normalized.includes('scz')) return 'Santa Cruz';
+    if (normalized.includes('cochabamba') || normalized.includes('cbba')) return 'Cochabamba';
+    if (normalized.includes('lima')) return 'Lima';
+    return String(value || '').trim();
+  };
   const fitTextByWidth = (doc, text = '', maxWidth = 0, suffix = '...') => {
     const safe = String(text || '').trim();
     if (!safe) return '—';
@@ -100,7 +115,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     }
   };
 
-  // Apply filters (cliente/teléfono + vendedor + estado)
+  // Apply filters (cliente/teléfono + vendedor + estado + almacén)
   useEffect(() => {
     let filtered = pedidos;
 
@@ -120,14 +135,19 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
       filtered = filtered.filter(q => q.status === statusFilter);
     }
 
+    if (warehouseFilter) {
+      filtered = filtered.filter((q) => canonicalWarehouse(q.store_location) === warehouseFilter);
+    }
+
     setFilteredPedidos(filtered);
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, vendorFilter, pedidos]);
+  }, [searchTerm, statusFilter, vendorFilter, warehouseFilter, pedidos]);
 
   const clearFilters = () => {
     setSearchTerm('');
     setStatusFilter('');
     setVendorFilter('');
+    setWarehouseFilter('');
   };
 
   const handleStatusChange = async (quoteId, newStatus) => {
@@ -464,6 +484,19 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
           <option value="Embalado">Embalado</option>
           <option value="Enviado">Enviado</option>
         </select>
+
+        {isAlmacenLider && (
+          <select
+            className="filter-select"
+            value={warehouseFilter}
+            onChange={(e) => setWarehouseFilter(e.target.value)}
+          >
+            <option value="">Todos los almacenes</option>
+            <option value="Santa Cruz">Santa Cruz</option>
+            <option value="Cochabamba">Cochabamba</option>
+            <option value="Lima">Lima</option>
+          </select>
+        )}
 
         <button
           className="btn btn-danger"
