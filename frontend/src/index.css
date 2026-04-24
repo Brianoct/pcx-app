@@ -1998,6 +1998,12 @@ nav {
   font-weight: 600;
 }
 
+.dashboard-line-value-label-end {
+  fill: #f8fafc;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .projects-workspace {
   max-width: 1450px;
   margin: 0 auto;

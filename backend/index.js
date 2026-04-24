@@ -6923,6 +6923,22 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
       GROUP BY day_num, period_day
       ORDER BY day_num ASC
     `, dateFilter.params);
+    const targetMonth = Number.isInteger(monthNum) ? monthNum : (new Date().getMonth() + 1);
+    const targetYear = Number.isInteger(yearNum) ? yearNum : new Date().getFullYear();
+    const daysInTargetMonth = new Date(targetYear, targetMonth, 0).getDate();
+    const dailyRowsByDay = new Map(
+      (dailySalesRes.rows || []).map((row) => [Number(row.day_num), row])
+    );
+    const dailySalesSeries = Array.from({ length: daysInTargetMonth }, (_, index) => {
+      const day = index + 1;
+      const row = dailyRowsByDay.get(day);
+      return {
+        day,
+        period_day: row?.period_day || `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+        order_count: Number(row?.order_count || 0),
+        total_sales: Number(row?.total_sales || 0)
+      };
+    });
 
     const activeUsersRes = await pool.query(
       `SELECT id, email, display_name, role, city
@@ -7077,7 +7093,7 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
       topLocations: locRes.rows,
       topWarehouses: whRes.rows,
       salesByDepartment: departmentSalesRes.rows,
-      dailySales: dailySalesRes.rows,
+      dailySalesSeries,
       activeUserCommissions: commissionByUser,
       totalCommissionToDate
     });
