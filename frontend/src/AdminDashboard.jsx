@@ -1,6 +1,7 @@
 // src/AdminDashboard.jsx
 import { useState, useEffect } from 'react';
 import { apiRequest } from './apiClient';
+import boliviaAdminMapSvg from './assets/bolivia-admin1.svg?raw';
 
 const BOLIVIA_DEPARTMENT_MAP = {
   'la paz': 'La Paz',
@@ -11,75 +12,107 @@ const BOLIVIA_DEPARTMENT_MAP = {
   tarija: 'Tarija',
   oruro: 'Oruro',
   beni: 'Beni',
+  'el beni': 'Beni',
   pando: 'Pando',
   chuquisaca: 'Chuquisaca'
 };
 
-const BOLIVIA_MAP_REGIONS = [
-  {
-    key: 'Pando',
-    path: 'M12 18 L32 18 L30 34 L10 34 Z',
-    labelX: 21,
-    labelY: 24,
-    valueY: 30
-  },
-  {
-    key: 'Beni',
-    path: 'M32 18 L58 18 L60 38 L42 44 L30 34 Z',
-    labelX: 45,
-    labelY: 27,
-    valueY: 33
-  },
-  {
-    key: 'La Paz',
-    path: 'M10 34 L30 34 L31 48 L16 56 L8 46 Z',
-    labelX: 20,
-    labelY: 43,
-    valueY: 49
-  },
-  {
-    key: 'Cochabamba',
-    path: 'M31 48 L42 44 L48 56 L34 61 L26 56 Z',
-    labelX: 37,
-    labelY: 53,
-    valueY: 59
-  },
-  {
-    key: 'Santa Cruz',
-    path: 'M42 44 L72 42 L86 56 L80 74 L56 76 L48 56 Z',
-    labelX: 66,
-    labelY: 56,
-    valueY: 62
-  },
-  {
-    key: 'Oruro',
-    path: 'M16 56 L26 56 L30 67 L19 73 L12 66 Z',
-    labelX: 21,
-    labelY: 63,
-    valueY: 69
-  },
-  {
-    key: 'Potosí',
-    path: 'M19 73 L30 67 L38 76 L30 88 L20 86 Z',
-    labelX: 28,
-    labelY: 77,
-    valueY: 83
-  },
-  {
-    key: 'Chuquisaca',
-    path: 'M38 76 L56 76 L52 90 L38 92 L30 88 Z',
-    labelX: 44,
-    labelY: 82,
-    valueY: 88
-  },
-  {
-    key: 'Tarija',
-    path: 'M30 88 L38 92 L36 102 L28 106 L20 99 L20 86 Z',
-    labelX: 29,
-    labelY: 96,
-    valueY: 102
+const BOLIVIA_MAP_CODE_TO_DEPARTMENT = {
+  BOB: 'Beni',
+  BOC: 'Cochabamba',
+  BOH: 'Chuquisaca',
+  BOL: 'La Paz',
+  BON: 'Pando',
+  BOO: 'Oruro',
+  BOP: 'Potosí',
+  BOS: 'Santa Cruz',
+  BOT: 'Tarija'
+};
+
+const BOLIVIA_DEPARTMENT_SHORT_LABEL = {
+  BOB: 'BEN',
+  BOC: 'CBB',
+  BOH: 'CHQ',
+  BOL: 'LPZ',
+  BON: 'PAN',
+  BOO: 'ORU',
+  BOP: 'POT',
+  BOS: 'SCZ',
+  BOT: 'TJA'
+};
+
+const BOLIVIA_LABEL_OFFSETS = {
+  BOB: { dx: 10, dy: -28 },
+  BOC: { dx: 26, dy: 8 },
+  BOH: { dx: 24, dy: 16 },
+  BOL: { dx: -28, dy: -14 },
+  BON: { dx: 0, dy: -30 },
+  BOO: { dx: -32, dy: 0 },
+  BOP: { dx: -36, dy: 16 },
+  BOS: { dx: 42, dy: 18 },
+  BOT: { dx: 18, dy: 30 }
+};
+
+const buildBoliviaMapFeatures = () => {
+  const pathRegex = /<path d="([^"]+)" id="([^"]+)" name="([^"]+)">/g;
+  const labelRegex = /<circle class="([^"]+)" cx="([^"]+)" cy="([^"]+)" id="([^"]+)">/g;
+  const features = [];
+  const labelById = new Map();
+  let match;
+
+  while ((match = labelRegex.exec(boliviaAdminMapSvg)) !== null) {
+    const [, mapLabel, cx, cy, id] = match;
+    labelById.set(id, {
+      labelName: mapLabel,
+      labelX: Number(cx),
+      labelY: Number(cy)
+    });
   }
-];
+
+  while ((match = pathRegex.exec(boliviaAdminMapSvg)) !== null) {
+    const [, path, id, fallbackName] = match;
+    if (!BOLIVIA_MAP_CODE_TO_DEPARTMENT[id]) {
+      continue;
+    }
+
+    const labelPoint = labelById.get(id) || {};
+    features.push({
+      id,
+      department: BOLIVIA_MAP_CODE_TO_DEPARTMENT[id] || fallbackName,
+      shortLabel: BOLIVIA_DEPARTMENT_SHORT_LABEL[id] || fallbackName,
+      path,
+      labelX: Number(labelPoint.labelX || 500),
+      labelY: Number(labelPoint.labelY || 500)
+    });
+  }
+
+  return features;
+};
+
+const BOLIVIA_MAP_FEATURES = buildBoliviaMapFeatures();
+
+const getNiceAxisMax = (value) => {
+  if (!Number.isFinite(value) || value <= 0) return 100;
+  const magnitude = 10 ** Math.floor(Math.log10(value));
+  const normalized = value / magnitude;
+  if (normalized <= 1) return magnitude;
+  if (normalized <= 2) return 2 * magnitude;
+  if (normalized <= 5) return 5 * magnitude;
+  return 10 * magnitude;
+};
+
+const getDepartmentFillColor = (ratio, hasSales) => {
+  if (!hasSales) {
+    return 'rgba(30, 41, 59, 0.78)';
+  }
+  const t = Math.max(0, Math.min(1, ratio));
+  const start = { r: 30, g: 64, b: 175 };
+  const end = { r: 249, g: 115, b: 22 };
+  const r = Math.round(start.r + (end.r - start.r) * t);
+  const g = Math.round(start.g + (end.g - start.g) * t);
+  const b = Math.round(start.b + (end.b - start.b) * t);
+  return `rgb(${r} ${g} ${b})`;
+};
 
 const normalizeText = (value = '') => String(value || '')
   .trim()
@@ -132,7 +165,7 @@ function AdminDashboard({ token }) {
   const maxWarehouseSales = Math.max(...topWarehouses.map((warehouse) => Number(warehouse.total_sales || 0)), 1);
   const monthDaysCount = new Date(selectedYear, selectedMonth, 0).getDate();
   const byDayMap = new Map(
-    dailySalesSeries.map((item) => [Number(item.day_num || 0), Number(item.total_sales || 0)])
+    dailySalesSeries.map((item) => [Number(item.day || item.day_num || 0), Number(item.total_sales || 0)])
   );
   const fullDailySalesSeries = Array.from({ length: monthDaysCount }, (_, idx) => {
     const day = idx + 1;
@@ -143,6 +176,17 @@ function AdminDashboard({ token }) {
     };
   });
   const maxDailySales = Math.max(...fullDailySalesSeries.map((item) => Number(item.total_sales || 0)), 1);
+  const yAxisMax = getNiceAxisMax(maxDailySales);
+  const formatAxisValue = (value) => {
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${Math.round(value / 1000)}k`;
+    return `${Math.round(value)}`;
+  };
+  const formatCompactBs = (value) => {
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${Math.round(value / 1000)}k`;
+    return `${Math.round(value)}`;
+  };
   const commissionRows = [...activeUserCommissions]
     .map((row, index) => ({
       ...row,
@@ -158,28 +202,46 @@ function AdminDashboard({ token }) {
     return acc;
   }, {});
   const maxDepartmentSales = Math.max(...Object.values(departmentSalesMap), 1);
-  const lineChartPoints = fullDailySalesSeries.map((item, index) => {
-    const chartWidth = 100;
-    const chartHeight = 100;
-    const leftPad = 6;
-    const rightPad = 6;
-    const topPad = 8;
-    const bottomPad = 18;
-    const drawableWidth = chartWidth - leftPad - rightPad;
-    const drawableHeight = chartHeight - topPad - bottomPad;
-    const x = fullDailySalesSeries.length === 1
-      ? leftPad + drawableWidth / 2
-      : leftPad + (index / (fullDailySalesSeries.length - 1)) * drawableWidth;
-    const y = topPad + (1 - (Number(item.total_sales || 0) / maxDailySales)) * drawableHeight;
+  const mapFeatureRows = BOLIVIA_MAP_FEATURES.map((feature) => {
+    const totalSales = Number(departmentSalesMap[feature.department] || 0);
+    const ratio = maxDepartmentSales > 0 ? Math.min(1, totalSales / maxDepartmentSales) : 0;
+    const offset = BOLIVIA_LABEL_OFFSETS[feature.id] || { dx: 0, dy: 0 };
     return {
-      ...item,
-      x,
-      y
+      ...feature,
+      totalSales,
+      ratio,
+      anchorX: feature.labelX,
+      anchorY: feature.labelY,
+      labelX: feature.labelX + offset.dx,
+      labelY: feature.labelY + offset.dy
     };
   });
+  const mapRankingRows = [...mapFeatureRows]
+    .sort((a, b) => b.totalSales - a.totalSales);
+
+  const chartWidth = 760;
+  const chartHeight = 320;
+  const chartPad = { top: 24, right: 20, bottom: 52, left: 74 };
+  const plotWidth = chartWidth - chartPad.left - chartPad.right;
+  const plotHeight = chartHeight - chartPad.top - chartPad.bottom;
+  const safeYMax = Math.max(yAxisMax, 1);
+  const xForDay = (day) => (
+    chartPad.left + ((day - 1) / Math.max(monthDaysCount - 1, 1)) * plotWidth
+  );
+  const yForValue = (value) => (
+    chartPad.top + (1 - (Math.max(0, Number(value || 0)) / safeYMax)) * plotHeight
+  );
+  const lineChartPoints = fullDailySalesSeries.map((item) => ({
+    ...item,
+    x: xForDay(item.day_num),
+    y: yForValue(item.total_sales)
+  }));
   const linePath = lineChartPoints
     .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
     .join(' ');
+  const yTickValues = [0, 0.25, 0.5, 0.75, 1].map((step) => Number((safeYMax * step).toFixed(2)));
+  const xTickDays = Array.from({ length: monthDaysCount }, (_, i) => i + 1)
+    .filter((day) => day === 1 || day === monthDaysCount || day % 5 === 0);
 
   return (
     <div className="dashboard-workspace">
@@ -278,25 +340,34 @@ function AdminDashboard({ token }) {
           <h3>Mapa de Bolivia · Ventas por departamento</h3>
           <div className="dashboard-map-wrap">
             <div className="dashboard-bolivia-map">
-              <svg viewBox="0 0 96 112" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Mapa de Bolivia por ventas">
-                {BOLIVIA_MAP_REGIONS.map((region) => {
-                  const totalSales = Number(departmentSalesMap[region.key] || 0);
-                  const ratio = Math.min(1, totalSales / maxDepartmentSales);
-                  const fillColor = ratio <= 0
-                    ? 'rgba(21, 36, 62, 0.9)'
-                    : `rgba(248, 113, 113, ${(0.16 + ratio * 0.74).toFixed(2)})`;
+              <svg
+                viewBox="40 20 920 950"
+                preserveAspectRatio="xMidYMid meet"
+                role="img"
+                aria-label="Mapa geográfico de Bolivia por ventas"
+                className="dashboard-bolivia-map-svg"
+              >
+                {mapFeatureRows.map((region) => {
+                  const fillColor = getDepartmentFillColor(region.ratio, region.totalSales > 0);
                   return (
-                    <g key={region.key}>
+                    <g key={region.id}>
                       <path
                         className="dashboard-map-region"
                         d={region.path}
                         style={{ fill: fillColor }}
                       />
+                      <line
+                        x1={region.anchorX}
+                        y1={region.anchorY}
+                        x2={region.labelX}
+                        y2={region.labelY}
+                        className="dashboard-map-label-leader"
+                      />
                       <text x={region.labelX} y={region.labelY} className="dashboard-map-region-label">
-                        {region.key}
+                        {region.shortLabel}
                       </text>
-                      <text x={region.labelX} y={region.valueY} className="dashboard-map-region-value">
-                        {Number(totalSales).toFixed(0)} Bs
+                      <text x={region.labelX} y={region.labelY + 14} className="dashboard-map-region-value">
+                        {formatCompactBs(region.totalSales)} Bs
                       </text>
                     </g>
                   );
@@ -304,43 +375,98 @@ function AdminDashboard({ token }) {
               </svg>
             </div>
             <div className="dashboard-map-ranking">
-              {Object.entries(departmentSalesMap)
-                .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))
-                .map(([department, total]) => (
-                  <div key={department} className="dashboard-map-ranking-row">
-                    <strong>{department}</strong>
-                    <span>{formatBs(total)}</span>
-                  </div>
-                ))}
+              {mapRankingRows.map((row) => (
+                <div key={row.id} className="dashboard-map-ranking-row">
+                  <strong>{row.department}</strong>
+                  <span>{formatBs(row.totalSales)}</span>
+                </div>
+              ))}
             </div>
           </div>
           <div className="dashboard-map-legend">
+            <span className="dashboard-map-legend-label">Menor venta</span>
             <span className="dashboard-map-legend-gradient" />
-            Mayor intensidad = mayor volumen de ventas.
+            <span className="dashboard-map-legend-label">Mayor venta</span>
           </div>
-          <p className="dashboard-empty" style={{ marginTop: '-2px' }}>
-            Referencia geográfica esquemática de departamentos de Bolivia.
-          </p>
         </section>
 
         <section className="dashboard-card dashboard-line-card">
           <h3>Línea diaria · Ventas del mes</h3>
           <div className="dashboard-line-wrap">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="dashboard-line-svg">
-              <line x1="6" y1="8" x2="6" y2="82" className="dashboard-line-axis" />
-              <line x1="6" y1="82" x2="94" y2="82" className="dashboard-line-axis" />
-              <line x1="6" y1="26" x2="94" y2="26" className="dashboard-line-grid" />
-              <line x1="6" y1="44" x2="94" y2="44" className="dashboard-line-grid" />
-              <line x1="6" y1="62" x2="94" y2="62" className="dashboard-line-grid" />
-              <path d={linePath} className="dashboard-line-path" />
+            <svg
+              viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+              preserveAspectRatio="xMidYMid meet"
+              className="dashboard-line-svg"
+              role="img"
+              aria-label="Línea de ventas por día del mes"
+            >
+              {yTickValues.map((tickValue) => {
+                const y = yForValue(tickValue);
+                return (
+                  <g key={`y-tick-${tickValue}`}>
+                    <line
+                      x1={chartPad.left}
+                      y1={y}
+                      x2={chartWidth - chartPad.right}
+                      y2={y}
+                      className="dashboard-line-grid"
+                    />
+                    <text x={chartPad.left - 10} y={y + 4} className="dashboard-line-tick dashboard-line-y-tick">
+                      {formatAxisValue(tickValue)}
+                    </text>
+                  </g>
+                );
+              })}
+
+              <line
+                x1={chartPad.left}
+                y1={chartPad.top}
+                x2={chartPad.left}
+                y2={chartHeight - chartPad.bottom}
+                className="dashboard-line-axis"
+              />
+              <line
+                x1={chartPad.left}
+                y1={chartHeight - chartPad.bottom}
+                x2={chartWidth - chartPad.right}
+                y2={chartHeight - chartPad.bottom}
+                className="dashboard-line-axis"
+              />
+
+              {linePath ? <path d={linePath} className="dashboard-line-path" /> : null}
               {lineChartPoints.map((point) => (
-                <circle key={point.day_num} cx={point.x} cy={point.y} r="1.2" className="dashboard-line-point" />
+                <circle key={point.day_num} cx={point.x} cy={point.y} r="3.2" className="dashboard-line-point" />
               ))}
-              <text x="2" y="10" className="dashboard-line-tick">{formatBs(maxDailySales).replace(' Bs', '')}</text>
-              <text x="2" y="46" className="dashboard-line-tick">{formatBs(maxDailySales / 2).replace(' Bs', '')}</text>
-              <text x="2" y="84" className="dashboard-line-tick">0</text>
-              <text x="6" y="93" className="dashboard-line-tick">Día 1</text>
-              <text x="84" y="93" className="dashboard-line-tick">Día {monthDaysCount}</text>
+
+              {xTickDays.map((day) => (
+                <text
+                  key={`x-tick-${day}`}
+                  x={xForDay(day)}
+                  y={chartHeight - chartPad.bottom + 22}
+                  textAnchor="middle"
+                  className="dashboard-line-tick"
+                >
+                  {day}
+                </text>
+              ))}
+
+              <text
+                x={chartPad.left + (plotWidth / 2)}
+                y={chartHeight - 8}
+                textAnchor="middle"
+                className="dashboard-line-axis-title"
+              >
+                Día del mes
+              </text>
+              <text
+                x={22}
+                y={chartPad.top + (plotHeight / 2)}
+                textAnchor="middle"
+                className="dashboard-line-axis-title"
+                transform={`rotate(-90 22 ${chartPad.top + (plotHeight / 2)})`}
+              >
+                Total ventas (Bs)
+              </text>
             </svg>
           </div>
         </section>

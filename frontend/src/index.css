@@ -1889,7 +1889,7 @@ nav {
 .dashboard-map-wrap {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 
 .dashboard-bolivia-map {
@@ -1897,36 +1897,43 @@ nav {
   border: 1px solid rgba(45, 56, 82, 0.88);
   border-radius: 12px;
   background: radial-gradient(circle at 15% 5%, rgba(43, 94, 179, 0.2), rgba(9, 15, 25, 0.92));
-  padding: 10px;
+  padding: 12px;
 }
 
 .dashboard-bolivia-map svg {
-  width: 100%;
-  height: auto;
+  width: min(100%, 760px);
+  height: clamp(260px, 44vw, 520px);
+  margin: 0 auto;
   display: block;
 }
 
 .dashboard-map-region {
-  stroke: rgba(148, 163, 184, 0.7);
-  stroke-width: 2;
+  stroke: rgba(203, 213, 225, 0.75);
+  stroke-width: 1.5;
+}
+
+.dashboard-map-label-leader {
+  stroke: rgba(191, 219, 254, 0.38);
+  stroke-width: 1.1;
+  stroke-dasharray: 3 3;
 }
 
 .dashboard-map-region-label {
-  fill: #e2e8f0;
-  font-size: 11px;
+  fill: #f1f5f9;
+  font-size: 12px;
   font-weight: 700;
   text-anchor: middle;
 }
 
 .dashboard-map-region-value {
   fill: #dbeafe;
-  font-size: 10px;
+  font-size: 10.5px;
   text-anchor: middle;
 }
 
 .dashboard-map-ranking {
   display: grid;
-  gap: 6px;
+  gap: 7px;
 }
 
 .dashboard-map-ranking-row {
@@ -1953,12 +1960,13 @@ nav {
   border: 1px solid rgba(45, 56, 82, 0.88);
   border-radius: 12px;
   background: radial-gradient(circle at 10% 0%, rgba(27, 78, 163, 0.24), rgba(9, 15, 25, 0.93));
-  padding: 10px;
+  padding: 12px;
 }
 
 .dashboard-line-svg {
-  width: 100%;
-  height: auto;
+  width: min(100%, 980px);
+  height: clamp(230px, 36vw, 340px);
+  margin: 0 auto;
   display: block;
 }
 
@@ -1976,7 +1984,7 @@ nav {
 .dashboard-line-path {
   fill: none;
   stroke: #ff7f30;
-  stroke-width: 3;
+  stroke-width: 2.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -1984,12 +1992,22 @@ nav {
 .dashboard-line-point {
   fill: #ff9f5a;
   stroke: #fff;
-  stroke-width: 1;
+  stroke-width: 1.2;
 }
 
 .dashboard-line-tick {
   fill: #9fb2cc;
-  font-size: 10px;
+  font-size: 11px;
+}
+
+.dashboard-line-y-tick {
+  text-anchor: end;
+}
+
+.dashboard-line-axis-title {
+  fill: #dbeafe;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .dashboard-line-value-label {
@@ -2002,6 +2020,13 @@ nav {
   fill: #f8fafc;
   font-size: 10px;
   font-weight: 700;
+}
+
+@media (min-width: 980px) {
+  .dashboard-map-wrap {
+    grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.7fr);
+    align-items: start;
+  }
 }
 
 .projects-workspace {
