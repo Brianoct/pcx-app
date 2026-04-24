@@ -438,7 +438,7 @@ button, .btn {
 }
 
 .pedidos-table-wrap {
-  overflow-x: auto;
+  overflow: visible;
   margin-bottom: 16px;
   border: 1px solid rgba(71, 85, 105, 0.5);
   border-radius: 12px;
@@ -448,7 +448,7 @@ button, .btn {
 
 .pedidos-table {
   width: 100%;
-  min-width: 1280px;
+  min-width: 0;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -512,7 +512,7 @@ button, .btn {
 }
 
 .history-table-wrap {
-  overflow-x: auto;
+  overflow: visible;
   margin-bottom: 16px;
   border: 1px solid rgba(71, 85, 105, 0.5);
   border-radius: 12px;
@@ -522,7 +522,7 @@ button, .btn {
 
 .history-table {
   width: 100%;
-  min-width: 1140px;
+  min-width: 0;
   border-collapse: collapse;
   table-layout: fixed;
 }
@@ -2626,6 +2626,60 @@ nav {
 }
 
 @media (min-width: 769px) {
+  .filter-bar {
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+
+  .filter-input {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  .filter-select {
+    min-width: 138px;
+    flex: 0 0 138px;
+  }
+
+  .filter-bar .btn {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 10px 14px;
+    font-size: 0.86rem;
+    white-space: nowrap;
+  }
+
+  .history-th,
+  .pedidos-th {
+    font-size: 0.78rem;
+    padding: 10px 6px;
+  }
+
+  .history-td,
+  .pedidos-td {
+    font-size: 0.82rem;
+    padding: 9px 6px;
+  }
+
+  .history-status-select,
+  .pedidos-status-select {
+    min-height: 30px;
+    font-size: 0.78rem;
+    padding: 5px 6px;
+  }
+
+  .history-pdf-btn,
+  .quote-actions-toggle,
+  .pedidos-action-btn {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 0.74rem;
+  }
+
+  .pedidos-action-buttons {
+    gap: 6px;
+  }
+
   .desktop-user {
     display: flex;
     align-items: center;
