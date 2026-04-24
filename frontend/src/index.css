@@ -1867,6 +1867,137 @@ nav {
   font-size: 0.76rem;
 }
 
+.dashboard-map-card {
+  grid-column: 1 / -1;
+}
+
+.dashboard-map-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #9fb2cc;
+  font-size: 0.78rem;
+}
+
+.dashboard-map-legend-gradient {
+  width: 120px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #163a7a 0%, #2e6ed5 45%, #ff7f30 100%);
+}
+
+.dashboard-map-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.dashboard-bolivia-map {
+  width: 100%;
+  border: 1px solid rgba(45, 56, 82, 0.88);
+  border-radius: 12px;
+  background: radial-gradient(circle at 15% 5%, rgba(43, 94, 179, 0.2), rgba(9, 15, 25, 0.92));
+  padding: 10px;
+}
+
+.dashboard-bolivia-map svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.dashboard-map-region {
+  stroke: rgba(148, 163, 184, 0.7);
+  stroke-width: 2;
+}
+
+.dashboard-map-region-label {
+  fill: #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+}
+
+.dashboard-map-region-value {
+  fill: #dbeafe;
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+.dashboard-map-ranking {
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-map-ranking-row {
+  border: 1px solid rgba(45, 56, 82, 0.75);
+  border-radius: 10px;
+  background: rgba(18, 26, 42, 0.74);
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #d2e1f6;
+  font-size: 0.84rem;
+}
+
+.dashboard-map-ranking-row strong {
+  color: #f8fafc;
+}
+
+.dashboard-line-card {
+  grid-column: 1 / -1;
+}
+
+.dashboard-line-wrap {
+  border: 1px solid rgba(45, 56, 82, 0.88);
+  border-radius: 12px;
+  background: radial-gradient(circle at 10% 0%, rgba(27, 78, 163, 0.24), rgba(9, 15, 25, 0.93));
+  padding: 10px;
+}
+
+.dashboard-line-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.dashboard-line-axis {
+  stroke: rgba(148, 163, 184, 0.8);
+  stroke-width: 1;
+}
+
+.dashboard-line-grid {
+  stroke: rgba(71, 85, 105, 0.55);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.dashboard-line-path {
+  fill: none;
+  stroke: #ff7f30;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dashboard-line-point {
+  fill: #ff9f5a;
+  stroke: #fff;
+  stroke-width: 1;
+}
+
+.dashboard-line-tick {
+  fill: #9fb2cc;
+  font-size: 10px;
+}
+
+.dashboard-line-value-label {
+  fill: #dbeafe;
+  font-size: 10px;
+  font-weight: 600;
+}
+
 .projects-workspace {
   max-width: 1450px;
   margin: 0 auto;
