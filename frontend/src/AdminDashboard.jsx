@@ -15,16 +15,70 @@ const BOLIVIA_DEPARTMENT_MAP = {
   chuquisaca: 'Chuquisaca'
 };
 
-const BOLIVIA_TILE_LAYOUT = [
-  { key: 'Pando', short: 'Pando', x: 0, y: 0 },
-  { key: 'Beni', short: 'Beni', x: 1, y: 0 },
-  { key: 'La Paz', short: 'La Paz', x: 0, y: 1 },
-  { key: 'Cochabamba', short: 'Cochabamba', x: 1, y: 1 },
-  { key: 'Santa Cruz', short: 'Santa Cruz', x: 2, y: 1 },
-  { key: 'Oruro', short: 'Oruro', x: 0, y: 2 },
-  { key: 'Potosí', short: 'Potosí', x: 1, y: 2 },
-  { key: 'Chuquisaca', short: 'Chuquisaca', x: 2, y: 2 },
-  { key: 'Tarija', short: 'Tarija', x: 1, y: 3 }
+const BOLIVIA_MAP_REGIONS = [
+  {
+    key: 'Pando',
+    path: 'M12 18 L32 18 L30 34 L10 34 Z',
+    labelX: 21,
+    labelY: 24,
+    valueY: 30
+  },
+  {
+    key: 'Beni',
+    path: 'M32 18 L58 18 L60 38 L42 44 L30 34 Z',
+    labelX: 45,
+    labelY: 27,
+    valueY: 33
+  },
+  {
+    key: 'La Paz',
+    path: 'M10 34 L30 34 L31 48 L16 56 L8 46 Z',
+    labelX: 20,
+    labelY: 43,
+    valueY: 49
+  },
+  {
+    key: 'Cochabamba',
+    path: 'M31 48 L42 44 L48 56 L34 61 L26 56 Z',
+    labelX: 37,
+    labelY: 53,
+    valueY: 59
+  },
+  {
+    key: 'Santa Cruz',
+    path: 'M42 44 L72 42 L86 56 L80 74 L56 76 L48 56 Z',
+    labelX: 66,
+    labelY: 56,
+    valueY: 62
+  },
+  {
+    key: 'Oruro',
+    path: 'M16 56 L26 56 L30 67 L19 73 L12 66 Z',
+    labelX: 21,
+    labelY: 63,
+    valueY: 69
+  },
+  {
+    key: 'Potosí',
+    path: 'M19 73 L30 67 L38 76 L30 88 L20 86 Z',
+    labelX: 28,
+    labelY: 77,
+    valueY: 83
+  },
+  {
+    key: 'Chuquisaca',
+    path: 'M38 76 L56 76 L52 90 L38 92 L30 88 Z',
+    labelX: 44,
+    labelY: 82,
+    valueY: 88
+  },
+  {
+    key: 'Tarija',
+    path: 'M30 88 L38 92 L36 102 L28 106 L20 99 L20 86 Z',
+    labelX: 29,
+    labelY: 96,
+    valueY: 102
+  }
 ];
 
 const normalizeText = (value = '') => String(value || '')
@@ -76,7 +130,19 @@ function AdminDashboard({ token }) {
   const maxQty = Math.max(...popularProducts.map((p) => Number(p.total_quantity || 0)), 1);
   const maxSales = Math.max(...topSalespeople.map((seller) => Number(seller.total_sales || 0)), 1);
   const maxWarehouseSales = Math.max(...topWarehouses.map((warehouse) => Number(warehouse.total_sales || 0)), 1);
-  const maxDailySales = Math.max(...dailySalesSeries.map((item) => Number(item.total_sales || 0)), 1);
+  const monthDaysCount = new Date(selectedYear, selectedMonth, 0).getDate();
+  const byDayMap = new Map(
+    dailySalesSeries.map((item) => [Number(item.day_num || 0), Number(item.total_sales || 0)])
+  );
+  const fullDailySalesSeries = Array.from({ length: monthDaysCount }, (_, idx) => {
+    const day = idx + 1;
+    return {
+      day_num: day,
+      period_day: `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      total_sales: byDayMap.get(day) || 0
+    };
+  });
+  const maxDailySales = Math.max(...fullDailySalesSeries.map((item) => Number(item.total_sales || 0)), 1);
   const commissionRows = [...activeUserCommissions]
     .map((row, index) => ({
       ...row,
@@ -92,7 +158,7 @@ function AdminDashboard({ token }) {
     return acc;
   }, {});
   const maxDepartmentSales = Math.max(...Object.values(departmentSalesMap), 1);
-  const lineChartPoints = dailySalesSeries.map((item, index) => {
+  const lineChartPoints = fullDailySalesSeries.map((item, index) => {
     const chartWidth = 100;
     const chartHeight = 100;
     const leftPad = 6;
@@ -101,9 +167,9 @@ function AdminDashboard({ token }) {
     const bottomPad = 18;
     const drawableWidth = chartWidth - leftPad - rightPad;
     const drawableHeight = chartHeight - topPad - bottomPad;
-    const x = dailySalesSeries.length === 1
+    const x = fullDailySalesSeries.length === 1
       ? leftPad + drawableWidth / 2
-      : leftPad + (index / (dailySalesSeries.length - 1)) * drawableWidth;
+      : leftPad + (index / (fullDailySalesSeries.length - 1)) * drawableWidth;
     const y = topPad + (1 - (Number(item.total_sales || 0) / maxDailySales)) * drawableHeight;
     return {
       ...item,
@@ -208,79 +274,75 @@ function AdminDashboard({ token }) {
           )}
         </section>
 
-        <section className="dashboard-card">
+        <section className="dashboard-card dashboard-map-card">
           <h3>Mapa de Bolivia · Ventas por departamento</h3>
-          <div className="dashboard-bolivia-map">
-            {BOLIVIA_TILE_LAYOUT.map((tile) => {
-              const totalSales = Number(departmentSalesMap[tile.key] || 0);
-              const ratio = Math.min(1, totalSales / maxDepartmentSales);
-              const alpha = 0.18 + (ratio * 0.72);
-              return (
-                <div
-                  key={tile.key}
-                  className="dashboard-bolivia-tile"
-                  style={{
-                    gridColumn: tile.x + 1,
-                    gridRow: tile.y + 1,
-                    background: `rgba(248, 113, 113, ${alpha.toFixed(2)})`
-                  }}
-                >
-                  <strong>{tile.short}</strong>
-                  <span>{formatBs(totalSales)}</span>
-                </div>
-              );
-            })}
+          <div className="dashboard-map-wrap">
+            <div className="dashboard-bolivia-map">
+              <svg viewBox="0 0 96 112" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Mapa de Bolivia por ventas">
+                {BOLIVIA_MAP_REGIONS.map((region) => {
+                  const totalSales = Number(departmentSalesMap[region.key] || 0);
+                  const ratio = Math.min(1, totalSales / maxDepartmentSales);
+                  const fillColor = ratio <= 0
+                    ? 'rgba(21, 36, 62, 0.9)'
+                    : `rgba(248, 113, 113, ${(0.16 + ratio * 0.74).toFixed(2)})`;
+                  return (
+                    <g key={region.key}>
+                      <path
+                        className="dashboard-map-region"
+                        d={region.path}
+                        style={{ fill: fillColor }}
+                      />
+                      <text x={region.labelX} y={region.labelY} className="dashboard-map-region-label">
+                        {region.key}
+                      </text>
+                      <text x={region.labelX} y={region.valueY} className="dashboard-map-region-value">
+                        {Number(totalSales).toFixed(0)} Bs
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+            <div className="dashboard-map-ranking">
+              {Object.entries(departmentSalesMap)
+                .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))
+                .map(([department, total]) => (
+                  <div key={department} className="dashboard-map-ranking-row">
+                    <strong>{department}</strong>
+                    <span>{formatBs(total)}</span>
+                  </div>
+                ))}
+            </div>
           </div>
-          <p className="dashboard-map-legend">
-            Mayor intensidad = mayor volumen de ventas del periodo seleccionado.
+          <div className="dashboard-map-legend">
+            <span className="dashboard-map-legend-gradient" />
+            Mayor intensidad = mayor volumen de ventas.
+          </div>
+          <p className="dashboard-empty" style={{ marginTop: '-2px' }}>
+            Referencia geográfica esquemática de departamentos de Bolivia.
           </p>
         </section>
 
-        <section className="dashboard-card">
+        <section className="dashboard-card dashboard-line-card">
           <h3>Línea diaria · Ventas del mes</h3>
-          {lineChartPoints.length === 0 ? (
-            <p className="dashboard-empty">Sin datos este periodo</p>
-          ) : (
-            <div className="dashboard-line-chart-wrap">
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="dashboard-line-chart">
-                <polyline
-                  fill="none"
-                  stroke="rgba(56, 189, 248, 0.45)"
-                  strokeWidth="0.6"
-                  points={`6,82 94,82`}
-                />
-                <path
-                  d={linePath}
-                  fill="none"
-                  stroke="#38bdf8"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {lineChartPoints.map((point) => (
-                  <circle
-                    key={point.day}
-                    cx={point.x}
-                    cy={point.y}
-                    r="1.4"
-                    fill="#38bdf8"
-                  />
-                ))}
-              </svg>
-              <div className="dashboard-line-axis">
-                <span>Día 1</span>
-                <span>Día {lineChartPoints.length}</span>
-              </div>
-              <ol className="dashboard-line-list">
-                {lineChartPoints.map((point) => (
-                  <li key={point.day}>
-                    <strong>{point.day}</strong>
-                    <span>{formatBs(point.total_sales)}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          )}
+          <div className="dashboard-line-wrap">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="dashboard-line-svg">
+              <line x1="6" y1="8" x2="6" y2="82" className="dashboard-line-axis" />
+              <line x1="6" y1="82" x2="94" y2="82" className="dashboard-line-axis" />
+              <line x1="6" y1="26" x2="94" y2="26" className="dashboard-line-grid" />
+              <line x1="6" y1="44" x2="94" y2="44" className="dashboard-line-grid" />
+              <line x1="6" y1="62" x2="94" y2="62" className="dashboard-line-grid" />
+              <path d={linePath} className="dashboard-line-path" />
+              {lineChartPoints.map((point) => (
+                <circle key={point.day_num} cx={point.x} cy={point.y} r="1.2" className="dashboard-line-point" />
+              ))}
+              <text x="2" y="10" className="dashboard-line-tick">{formatBs(maxDailySales).replace(' Bs', '')}</text>
+              <text x="2" y="46" className="dashboard-line-tick">{formatBs(maxDailySales / 2).replace(' Bs', '')}</text>
+              <text x="2" y="84" className="dashboard-line-tick">0</text>
+              <text x="6" y="93" className="dashboard-line-tick">Día 1</text>
+              <text x="84" y="93" className="dashboard-line-tick">Día {monthDaysCount}</text>
+            </svg>
+          </div>
         </section>
 
         <section className="dashboard-card">
