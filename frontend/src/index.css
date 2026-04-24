@@ -2626,6 +2626,19 @@ nav {
 }
 
 @media (min-width: 769px) {
+  .pedidos-table-wrap,
+  .history-table-wrap {
+    /* Let table height grow naturally so pagination stays below rows. */
+    overflow: visible;
+    max-height: none;
+  }
+
+  .pedidos-table,
+  .history-table {
+    /* Prevent forced horizontal overflow on desktop. */
+    min-width: 0;
+  }
+
   .filter-bar {
     flex-wrap: nowrap;
     gap: 10px;
