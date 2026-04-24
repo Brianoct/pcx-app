@@ -2650,8 +2650,9 @@ nav {
   }
 
   .filter-select {
-    min-width: 138px;
-    flex: 0 0 138px;
+    min-width: 0;
+    flex: 0 1 200px;
+    max-width: 200px;
   }
 
   .filter-bar .btn {
