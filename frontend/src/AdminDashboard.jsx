@@ -2,6 +2,37 @@
 import { useState, useEffect } from 'react';
 import { apiRequest } from './apiClient';
 
+const BOLIVIA_DEPARTMENT_MAP = {
+  'la paz': 'La Paz',
+  'santa cruz': 'Santa Cruz',
+  cochabamba: 'Cochabamba',
+  potosi: 'Potosí',
+  potosí: 'Potosí',
+  tarija: 'Tarija',
+  oruro: 'Oruro',
+  beni: 'Beni',
+  pando: 'Pando',
+  chuquisaca: 'Chuquisaca'
+};
+
+const BOLIVIA_TILE_LAYOUT = [
+  { key: 'Pando', short: 'Pando', x: 0, y: 0 },
+  { key: 'Beni', short: 'Beni', x: 1, y: 0 },
+  { key: 'La Paz', short: 'La Paz', x: 0, y: 1 },
+  { key: 'Cochabamba', short: 'Cochabamba', x: 1, y: 1 },
+  { key: 'Santa Cruz', short: 'Santa Cruz', x: 2, y: 1 },
+  { key: 'Oruro', short: 'Oruro', x: 0, y: 2 },
+  { key: 'Potosí', short: 'Potosí', x: 1, y: 2 },
+  { key: 'Chuquisaca', short: 'Chuquisaca', x: 2, y: 2 },
+  { key: 'Tarija', short: 'Tarija', x: 1, y: 3 }
+];
+
+const normalizeText = (value = '') => String(value || '')
+  .trim()
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '');
+
 function AdminDashboard({ token }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -31,6 +62,8 @@ function AdminDashboard({ token }) {
   const topSalespeople = Array.isArray(stats.topSalespeople) ? stats.topSalespeople : [];
   const topLocations = Array.isArray(stats.topLocations) ? stats.topLocations : [];
   const topWarehouses = Array.isArray(stats.topWarehouses) ? stats.topWarehouses : [];
+  const dailySalesSeries = Array.isArray(stats.dailySalesSeries) ? stats.dailySalesSeries : [];
+  const salesByDepartment = Array.isArray(stats.salesByDepartment) ? stats.salesByDepartment : [];
   const activeUserCommissions = Array.isArray(stats.activeUserCommissions)
     ? stats.activeUserCommissions
     : (Array.isArray(stats.commissionPayout?.rows) ? stats.commissionPayout.rows : []);
@@ -43,6 +76,7 @@ function AdminDashboard({ token }) {
   const maxQty = Math.max(...popularProducts.map((p) => Number(p.total_quantity || 0)), 1);
   const maxSales = Math.max(...topSalespeople.map((seller) => Number(seller.total_sales || 0)), 1);
   const maxWarehouseSales = Math.max(...topWarehouses.map((warehouse) => Number(warehouse.total_sales || 0)), 1);
+  const maxDailySales = Math.max(...dailySalesSeries.map((item) => Number(item.total_sales || 0)), 1);
   const commissionRows = [...activeUserCommissions]
     .map((row, index) => ({
       ...row,
@@ -50,6 +84,36 @@ function AdminDashboard({ token }) {
     }))
     .sort((a, b) => Number(b.commission || 0) - Number(a.commission || 0));
   const formatBs = (value) => `${Number(value || 0).toFixed(2)} Bs`;
+  const departmentSalesMap = salesByDepartment.reduce((acc, row) => {
+    const sourceDepartment = String(row.department || '').trim();
+    const normalizedDepartment = normalizeText(sourceDepartment);
+    const canonicalDepartment = BOLIVIA_DEPARTMENT_MAP[normalizedDepartment] || sourceDepartment;
+    acc[canonicalDepartment] = Number(row.total_sales || 0);
+    return acc;
+  }, {});
+  const maxDepartmentSales = Math.max(...Object.values(departmentSalesMap), 1);
+  const lineChartPoints = dailySalesSeries.map((item, index) => {
+    const chartWidth = 100;
+    const chartHeight = 100;
+    const leftPad = 6;
+    const rightPad = 6;
+    const topPad = 8;
+    const bottomPad = 18;
+    const drawableWidth = chartWidth - leftPad - rightPad;
+    const drawableHeight = chartHeight - topPad - bottomPad;
+    const x = dailySalesSeries.length === 1
+      ? leftPad + drawableWidth / 2
+      : leftPad + (index / (dailySalesSeries.length - 1)) * drawableWidth;
+    const y = topPad + (1 - (Number(item.total_sales || 0) / maxDailySales)) * drawableHeight;
+    return {
+      ...item,
+      x,
+      y
+    };
+  });
+  const linePath = lineChartPoints
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ');
 
   return (
     <div className="dashboard-workspace">
@@ -141,6 +205,81 @@ function AdminDashboard({ token }) {
                 </li>
               ))}
             </ol>
+          )}
+        </section>
+
+        <section className="dashboard-card">
+          <h3>Mapa de Bolivia · Ventas por departamento</h3>
+          <div className="dashboard-bolivia-map">
+            {BOLIVIA_TILE_LAYOUT.map((tile) => {
+              const totalSales = Number(departmentSalesMap[tile.key] || 0);
+              const ratio = Math.min(1, totalSales / maxDepartmentSales);
+              const alpha = 0.18 + (ratio * 0.72);
+              return (
+                <div
+                  key={tile.key}
+                  className="dashboard-bolivia-tile"
+                  style={{
+                    gridColumn: tile.x + 1,
+                    gridRow: tile.y + 1,
+                    background: `rgba(248, 113, 113, ${alpha.toFixed(2)})`
+                  }}
+                >
+                  <strong>{tile.short}</strong>
+                  <span>{formatBs(totalSales)}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="dashboard-map-legend">
+            Mayor intensidad = mayor volumen de ventas del periodo seleccionado.
+          </p>
+        </section>
+
+        <section className="dashboard-card">
+          <h3>Línea diaria · Ventas del mes</h3>
+          {lineChartPoints.length === 0 ? (
+            <p className="dashboard-empty">Sin datos este periodo</p>
+          ) : (
+            <div className="dashboard-line-chart-wrap">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="dashboard-line-chart">
+                <polyline
+                  fill="none"
+                  stroke="rgba(56, 189, 248, 0.45)"
+                  strokeWidth="0.6"
+                  points={`6,82 94,82`}
+                />
+                <path
+                  d={linePath}
+                  fill="none"
+                  stroke="#38bdf8"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                {lineChartPoints.map((point) => (
+                  <circle
+                    key={point.day}
+                    cx={point.x}
+                    cy={point.y}
+                    r="1.4"
+                    fill="#38bdf8"
+                  />
+                ))}
+              </svg>
+              <div className="dashboard-line-axis">
+                <span>Día 1</span>
+                <span>Día {lineChartPoints.length}</span>
+              </div>
+              <ol className="dashboard-line-list">
+                {lineChartPoints.map((point) => (
+                  <li key={point.day}>
+                    <strong>{point.day}</strong>
+                    <span>{formatBs(point.total_sales)}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
           )}
         </section>
 

@@ -6897,6 +6897,33 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
       ORDER BY order_count DESC
     `, dateFilter.params);
 
+    // 5. Sales by department for Bolivia map
+    const departmentSalesRes = await pool.query(`
+      SELECT
+        COALESCE(NULLIF(TRIM(q.department), ''), 'Sin departamento') AS department,
+        COUNT(*) AS order_count,
+        SUM(q.total) AS total_sales
+      FROM quotes q
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        ${dateFilter.sql}
+      GROUP BY department
+      ORDER BY total_sales DESC
+    `, dateFilter.params);
+
+    // 6. Daily sales for selected month (line chart)
+    const dailySalesRes = await pool.query(`
+      SELECT
+        EXTRACT(DAY FROM q.created_at)::INT AS day_num,
+        TO_CHAR(DATE_TRUNC('day', q.created_at), 'YYYY-MM-DD') AS period_day,
+        COUNT(*) AS order_count,
+        SUM(q.total) AS total_sales
+      FROM quotes q
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        ${dateFilter.sql}
+      GROUP BY day_num, period_day
+      ORDER BY day_num ASC
+    `, dateFilter.params);
+
     const activeUsersRes = await pool.query(
       `SELECT id, email, display_name, role, city
        FROM users
@@ -7049,6 +7076,8 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
       topSalespeople: salesRes.rows,
       topLocations: locRes.rows,
       topWarehouses: whRes.rows,
+      salesByDepartment: departmentSalesRes.rows,
+      dailySales: dailySalesRes.rows,
       activeUserCommissions: commissionByUser,
       totalCommissionToDate
     });
