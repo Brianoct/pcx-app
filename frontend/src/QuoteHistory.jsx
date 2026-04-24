@@ -1115,14 +1115,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
             <div className="history-table-wrap">
               <table className="history-table">
                 <colgroup>
-                  <col style={{ width: '64px' }} />
-                  <col style={{ width: '220px' }} />
-                  <col style={{ width: '170px' }} />
-                  {isLeader && <col style={{ width: '150px' }} />}
-                  <col style={{ width: '130px' }} />
-                  <col style={{ width: '140px' }} />
-                  <col style={{ width: '170px' }} />
-                  <col style={{ width: '200px' }} />
+                  <col style={{ width: '56px' }} />
+                  <col style={{ width: isLeader ? '17%' : '21%' }} />
+                  <col style={{ width: isLeader ? '14%' : '17%' }} />
+                  {isLeader && <col style={{ width: '12%' }} />}
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: isLeader ? '22%' : '28%' }} />
                 </colgroup>
                 <thead>
                   <tr>

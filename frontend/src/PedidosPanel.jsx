@@ -593,15 +593,15 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
             <div className="pedidos-table-wrap">
               <table className="pedidos-table">
                 <colgroup>
-                  <col style={{ width: '56px' }} />
-                  <col style={{ width: '120px' }} />
-                  <col style={{ width: '180px' }} />
-                  <col style={{ width: '120px' }} />
-                  <col style={{ width: '190px' }} />
-                  <col style={{ width: '140px' }} />
-                  <col style={{ width: '120px' }} />
-                  <col style={{ width: '170px' }} />
-                  <col style={{ width: '190px' }} />
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '15%' }} />
                 </colgroup>
                 <thead>
                   <tr>
