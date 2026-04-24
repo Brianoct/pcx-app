@@ -27,7 +27,10 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const panelAccess = useMemo(() => buildAccessForUser(role, access), [role, access]);
   const { isOnline, enqueueWrite } = useOutbox();
   const canViewPedidosGlobal = canAccessPanel(panelAccess, 'pedidosGlobal');
-  const isAlmacenLider = normalizeRole(role) === 'almacen lider';
+  const normalizedRole = normalizeRole(role);
+  const isAlmacenLider = normalizedRole === 'almacen lider';
+  const isAdmin = normalizedRole === 'admin';
+  const canFilterByWarehouse = isAlmacenLider || isAdmin;
   const canManageStatus = canAccessPanel(panelAccess, 'pedidosIndividual') || canViewPedidosGlobal;
   const vendorOptions = useMemo(() => {
     const uniqueVendors = new Set();
@@ -485,7 +488,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
           <option value="Enviado">Enviado</option>
         </select>
 
-        {isAlmacenLider && (
+        {canFilterByWarehouse && (
           <select
             className="filter-select"
             value={warehouseFilter}
