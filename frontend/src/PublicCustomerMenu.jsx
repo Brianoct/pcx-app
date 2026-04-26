@@ -860,6 +860,8 @@ export default function PublicCustomerMenu() {
   }
 
   const sellerName = String(menuData?.seller?.display_name || 'Ventas PCX');
+  const desktopWorkspaceMaxWidth = 1240;
+  const desktopCartPanelWidth = 430;
 
   const renderTableroGroupCard = (group) => {
     const selectedColorKey = selectedTableroColorByModel[group.key] || group.variants[0]?.key;
@@ -1107,7 +1109,7 @@ export default function PublicCustomerMenu() {
     ];
 
   return (
-    <div className="container" style={{ maxWidth: '1120px', paddingTop: '28px', color: LIGHT_THEME.text, background: LIGHT_THEME.pageBg, borderRadius: '16px' }}>
+    <div className="container" style={{ maxWidth: `${desktopWorkspaceMaxWidth}px`, paddingTop: '28px', color: LIGHT_THEME.text, background: LIGHT_THEME.pageBg, borderRadius: '16px' }}>
       <div className="card" style={{ marginBottom: '14px', background: LIGHT_THEME.surface, border: `1px solid ${LIGHT_THEME.border}`, boxShadow: '0 8px 22px rgba(15, 23, 42, 0.08)' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
           <img
@@ -1131,7 +1133,7 @@ export default function PublicCustomerMenu() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: isCompactLayout ? '1fr' : 'minmax(0, 1fr) 340px',
+          gridTemplateColumns: isCompactLayout ? '1fr' : `minmax(0, 1fr) minmax(380px, ${desktopCartPanelWidth}px)`,
           gap: isCompactLayout ? '12px' : '14px',
           alignItems: 'start'
         }}
