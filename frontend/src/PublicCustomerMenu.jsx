@@ -20,6 +20,8 @@ const HOGAR_ACCESSORY_KEYWORDS = [
   'multifunción',
   'bandeja'
 ];
+const HOGAR_ACCESSORY_GANCHO_HINTS = ['gancho', 'j', '5cm', '8cm', 'blanco', 'negro'];
+const INDUSTRIAL_ACCESSORY_KEYWORDS = ['cromo', 'metal', 'acero', 'industrial'];
 const DEPARTMENT_OPTIONS = [
   'Beni',
   'Chuquisaca',
@@ -268,7 +270,14 @@ function isComboProduct(product) {
 
 function isHogarAccessoryProduct(product) {
   const text = normalizeText(`${product?.name || ''} ${product?.sku || ''}`);
-  return HOGAR_ACCESSORY_KEYWORDS.some((keyword) => text.includes(normalizeText(keyword)));
+  if (INDUSTRIAL_ACCESSORY_KEYWORDS.some((keyword) => text.includes(normalizeText(keyword)))) {
+    return false;
+  }
+  if (HOGAR_ACCESSORY_KEYWORDS.some((keyword) => text.includes(normalizeText(keyword)))) {
+    return true;
+  }
+  // Some legacy product names omit "plastico" but are still hogar hooks.
+  return text.includes('gancho') && HOGAR_ACCESSORY_GANCHO_HINTS.some((hint) => text.includes(hint));
 }
 
 function isHogarComboProduct(product) {
@@ -281,6 +290,20 @@ function isHogarComboProduct(product) {
     || text.includes('plastico')
     || text.includes('plástico')
   );
+}
+
+function shouldShowAccessoryInSegment(product, segment) {
+  if (segment === SEGMENT_HOGAR) {
+    return isHogarAccessoryProduct(product);
+  }
+  return !isHogarAccessoryProduct(product);
+}
+
+function shouldShowComboInSegment(product, segment) {
+  if (segment === SEGMENT_HOGAR) {
+    return isHogarComboProduct(product);
+  }
+  return !isHogarComboProduct(product);
 }
 
 function ProductImage({
@@ -1202,9 +1225,50 @@ export default function PublicCustomerMenu() {
             {cartItems.length === 0 ? (
               <div style={{ color: LIGHT_THEME.textMuted }}>Aún no agregaste productos.</div>
             ) : cartItems.map((item) => (
-              <div key={`cart-${item.sku}`} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '6px', color: LIGHT_THEME.text }}>
-                <span>{item.qty}× {item.name}</span>
-                <strong>{item.lineTotal.toFixed(2)} Bs</strong>
+              <div key={`cart-${item.sku}`} style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                gap: '8px',
+                marginBottom: '8px',
+                color: LIGHT_THEME.text,
+                borderBottom: `1px dashed ${LIGHT_THEME.border}`,
+                paddingBottom: '6px'
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {item.name}
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: LIGHT_THEME.textMuted }}>
+                    {item.qty} x {(Number(item.lineTotal || 0) / Math.max(Number(item.qty || 1), 1)).toFixed(2)} Bs
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px' }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => decrease(item.sku)}
+                      style={{ minHeight: '28px', minWidth: '28px', padding: '0 8px', background: '#e2e8f0', color: '#0f172a' }}
+                    >
+                      -
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => increase(item.sku)}
+                      style={{ minHeight: '28px', minWidth: '28px', padding: '0 8px', background: '#2563eb', color: '#fff' }}
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setQty(item.sku, 0)}
+                      style={{ minHeight: '28px', padding: '0 8px', background: '#ef4444', color: '#fff' }}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+                <strong style={{ alignSelf: 'start' }}>{item.lineTotal.toFixed(2)} Bs</strong>
               </div>
             ))}
           </div>
