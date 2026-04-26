@@ -386,6 +386,19 @@ export default function CustomerMenuTool({ token, user }) {
           <div style={{ color: '#93c5fd', fontSize: '0.85rem', marginBottom: '14px' }}>
             Para variantes de tableros: crea SKUs separados por variante (color/tamaño) y marca categoría <strong>Tableros</strong>.
           </div>
+          <div style={{
+            border: '1px solid rgba(16,185,129,0.35)',
+            background: 'rgba(6,78,59,0.22)',
+            borderRadius: '10px',
+            padding: '10px 12px',
+            color: '#bbf7d0',
+            fontSize: '0.84rem',
+            marginBottom: '12px',
+            lineHeight: 1.4
+          }}>
+            <strong>Persistencia:</strong> nombres, precios, categoría e imagen del catálogo se guardan en base de datos y permanecen tras cambios de código.
+            Las imágenes subidas se guardan en <code>/customer-menu-images</code> del servidor.
+          </div>
 
           <div style={{ marginBottom: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-secondary" onClick={loadCatalogProducts} disabled={catalogLoading}>
@@ -517,152 +530,176 @@ export default function CustomerMenuTool({ token, user }) {
             </div>
           )}
 
-          <div style={{ background: '#1e293b', borderRadius: '10px', padding: '12px', overflowX: 'auto' }}>
+          <div style={{ background: '#1e293b', borderRadius: '10px', padding: '12px' }}>
             <h4 style={{ marginBottom: '10px' }}>Productos activos ({activeCatalogProducts.length})</h4>
             {catalogLoading ? (
               <div style={{ color: '#94a3b8' }}>Cargando catálogo...</div>
             ) : (
-              <table className="table" style={{ minWidth: '1120px' }}>
-                <thead>
-                  <tr>
-                    <th>SKU</th>
-                    <th>Nombre</th>
-                    <th>SF</th>
-                    <th>CF</th>
-                    <th>Categoría</th>
-                    <th>Imagen</th>
-                    <th>Activo</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {activeCatalogProducts.map((row) => (
-                    <tr key={row.sku}>
-                      <td style={{ whiteSpace: 'nowrap', fontWeight: 700 }}>{row.sku}</td>
-                      <td>
-                        <input
-                          value={row.name || ''}
-                          onChange={(e) => onCatalogRowField(row.sku, 'name', e.target.value)}
-                          style={{ width: '260px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={row.sf ?? row.sf_price ?? 0}
-                          onChange={(e) => onCatalogRowField(row.sku, 'sf', e.target.value)}
-                          style={{ width: '92px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={row.cf ?? row.cf_price ?? 0}
-                          onChange={(e) => onCatalogRowField(row.sku, 'cf', e.target.value)}
-                          style={{ width: '92px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
-                        />
-                      </td>
-                      <td>
-                        <select
-                          value={row.menu_category || ''}
-                          onChange={(e) => onCatalogRowField(row.sku, 'menu_category', e.target.value)}
-                          style={{ width: '130px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
-                        >
-                          {PRODUCT_CATEGORY_OPTIONS.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <div style={{ display: 'grid', gap: '6px', minWidth: '260px' }}>
-                          <input
-                            value={row.image_url || ''}
-                            onChange={(e) => onCatalogRowField(row.sku, 'image_url', e.target.value)}
-                            placeholder="/menu-images/archivo.jpg o URL"
-                            style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
-                          />
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <select
-                              value=""
-                              onChange={(e) => {
-                                const value = String(e.target.value || '').trim();
-                                if (value) onCatalogRowField(row.sku, 'image_url', value);
-                              }}
-                              style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
-                            >
-                              <option value="">Elegir imagen...</option>
-                              {imageLibrary.map((img) => (
-                                <option key={`${row.sku}-${img.source}-${img.name}`} value={img.image_url}>
-                                  [{img.source}] {img.name}
-                                </option>
-                              ))}
-                            </select>
-                            <label style={{
-                              borderRadius: '8px',
-                              border: '1px solid #334155',
-                              background: '#0f172a',
-                              color: '#e2e8f0',
-                              padding: '8px',
-                              cursor: uploadingImageTarget ? 'not-allowed' : 'pointer',
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {uploadingImageTarget === row.sku ? 'Subiendo...' : 'Subir'}
-                              <input
-                                type="file"
-                                accept="image/*"
-                                style={{ display: 'none' }}
-                                disabled={Boolean(uploadingImageTarget)}
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  uploadImageFile(file, row.sku);
-                                  e.target.value = '';
-                                }}
-                              />
-                            </label>
-                          </div>
-                          {row.image_url && (
-                            <img
-                              src={resolvePreviewUrl(row.image_url)}
-                              alt={`preview-${row.sku}`}
-                              style={{ width: '54px', height: '54px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #334155', background: '#020617' }}
-                            />
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {activeCatalogProducts.map((row) => (
+                  <div
+                    key={row.sku}
+                    style={{
+                      border: '1px solid #334155',
+                      borderRadius: '10px',
+                      background: '#0f172a',
+                      padding: '10px'
+                    }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '10px',
+                      flexWrap: 'wrap',
+                      marginBottom: '8px'
+                    }}>
+                      <div style={{ color: '#f8fafc', fontWeight: 700, letterSpacing: '0.02em' }}>{row.sku}</div>
+                      <label style={{ color: '#cbd5e1', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                         <input
                           type="checkbox"
                           checked={Boolean(row.is_active)}
                           onChange={(e) => onCatalogRowField(row.sku, 'is_active', e.target.checked)}
                         />
-                      </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={() => saveCatalogRow(row)}
-                          disabled={catalogSaving}
-                        >
-                          Guardar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-danger"
-                          onClick={() => deactivateCatalogRow(row)}
-                          disabled={catalogSaving}
-                          style={{ marginLeft: '6px' }}
-                        >
-                          Desactivar
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        Activo
+                      </label>
+                    </div>
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                      gap: '8px',
+                      marginBottom: '8px'
+                    }}>
+                      <input
+                        value={row.name || ''}
+                        onChange={(e) => onCatalogRowField(row.sku, 'name', e.target.value)}
+                        placeholder="Nombre producto/variante"
+                        style={{ gridColumn: 'span 2', minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={row.sf ?? row.sf_price ?? 0}
+                        onChange={(e) => onCatalogRowField(row.sku, 'sf', e.target.value)}
+                        placeholder="SF"
+                        style={{ minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                      />
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={row.cf ?? row.cf_price ?? 0}
+                        onChange={(e) => onCatalogRowField(row.sku, 'cf', e.target.value)}
+                        placeholder="CF"
+                        style={{ minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                      />
+                      <select
+                        value={row.menu_category || ''}
+                        onChange={(e) => onCatalogRowField(row.sku, 'menu_category', e.target.value)}
+                        style={{ minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                      >
+                        {PRODUCT_CATEGORY_OPTIONS.map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(0, 1fr) auto',
+                      gap: '8px',
+                      alignItems: 'start'
+                    }}>
+                      <div style={{ display: 'grid', gap: '6px' }}>
+                        <input
+                          value={row.image_url || ''}
+                          onChange={(e) => onCatalogRowField(row.sku, 'image_url', e.target.value)}
+                          placeholder="/customer-menu-images/archivo.jpg o URL"
+                          style={{ width: '100%', minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                        />
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '6px' }}>
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              const value = String(e.target.value || '').trim();
+                              if (value) onCatalogRowField(row.sku, 'image_url', value);
+                            }}
+                            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                          >
+                            <option value="">Elegir imagen...</option>
+                            {imageLibrary.map((img) => (
+                              <option key={`${row.sku}-${img.source}-${img.name}`} value={img.image_url}>
+                                [{img.source}] {img.name}
+                              </option>
+                            ))}
+                          </select>
+                          <label style={{
+                            borderRadius: '8px',
+                            border: '1px solid #334155',
+                            background: '#020617',
+                            color: '#e2e8f0',
+                            padding: '8px 10px',
+                            cursor: uploadingImageTarget ? 'not-allowed' : 'pointer',
+                            whiteSpace: 'nowrap',
+                            display: 'inline-flex',
+                            alignItems: 'center'
+                          }}>
+                            {uploadingImageTarget === row.sku ? 'Subiendo...' : 'Subir'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              disabled={Boolean(uploadingImageTarget)}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                uploadImageFile(file, row.sku);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gap: '8px', justifyItems: 'end' }}>
+                        {row.image_url ? (
+                          <img
+                            src={resolvePreviewUrl(row.image_url)}
+                            alt={`preview-${row.sku}`}
+                            style={{ width: '58px', height: '58px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #334155', background: '#020617' }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: '58px',
+                            height: '58px',
+                            borderRadius: '8px',
+                            border: '1px dashed #334155',
+                            background: '#020617'
+                          }} />
+                        )}
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => saveCatalogRow(row)}
+                            disabled={catalogSaving}
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => deactivateCatalogRow(row)}
+                            disabled={catalogSaving}
+                          >
+                            Desactivar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
 
             {inactiveCatalogProducts.length > 0 && (
