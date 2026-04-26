@@ -1253,18 +1253,20 @@ export default function PublicCustomerMenu() {
                   onClick={() => setQty(item.sku, 0)}
                   aria-label={`Eliminar ${item.name}`}
                   style={{
-                    width: '26px',
-                    height: '26px',
-                    borderRadius: '999px',
-                    border: '1px solid #fda4af',
-                    background: '#fff1f2',
+                    minWidth: isCompactLayout ? '30px' : '58px',
+                    height: isCompactLayout ? '30px' : '26px',
+                    borderRadius: isCompactLayout ? '999px' : '8px',
+                    border: '1px solid #fecdd3',
+                    background: isCompactLayout ? '#fff1f2' : '#fff',
                     color: '#e11d48',
-                    fontWeight: 800,
+                    fontWeight: 700,
+                    fontSize: isCompactLayout ? '0.9rem' : '0.72rem',
                     cursor: 'pointer',
-                    lineHeight: 1
+                    lineHeight: 1,
+                    padding: isCompactLayout ? 0 : '0 8px'
                   }}
                 >
-                  X
+                  {isCompactLayout ? '×' : 'Quitar'}
                 </button>
               </div>
             ))}
