@@ -1227,48 +1227,45 @@ export default function PublicCustomerMenu() {
             ) : cartItems.map((item) => (
               <div key={`cart-${item.sku}`} style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+                alignItems: 'center',
                 gap: '8px',
                 marginBottom: '8px',
                 color: LIGHT_THEME.text,
                 borderBottom: `1px dashed ${LIGHT_THEME.border}`,
                 paddingBottom: '6px'
               }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {item.name}
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: LIGHT_THEME.textMuted }}>
-                    {item.qty} x {(Number(item.lineTotal || 0) / Math.max(Number(item.qty || 1), 1)).toFixed(2)} Bs
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '5px' }}>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => decrease(item.sku)}
-                      style={{ minHeight: '28px', minWidth: '28px', padding: '0 8px', background: '#e2e8f0', color: '#0f172a' }}
-                    >
-                      -
-                    </button>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => increase(item.sku)}
-                      style={{ minHeight: '28px', minWidth: '28px', padding: '0 8px', background: '#2563eb', color: '#fff' }}
-                    >
-                      +
-                    </button>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setQty(item.sku, 0)}
-                      style={{ minHeight: '28px', padding: '0 8px', background: '#ef4444', color: '#fff' }}
-                    >
-                      Quitar
-                    </button>
-                  </div>
+                <div
+                  style={{
+                    minWidth: 0,
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                  title={`${item.name} x${item.qty}`}
+                >
+                  {item.name} x{item.qty}
                 </div>
-                <strong style={{ alignSelf: 'start' }}>{item.lineTotal.toFixed(2)} Bs</strong>
+                <strong>{item.lineTotal.toFixed(2)} Bs</strong>
+                <button
+                  type="button"
+                  onClick={() => setQty(item.sku, 0)}
+                  aria-label={`Eliminar ${item.name}`}
+                  style={{
+                    width: '26px',
+                    height: '26px',
+                    borderRadius: '999px',
+                    border: '1px solid #fda4af',
+                    background: '#fff1f2',
+                    color: '#e11d48',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    lineHeight: 1
+                  }}
+                >
+                  X
+                </button>
               </div>
             ))}
           </div>
