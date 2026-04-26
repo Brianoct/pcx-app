@@ -1150,7 +1150,7 @@ export default function PublicCustomerMenu() {
                 {section.kind === 'tableros'
                   ? (section.items.length === 0
                     ? <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.9rem' }}>{section.empty}</div>
-                    : section.items.map((group) => renderTableroGroup(group)))
+                    : section.items.map((group) => renderTableroGroupCard(group)))
                   : renderAccessoryGrid(section.items, section.empty)}
               </section>
             ))}
