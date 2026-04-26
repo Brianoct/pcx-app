@@ -408,9 +408,22 @@ export default function PublicCustomerMenu() {
     () => Array.isArray(menuData?.products) ? menuData.products : [],
     [menuData]
   );
-  const tableroProducts = useMemo(
-    () => products.filter((product) => String(product.category || CATEGORY_ACCESORIOS) === CATEGORY_TABLEROS),
+  const comboProducts = useMemo(
+    () => products
+      .filter((product) => isComboProduct(product))
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es', { sensitivity: 'base' })),
     [products]
+  );
+  const nonComboProducts = useMemo(
+    () => products.filter((product) => !isComboProduct(product)),
+    [products]
+  );
+  const tableroProducts = useMemo(
+    () => nonComboProducts.filter((product) => {
+      const isTableroCategory = String(product.category || CATEGORY_ACCESORIOS) === CATEGORY_TABLEROS;
+      return isTableroCategory && Boolean(detectTableroModelKey(product));
+    }),
+    [nonComboProducts]
   );
   const tableroGroups = useMemo(() => {
     const byModel = new Map();
@@ -494,17 +507,16 @@ export default function PublicCustomerMenu() {
   }, [tableroGroups]);
 
   const accessoryProducts = useMemo(
-    () => products
-      .filter((product) => String(product.category || CATEGORY_ACCESORIOS) !== CATEGORY_TABLEROS)
-      .filter((product) => !isComboProduct(product))
+    () => nonComboProducts
+      .filter((product) => {
+        const isTableroCategory = String(product.category || CATEGORY_ACCESORIOS) === CATEGORY_TABLEROS;
+        // Safety net: if a product is tagged as Tableros but has no tablero model
+        // dimensions (e.g. G08BP), still show it as accessory instead of hiding it.
+        if (!isTableroCategory) return true;
+        return !detectTableroModelKey(product);
+      })
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es', { sensitivity: 'base' })),
-    [products]
-  );
-  const comboProducts = useMemo(
-    () => products
-      .filter((product) => isComboProduct(product))
-      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es', { sensitivity: 'base' })),
-    [products]
+    [nonComboProducts]
   );
   const tablerosTalleres = useMemo(
     () => tableroGroups.filter((group) => getTableroSegmentByModel(group.key) === SEGMENT_TALLERES),
