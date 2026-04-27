@@ -121,6 +121,7 @@ const normalizeText = (value = '') => String(value || '')
   .replace(/[\u0300-\u036f]/g, '');
 
 const DASHBOARD_CARD_ORDER = [
+  'summary',
   'products',
   'salespeople',
   'locations',
@@ -223,6 +224,9 @@ function AdminDashboard({ token }) {
   const maxQty = Math.max(...popularProducts.map((p) => Number(p.total_quantity || 0)), 1);
   const maxSales = Math.max(...topSalespeople.map((seller) => Number(seller.total_sales || 0)), 1);
   const maxWarehouseSales = Math.max(...topWarehouses.map((warehouse) => Number(warehouse.total_sales || 0)), 1);
+  const totalSalesInPeriod = topSalespeople.reduce((sum, seller) => sum + Number(seller.total_sales || 0), 0);
+  const totalPedidosInPeriod = topSalespeople.reduce((sum, seller) => sum + Number(seller.order_count || 0), 0);
+  const totalCombinedProducts = popularProducts.reduce((sum, product) => sum + Number(product.total_quantity || 0), 0);
   const monthDaysCount = new Date(selectedYear, selectedMonth, 0).getDate();
   const byDayMap = new Map(
     dailySalesSeries.map((item) => [Number(item.day || item.day_num || 0), Number(item.total_sales || 0)])
@@ -346,6 +350,29 @@ function AdminDashboard({ token }) {
   };
 
   const dashboardCards = {
+    summary: (
+      <section className="dashboard-card dashboard-summary-card dashboard-card-wide">
+        <h3>Resumen general del periodo</h3>
+        <div className="dashboard-summary-grid">
+          <div className="dashboard-summary-item">
+            <span>Total ventas</span>
+            <strong>{formatBs(totalSalesInPeriod)}</strong>
+          </div>
+          <div className="dashboard-summary-item">
+            <span>Total comisiones</span>
+            <strong>{formatBs(totalCommissionsToDate)}</strong>
+          </div>
+          <div className="dashboard-summary-item">
+            <span>Total pedidos</span>
+            <strong>{totalPedidosInPeriod}</strong>
+          </div>
+          <div className="dashboard-summary-item">
+            <span>Total productos combinados</span>
+            <strong>{totalCombinedProducts}</strong>
+          </div>
+        </div>
+      </section>
+    ),
     products: (
       <section className="dashboard-card">
         <h3>Productos Más Vendidos (Cantidad)</h3>

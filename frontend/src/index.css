@@ -1776,6 +1776,38 @@ nav {
   grid-column: 1 / -1;
 }
 
+.dashboard-summary-card {
+  grid-column: 1 / -1;
+}
+
+.dashboard-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.dashboard-summary-item {
+  border: 1px solid rgba(45, 56, 82, 0.85);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.dashboard-summary-label {
+  color: #9fb2cc;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.dashboard-summary-value {
+  color: #f8fafc;
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
 .dashboard-empty {
   margin: 0;
   color: #94a3b8;
