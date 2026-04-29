@@ -74,6 +74,7 @@ export default function CustomerMenuTool({ token, user }) {
     name: '',
     sf: '',
     cf: '',
+    is_gift_eligible: false,
     menu_category: 'Tableros',
     image_url: ''
   });
@@ -167,6 +168,7 @@ export default function CustomerMenuTool({ token, user }) {
         name: String(newProduct.name || '').trim(),
         sf: toPositiveNumber(newProduct.sf),
         cf: toPositiveNumber(newProduct.cf),
+        is_gift_eligible: Boolean(newProduct.is_gift_eligible),
         menu_category: String(newProduct.menu_category || '').trim() || null,
         image_url: String(newProduct.image_url || '').trim() || null
       };
@@ -184,6 +186,7 @@ export default function CustomerMenuTool({ token, user }) {
         name: '',
         sf: '',
         cf: '',
+        is_gift_eligible: false,
         menu_category: 'Tableros',
         image_url: ''
       });
@@ -203,6 +206,7 @@ export default function CustomerMenuTool({ token, user }) {
         name: String(row.name || '').trim(),
         sf: toPositiveNumber(row.sf ?? row.sf_price ?? 0),
         cf: toPositiveNumber(row.cf ?? row.cf_price ?? 0),
+        is_gift_eligible: Boolean(row.is_gift_eligible),
         menu_category: String(row.menu_category || '').trim() || null,
         image_url: String(row.image_url || '').trim() || null,
         is_active: Boolean(row.is_active)
@@ -442,6 +446,14 @@ export default function CustomerMenuTool({ token, user }) {
                 onChange={(e) => setNewProduct((prev) => ({ ...prev, cf: e.target.value }))}
                 style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
               />
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#cbd5e1', fontSize: '0.9rem' }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(newProduct.is_gift_eligible)}
+                  onChange={(e) => setNewProduct((prev) => ({ ...prev, is_gift_eligible: e.target.checked }))}
+                />
+                Disponible como regalo en Cotizador
+              </label>
               <select
                 value={newProduct.menu_category}
                 onChange={(e) => setNewProduct((prev) => ({ ...prev, menu_category: e.target.value }))}
@@ -595,6 +607,14 @@ export default function CustomerMenuTool({ token, user }) {
                         placeholder="CF"
                         style={{ minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
                       />
+                      <label style={{ color: '#cbd5e1', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(row.is_gift_eligible)}
+                          onChange={(e) => onCatalogRowField(row.sku, 'is_gift_eligible', e.target.checked)}
+                        />
+                        Regalo cotizador
+                      </label>
                       <select
                         value={row.menu_category || ''}
                         onChange={(e) => onCatalogRowField(row.sku, 'menu_category', e.target.value)}

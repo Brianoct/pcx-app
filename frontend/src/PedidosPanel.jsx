@@ -262,30 +262,27 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     return expanded;
   };
 
-  const loadChecklistItems = async (quote) => {
+  const openChecklist = async (quote) => {
+    let checklistPayload = null;
+    let items = [];
     try {
-      const payload = await apiRequest(`/api/quotes/${quote.id}/checklist`, { token });
-      const normalized = normalizeChecklistItems(payload?.items || []);
-      if (normalized.length > 0) return normalized;
+      checklistPayload = await apiRequest(`/api/quotes/${quote.id}/checklist`, { token });
+      items = normalizeChecklistItems(checklistPayload?.items || []);
     } catch (err) {
       console.warn('No se pudo cargar checklist expandido, usando fallback local:', err);
+      items = normalizeChecklistItems(buildChecklistItemsFromQuote(quote));
     }
-    return normalizeChecklistItems(buildChecklistItemsFromQuote(quote));
-  };
-
-  const openChecklist = async (quote) => {
-    const items = await loadChecklistItems(quote);
     if (items.length === 0) {
       alert('Este pedido no tiene productos.');
       return;
     }
     const checked = items.map((item) => (item.isCheckable ? false : true));
+    const promoSections = Array.isArray(checklistPayload?.promo_sections) ? checklistPayload.promo_sections : [];
     setChecklistModal({
       quoteId: quote.id,
       items,
       checked,
-      giftName: quote.customer_gift || null,
-      couponCode: quote.coupon_code || null
+      promoSections
     });
   };
 
@@ -780,39 +777,43 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
               </div>
             </div>
 
-            {(checklistModal.couponCode || checklistModal.giftName) && (
+            {Array.isArray(checklistModal.promoSections) && checklistModal.promoSections.length > 0 && (
               <div style={{
                 marginBottom: '16px',
                 display: 'grid',
                 gap: '8px',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))'
               }}>
-                {checklistModal.couponCode && (
-                  <div style={{
-                    background: 'rgba(37, 99, 235, 0.16)',
-                    border: '1px solid rgba(96, 165, 250, 0.5)',
-                    borderRadius: '10px',
-                    padding: '10px 12px'
-                  }}>
-                    <div style={{ color: '#93c5fd', fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                      Cupón aplicado
+                {checklistModal.promoSections.map((promo, index) => {
+                  const isGift = promo?.type === 'gift';
+                  const accentBg = isGift ? 'rgba(16, 185, 129, 0.16)' : 'rgba(37, 99, 235, 0.16)';
+                  const accentBorder = isGift ? '1px solid rgba(52, 211, 153, 0.5)' : '1px solid rgba(96, 165, 250, 0.5)';
+                  const titleColor = isGift ? '#6ee7b7' : '#93c5fd';
+                  const valueColor = isGift ? '#d1fae5' : '#e0f2fe';
+                  return (
+                    <div
+                      key={`${promo.type || 'promo'}-${index}`}
+                      style={{
+                        background: accentBg,
+                        border: accentBorder,
+                        borderRadius: '10px',
+                        padding: '10px 12px'
+                      }}
+                    >
+                      <div style={{ color: titleColor, fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                        {promo?.title || (isGift ? 'Regalo' : 'Cupón')}
+                      </div>
+                      <strong style={{ color: valueColor, fontSize: '1rem' }}>
+                        {promo?.name || promo?.code || promo?.label || '—'}
+                      </strong>
+                      {(promo?.sku || Number(promo?.qty || 0) > 1) && (
+                        <div style={{ color: valueColor, fontSize: '0.78rem', marginTop: '4px' }}>
+                          {promo?.sku ? `SKU: ${promo.sku}` : ''}{promo?.sku && Number(promo?.qty || 0) > 1 ? ' · ' : ''}{Number(promo?.qty || 0) > 1 ? `Cant: ${promo.qty}` : ''}
+                        </div>
+                      )}
                     </div>
-                    <strong style={{ color: '#e0f2fe', fontSize: '1rem' }}>{checklistModal.couponCode}</strong>
-                  </div>
-                )}
-                {checklistModal.giftName && (
-                  <div style={{
-                    background: 'rgba(16, 185, 129, 0.16)',
-                    border: '1px solid rgba(52, 211, 153, 0.5)',
-                    borderRadius: '10px',
-                    padding: '10px 12px'
-                  }}>
-                    <div style={{ color: '#6ee7b7', fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                      Regalo para cliente
-                    </div>
-                    <strong style={{ color: '#d1fae5', fontSize: '1rem' }}>{checklistModal.giftName}</strong>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             )}
 

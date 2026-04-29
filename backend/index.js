@@ -54,6 +54,14 @@ const ensureQuotesMarketingSchema = async () => {
       `ALTER TABLE quotes
        ADD COLUMN IF NOT EXISTS gift_name TEXT`
     );
+    await pool.query(
+      `ALTER TABLE quotes
+       ADD COLUMN IF NOT EXISTS gift_sku TEXT`
+    );
+    await pool.query(
+      `ALTER TABLE quotes
+       ADD COLUMN IF NOT EXISTS gift_qty INTEGER NOT NULL DEFAULT 1`
+    );
   } catch (err) {
     console.error('No se pudo asegurar esquema marketing en quotes:', err.message);
   }
@@ -1202,6 +1210,7 @@ const ensureProductCatalogReady = async () => {
       await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS sf_price NUMERIC(12,2) NOT NULL DEFAULT 0`);
       await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cf_price NUMERIC(12,2) NOT NULL DEFAULT 0`);
       await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
+      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_gift_eligible BOOLEAN NOT NULL DEFAULT FALSE`);
       await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS menu_category TEXT`);
       await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT`);
 
@@ -1230,7 +1239,7 @@ const ensureProductCatalogReady = async () => {
       }
 
       const rowsResult = await pool.query(
-        `SELECT sku, name, sf_price, cf_price, menu_category, image_url
+        `SELECT sku, name, sf_price, cf_price, is_gift_eligible, menu_category, image_url
          FROM products
          WHERE is_active = TRUE
          ORDER BY UPPER(name) ASC, UPPER(sku) ASC`
@@ -1245,7 +1254,7 @@ const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
   await ensureProductCatalogReady();
   const whereClause = includeInactive ? '' : 'WHERE is_active = TRUE';
   const result = await pool.query(
-    `SELECT sku, name, sf_price, cf_price, is_active, menu_category, image_url
+    `SELECT sku, name, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url
      FROM products
      ${whereClause}
      ORDER BY UPPER(name) ASC, UPPER(sku) ASC`
@@ -1256,6 +1265,7 @@ const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
     sf: Number(row.sf_price || 0),
     cf: Number(row.cf_price || 0),
     is_active: Boolean(row.is_active),
+    is_gift_eligible: Boolean(row.is_gift_eligible),
     menu_category: String(row.menu_category || '').trim() || null,
     image_url: String(row.image_url || '').trim() || null
   }));
@@ -1291,13 +1301,14 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
   const hasSf = Object.prototype.hasOwnProperty.call(src, 'sf') || Object.prototype.hasOwnProperty.call(src, 'sf_price');
   const hasCf = Object.prototype.hasOwnProperty.call(src, 'cf') || Object.prototype.hasOwnProperty.call(src, 'cf_price');
   const hasIsActive = Object.prototype.hasOwnProperty.call(src, 'is_active');
+  const hasIsGiftEligible = Object.prototype.hasOwnProperty.call(src, 'is_gift_eligible');
   const hasMenuCategory = Object.prototype.hasOwnProperty.call(src, 'menu_category');
   const hasImageUrl = Object.prototype.hasOwnProperty.call(src, 'image_url');
 
   if (!partial && (!hasName || !hasSf || !hasCf)) {
     throw createHttpError(400, 'Debes enviar name, sf y cf');
   }
-  if (partial && !hasName && !hasSf && !hasCf && !hasIsActive && !hasMenuCategory && !hasImageUrl) {
+  if (partial && !hasName && !hasSf && !hasCf && !hasIsActive && !hasIsGiftEligible && !hasMenuCategory && !hasImageUrl) {
     throw createHttpError(400, 'No se enviaron cambios para actualizar');
   }
 
@@ -1321,6 +1332,20 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
         normalized.is_active = false;
       } else {
         throw createHttpError(400, 'is_active debe ser booleano');
+      }
+    }
+  }
+  if (hasIsGiftEligible) {
+    if (typeof src.is_gift_eligible === 'boolean') {
+      normalized.is_gift_eligible = src.is_gift_eligible;
+    } else {
+      const giftRaw = normalizeText(String(src.is_gift_eligible));
+      if (['true', '1', 'si', 'yes', 'activo', 'active'].includes(giftRaw)) {
+        normalized.is_gift_eligible = true;
+      } else if (['false', '0', 'no', 'inactivo', 'inactive'].includes(giftRaw)) {
+        normalized.is_gift_eligible = false;
+      } else {
+        throw createHttpError(400, 'is_gift_eligible debe ser booleano');
       }
     }
   }
@@ -2728,7 +2753,7 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
   const quoteRes = await client.query(
     `SELECT id, user_id, customer_name, customer_phone, department, provincia, shipping_notes,
             alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
-            line_items, subtotal, total, status
+            gift_name, gift_sku, gift_qty, line_items, subtotal, total, status
      FROM quotes
      WHERE id = $1
      FOR UPDATE`,
@@ -2749,6 +2774,65 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
   }
 
   return quote;
+};
+
+const normalizeGiftSelection = (giftPayload = null) => {
+  if (!giftPayload || typeof giftPayload !== 'object' || Array.isArray(giftPayload)) {
+    return null;
+  }
+  const giftSku = String(giftPayload.sku || '').trim().toUpperCase();
+  const giftQty = Number.parseInt(giftPayload.qty, 10);
+  const giftName = String(giftPayload.name || '').trim();
+  if (!giftSku) return null;
+  if (!Number.isInteger(giftQty) || giftQty <= 0) {
+    throw createHttpError(400, 'Cantidad de regalo inválida');
+  }
+  return {
+    sku: giftSku,
+    qty: giftQty,
+    name: giftName || null
+  };
+};
+
+const resolveGiftSelectionForQuote = async (client, giftSelection, giftNameLegacy) => {
+  const normalizedGift = normalizeGiftSelection(giftSelection);
+  if (normalizedGift) {
+    const giftProductRes = await client.query(
+      `SELECT sku, name, is_active, is_gift_eligible
+       FROM products
+       WHERE UPPER(sku) = $1`,
+      [normalizedGift.sku]
+    );
+    if (giftProductRes.rowCount === 0) {
+      throw createHttpError(400, 'El producto de regalo seleccionado no existe');
+    }
+    const giftProduct = giftProductRes.rows[0];
+    if (!giftProduct.is_active) {
+      throw createHttpError(400, 'El producto de regalo seleccionado está inactivo');
+    }
+    if (!giftProduct.is_gift_eligible) {
+      throw createHttpError(400, 'El producto seleccionado no está habilitado como regalo para cotizador');
+    }
+    return {
+      gift_name: String(giftProduct.name || '').trim() || normalizedGift.name || null,
+      gift_sku: String(giftProduct.sku || '').trim().toUpperCase(),
+      gift_qty: normalizedGift.qty
+    };
+  }
+
+  const legacyGiftName = giftNameLegacy ? String(giftNameLegacy).trim() : '';
+  if (legacyGiftName) {
+    return {
+      gift_name: legacyGiftName,
+      gift_sku: null,
+      gift_qty: 1
+    };
+  }
+  return {
+    gift_name: null,
+    gift_sku: null,
+    gift_qty: 1
+  };
 };
 
 const flattenQuoteLineItemsToSkuQtyMap = (lineItems = []) => {
@@ -3428,6 +3512,8 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
     coupon_code,
     coupon_discount_percent,
     gift_name,
+    gift_sku,
+    gift_qty,
     rows,
     subtotal,
     total,
@@ -3529,12 +3615,18 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
       vendorDisplayName = resolveUserDisplayName(seller, vendorDisplayName);
     }
 
+    const giftSelection = await resolveGiftSelectionForQuote(
+      client,
+      { sku: gift_sku, qty: gift_qty, name: gift_name },
+      gift_name
+    );
+
     const quoteResult = await client.query(
       `INSERT INTO quotes (
         user_id, customer_name, customer_phone, department, provincia, shipping_notes,
         alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
-        coupon_code, coupon_discount_percent, gift_name, line_items, subtotal, total, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, NOW())
+        coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, line_items, subtotal, total, status, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW())
       RETURNING id`,
       [
         quoteOwnerId,
@@ -3551,7 +3643,9 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
         discountPercentValue,
         coupon_code ? String(coupon_code).trim().toUpperCase() : null,
         Number.isFinite(Number(coupon_discount_percent)) ? Number(coupon_discount_percent) : 0,
-        gift_name ? String(gift_name).trim() : null,
+        giftSelection.gift_name,
+        giftSelection.gift_sku,
+        giftSelection.gift_qty,
         JSON.stringify(lineItemsWithDisplay),
         subtotalValue,
         totalValue,
@@ -3563,7 +3657,10 @@ app.post('/api/quotes', authenticateToken, async (req, res) => {
 
     // Only deduct stock if initial status is finalized.
     if (FINALIZED_QUOTE_STATUSES.includes(normalizedStatus)) {
-      await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay);
+      await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay, {
+        gift_sku: giftSelection.gift_sku,
+        gift_qty: giftSelection.gift_qty
+      });
     }
 
     await client.query('COMMIT');
@@ -4837,7 +4934,7 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT id, user_id, customer_name, customer_phone, department, provincia, store_location,
               vendor, status, line_items, created_at, alternative_name, alternative_phone,
-              coupon_code, coupon_discount_percent, gift_name
+              coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty
        FROM quotes WHERE id = $1`,
       [id]
     );
@@ -4982,29 +5079,29 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       });
     }
 
+    const promoSections = [];
     if (quote.coupon_code) {
       const couponPercent = Number(quote.coupon_discount_percent || 0);
-      const couponLabel = Number.isFinite(couponPercent) && couponPercent > 0
-        ? `Cupón ${String(quote.coupon_code).trim().toUpperCase()} (${couponPercent}%)`
-        : `Cupón ${String(quote.coupon_code).trim().toUpperCase()}`;
-      items.push({
-        displayName: couponLabel,
-        sku: 'CUPON',
-        qty: 1,
-        isComboHeader: false,
-        isIndented: false,
-        isCheckable: false
+      promoSections.push({
+        type: 'coupon',
+        title: 'Cupón',
+        code: String(quote.coupon_code).trim().toUpperCase(),
+        discount_percent: Number.isFinite(couponPercent) ? couponPercent : 0,
+        label: Number.isFinite(couponPercent) && couponPercent > 0
+          ? `Cupón ${String(quote.coupon_code).trim().toUpperCase()} (${couponPercent}%)`
+          : `Cupón ${String(quote.coupon_code).trim().toUpperCase()}`
       });
     }
-
-    if (quote.gift_name) {
-      items.push({
-        displayName: `Regalo: ${String(quote.gift_name).trim()}`,
-        sku: 'REGALO',
-        qty: 1,
-        isComboHeader: false,
-        isIndented: false,
-        isCheckable: false
+    if (quote.gift_name || quote.gift_sku) {
+      promoSections.push({
+        type: 'gift',
+        title: 'Regalo',
+        name: String(quote.gift_name || '').trim() || null,
+        sku: String(quote.gift_sku || '').trim().toUpperCase() || null,
+        qty: Math.max(1, Number.parseInt(quote.gift_qty, 10) || 1),
+        label: String(quote.gift_name || '').trim()
+          ? `Regalo: ${String(quote.gift_name).trim()}`
+          : 'Regalo'
       });
     }
 
@@ -5023,6 +5120,9 @@ app.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       coupon_code: quote.coupon_code,
       coupon_discount_percent: quote.coupon_discount_percent,
       gift_name: quote.gift_name,
+      gift_sku: quote.gift_sku || null,
+      gift_qty: Math.max(1, Number.parseInt(quote.gift_qty, 10) || 1),
+      promo_sections: promoSections,
       items
     });
   } catch (err) {
@@ -5051,7 +5151,7 @@ app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
     await client.query('BEGIN');
 
     const currentRes = await client.query(
-      'SELECT user_id, status, store_location, line_items FROM quotes WHERE id = $1',
+      'SELECT user_id, status, store_location, line_items, gift_sku, gift_qty FROM quotes WHERE id = $1',
       [req.params.id]
     );
 
@@ -5071,10 +5171,15 @@ app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
     const currentStatus = currentRes.rows[0].status;
     const storeLocation = currentRes.rows[0].store_location;
     const lineItems = currentRes.rows[0].line_items;
+    const giftSku = String(currentRes.rows[0].gift_sku || '').trim().toUpperCase() || null;
+    const giftQty = Math.max(1, Number.parseInt(currentRes.rows[0].gift_qty, 10) || 1);
 
     // Deduct stock only if moving FROM Cotizado to something else
     if (currentStatus === 'Cotizado' && status !== 'Cotizado') {
-      await deductStockForQuote(client, req.params.id, storeLocation, lineItems);
+      await deductStockForQuote(client, req.params.id, storeLocation, lineItems, {
+        gift_sku: giftSku,
+        gift_qty: giftQty
+      });
     }
 
     const updateRes = await client.query(
@@ -5117,6 +5222,8 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     coupon_code,
     coupon_discount_percent,
     gift_name,
+    gift_sku,
+    gift_qty,
     rows,
     subtotal,
     total,
@@ -5204,11 +5311,27 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
       nextQuoteOwnerId = selectedSellerId;
     }
 
-    if (wasFinalized && (!willBeFinalized || storeChanged || lineItemsChanged)) {
-      await restockStockForQuote(client, oldStore, oldLineItems);
+    const resolvedGift = await resolveGiftSelectionForQuote(
+      client,
+      { sku: gift_sku, qty: gift_qty, name: gift_name },
+      gift_name
+    );
+    const previousGiftSelection = {
+      gift_sku: String(currentQuote.gift_sku || '').trim().toUpperCase() || null,
+      gift_qty: Number.parseInt(currentQuote.gift_qty, 10) || 1
+    };
+    const nextGiftSelection = {
+      gift_sku: resolvedGift.gift_sku,
+      gift_qty: resolvedGift.gift_qty
+    };
+    const giftChanged = `${previousGiftSelection.gift_sku || ''}:${previousGiftSelection.gift_qty}`
+      !== `${nextGiftSelection.gift_sku || ''}:${nextGiftSelection.gift_qty}`;
+
+    if (wasFinalized && (!willBeFinalized || storeChanged || lineItemsChanged || giftChanged)) {
+      await restockStockForQuote(client, oldStore, oldLineItems, previousGiftSelection);
     }
-    if (willBeFinalized && (!wasFinalized || storeChanged || lineItemsChanged)) {
-      await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay);
+    if (willBeFinalized && (!wasFinalized || storeChanged || lineItemsChanged || giftChanged)) {
+      await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay, nextGiftSelection);
     }
 
     await client.query(
@@ -5228,11 +5351,13 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
            coupon_code = $13,
            coupon_discount_percent = $14,
            gift_name = $15,
-           line_items = $16,
-           subtotal = $17,
-           total = $18,
-           status = $19
-      WHERE id = $20`,
+           gift_sku = $16,
+           gift_qty = $17,
+           line_items = $18,
+           subtotal = $19,
+           total = $20,
+           status = $21
+      WHERE id = $22`,
       [
         customer_name,
         customer_phone,
@@ -5248,7 +5373,9 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         discountPercentValue,
         coupon_code ? String(coupon_code).trim().toUpperCase() : null,
         Number.isFinite(Number(coupon_discount_percent)) ? Number(coupon_discount_percent) : 0,
-        gift_name ? String(gift_name).trim() : null,
+        resolvedGift.gift_name,
+        resolvedGift.gift_sku,
+        resolvedGift.gift_qty,
         JSON.stringify(lineItemsWithDisplay),
         subtotalValue,
         totalValue,
@@ -5294,7 +5421,11 @@ app.delete('/api/quotes/:id', authenticateToken, async (req, res) => {
       await restockStockForQuote(
         client,
         currentQuote.store_location,
-        Array.isArray(currentQuote.line_items) ? currentQuote.line_items : []
+        Array.isArray(currentQuote.line_items) ? currentQuote.line_items : [],
+        {
+          gift_sku: String(currentQuote.gift_sku || '').trim().toUpperCase() || null,
+          gift_qty: Number.parseInt(currentQuote.gift_qty, 10) || 1
+        }
       );
     }
 
@@ -5312,7 +5443,7 @@ app.delete('/api/quotes/:id', authenticateToken, async (req, res) => {
 });
 
 // ─── Helper: Deduct stock for a quote ───────────────────────────────────────
-async function deductStockForQuote(client, quoteId, storeLocation, lineItems) {
+async function deductStockForQuote(client, quoteId, storeLocation, lineItems, giftSelection = null) {
   const warehouseField = {
     'Cochabamba': 'stock_cochabamba',
     'Santa Cruz': 'stock_santacruz',
@@ -5403,10 +5534,26 @@ async function deductStockForQuote(client, quoteId, storeLocation, lineItems) {
       [qty, sku]
     );
   }
+
+  const giftSku = String(giftSelection?.gift_sku || '').trim().toUpperCase();
+  const giftQty = Number.parseInt(giftSelection?.gift_qty, 10);
+  if (giftSku && Number.isInteger(giftQty) && giftQty > 0) {
+    const stockCheck = await client.query(
+      `SELECT ${warehouseField} FROM products WHERE sku = $1 FOR UPDATE`,
+      [giftSku]
+    );
+    if (stockCheck.rowCount === 0) throw new Error(`Producto de regalo ${giftSku} no encontrado`);
+    const currentStock = Number(stockCheck.rows[0][warehouseField] || 0);
+    if (currentStock < giftQty) throw new Error(`Stock insuficiente para regalo ${giftSku}`);
+    await client.query(
+      `UPDATE products SET ${warehouseField} = ${warehouseField} - $1, last_updated = NOW() WHERE sku = $2`,
+      [giftQty, giftSku]
+    );
+  }
 }
 
 // ─── Helper: Restore stock for a quote ───────────────────────────────────────
-async function restockStockForQuote(client, storeLocation, lineItems) {
+async function restockStockForQuote(client, storeLocation, lineItems, giftSelection = null) {
   const warehouseField = {
     'Cochabamba': 'stock_cochabamba',
     'Santa Cruz': 'stock_santacruz',
@@ -5481,6 +5628,18 @@ async function restockStockForQuote(client, storeLocation, lineItems) {
            last_updated = NOW()
        WHERE sku = $2`,
       [qty, sku]
+    );
+  }
+
+  const giftSku = String(giftSelection?.gift_sku || '').trim().toUpperCase();
+  const giftQty = Number.parseInt(giftSelection?.gift_qty, 10);
+  if (giftSku && Number.isInteger(giftQty) && giftQty > 0) {
+    await client.query(
+      `UPDATE products
+       SET ${warehouseField} = ${warehouseField} + $1,
+           last_updated = NOW()
+       WHERE sku = $2`,
+      [giftQty, giftSku]
     );
   }
 }
@@ -6666,10 +6825,18 @@ app.post('/api/product-catalog', authenticateToken, requireRole(['admin']), asyn
     const sku = validateProductSku(req.body?.sku);
     const normalized = normalizeProductPayload(req.body, { partial: false });
     const result = await pool.query(
-      `INSERT INTO products (sku, name, sf_price, cf_price, is_active, menu_category, image_url, last_updated)
-       VALUES ($1, $2, $3, $4, TRUE, $5, $6, NOW())
-       RETURNING sku, name, sf_price, cf_price, is_active, menu_category, image_url`,
-      [sku, normalized.name, normalized.sf_price, normalized.cf_price, normalized.menu_category || null, normalized.image_url || null]
+      `INSERT INTO products (sku, name, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, last_updated)
+       VALUES ($1, $2, $3, $4, TRUE, $5, $6, $7, NOW())
+       RETURNING sku, name, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url`,
+      [
+        sku,
+        normalized.name,
+        normalized.sf_price,
+        normalized.cf_price,
+        Boolean(normalized.is_gift_eligible),
+        normalized.menu_category || null,
+        normalized.image_url || null
+      ]
     );
     await loadProductCatalogRows();
     res.status(201).json({
@@ -6678,6 +6845,7 @@ app.post('/api/product-catalog', authenticateToken, requireRole(['admin']), asyn
       sf: Number(result.rows[0].sf_price || 0),
       cf: Number(result.rows[0].cf_price || 0),
       is_active: Boolean(result.rows[0].is_active),
+      is_gift_eligible: Boolean(result.rows[0].is_gift_eligible),
       menu_category: String(result.rows[0].menu_category || '').trim() || null,
       image_url: String(result.rows[0].image_url || '').trim() || null
     });
@@ -6712,6 +6880,10 @@ app.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin'])
       values.push(Boolean(normalized.is_active));
       sets.push(`is_active = $${values.length}`);
     }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'is_gift_eligible')) {
+      values.push(Boolean(normalized.is_gift_eligible));
+      sets.push(`is_gift_eligible = $${values.length}`);
+    }
     if (Object.prototype.hasOwnProperty.call(normalized, 'menu_category')) {
       values.push(normalized.menu_category || null);
       sets.push(`menu_category = $${values.length}`);
@@ -6725,7 +6897,7 @@ app.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin'])
       `UPDATE products
        SET ${sets.join(', ')}, last_updated = NOW()
        WHERE sku = $${values.length}
-       RETURNING sku, name, sf_price, cf_price, is_active, menu_category, image_url`,
+       RETURNING sku, name, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url`,
       values
     );
     if (result.rowCount === 0) {
@@ -6738,6 +6910,7 @@ app.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin'])
       sf: Number(result.rows[0].sf_price || 0),
       cf: Number(result.rows[0].cf_price || 0),
       is_active: Boolean(result.rows[0].is_active),
+      is_gift_eligible: Boolean(result.rows[0].is_gift_eligible),
       menu_category: String(result.rows[0].menu_category || '').trim() || null,
       image_url: String(result.rows[0].image_url || '').trim() || null
     });
