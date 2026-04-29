@@ -12,14 +12,7 @@ const clampNumber = (value, min, max) => {
   return Math.min(max, Math.max(min, numeric));
 };
 
-const GIFT_OPTIONS = [
-  'Llaverito de cortesía',
-  'Gancho 5cm (docena)',
-  'Gancho 10cm (docena)',
-  'Porta llave grande',
-  'Set de tornillos',
-  'Sticker PCX'
-];
+const DEFAULT_GIFT_QTY = 1;
 
 export default function QuoteTool({ token, user }) {
   const [combos, setCombos] = useState([]);
@@ -39,7 +32,7 @@ export default function QuoteTool({ token, user }) {
   const [discountInput, setDiscountInput] = useState(0);
   const [coupons, setCoupons] = useState([]);
   const [selectedCouponCode, setSelectedCouponCode] = useState('');
-  const [selectedGiftLabel, setSelectedGiftLabel] = useState('');
+  const [selectedGiftSku, setSelectedGiftSku] = useState('');
   const [useAlternativeName, setUseAlternativeName] = useState(false);
   const [alternativeName, setAlternativeName] = useState('');
   const [alternativePhone, setAlternativePhone] = useState('');
@@ -79,6 +72,25 @@ export default function QuoteTool({ token, user }) {
     }
     return sku || name || 'Producto';
   };
+  const giftOptions = products
+    .filter((product) => Boolean(product?.is_gift_eligible))
+    .map((product) => {
+      const sku = String(product?.sku || '').trim().toUpperCase();
+      const name = String(product?.name || '').trim() || sku;
+      return {
+        sku,
+        name,
+        label: formatSkuNameLabel(sku, name)
+      };
+    });
+  const selectedGiftProduct = giftOptions.find((giftProduct) => giftProduct.sku === selectedGiftSku) || null;
+  useEffect(() => {
+    if (!selectedGiftSku) return;
+    const isStillEligible = giftOptions.some((giftProduct) => giftProduct.sku === selectedGiftSku);
+    if (!isStillEligible) {
+      setSelectedGiftSku('');
+    }
+  }, [giftOptions, selectedGiftSku]);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
@@ -87,26 +99,29 @@ export default function QuoteTool({ token, user }) {
   }, []);
 
   useEffect(() => {
-    if (step === 2) {
-      const fetchCatalog = async () => {
-        try {
-          const data = await apiRequest('/api/product-catalog', { token });
-          setProducts(Array.isArray(data) ? data : []);
-        } catch (err) {
-          console.error('Error fetching product catalog:', err);
-        }
-      };
-      const fetchCombos = async () => {
-        try {
-          const data = await apiRequest('/api/combos', { token });
-          setCombos(Array.isArray(data) ? data : []);
-        } catch (err) {
-          console.error('Error fetching combos:', err);
-        }
-      };
-      fetchCatalog();
-      fetchCombos();
-    }
+    if (!token) return;
+    const fetchCatalog = async () => {
+      try {
+        const data = await apiRequest('/api/product-catalog', { token });
+        setProducts(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Error fetching product catalog:', err);
+      }
+    };
+    fetchCatalog();
+  }, [token]);
+
+  useEffect(() => {
+    if (step !== 2) return;
+    const fetchCombos = async () => {
+      try {
+        const data = await apiRequest('/api/combos', { token });
+        setCombos(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error('Error fetching combos:', err);
+      }
+    };
+    fetchCombos();
   }, [step, token]);
 
   useEffect(() => {
@@ -373,7 +388,19 @@ export default function QuoteTool({ token, user }) {
     if (typeof values.shippingNotes === 'string') setShippingNotes(values.shippingNotes);
     if (typeof values.assignedSellerId === 'string') setAssignedSellerId(values.assignedSellerId);
     if (typeof values.selectedCouponCode === 'string') setSelectedCouponCode(values.selectedCouponCode);
-    if (typeof values.selectedGiftLabel === 'string') setSelectedGiftLabel(values.selectedGiftLabel);
+    if (typeof values.selectedGiftSku === 'string') {
+      setSelectedGiftSku(String(values.selectedGiftSku || '').trim().toUpperCase());
+    } else if (typeof values.selectedGiftLabel === 'string') {
+      const legacyGiftLabel = String(values.selectedGiftLabel || '').trim().toLowerCase();
+      if (legacyGiftLabel) {
+        const matchedGift = products.find((product) => (
+          String(product?.name || '').trim().toLowerCase() === legacyGiftLabel
+        ));
+        if (matchedGift?.sku) {
+          setSelectedGiftSku(String(matchedGift.sku).trim().toUpperCase());
+        }
+      }
+    }
     setDraftNotice('Se recuperó un borrador local.');
   }, [draftStorageKey, draft]);
 
@@ -396,7 +423,7 @@ export default function QuoteTool({ token, user }) {
         discountMode,
         discountInput,
         selectedCouponCode,
-        selectedGiftLabel,
+        selectedGiftSku,
         useAlternativeName,
         alternativeName,
         alternativePhone,
@@ -417,7 +444,8 @@ export default function QuoteTool({ token, user }) {
     discountMode,
     discountInput,
     selectedCouponCode,
-    selectedGiftLabel,
+    selectedGiftSku,
+    products,
     useAlternativeName,
     alternativeName,
     alternativePhone,
@@ -454,7 +482,7 @@ export default function QuoteTool({ token, user }) {
     setDiscountMode('percent');
     setDiscountInput(0);
     setSelectedCouponCode('');
-    setSelectedGiftLabel('');
+    setSelectedGiftSku('');
     setUseAlternativeName(false);
     setAlternativeName('');
     setAlternativePhone('');
@@ -564,7 +592,9 @@ export default function QuoteTool({ token, user }) {
       venta_type: ventaType,
       discount_percent: discountPercentForStorage,
       coupon_code: selectedCouponCode || null,
-      gift_name: selectedGiftLabel || null,
+      gift_name: selectedGiftProduct?.name || null,
+      gift_sku: selectedGiftProduct?.sku || null,
+      gift_qty: selectedGiftProduct ? DEFAULT_GIFT_QTY : 0,
       seller_user_id: requiresSellerAssignment ? Number(assignedSellerId) : null,
       rows: rowsWithDisplay,
       subtotal,
@@ -909,8 +939,8 @@ export default function QuoteTool({ token, user }) {
                 Regalo para cliente
               </label>
               <select
-                value={selectedGiftLabel}
-                onChange={(e) => setSelectedGiftLabel(e.target.value)}
+                value={selectedGiftSku}
+                onChange={(e) => setSelectedGiftSku(String(e.target.value || '').trim().toUpperCase())}
                 style={{
                   width: '100%',
                   minHeight: '44px',
@@ -928,10 +958,13 @@ export default function QuoteTool({ token, user }) {
                 }}
               >
                 <option value="">Sin regalo</option>
-                {GIFT_OPTIONS.map((giftLabel) => (
-                  <option key={giftLabel} value={giftLabel}>{giftLabel}</option>
+                {giftOptions.map((giftProduct) => (
+                  <option key={giftProduct.sku} value={giftProduct.sku}>{giftProduct.label}</option>
                 ))}
               </select>
+              <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '0.78rem' }}>
+                Lista preseleccionada desde catálogo de productos.
+              </div>
             </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
