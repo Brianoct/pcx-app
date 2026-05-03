@@ -12,10 +12,15 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 const CUSTOMER_MENU_IMAGE_DIR = path.resolve(__dirname, 'customer-menu-images');
+const LEGACY_MENU_IMAGE_DIR = path.resolve(__dirname, '../frontend/public/menu-images');
 if (!fsSync.existsSync(CUSTOMER_MENU_IMAGE_DIR)) {
   fsSync.mkdirSync(CUSTOMER_MENU_IMAGE_DIR, { recursive: true });
 }
 app.use('/customer-menu-images', express.static(CUSTOMER_MENU_IMAGE_DIR));
+app.use('/menu-images', express.static(CUSTOMER_MENU_IMAGE_DIR));
+if (fsSync.existsSync(LEGACY_MENU_IMAGE_DIR)) {
+  app.use('/menu-images', express.static(LEGACY_MENU_IMAGE_DIR));
+}
 
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -1157,7 +1162,6 @@ const CUSTOMER_MENU_CATEGORIES = [CUSTOMER_MENU_CATEGORY_TABLEROS, CUSTOMER_MENU
 const CUSTOMER_MENU_TOKEN_PURPOSE = 'customer_menu_share';
 const CUSTOMER_MENU_TOKEN_TTL = process.env.CUSTOMER_MENU_TOKEN_TTL || '30d';
 const CUSTOMER_MENU_IMAGE_ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
-const LEGACY_MENU_IMAGE_DIR = path.resolve(__dirname, '../frontend/public/menu-images');
 const CUSTOMER_MENU_IMAGE_MIME_TO_EXT = {
   'image/jpeg': '.jpg',
   'image/jpg': '.jpg',
@@ -1182,6 +1186,63 @@ const toCustomerMenuImageAbsoluteUrl = (req, relativePath) => {
   const origin = getRequestOrigin(req);
   if (!origin) return relativePath;
   return `${origin}${relativePath}`;
+};
+
+const normalizeLegacyMenuImagePath = (rawPath = '') => {
+  const value = String(rawPath || '').trim();
+  if (!value) return null;
+  const normalized = value.split('?')[0].split('#')[0].trim();
+  if (/^\/menu-images\/.+/i.test(normalized)) return normalized;
+  const absoluteLegacyMatch = normalized.match(/\/menu-images\/([^/?#]+)$/i);
+  if (absoluteLegacyMatch?.[1]) {
+    return `/menu-images/${absoluteLegacyMatch[1]}`;
+  }
+  return null;
+};
+
+const rewriteLegacyMenuImagePath = (rawPath = '') => normalizeLegacyMenuImagePath(rawPath) || String(rawPath || '').trim();
+
+const resolveCatalogLocalImagePath = (rawPath = '') => {
+  const value = String(rawPath || '').trim();
+  if (!value) return null;
+  if (value.startsWith('/customer-menu-images/')) {
+    return value.split('?')[0].split('#')[0].trim();
+  }
+  const rewritten = rewriteLegacyMenuImagePath(value);
+  if (rewritten.startsWith('/customer-menu-images/') || rewritten.startsWith('/menu-images/')) {
+    return rewritten.split('?')[0].split('#')[0].trim();
+  }
+  return null;
+};
+
+const getCatalogImageAbsolutePath = (relativePath = '') => {
+  const safeRelativePath = String(relativePath || '').trim();
+  if (!safeRelativePath || safeRelativePath.includes('..')) return null;
+  if (safeRelativePath.startsWith('/customer-menu-images/')) {
+    const filename = path.basename(safeRelativePath);
+    return path.join(CUSTOMER_MENU_IMAGE_DIR, filename);
+  }
+  if (safeRelativePath.startsWith('/menu-images/')) {
+    const filename = path.basename(safeRelativePath);
+    const preferredPath = path.join(CUSTOMER_MENU_IMAGE_DIR, filename);
+    if (fsSync.existsSync(preferredPath)) return preferredPath;
+    return path.join(LEGACY_MENU_IMAGE_DIR, filename);
+  }
+  return null;
+};
+
+const normalizeCatalogImageUrl = (req, rawPath = '', fallbackSku = '') => {
+  const value = String(rawPath || '').trim();
+  if (!value) return null;
+  const rewritten = rewriteLegacyMenuImagePath(value);
+  if (rewritten.startsWith('/customer-menu-images/') || rewritten.startsWith('/menu-images/')) {
+    const sku = String(fallbackSku || '').trim().toUpperCase();
+    if (sku) {
+      return toCustomerMenuImageAbsoluteUrl(req, `/api/public/menu-image/${encodeURIComponent(sku)}`);
+    }
+    return toCustomerMenuImageAbsoluteUrl(req, rewritten);
+  }
+  return value;
 };
 
 let PRODUCT_CATALOG = [...DEFAULT_PRODUCT_CATALOG];
@@ -3163,12 +3224,16 @@ app.get('/api/customer-menu/images', authenticateToken, async (req, res) => {
       .filter((entry) => entry.isFile())
       .map((entry) => entry.name)
       .filter((name) => CUSTOMER_MENU_IMAGE_ALLOWED_EXTENSIONS.has(path.extname(name).toLowerCase()))
-      .map((name) => ({
-        name,
-        source: 'menu-images',
-        relative_path: `/menu-images/${encodeURIComponent(name)}`,
-        image_url: `/menu-images/${encodeURIComponent(name)}`
-      }));
+      .map((name) => {
+        const legacyPath = `/menu-images/${encodeURIComponent(name)}`;
+        const canonicalPath = rewriteLegacyMenuImagePath(legacyPath);
+        return {
+          name,
+          source: 'menu-images',
+          relative_path: canonicalPath,
+          image_url: toCustomerMenuImageAbsoluteUrl(req, canonicalPath)
+        };
+      });
 
     const merged = [...ownImages, ...legacyImages].sort((a, b) => (
       `${a.source}:${a.name}`.localeCompare(`${b.source}:${b.name}`)
@@ -3307,7 +3372,7 @@ app.get('/api/public/menu/:shareToken', async (req, res) => {
         price: Number(row.sf || 0),
         price_sf: Number(row.sf || 0),
         price_cf: Number(row.cf || row.sf || 0),
-        image_url: String(row.image_url || '').trim() || null,
+        image_url: normalizeCatalogImageUrl(req, String(row.image_url || '').trim(), String(row.sku || '')),
         category: inferProductMenuCategory(row)
       }))
       .sort((a, b) => {
@@ -3335,6 +3400,57 @@ app.get('/api/public/menu/:shareToken', async (req, res) => {
     }
     console.error(err);
     return res.status(500).json({ error: 'No se pudo cargar el catálogo compartido' });
+  }
+});
+
+app.get('/api/public/menu-image/:sku', async (req, res) => {
+  const sku = String(req.params.sku || '').trim().toUpperCase();
+  if (!sku) {
+    return res.status(400).json({ error: 'SKU inválido' });
+  }
+
+  try {
+    const productRes = await pool.query(
+      `SELECT image_url
+       FROM products
+       WHERE UPPER(sku) = $1
+       LIMIT 1`,
+      [sku]
+    );
+    if (productRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+
+    const rawImageUrl = String(productRes.rows[0]?.image_url || '').trim();
+    const localRelativePath = resolveCatalogLocalImagePath(rawImageUrl);
+    if (!localRelativePath) {
+      return res.status(404).json({ error: 'Imagen no disponible' });
+    }
+
+    const localFilePath = getCatalogImageAbsolutePath(localRelativePath);
+    if (!localFilePath) {
+      return res.status(404).json({ error: 'Imagen no disponible' });
+    }
+
+    const extension = path.extname(localFilePath).toLowerCase();
+    const mimeByExt = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+      '.gif': 'image/gif'
+    };
+    const contentType = mimeByExt[extension] || 'application/octet-stream';
+    const imageBuffer = await fs.readFile(localFilePath);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    return res.send(imageBuffer);
+  } catch (err) {
+    if (err?.code === 'ENOENT') {
+      return res.status(404).json({ error: 'Imagen no disponible' });
+    }
+    console.error(err);
+    return res.status(500).json({ error: 'No se pudo cargar la imagen' });
   }
 });
 
