@@ -80,7 +80,9 @@ const normalizeText = (value = '') =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, ' ');
 const normalizeRole = (value = '') => normalizeText(value);
+const REPORTING_TIMEZONE = 'America/La_Paz';
 const COMPLETED_STATUSES = ['Confirmado', 'Pagado', 'Embalado', 'Enviado'];
+const TIMESTAMP_STORAGE_TIMEZONE = 'UTC';
 const PANEL_KEYS = [
   'cotizar',
   'menu_cliente',
@@ -2997,9 +2999,14 @@ const resolveAssignableVendorName = async (sellerUserId, fallbackName = '') => {
   return displayName;
 };
 
+const buildReportingCreatedAtExpr = (tableAlias = 'q') => (
+  `timezone('${REPORTING_TIMEZONE}', ${tableAlias}.created_at AT TIME ZONE '${TIMESTAMP_STORAGE_TIMEZONE}')`
+);
+
 const buildDateFilter = (month, year, tableAlias = 'q', startIndex = 1) => {
   const params = [];
   const clauses = [];
+  const reportingCreatedAtExpr = buildReportingCreatedAtExpr(tableAlias);
 
   const monthNum = month !== undefined ? Number.parseInt(month, 10) : null;
   const yearNum = year !== undefined ? Number.parseInt(year, 10) : null;
@@ -3013,11 +3020,11 @@ const buildDateFilter = (month, year, tableAlias = 'q', startIndex = 1) => {
 
   if (monthNum !== null) {
     params.push(monthNum);
-    clauses.push(`EXTRACT(MONTH FROM ${tableAlias}.created_at) = $${startIndex + params.length - 1}`);
+    clauses.push(`EXTRACT(MONTH FROM ${reportingCreatedAtExpr}) = $${startIndex + params.length - 1}`);
   }
   if (yearNum !== null) {
     params.push(yearNum);
-    clauses.push(`EXTRACT(YEAR FROM ${tableAlias}.created_at) = $${startIndex + params.length - 1}`);
+    clauses.push(`EXTRACT(YEAR FROM ${reportingCreatedAtExpr}) = $${startIndex + params.length - 1}`);
   }
 
   const sql = clauses.length ? ` AND ${clauses.join(' AND ')}` : '';
@@ -7200,10 +7207,11 @@ app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (re
     `, dateFilter.params);
 
     // 6. Daily sales for selected month (line chart)
+    const reportingCreatedAtExpr = buildReportingCreatedAtExpr('q');
     const dailySalesRes = await pool.query(`
       SELECT
-        EXTRACT(DAY FROM q.created_at)::INT AS day_num,
-        TO_CHAR(DATE_TRUNC('day', q.created_at), 'YYYY-MM-DD') AS period_day,
+        EXTRACT(DAY FROM ${reportingCreatedAtExpr})::INT AS day_num,
+        TO_CHAR(DATE_TRUNC('day', ${reportingCreatedAtExpr}), 'YYYY-MM-DD') AS period_day,
         COUNT(*) AS order_count,
         SUM(q.total) AS total_sales
       FROM quotes q
