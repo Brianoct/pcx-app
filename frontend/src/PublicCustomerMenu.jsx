@@ -200,7 +200,11 @@ function getProductImageCandidates(product, options = {}) {
   const { enableSkuFallback = false, includeAliases = true } = options;
   const candidates = [];
   const explicitRaw = String(product?.image_url || '').trim();
-  const explicit = explicitRaw.startsWith('/customer-menu-images/')
+  const explicit = (
+    explicitRaw.startsWith('/customer-menu-images/')
+    || explicitRaw.startsWith('/menu-images/')
+    || explicitRaw.startsWith('/api/public/menu-image/')
+  )
     ? `${String(API_BASE || '').replace(/\/+$/, '')}${explicitRaw}`
     : explicitRaw;
   if (explicit) {
