@@ -7,6 +7,11 @@ import { useOutbox } from './OutboxProvider';
 const QUOTE_STATUS_OPTIONS = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
 const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'];
+const PAYMENT_METHOD_OPTIONS = [
+  { value: '', label: 'Sin definir' },
+  { value: 'QR', label: 'QR' },
+  { value: 'Efectivo', label: 'Efectivo' }
+];
 
 function QuoteHistory({ token, access, onStatusUpdated }) {
   const { enqueueWrite, isWriteIntentError } = useOutbox();
@@ -56,6 +61,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
           subtotal: Number(quote.subtotal) || 0,
           total: Number(quote.total) || 0,
           discount_percent: Number(quote.discount_percent) || 0,
+          payment_method: quote.payment_method === 'QR' || quote.payment_method === 'Efectivo'
+            ? quote.payment_method
+            : '',
           line_items: Array.isArray(quote.line_items) ? quote.line_items : []
         }));
 
@@ -195,6 +203,55 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       }
 
       alert('Estado actualizado a: ' + newStatus);
+    } catch (err) {
+      alert('Error: ' + err.message);
+      console.error(err);
+    }
+  };
+
+  const updatePaymentMethod = async (quoteId, nextPaymentMethodValue) => {
+    const normalizedMethod = nextPaymentMethodValue === 'QR' || nextPaymentMethodValue === 'Efectivo'
+      ? nextPaymentMethodValue
+      : null;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const quote = quotes.find((q) => q.id === quoteId);
+      enqueueWrite({
+        label: `Pago cotización #${quoteId} → ${normalizedMethod || 'Sin definir'}`,
+        path: `/api/quotes/${quoteId}/payment-method`,
+        options: {
+          method: 'PATCH',
+          token,
+          body: { payment_method: normalizedMethod },
+          retries: 0
+        },
+        meta: {
+          quoteId,
+          customerName: quote?.customer_name || '',
+          paymentMethod: normalizedMethod || ''
+        }
+      });
+      setQuotes((prev) => prev.map((q) => (
+        q.id === quoteId ? { ...q, payment_method: normalizedMethod || '' } : q
+      )));
+      if (typeof onStatusUpdated === 'function') {
+        onStatusUpdated();
+      }
+      alert('Sin conexión: método de pago guardado en cola y se enviará automáticamente.');
+      return;
+    }
+    try {
+      await apiRequest(`/api/quotes/${quoteId}/payment-method`, {
+        method: 'PATCH',
+        token,
+        body: { payment_method: normalizedMethod }
+      });
+      setQuotes((prev) => prev.map((q) => (
+        q.id === quoteId ? { ...q, payment_method: normalizedMethod || '' } : q
+      )));
+      if (typeof onStatusUpdated === 'function') {
+        onStatusUpdated();
+      }
+      alert(`Método de pago actualizado: ${normalizedMethod || 'Sin definir'}`);
     } catch (err) {
       alert('Error: ' + err.message);
       console.error(err);
@@ -1048,6 +1105,10 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <span className="mobile-card-label">Fecha</span>
                       <span>{formatHistoryDate(quote.created_at)}</span>
                     </div>
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Método de pago</span>
+                      <span>{quote.payment_method || 'Sin definir'}</span>
+                    </div>
                   </div>
 
                   <div className="mobile-card-actions">
@@ -1061,6 +1122,15 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <option value="Pagado">Pagado</option>
                       <option value="Embalado">Embalado</option>
                       <option value="Enviado">Enviado</option>
+                    </select>
+                    <select
+                      className="mobile-select"
+                      value={quote.payment_method || ''}
+                      onChange={(e) => updatePaymentMethod(quote.id, e.target.value)}
+                    >
+                      {PAYMENT_METHOD_OPTIONS.map((option) => (
+                        <option key={option.value || 'none'} value={option.value}>{option.label}</option>
+                      ))}
                     </select>
                     <button
                       className="btn btn-secondary"
@@ -1116,13 +1186,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
               <table className="history-table">
                 <colgroup>
                   <col style={{ width: '56px' }} />
-                  <col style={{ width: isLeader ? '17%' : '21%' }} />
-                  <col style={{ width: isLeader ? '14%' : '17%' }} />
+                  <col style={{ width: isLeader ? '15%' : '19%' }} />
+                  <col style={{ width: isLeader ? '12%' : '15%' }} />
                   {isLeader && <col style={{ width: '12%' }} />}
+                  <col style={{ width: '9%' }} />
                   <col style={{ width: '10%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: isLeader ? '22%' : '28%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: isLeader ? '20%' : '24%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -1132,6 +1203,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                     {isLeader && <th className="history-th center">Vendedor</th>}
                     <th className="history-th center">Total</th>
                     <th className="history-th center">Estado</th>
+                    <th className="history-th center">Pago</th>
                     <th className="history-th center">Fecha</th>
                     <th className="history-th center">Acciones</th>
                   </tr>
@@ -1186,6 +1258,25 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           <option value="Pagado">Pagado</option>
                           <option value="Embalado">Embalado</option>
                           <option value="Enviado">Enviado</option>
+                        </select>
+                      </td>
+                      <td className="history-td center">
+                        <select
+                          value={quote.payment_method || ''}
+                          onChange={(e) => updatePaymentMethod(quote.id, e.target.value)}
+                          className="history-status-select"
+                          style={{
+                            background:
+                              quote.payment_method === 'QR' ? '#0ea5e9'
+                                : quote.payment_method === 'Efectivo' ? '#16a34a'
+                                  : '#64748b',
+                            color: 'white',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {PAYMENT_METHOD_OPTIONS.map((option) => (
+                            <option key={option.value || 'none'} value={option.value}>{option.label}</option>
+                          ))}
                         </select>
                       </td>
                       <td className="history-td center nowrap">

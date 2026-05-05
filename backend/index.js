@@ -67,6 +67,10 @@ const ensureQuotesMarketingSchema = async () => {
       `ALTER TABLE quotes
        ADD COLUMN IF NOT EXISTS gift_qty INTEGER NOT NULL DEFAULT 1`
     );
+    await pool.query(
+      `ALTER TABLE quotes
+       ADD COLUMN IF NOT EXISTS payment_method TEXT`
+    );
   } catch (err) {
     console.error('No se pudo asegurar esquema marketing en quotes:', err.message);
   }
@@ -437,8 +441,23 @@ const COMMISSION_SETTINGS_DEFAULT = {
 const COMMISSION_SETTINGS_KEYS = Object.keys(COMMISSION_SETTINGS_DEFAULT);
 const QUOTE_STATUSES = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const FINALIZED_QUOTE_STATUSES = ['Confirmado', 'Pagado', 'Embalado', 'Enviado'];
+const QUOTE_PAYMENT_METHODS = ['QR', 'Efectivo'];
 const QUOTE_SAVE_IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
 const quoteSaveIdempotencyCache = new Map();
+
+const normalizeQuotePaymentMethod = (value) => {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  const normalized = normalizeText(trimmed);
+  if (normalized === 'qr' || normalized === 'codigo qr' || normalized === 'codigoqr') {
+    return 'QR';
+  }
+  if (normalized === 'efectivo' || normalized === 'cash') {
+    return 'Efectivo';
+  }
+  return null;
+};
 
 const pruneQuoteSaveIdempotencyCache = () => {
   const now = Date.now();
@@ -2863,7 +2882,7 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
   const quoteRes = await client.query(
     `SELECT id, user_id, customer_name, customer_phone, department, provincia, shipping_notes,
             alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
-            gift_name, gift_sku, gift_qty, line_items, subtotal, total, status
+            gift_name, gift_sku, gift_qty, payment_method, line_items, subtotal, total, status
      FROM quotes
      WHERE id = $1
      FOR UPDATE`,
@@ -3888,7 +3907,7 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
       query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                      q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+                      q.total, q.status, q.payment_method, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
                ORDER BY q.created_at DESC`;
@@ -3898,7 +3917,7 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
       query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                      q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+                      q.total, q.status, q.payment_method, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
                WHERE q.store_location = $1
@@ -3909,7 +3928,7 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
       query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                      q.total, q.status, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+                      q.total, q.status, q.payment_method, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
                WHERE q.user_id = $1
@@ -5370,6 +5389,47 @@ app.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
     await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: err.message || 'Error al actualizar estado' });
+  } finally {
+    client.release();
+  }
+});
+
+app.patch('/api/quotes/:id/payment-method', authenticateToken, async (req, res) => {
+  const quoteId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(quoteId) || quoteId <= 0) {
+    return res.status(400).json({ error: 'ID de cotización inválido' });
+  }
+
+  const rawPaymentMethod = req.body?.payment_method;
+  const normalizedPaymentMethod = normalizeQuotePaymentMethod(rawPaymentMethod);
+  if (rawPaymentMethod !== undefined && rawPaymentMethod !== null && String(rawPaymentMethod).trim() !== '' && !normalizedPaymentMethod) {
+    return res.status(400).json({ error: `Método de pago inválido. Usa: ${QUOTE_PAYMENT_METHODS.join(', ')}` });
+  }
+
+  const userContext = await loadUserContext(req.user.id);
+  if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await assertQuoteMutationPermission(client, quoteId, req.user.id, userContext, access);
+
+    const updateRes = await client.query(
+      'UPDATE quotes SET payment_method = $1 WHERE id = $2 RETURNING payment_method',
+      [normalizedPaymentMethod, quoteId]
+    );
+
+    await client.query('COMMIT');
+    return res.json({
+      message: 'Método de pago actualizado',
+      payment_method: updateRes.rows[0]?.payment_method || null
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    const statusCode = err?.statusCode || 500;
+    console.error(err);
+    return res.status(statusCode).json({ error: err.message || 'Error al actualizar método de pago' });
   } finally {
     client.release();
   }
