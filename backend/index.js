@@ -265,6 +265,7 @@ const ROLE_KEYS = {
 };
 
 const EXPENSE_RECURRENCE_VALUES = ['weekly', 'monthly', 'quarterly', 'yearly'];
+const EXPENSE_CURRENCY_DEFAULT = 'BS';
 const EXPENSE_DEPARTMENT_BY_ROLE = {
   [ROLE_KEYS.admin]: 'Administración',
   [ROLE_KEYS.ventas]: 'Ventas',
@@ -273,6 +274,8 @@ const EXPENSE_DEPARTMENT_BY_ROLE = {
   [ROLE_KEYS.almacenLider]: 'Almacén',
   [ROLE_KEYS.marketing]: 'Marketing',
   [ROLE_KEYS.marketingLider]: 'Marketing',
+  desarrollo: 'Desarrollo',
+  'desarrollo lider': 'Desarrollo',
   [ROLE_KEYS.microfabrica]: 'Microfábrica',
   [ROLE_KEYS.microfabricaLider]: 'Microfábrica'
 };
@@ -302,6 +305,14 @@ const normalizeRecurringPeriod = (value = '') => {
     anual: 'yearly'
   };
   return map[normalized] || null;
+};
+
+const normalizeExpenseCurrency = (value = 'BS') => {
+  const raw = String(value || 'BS').trim().toUpperCase();
+  if (!raw) return '';
+  if (raw === 'BOB') return 'BS';
+  if (raw === 'BS') return 'BS';
+  return raw;
 };
 
 const normalizeDepartmentLabel = (value = '') => {
@@ -790,10 +801,11 @@ const ensureExpensesTable = async () => {
        id BIGSERIAL PRIMARY KEY,
        department TEXT NOT NULL,
        category TEXT NOT NULL DEFAULT 'Operativo',
-       concept TEXT NOT NULL,
+      concept TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
        vendor TEXT,
        amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
-       currency TEXT NOT NULL DEFAULT 'BOB',
+       currency TEXT NOT NULL DEFAULT 'BS',
        is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
        recurrence_period TEXT,
        expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
@@ -821,6 +833,28 @@ const ensureExpensesTable = async () => {
   );
   await pool.query(
     `ALTER TABLE department_expenses
+     ADD COLUMN IF NOT EXISTS quantity INTEGER`
+  );
+  await pool.query(
+    `UPDATE department_expenses
+     SET quantity = 1
+     WHERE quantity IS NULL OR quantity <= 0`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ALTER COLUMN quantity TYPE INTEGER
+     USING GREATEST(1, ROUND(COALESCE(quantity, 1))::INTEGER)`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ALTER COLUMN quantity SET NOT NULL`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ALTER COLUMN quantity SET DEFAULT 1`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
      ADD COLUMN IF NOT EXISTS vendor TEXT`
   );
   await pool.query(
@@ -829,7 +863,11 @@ const ensureExpensesTable = async () => {
   );
   await pool.query(
     `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'BOB'`
+     ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'BS'`
+  );
+  await pool.query(
+    `ALTER TABLE department_expenses
+     ALTER COLUMN currency SET DEFAULT 'BS'`
   );
   await pool.query(
     `ALTER TABLE department_expenses
@@ -1038,8 +1076,9 @@ const mapExpenseRow = (row = {}) => ({
   category: String(row.category || '').trim(),
   concept: String(row.concept || '').trim(),
   vendor: row.vendor || null,
+  quantity: Math.max(1, Number.parseInt(row.quantity, 10) || 1),
   amount: Number(row.amount || 0),
-  currency: String(row.currency || 'BOB').trim().toUpperCase(),
+  currency: normalizeExpenseCurrency(row.currency || 'BS'),
   is_recurring: Boolean(row.is_recurring),
   recurrence_period: row.recurrence_period || null,
   expense_date: row.expense_date,
@@ -2439,6 +2478,14 @@ const normalizeExpensePayload = (payload = {}, { partial = false } = {}) => {
     normalized.concept = concept;
   }
 
+  if (!partial || has('quantity')) {
+    const quantity = Number.parseInt(src.quantity ?? 1, 10);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw createHttpError(400, 'Cantidad inválida (debe ser entero mayor a 0)');
+    }
+    normalized.quantity = quantity;
+  }
+
   if (!partial || has('amount')) {
     const amount = Number(src.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -2455,7 +2502,7 @@ const normalizeExpensePayload = (payload = {}, { partial = false } = {}) => {
   }
 
   if (!partial || has('currency')) {
-    const currency = String(src.currency || 'BOB').trim().toUpperCase();
+    const currency = normalizeExpenseCurrency(src.currency || 'BS');
     if (!currency) throw createHttpError(400, 'Moneda inválida');
     if (currency.length > 10) throw createHttpError(400, 'Moneda inválida');
     normalized.currency = currency;
@@ -4730,7 +4777,7 @@ app.get('/api/expenses', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT
          e.id, e.department, e.category, e.concept, e.vendor,
-         e.amount, e.currency, e.is_recurring, e.recurrence_period,
+         e.quantity, e.amount, e.currency, e.is_recurring, e.recurrence_period,
          e.expense_date, e.notes, e.created_by, e.created_at, e.updated_at,
          u.email AS created_by_email
        FROM department_expenses e
@@ -4872,15 +4919,16 @@ app.post('/api/expenses', authenticateToken, async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO department_expenses (
-         department, category, concept, vendor, amount, currency,
+         department, category, concept, vendor, quantity, amount, currency,
          is_recurring, recurrence_period, expense_date, notes, created_by, created_at, updated_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10, $11, NOW(), NOW())
-       RETURNING id, department, category, concept, vendor, amount, currency, is_recurring, recurrence_period, expense_date, notes, created_by, created_at, updated_at`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::date, $11, $12, NOW(), NOW())
+       RETURNING id, department, category, concept, vendor, quantity, amount, currency, is_recurring, recurrence_period, expense_date, notes, created_by, created_at, updated_at`,
       [
         normalized.department,
         normalized.category,
         normalized.concept,
         normalized.vendor,
+        normalized.quantity,
         normalized.amount,
         normalized.currency,
         Boolean(normalized.is_recurring),
@@ -4916,7 +4964,7 @@ app.patch('/api/expenses/:id', authenticateToken, async (req, res) => {
   try {
     await ensureExpensesTable();
     const existingRes = await pool.query(
-      `SELECT id, department, category, concept, vendor, amount, currency, is_recurring, recurrence_period, expense_date, notes, created_by
+      `SELECT id, department, category, concept, vendor, quantity, amount, currency, is_recurring, recurrence_period, expense_date, notes, created_by
        FROM department_expenses
        WHERE id = $1`,
       [expenseId]
@@ -4947,6 +4995,9 @@ app.patch('/api/expenses/:id', authenticateToken, async (req, res) => {
     const nextVendor = Object.prototype.hasOwnProperty.call(normalized, 'vendor')
       ? normalized.vendor
       : current.vendor;
+    const nextQuantity = Object.prototype.hasOwnProperty.call(normalized, 'quantity')
+      ? normalized.quantity
+      : Math.max(1, Number.parseInt(current.quantity, 10) || 1);
     const nextAmount = Object.prototype.hasOwnProperty.call(normalized, 'amount')
       ? normalized.amount
       : Number(current.amount || 0);
@@ -4974,20 +5025,22 @@ app.patch('/api/expenses/:id', authenticateToken, async (req, res) => {
            category = $2,
            concept = $3,
            vendor = $4,
-           amount = $5,
-           currency = $6,
-           is_recurring = $7,
-           recurrence_period = $8,
-           expense_date = $9::date,
-           notes = $10,
+           quantity = $5,
+           amount = $6,
+           currency = $7,
+           is_recurring = $8,
+           recurrence_period = $9,
+           expense_date = $10::date,
+           notes = $11,
            updated_at = NOW()
-       WHERE id = $11
-       RETURNING id, department, category, concept, vendor, amount, currency, is_recurring, recurrence_period, expense_date, notes, created_by, created_at, updated_at`,
+       WHERE id = $12
+       RETURNING id, department, category, concept, vendor, quantity, amount, currency, is_recurring, recurrence_period, expense_date, notes, created_by, created_at, updated_at`,
       [
         nextDepartment,
         nextCategory,
         nextConcept,
         nextVendor,
+        nextQuantity,
         nextAmount,
         nextCurrency,
         nextIsRecurring,

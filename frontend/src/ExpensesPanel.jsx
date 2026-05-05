@@ -26,7 +26,7 @@ const CATEGORY_OPTIONS = [
   'Otro'
 ];
 
-const DEPARTMENT_BY_ROLE = {
+const WORK_AREA_BY_ROLE = {
   ventas: 'Ventas',
   'ventas lider': 'Ventas',
   almacen: 'Almacén',
@@ -59,7 +59,7 @@ function ExpensesPanel({ token, user, role }) {
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [message, setMessage] = useState('');
 
-  const userDepartment = DEPARTMENT_BY_ROLE[normalizeRole(role || '')] || '';
+  const userDepartment = WORK_AREA_BY_ROLE[normalizeRole(role || '')] || '';
   const isAdmin = normalizeRole(role || '') === 'admin';
 
   const [form, setForm] = useState({
@@ -67,8 +67,9 @@ function ExpensesPanel({ token, user, role }) {
     category: 'Operativo',
     concept: '',
     vendor: '',
+    quantity: '1',
     amount: '',
-    currency: 'BOB',
+    currency: 'BS',
     is_recurring: false,
     recurrence_period: 'monthly',
     expense_date: todayText(),
@@ -122,6 +123,7 @@ function ExpensesPanel({ token, user, role }) {
       'Almacén',
       'Marketing',
       'Microfábrica',
+      'Desarrollo',
       'Administración',
       ...rows.map((row) => row.department).filter(Boolean)
     ]);
@@ -147,8 +149,9 @@ function ExpensesPanel({ token, user, role }) {
       category: 'Operativo',
       concept: '',
       vendor: '',
+      quantity: '1',
       amount: '',
-      currency: 'BOB',
+      currency: 'BS',
       is_recurring: false,
       recurrence_period: 'monthly',
       expense_date: todayText(),
@@ -164,8 +167,9 @@ function ExpensesPanel({ token, user, role }) {
       category: form.category,
       concept: form.concept.trim(),
       vendor: form.vendor.trim() || null,
+      quantity: Number.parseInt(form.quantity, 10),
       amount: Number(form.amount),
-      currency: form.currency || 'BOB',
+      currency: form.currency || 'BS',
       is_recurring: Boolean(form.is_recurring),
       recurrence_period: form.is_recurring ? form.recurrence_period : null,
       expense_date: form.expense_date || todayText(),
@@ -173,11 +177,15 @@ function ExpensesPanel({ token, user, role }) {
     };
 
     if (!payload.department) {
-      setMessage('Error: Debes seleccionar un departamento.');
+      setMessage('Error: Debes seleccionar un área de trabajo.');
       return;
     }
     if (!payload.concept) {
       setMessage('Error: Debes indicar el concepto del gasto.');
+      return;
+    }
+    if (!Number.isInteger(payload.quantity) || payload.quantity <= 0) {
+      setMessage('Error: La cantidad debe ser mayor a 0.');
       return;
     }
     if (!Number.isFinite(payload.amount) || payload.amount <= 0) {
@@ -308,11 +316,10 @@ function ExpensesPanel({ token, user, role }) {
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1440px', margin: '0 auto', display: 'grid', gap: '14px' }}>
-      <div className="card" style={{ marginBottom: 0 }}>
-        <h2 style={{ marginBottom: '8px', color: '#f87171' }}>Gastos por departamento</h2>
-        <p style={{ color: '#94a3b8', marginBottom: 0 }}>
-          Registra cada gasto con dueño, concepto y recurrencia para detectar incrementos y recortar costos con disciplina.
+    <div className="dashboard-workspace">
+      <div className="admin-hero-card" style={{ padding: '16px 20px' }}>
+        <p style={{ margin: 0, color: '#ff7f30', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Gastos
         </p>
       </div>
 
@@ -341,7 +348,7 @@ function ExpensesPanel({ token, user, role }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
             {isAdmin ? (
               <label style={{ display: 'grid', gap: '6px' }}>
-                <span style={{ color: '#94a3b8' }}>Departamento</span>
+                <span style={{ color: '#94a3b8' }}>Área de Trabajo</span>
                 <input
                   value={form.department}
                   onChange={(e) => setForm((prev) => ({ ...prev, department: e.target.value }))}
@@ -357,7 +364,7 @@ function ExpensesPanel({ token, user, role }) {
               </label>
             ) : (
               <label style={{ display: 'grid', gap: '6px' }}>
-                <span style={{ color: '#94a3b8' }}>Departamento</span>
+                <span style={{ color: '#94a3b8' }}>Área de Trabajo</span>
                 <input
                   value={userDepartment || '—'}
                   disabled
@@ -397,6 +404,18 @@ function ExpensesPanel({ token, user, role }) {
               />
             </label>
             <label style={{ display: 'grid', gap: '6px' }}>
+              <span style={{ color: '#94a3b8' }}>Cantidad</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={form.quantity}
+                onChange={(e) => setForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                required
+                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '6px' }}>
               <span style={{ color: '#94a3b8' }}>Monto (Bs)</span>
               <input
                 type="number"
@@ -418,7 +437,7 @@ function ExpensesPanel({ token, user, role }) {
               />
             </label>
             <label style={{ display: 'grid', gap: '6px' }}>
-              <span style={{ color: '#94a3b8' }}>Moneda</span>
+              <span style={{ color: '#94a3b8' }}>Moneda (Bs)</span>
               <input
                 value={form.currency}
                 onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))}
@@ -498,7 +517,7 @@ function ExpensesPanel({ token, user, role }) {
               value={departmentFilter}
               onChange={(e) => setDepartmentFilter(e.target.value)}
             >
-              <option value="">Todos los departamentos</option>
+              <option value="">Todas las áreas de trabajo</option>
               {availableDepartments.map((dep) => (
                 <option key={dep} value={dep}>{dep}</option>
               ))}
@@ -550,10 +569,11 @@ function ExpensesPanel({ token, user, role }) {
               <thead>
                 <tr>
                   <th>Fecha</th>
-                  <th>Departamento</th>
+                  <th>Área de Trabajo</th>
                   <th>Categoría</th>
                   <th>Concepto</th>
                   <th>Proveedor</th>
+                  <th style={{ textAlign: 'right' }}>Cantidad</th>
                   <th style={{ textAlign: 'right' }}>Monto</th>
                   <th>Recurrencia</th>
                   <th>Registrado por</th>
@@ -563,7 +583,7 @@ function ExpensesPanel({ token, user, role }) {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: 'center', color: '#94a3b8' }}>
+                    <td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8' }}>
                       Sin gastos en el período seleccionado.
                     </td>
                   </tr>
@@ -574,6 +594,7 @@ function ExpensesPanel({ token, user, role }) {
                     <td>{row.category}</td>
                     <td title={row.concept}>{row.concept}</td>
                     <td title={row.vendor || ''}>{row.vendor || '—'}</td>
+                    <td style={{ textAlign: 'right' }}>{Number.parseInt(row.quantity, 10) || 1}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatMoney(row.amount)}</td>
                     <td>{row.is_recurring ? (RECURRENCE_OPTIONS.find((item) => item.value === row.recurrence_period)?.label || row.recurrence_period || 'Sí') : 'No'}</td>
                     <td>{row.created_by_email || '—'}</td>
@@ -603,7 +624,7 @@ function ExpensesPanel({ token, user, role }) {
           <table className="table" style={{ minWidth: '1080px' }}>
             <thead>
               <tr>
-                <th>Departamento</th>
+                <th>Área de Trabajo</th>
                 <th>Concepto</th>
                 <th>Frecuencia</th>
                 <th style={{ textAlign: 'right' }}>Último</th>
