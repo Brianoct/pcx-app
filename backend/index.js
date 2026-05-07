@@ -71,6 +71,10 @@ const ensureQuotesMarketingSchema = async () => {
       `ALTER TABLE quotes
        ADD COLUMN IF NOT EXISTS payment_method TEXT`
     );
+    await pool.query(
+      `ALTER TABLE quotes
+       ADD COLUMN IF NOT EXISTS payment_cash_bs NUMERIC(12,2)`
+    );
   } catch (err) {
     console.error('No se pudo asegurar esquema marketing en quotes:', err.message);
   }
@@ -2893,7 +2897,7 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
   const quoteRes = await client.query(
     `SELECT id, user_id, customer_name, customer_phone, department, provincia, shipping_notes,
             alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
-            coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, payment_method,
+            coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, payment_method, payment_cash_bs,
             line_items, subtotal, total, status
      FROM quotes
      WHERE id = $1
@@ -3919,7 +3923,7 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
       query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                      q.total, q.status, q.payment_method, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+                      q.total, q.status, q.payment_method, q.payment_cash_bs, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
                ORDER BY q.created_at DESC`;
@@ -3929,7 +3933,7 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
       query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                      q.total, q.status, q.payment_method, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+                      q.total, q.status, q.payment_method, q.payment_cash_bs, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
                WHERE q.store_location = $1
@@ -3940,7 +3944,7 @@ app.get('/api/quotes', authenticateToken, async (req, res) => {
       query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                      q.total, q.status, q.payment_method, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+                      q.total, q.status, q.payment_method, q.payment_cash_bs, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
                WHERE q.user_id = $1
@@ -5412,9 +5416,18 @@ app.patch('/api/quotes/:id/payment-method', authenticateToken, async (req, res) 
     return res.status(400).json({ error: 'ID de cotización inválido' });
   }
 
-  const rawPaymentMethod = req.body?.payment_method;
+  const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body))
+    ? req.body
+    : {};
+  const hasPaymentMethodField = Object.prototype.hasOwnProperty.call(body, 'payment_method');
+  const hasCashField = Object.prototype.hasOwnProperty.call(body, 'payment_cash_bs');
+  if (!hasPaymentMethodField && !hasCashField) {
+    return res.status(400).json({ error: 'Debes enviar payment_method o payment_cash_bs' });
+  }
+
+  const rawPaymentMethod = body?.payment_method;
   const normalizedPaymentMethod = normalizeQuotePaymentMethod(rawPaymentMethod);
-  if (rawPaymentMethod !== undefined && rawPaymentMethod !== null && String(rawPaymentMethod).trim() !== '' && !normalizedPaymentMethod) {
+  if (hasPaymentMethodField && rawPaymentMethod !== undefined && rawPaymentMethod !== null && String(rawPaymentMethod).trim() !== '' && !normalizedPaymentMethod) {
     return res.status(400).json({ error: `Método de pago inválido. Usa: ${QUOTE_PAYMENT_METHODS.join(', ')}` });
   }
 
@@ -5425,17 +5438,41 @@ app.patch('/api/quotes/:id/payment-method', authenticateToken, async (req, res) 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await assertQuoteMutationPermission(client, quoteId, req.user.id, userContext, access);
+    const currentQuote = await assertQuoteMutationPermission(client, quoteId, req.user.id, userContext, access);
+    const currentMethod = normalizeQuotePaymentMethod(currentQuote.payment_method);
+    const nextPaymentMethod = hasPaymentMethodField ? normalizedPaymentMethod : currentMethod;
+    const totalAmount = Number(currentQuote.total || 0);
+    const clampMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
+    let nextCashBs = null;
+
+    if (nextPaymentMethod === 'QR') {
+      nextCashBs = 0;
+    } else if (nextPaymentMethod === 'Efectivo') {
+      nextCashBs = clampMoney(totalAmount);
+    } else if (nextPaymentMethod === 'Mixto') {
+      const baseCashRaw = hasCashField ? body.payment_cash_bs : currentQuote.payment_cash_bs;
+      const parsedCash = Number(baseCashRaw);
+      if (!Number.isFinite(parsedCash) || parsedCash <= 0) {
+        return res.status(400).json({ error: 'Para pago mixto debes indicar monto en efectivo mayor a 0' });
+      }
+      if (totalAmount > 0 && parsedCash >= totalAmount) {
+        return res.status(400).json({ error: 'En pago mixto el efectivo debe ser menor al total' });
+      }
+      nextCashBs = clampMoney(parsedCash);
+    }
 
     const updateRes = await client.query(
-      'UPDATE quotes SET payment_method = $1 WHERE id = $2 RETURNING payment_method',
-      [normalizedPaymentMethod, quoteId]
+      'UPDATE quotes SET payment_method = $1, payment_cash_bs = $2 WHERE id = $3 RETURNING payment_method, payment_cash_bs',
+      [nextPaymentMethod, nextCashBs, quoteId]
     );
 
     await client.query('COMMIT');
     return res.json({
       message: 'Método de pago actualizado',
-      payment_method: updateRes.rows[0]?.payment_method || null
+      payment_method: updateRes.rows[0]?.payment_method || null,
+      payment_cash_bs: updateRes.rows[0]?.payment_cash_bs === null || updateRes.rows[0]?.payment_cash_bs === undefined
+        ? null
+        : Number(updateRes.rows[0].payment_cash_bs)
     });
   } catch (err) {
     await client.query('ROLLBACK');
