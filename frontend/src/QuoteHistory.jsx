@@ -13,6 +13,7 @@ const PAYMENT_METHOD_OPTIONS = [
   { value: 'Efectivo', label: 'Efectivo' },
   { value: 'Mixto', label: 'Mixto' }
 ];
+const PAYMENT_ALLOWED_STATUSES = ['Pagado', 'Embalado', 'Enviado'];
 
 function QuoteHistory({ token, access, onStatusUpdated }) {
   const { enqueueWrite, isWriteIntentError } = useOutbox();
@@ -49,16 +50,20 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     if (paymentMethod === 'Mixto') return '#a855f7';
     return '#64748b';
   };
-  const paymentMethodSelectStyle = (paymentMethod = '') => ({
+  const paymentMethodSelectStyle = (paymentMethod = '', disabled = false) => ({
     background: getPaymentMethodColor(paymentMethod),
     color: 'white',
-    cursor: 'pointer'
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.68 : 1
   });
   const getPaymentSelectValue = (quote) => {
     const method = String(quote?.payment_method || '');
     if (method === 'QR' || method === 'Efectivo' || method === 'Mixto') return method;
     return '';
   };
+  const canEditPaymentForStatus = (statusValue = '') => (
+    PAYMENT_ALLOWED_STATUSES.includes(String(statusValue || '').trim())
+  );
   const formatPaymentDetail = (quote) => {
     const total = toMoneyNumber(quote?.total, 0);
     const method = String(quote?.payment_method || '');
@@ -258,6 +263,10 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       || nextPaymentMethodValue === 'Mixto'
       ? nextPaymentMethodValue
       : null;
+    if (normalizedMethod && !canEditPaymentForStatus(quote?.status)) {
+      alert(`Primero cambia el estado a ${PAYMENT_ALLOWED_STATUSES.join(', ')} para registrar el pago.`);
+      return;
+    }
     const quoteTotal = toMoneyNumber(quote?.total, 0);
 
     let nextCashBs = null;
@@ -1162,7 +1171,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                     <span className="mobile-card-id">#{quote.id}</span>
                     <div style={{ display: 'grid', justifyItems: 'end', gap: '2px' }}>
                       <span className="mobile-card-total">{Number(quote.total).toFixed(2)} Bs</span>
-                      {quote.payment_method === 'Mixto' ? (
+                      {quote.payment_method === 'Mixto' && canEditPaymentForStatus(quote.status) ? (
                         <button
                           type="button"
                           onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
@@ -1237,7 +1246,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                         e.target.value,
                         { forcePrompt: e.target.value === 'Mixto' }
                       )}
-                      style={paymentMethodSelectStyle(quote.payment_method || '')}
+                      disabled={!canEditPaymentForStatus(quote.status)}
+                      style={paymentMethodSelectStyle(quote.payment_method || '', !canEditPaymentForStatus(quote.status))}
                     >
                       {PAYMENT_METHOD_OPTIONS.map((option) => (
                         <option key={option.value || 'none'} value={option.value}>{option.label}</option>
@@ -1348,7 +1358,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <td className="history-td center" style={{ fontWeight: '600' }}>
                         <div style={{ display: 'grid', gap: '4px', justifyItems: 'center' }}>
                           <span className="nowrap">{Number(quote.total).toFixed(2)} Bs</span>
-                          {quote.payment_method === 'Mixto' ? (
+                          {quote.payment_method === 'Mixto' && canEditPaymentForStatus(quote.status) ? (
                             <button
                               type="button"
                               onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
@@ -1405,8 +1415,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                               e.target.value,
                               { forcePrompt: e.target.value === 'Mixto' }
                             )}
+                            disabled={!canEditPaymentForStatus(quote.status)}
                             className="history-status-select"
-                            style={paymentMethodSelectStyle(quote.payment_method || '')}
+                            style={paymentMethodSelectStyle(quote.payment_method || '', !canEditPaymentForStatus(quote.status))}
                           >
                             {PAYMENT_METHOD_OPTIONS.map((option) => (
                               <option key={option.value || 'none'} value={option.value}>{option.label}</option>

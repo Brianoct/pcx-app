@@ -446,6 +446,7 @@ const COMMISSION_SETTINGS_KEYS = Object.keys(COMMISSION_SETTINGS_DEFAULT);
 const QUOTE_STATUSES = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const FINALIZED_QUOTE_STATUSES = ['Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const QUOTE_PAYMENT_METHODS = ['QR', 'Efectivo', 'Mixto'];
+const QUOTE_PAYMENT_ALLOWED_STATUSES = ['Pagado', 'Embalado', 'Enviado'];
 const QUOTE_SAVE_IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
 const quoteSaveIdempotencyCache = new Map();
 
@@ -5441,6 +5442,11 @@ app.patch('/api/quotes/:id/payment-method', authenticateToken, async (req, res) 
     const currentQuote = await assertQuoteMutationPermission(client, quoteId, req.user.id, userContext, access);
     const currentMethod = normalizeQuotePaymentMethod(currentQuote.payment_method);
     const nextPaymentMethod = hasPaymentMethodField ? normalizedPaymentMethod : currentMethod;
+    const currentStatus = String(currentQuote.status || '').trim();
+    const canMutatePaymentForStatus = QUOTE_PAYMENT_ALLOWED_STATUSES.includes(currentStatus);
+    if (nextPaymentMethod && !canMutatePaymentForStatus) {
+      throw createHttpError(400, `Solo puedes registrar pago cuando el estado es ${QUOTE_PAYMENT_ALLOWED_STATUSES.join(', ')}`);
+    }
     const totalAmount = Number(currentQuote.total || 0);
     const clampMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
     let nextCashBs = null;
