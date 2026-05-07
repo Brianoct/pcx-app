@@ -10,8 +10,10 @@ const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro
 const PAYMENT_METHOD_OPTIONS = [
   { value: '', label: 'Sin definir' },
   { value: 'QR', label: 'QR' },
-  { value: 'Efectivo', label: 'Efectivo' }
+  { value: 'Efectivo', label: 'Efectivo' },
+  { value: 'Mixto', label: 'Mixto' }
 ];
+const PAYMENT_METHOD_QUICK_OPTIONS = PAYMENT_METHOD_OPTIONS.filter((option) => option.value);
 
 function QuoteHistory({ token, access, onStatusUpdated }) {
   const { enqueueWrite, isWriteIntentError } = useOutbox();
@@ -37,6 +39,17 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const canViewHistory = canAccessPanel(access, 'historialIndividual');
   const canMutateQuotes = canViewHistory || canViewGlobalHistory;
   const availableProducts = Array.isArray(productCatalog) ? productCatalog : [];
+  const getPaymentMethodColor = (paymentMethod = '') => {
+    if (paymentMethod === 'QR') return '#0ea5e9';
+    if (paymentMethod === 'Efectivo') return '#16a34a';
+    if (paymentMethod === 'Mixto') return '#a855f7';
+    return '#64748b';
+  };
+  const paymentMethodSelectStyle = (paymentMethod = '') => ({
+    background: getPaymentMethodColor(paymentMethod),
+    color: 'white',
+    cursor: 'pointer'
+  });
   const getProductNameBySku = (skuValue = '') => {
     const normalizedSku = String(skuValue || '').trim().toUpperCase();
     if (!normalizedSku) return '';
@@ -61,7 +74,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
           subtotal: Number(quote.subtotal) || 0,
           total: Number(quote.total) || 0,
           discount_percent: Number(quote.discount_percent) || 0,
-          payment_method: quote.payment_method === 'QR' || quote.payment_method === 'Efectivo'
+          payment_method: quote.payment_method === 'QR' || quote.payment_method === 'Efectivo' || quote.payment_method === 'Mixto'
             ? quote.payment_method
             : '',
           line_items: Array.isArray(quote.line_items) ? quote.line_items : []
@@ -210,7 +223,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   };
 
   const updatePaymentMethod = async (quoteId, nextPaymentMethodValue) => {
-    const normalizedMethod = nextPaymentMethodValue === 'QR' || nextPaymentMethodValue === 'Efectivo'
+    const normalizedMethod = nextPaymentMethodValue === 'QR' || nextPaymentMethodValue === 'Efectivo' || nextPaymentMethodValue === 'Mixto'
       ? nextPaymentMethodValue
       : null;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -1123,15 +1136,48 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <option value="Embalado">Embalado</option>
                       <option value="Enviado">Enviado</option>
                     </select>
-                    <select
-                      className="mobile-select"
-                      value={quote.payment_method || ''}
-                      onChange={(e) => updatePaymentMethod(quote.id, e.target.value)}
-                    >
-                      {PAYMENT_METHOD_OPTIONS.map((option) => (
-                        <option key={option.value || 'none'} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
+                    <div style={{ display: 'grid', gap: '6px' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 700 }}>Pago rápido</span>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '6px' }}>
+                        {PAYMENT_METHOD_QUICK_OPTIONS.map((option) => {
+                          const isActive = (quote.payment_method || '') === option.value;
+                          return (
+                            <button
+                              key={`${quote.id}-${option.value}`}
+                              type="button"
+                              className="btn"
+                              onClick={() => updatePaymentMethod(quote.id, option.value)}
+                              style={{
+                                minHeight: '36px',
+                                padding: '6px 8px',
+                                border: `1px solid ${isActive ? 'rgba(255,255,255,0.35)' : '#334155'}`,
+                                background: isActive ? getPaymentMethodColor(option.value) : '#0f172a',
+                                color: '#e2e8f0',
+                                fontSize: '0.82rem',
+                                fontWeight: isActive ? 700 : 600
+                              }}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => updatePaymentMethod(quote.id, '')}
+                        style={{
+                          minHeight: '34px',
+                          background: quote.payment_method ? '#1f2937' : '#334155',
+                          color: '#e2e8f0',
+                          border: '1px solid #475569',
+                          fontSize: '0.8rem',
+                          fontWeight: 600
+                        }}
+                      >
+                        Sin definir
+                      </button>
+                    </div>
                     <button
                       className="btn btn-secondary"
                       onClick={() => regeneratePDF(quote)}
@@ -1185,15 +1231,15 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
             <div className="history-table-wrap">
               <table className="history-table">
                 <colgroup>
-                  <col style={{ width: '56px' }} />
-                  <col style={{ width: isLeader ? '15%' : '19%' }} />
-                  <col style={{ width: isLeader ? '12%' : '15%' }} />
+                  <col style={{ width: '6%' }} />
+                  <col style={{ width: isLeader ? '16%' : '20%' }} />
+                  <col style={{ width: isLeader ? '13%' : '15%' }} />
                   {isLeader && <col style={{ width: '12%' }} />}
-                  <col style={{ width: '9%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '12%' }} />
-                  <col style={{ width: isLeader ? '20%' : '24%' }} />
+                  <col style={{ width: isLeader ? '10%' : '11%' }} />
+                  <col style={{ width: isLeader ? '11%' : '12%' }} />
+                  <col style={{ width: isLeader ? '11%' : '12%' }} />
+                  <col style={{ width: isLeader ? '11%' : '10%' }} />
+                  <col style={{ width: isLeader ? '10%' : '14%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -1265,14 +1311,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           value={quote.payment_method || ''}
                           onChange={(e) => updatePaymentMethod(quote.id, e.target.value)}
                           className="history-status-select"
-                          style={{
-                            background:
-                              quote.payment_method === 'QR' ? '#0ea5e9'
-                                : quote.payment_method === 'Efectivo' ? '#16a34a'
-                                  : '#64748b',
-                            color: 'white',
-                            cursor: 'pointer'
-                          }}
+                          style={paymentMethodSelectStyle(quote.payment_method || '')}
                         >
                           {PAYMENT_METHOD_OPTIONS.map((option) => (
                             <option key={option.value || 'none'} value={option.value}>{option.label}</option>
