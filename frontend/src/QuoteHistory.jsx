@@ -10,10 +10,8 @@ const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro
 const PAYMENT_METHOD_OPTIONS = [
   { value: '', label: 'Sin definir' },
   { value: 'QR', label: 'QR' },
-  { value: 'Efectivo', label: 'Efectivo' },
-  { value: 'Mixto', label: 'Mixto' }
+  { value: 'Efectivo', label: 'Efectivo' }
 ];
-const PAYMENT_METHOD_QUICK_OPTIONS = PAYMENT_METHOD_OPTIONS.filter((option) => option.value);
 
 function QuoteHistory({ token, access, onStatusUpdated }) {
   const { enqueueWrite, isWriteIntentError } = useOutbox();
@@ -55,6 +53,11 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     color: 'white',
     cursor: 'pointer'
   });
+  const getPaymentSelectValue = (quote) => {
+    const method = String(quote?.payment_method || '');
+    if (method === 'QR' || method === 'Efectivo') return method;
+    return '';
+  };
   const formatPaymentDetail = (quote) => {
     const total = toMoneyNumber(quote?.total, 0);
     const method = String(quote?.payment_method || '');
@@ -1156,7 +1159,10 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                 <div key={quote.id} className="mobile-card">
                   <div className="mobile-card-header">
                     <span className="mobile-card-id">#{quote.id}</span>
-                    <span className="mobile-card-total">{Number(quote.total).toFixed(2)} Bs</span>
+                    <div style={{ display: 'grid', justifyItems: 'end', gap: '2px' }}>
+                      <span className="mobile-card-total">{Number(quote.total).toFixed(2)} Bs</span>
+                      <span style={{ fontSize: '0.75rem', color: '#93c5fd' }}>{formatPaymentDetail(quote)}</span>
+                    </div>
                   </div>
 
                   <div className="mobile-card-body">
@@ -1189,10 +1195,6 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <span className="mobile-card-label">Fecha</span>
                       <span>{formatHistoryDate(quote.created_at)}</span>
                     </div>
-                    <div className="mobile-card-row">
-                      <span className="mobile-card-label">Método de pago</span>
-                      <span>{formatPaymentDetail(quote)}</span>
-                    </div>
                   </div>
 
                   <div className="mobile-card-actions">
@@ -1207,65 +1209,33 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <option value="Embalado">Embalado</option>
                       <option value="Enviado">Enviado</option>
                     </select>
-                    <div style={{ display: 'grid', gap: '6px' }}>
-                      <span style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 700 }}>Pago rápido</span>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '6px' }}>
-                        {PAYMENT_METHOD_QUICK_OPTIONS.map((option) => {
-                          const isActive = (quote.payment_method || '') === option.value;
-                          return (
-                            <button
-                              key={`${quote.id}-${option.value}`}
-                              type="button"
-                              className="btn"
-                              onClick={() => updatePaymentMethod(quote, option.value, { forcePrompt: option.value === 'Mixto' })}
-                              style={{
-                                minHeight: '36px',
-                                padding: '6px 8px',
-                                border: `1px solid ${isActive ? 'rgba(255,255,255,0.35)' : '#334155'}`,
-                                background: isActive ? getPaymentMethodColor(option.value) : '#0f172a',
-                                color: '#e2e8f0',
-                                fontSize: '0.82rem',
-                                fontWeight: isActive ? 700 : 600
-                              }}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => updatePaymentMethod(quote, '')}
-                        style={{
-                          minHeight: '34px',
-                          background: quote.payment_method ? '#1f2937' : '#334155',
-                          color: '#e2e8f0',
-                          border: '1px solid #475569',
-                          fontSize: '0.8rem',
-                          fontWeight: 600
-                        }}
-                      >
-                        Sin definir
-                      </button>
-                      {quote.payment_method === 'Mixto' && (
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
-                          style={{
-                            minHeight: '34px',
-                            background: 'rgba(168, 85, 247, 0.16)',
-                            color: '#e9d5ff',
-                            border: '1px solid rgba(168, 85, 247, 0.45)',
-                            fontSize: '0.8rem',
-                            fontWeight: 700
-                          }}
-                        >
-                          Editar efectivo: {toMoneyNumber(quote.payment_cash_bs, 0).toFixed(2)} Bs
-                        </button>
-                      )}
-                    </div>
+                    <select
+                      className="mobile-select"
+                      value={getPaymentSelectValue(quote)}
+                      onChange={(e) => updatePaymentMethod(quote, e.target.value)}
+                      style={paymentMethodSelectStyle(quote.payment_method || '')}
+                    >
+                      {PAYMENT_METHOD_OPTIONS.map((option) => (
+                        <option key={option.value || 'none'} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
+                      style={{
+                        minHeight: '34px',
+                        background: quote.payment_method === 'Mixto' ? '#7c3aed' : '#312e81',
+                        color: '#ede9fe',
+                        border: '1px solid rgba(167, 139, 250, 0.45)',
+                        fontSize: '0.8rem',
+                        fontWeight: 700
+                      }}
+                    >
+                      {quote.payment_method === 'Mixto'
+                        ? `Editar mixto (Ef ${toMoneyNumber(quote.payment_cash_bs, 0).toFixed(2)} Bs)`
+                        : 'Registrar pago mixto'}
+                    </button>
                     <button
                       className="btn btn-secondary"
                       onClick={() => regeneratePDF(quote)}
@@ -1320,14 +1290,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
               <table className="history-table">
                 <colgroup>
                   <col style={{ width: '6%' }} />
-                  <col style={{ width: isLeader ? '16%' : '20%' }} />
-                  <col style={{ width: isLeader ? '13%' : '15%' }} />
-                  {isLeader && <col style={{ width: '12%' }} />}
-                  <col style={{ width: isLeader ? '10%' : '11%' }} />
-                  <col style={{ width: isLeader ? '11%' : '12%' }} />
-                  <col style={{ width: isLeader ? '11%' : '12%' }} />
+                  <col style={{ width: isLeader ? '15%' : '19%' }} />
+                  <col style={{ width: isLeader ? '12%' : '15%' }} />
+                  {isLeader && <col style={{ width: '11%' }} />}
+                  <col style={{ width: isLeader ? '14%' : '16%' }} />
+                  <col style={{ width: isLeader ? '10%' : '12%' }} />
+                  <col style={{ width: isLeader ? '10%' : '12%' }} />
                   <col style={{ width: isLeader ? '11%' : '10%' }} />
-                  <col style={{ width: isLeader ? '10%' : '14%' }} />
+                  <col style={{ width: isLeader ? '11%' : '10%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -1368,8 +1338,28 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           <span className="history-cell-truncate">{quote.vendor || '—'}</span>
                         </td>
                       )}
-                      <td className="history-td center nowrap" style={{ fontWeight: '600' }}>
-                        {Number(quote.total).toFixed(2)} Bs
+                      <td className="history-td center" style={{ fontWeight: '600' }}>
+                        <div style={{ display: 'grid', gap: '4px', justifyItems: 'center' }}>
+                          <span className="nowrap">{Number(quote.total).toFixed(2)} Bs</span>
+                          <span style={{ fontSize: '0.72rem', color: '#93c5fd', fontWeight: 600 }}>
+                            {formatPaymentDetail(quote)}
+                          </span>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
+                            style={{
+                              minHeight: '26px',
+                              padding: '4px 8px',
+                              fontSize: '0.7rem',
+                              background: quote.payment_method === 'Mixto' ? '#7c3aed' : '#312e81',
+                              color: '#ede9fe',
+                              border: '1px solid rgba(167, 139, 250, 0.45)'
+                            }}
+                          >
+                            {quote.payment_method === 'Mixto' ? 'Editar mixto' : 'Mixto'}
+                          </button>
+                        </div>
                       </td>
                       <td className="history-td center">
                         <select
@@ -1397,8 +1387,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <td className="history-td center">
                         <div style={{ display: 'grid', gap: '4px' }}>
                           <select
-                            value={quote.payment_method || ''}
-                            onChange={(e) => updatePaymentMethod(quote, e.target.value, { forcePrompt: e.target.value === 'Mixto' })}
+                            value={getPaymentSelectValue(quote)}
+                            onChange={(e) => updatePaymentMethod(quote, e.target.value)}
                             className="history-status-select"
                             style={paymentMethodSelectStyle(quote.payment_method || '')}
                           >
@@ -1406,26 +1396,6 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                               <option key={option.value || 'none'} value={option.value}>{option.label}</option>
                             ))}
                           </select>
-                          <span style={{ fontSize: '0.72rem', color: '#93c5fd' }}>
-                            {formatPaymentDetail(quote)}
-                          </span>
-                          {quote.payment_method === 'Mixto' && (
-                            <button
-                              type="button"
-                              className="btn"
-                              onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
-                              style={{
-                                minHeight: '28px',
-                                padding: '4px 8px',
-                                fontSize: '0.72rem',
-                                background: 'rgba(168, 85, 247, 0.16)',
-                                color: '#e9d5ff',
-                                border: '1px solid rgba(168, 85, 247, 0.45)'
-                              }}
-                            >
-                              Editar monto efectivo
-                            </button>
-                          )}
                         </div>
                       </td>
                       <td className="history-td center nowrap">
