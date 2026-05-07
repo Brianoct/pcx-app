@@ -2882,7 +2882,8 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
   const quoteRes = await client.query(
     `SELECT id, user_id, customer_name, customer_phone, department, provincia, shipping_notes,
             alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
-            gift_name, gift_sku, gift_qty, payment_method, line_items, subtotal, total, status
+            coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, payment_method,
+            line_items, subtotal, total, status
      FROM quotes
      WHERE id = $1
      FOR UPDATE`,
@@ -5442,6 +5443,10 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'ID de cotización inválido' });
   }
 
+  const requestBody = (req.body && typeof req.body === 'object' && !Array.isArray(req.body))
+    ? req.body
+    : {};
+  const hasBodyField = (field) => Object.prototype.hasOwnProperty.call(requestBody, field);
   const {
     customer_name,
     customer_phone,
@@ -5464,7 +5469,12 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     subtotal,
     total,
     status
-  } = req.body || {};
+  } = requestBody;
+  const hasCouponCodeField = hasBodyField('coupon_code');
+  const hasCouponDiscountField = hasBodyField('coupon_discount_percent');
+  const hasGiftNameField = hasBodyField('gift_name');
+  const hasGiftSkuField = hasBodyField('gift_sku');
+  const hasGiftQtyField = hasBodyField('gift_qty');
 
   if (!customer_name || !customer_phone || !store_location || !venta_type) {
     return res.status(400).json({ error: 'Faltan campos obligatorios para actualizar la cotización' });
@@ -5547,11 +5557,33 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
       nextQuoteOwnerId = selectedSellerId;
     }
 
-    const resolvedGift = await resolveGiftSelectionForQuote(
-      client,
-      { sku: gift_sku, qty: gift_qty, name: gift_name },
-      gift_name
-    );
+    const hasAnyGiftField = hasGiftNameField || hasGiftSkuField || hasGiftQtyField;
+    const resolvedGift = hasAnyGiftField
+      ? await resolveGiftSelectionForQuote(
+        client,
+        { sku: gift_sku, qty: gift_qty, name: gift_name },
+        gift_name
+      )
+      : {
+        gift_name: String(currentQuote.gift_name || '').trim() || null,
+        gift_sku: String(currentQuote.gift_sku || '').trim().toUpperCase() || null,
+        gift_qty: Math.max(1, Number.parseInt(currentQuote.gift_qty, 10) || 1)
+      };
+    const currentCouponCode = String(currentQuote.coupon_code || '').trim().toUpperCase() || null;
+    const currentCouponDiscount = Number(currentQuote.coupon_discount_percent);
+    let nextCouponCode = currentCouponCode;
+    if (hasCouponCodeField) {
+      const normalizedCouponCode = String(coupon_code || '').trim().toUpperCase();
+      nextCouponCode = normalizedCouponCode || null;
+    }
+    let nextCouponDiscount = Number.isFinite(currentCouponDiscount) ? currentCouponDiscount : 0;
+    if (hasCouponDiscountField) {
+      const requestedCouponDiscount = Number(coupon_discount_percent);
+      nextCouponDiscount = Number.isFinite(requestedCouponDiscount) ? requestedCouponDiscount : 0;
+    }
+    if (!nextCouponCode) {
+      nextCouponDiscount = 0;
+    }
     const previousGiftSelection = {
       gift_sku: String(currentQuote.gift_sku || '').trim().toUpperCase() || null,
       gift_qty: Number.parseInt(currentQuote.gift_qty, 10) || 1
@@ -5607,8 +5639,8 @@ app.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         nextVendorName,
         venta_type,
         discountPercentValue,
-        coupon_code ? String(coupon_code).trim().toUpperCase() : null,
-        Number.isFinite(Number(coupon_discount_percent)) ? Number(coupon_discount_percent) : 0,
+        nextCouponCode,
+        nextCouponDiscount,
         resolvedGift.gift_name,
         resolvedGift.gift_sku,
         resolvedGift.gift_qty,
