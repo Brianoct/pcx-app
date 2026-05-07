@@ -39,6 +39,11 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const canViewHistory = canAccessPanel(access, 'historialIndividual');
   const canMutateQuotes = canViewHistory || canViewGlobalHistory;
   const availableProducts = Array.isArray(productCatalog) ? productCatalog : [];
+  const toMoneyNumber = (value, fallback = 0) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.round(parsed * 100) / 100;
+  };
   const getPaymentMethodColor = (paymentMethod = '') => {
     if (paymentMethod === 'QR') return '#0ea5e9';
     if (paymentMethod === 'Efectivo') return '#16a34a';
@@ -50,6 +55,22 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     color: 'white',
     cursor: 'pointer'
   });
+  const formatPaymentDetail = (quote) => {
+    const total = toMoneyNumber(quote?.total, 0);
+    const method = String(quote?.payment_method || '');
+    if (method === 'Mixto') {
+      const cash = Math.max(0, toMoneyNumber(quote?.payment_cash_bs, 0));
+      const qr = Math.max(0, toMoneyNumber(total - cash, 0));
+      return `Ef ${cash.toFixed(2)} Bs / QR ${qr.toFixed(2)} Bs`;
+    }
+    if (method === 'Efectivo') {
+      return `Ef ${total.toFixed(2)} Bs`;
+    }
+    if (method === 'QR') {
+      return `QR ${total.toFixed(2)} Bs`;
+    }
+    return 'Sin definir';
+  };
   const getProductNameBySku = (skuValue = '') => {
     const normalizedSku = String(skuValue || '').trim().toUpperCase();
     if (!normalizedSku) return '';
@@ -77,6 +98,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
           payment_method: quote.payment_method === 'QR' || quote.payment_method === 'Efectivo' || quote.payment_method === 'Mixto'
             ? quote.payment_method
             : '',
+          payment_cash_bs: Number.isFinite(Number(quote.payment_cash_bs))
+            ? Number(quote.payment_cash_bs)
+            : null,
           line_items: Array.isArray(quote.line_items) ? quote.line_items : []
         }));
 
@@ -222,29 +246,71 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     }
   };
 
-  const updatePaymentMethod = async (quoteId, nextPaymentMethodValue) => {
-    const normalizedMethod = nextPaymentMethodValue === 'QR' || nextPaymentMethodValue === 'Efectivo' || nextPaymentMethodValue === 'Mixto'
+  const updatePaymentMethod = async (quote, nextPaymentMethodValue, { forcePrompt = false } = {}) => {
+    const quoteId = Number(quote?.id);
+    if (!quoteId) return;
+    const normalizedMethod = nextPaymentMethodValue === 'QR'
+      || nextPaymentMethodValue === 'Efectivo'
+      || nextPaymentMethodValue === 'Mixto'
       ? nextPaymentMethodValue
       : null;
+    const quoteTotal = toMoneyNumber(quote?.total, 0);
+
+    let nextCashBs = null;
+    if (normalizedMethod === 'QR') {
+      nextCashBs = 0;
+    } else if (normalizedMethod === 'Efectivo') {
+      nextCashBs = quoteTotal;
+    } else if (normalizedMethod === 'Mixto') {
+      const currentCash = toMoneyNumber(quote?.payment_cash_bs, 0);
+      const needsPrompt = forcePrompt || !Number.isFinite(currentCash) || currentCash <= 0 || quote?.payment_method !== 'Mixto';
+      let resolvedCash = currentCash;
+      if (needsPrompt) {
+        const promptValue = window.prompt(
+          `Pedido #${quoteId}\nIngresa cuánto se recibió en efectivo (Bs):`,
+          currentCash > 0 ? currentCash.toFixed(2) : ''
+        );
+        if (promptValue === null) return;
+        const parsedPrompt = Number(String(promptValue).replace(',', '.').trim());
+        if (!Number.isFinite(parsedPrompt) || parsedPrompt <= 0) {
+          alert('Debes ingresar un monto en efectivo mayor a 0 para pago mixto.');
+          return;
+        }
+        if (quoteTotal > 0 && parsedPrompt >= quoteTotal) {
+          alert('Para pago mixto, el efectivo debe ser menor al total del pedido.');
+          return;
+        }
+        resolvedCash = parsedPrompt;
+      }
+      nextCashBs = toMoneyNumber(resolvedCash, 0);
+    }
+
+    const payload = {
+      payment_method: normalizedMethod,
+      payment_cash_bs: normalizedMethod === null ? null : nextCashBs
+    };
+
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      const quote = quotes.find((q) => q.id === quoteId);
       enqueueWrite({
         label: `Pago cotización #${quoteId} → ${normalizedMethod || 'Sin definir'}`,
         path: `/api/quotes/${quoteId}/payment-method`,
         options: {
           method: 'PATCH',
           token,
-          body: { payment_method: normalizedMethod },
+          body: payload,
           retries: 0
         },
         meta: {
           quoteId,
           customerName: quote?.customer_name || '',
-          paymentMethod: normalizedMethod || ''
+          paymentMethod: normalizedMethod || '',
+          paymentCashBs: payload.payment_cash_bs
         }
       });
       setQuotes((prev) => prev.map((q) => (
-        q.id === quoteId ? { ...q, payment_method: normalizedMethod || '' } : q
+        q.id === quoteId
+          ? { ...q, payment_method: normalizedMethod || '', payment_cash_bs: payload.payment_cash_bs }
+          : q
       )));
       if (typeof onStatusUpdated === 'function') {
         onStatusUpdated();
@@ -253,13 +319,18 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       return;
     }
     try {
-      await apiRequest(`/api/quotes/${quoteId}/payment-method`, {
+      const response = await apiRequest(`/api/quotes/${quoteId}/payment-method`, {
         method: 'PATCH',
         token,
-        body: { payment_method: normalizedMethod }
+        body: payload
       });
+      const savedCash = response?.payment_cash_bs === null || response?.payment_cash_bs === undefined
+        ? payload.payment_cash_bs
+        : toMoneyNumber(response.payment_cash_bs, payload.payment_cash_bs ?? 0);
       setQuotes((prev) => prev.map((q) => (
-        q.id === quoteId ? { ...q, payment_method: normalizedMethod || '' } : q
+        q.id === quoteId
+          ? { ...q, payment_method: normalizedMethod || '', payment_cash_bs: savedCash }
+          : q
       )));
       if (typeof onStatusUpdated === 'function') {
         onStatusUpdated();
@@ -1120,7 +1191,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                     </div>
                     <div className="mobile-card-row">
                       <span className="mobile-card-label">Método de pago</span>
-                      <span>{quote.payment_method || 'Sin definir'}</span>
+                      <span>{formatPaymentDetail(quote)}</span>
                     </div>
                   </div>
 
@@ -1146,7 +1217,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                               key={`${quote.id}-${option.value}`}
                               type="button"
                               className="btn"
-                              onClick={() => updatePaymentMethod(quote.id, option.value)}
+                              onClick={() => updatePaymentMethod(quote, option.value, { forcePrompt: option.value === 'Mixto' })}
                               style={{
                                 minHeight: '36px',
                                 padding: '6px 8px',
@@ -1165,7 +1236,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <button
                         type="button"
                         className="btn"
-                        onClick={() => updatePaymentMethod(quote.id, '')}
+                        onClick={() => updatePaymentMethod(quote, '')}
                         style={{
                           minHeight: '34px',
                           background: quote.payment_method ? '#1f2937' : '#334155',
@@ -1177,6 +1248,23 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       >
                         Sin definir
                       </button>
+                      {quote.payment_method === 'Mixto' && (
+                        <button
+                          type="button"
+                          className="btn"
+                          onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
+                          style={{
+                            minHeight: '34px',
+                            background: 'rgba(168, 85, 247, 0.16)',
+                            color: '#e9d5ff',
+                            border: '1px solid rgba(168, 85, 247, 0.45)',
+                            fontSize: '0.8rem',
+                            fontWeight: 700
+                          }}
+                        >
+                          Editar efectivo: {toMoneyNumber(quote.payment_cash_bs, 0).toFixed(2)} Bs
+                        </button>
+                      )}
                     </div>
                     <button
                       className="btn btn-secondary"
@@ -1307,16 +1395,38 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                         </select>
                       </td>
                       <td className="history-td center">
-                        <select
-                          value={quote.payment_method || ''}
-                          onChange={(e) => updatePaymentMethod(quote.id, e.target.value)}
-                          className="history-status-select"
-                          style={paymentMethodSelectStyle(quote.payment_method || '')}
-                        >
-                          {PAYMENT_METHOD_OPTIONS.map((option) => (
-                            <option key={option.value || 'none'} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
+                        <div style={{ display: 'grid', gap: '4px' }}>
+                          <select
+                            value={quote.payment_method || ''}
+                            onChange={(e) => updatePaymentMethod(quote, e.target.value, { forcePrompt: e.target.value === 'Mixto' })}
+                            className="history-status-select"
+                            style={paymentMethodSelectStyle(quote.payment_method || '')}
+                          >
+                            {PAYMENT_METHOD_OPTIONS.map((option) => (
+                              <option key={option.value || 'none'} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                          <span style={{ fontSize: '0.72rem', color: '#93c5fd' }}>
+                            {formatPaymentDetail(quote)}
+                          </span>
+                          {quote.payment_method === 'Mixto' && (
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
+                              style={{
+                                minHeight: '28px',
+                                padding: '4px 8px',
+                                fontSize: '0.72rem',
+                                background: 'rgba(168, 85, 247, 0.16)',
+                                color: '#e9d5ff',
+                                border: '1px solid rgba(168, 85, 247, 0.45)'
+                              }}
+                            >
+                              Editar monto efectivo
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="history-td center nowrap">
                         {formatHistoryDate(quote.created_at)}
