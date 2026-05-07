@@ -1344,21 +1344,6 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           <span style={{ fontSize: '0.72rem', color: '#93c5fd', fontWeight: 600 }}>
                             {formatPaymentDetail(quote)}
                           </span>
-                          <button
-                            type="button"
-                            className="btn"
-                            onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
-                            style={{
-                              minHeight: '26px',
-                              padding: '4px 8px',
-                              fontSize: '0.7rem',
-                              background: quote.payment_method === 'Mixto' ? '#7c3aed' : '#312e81',
-                              color: '#ede9fe',
-                              border: '1px solid rgba(167, 139, 250, 0.45)'
-                            }}
-                          >
-                            {quote.payment_method === 'Mixto' ? 'Editar mixto' : 'Mixto'}
-                          </button>
                         </div>
                       </td>
                       <td className="history-td center">
@@ -1396,6 +1381,21 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                               <option key={option.value || 'none'} value={option.value}>{option.label}</option>
                             ))}
                           </select>
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
+                            style={{
+                              minHeight: '26px',
+                              padding: '4px 8px',
+                              fontSize: '0.7rem',
+                              background: quote.payment_method === 'Mixto' ? '#7c3aed' : '#312e81',
+                              color: '#ede9fe',
+                              border: '1px solid rgba(167, 139, 250, 0.45)'
+                            }}
+                          >
+                            {quote.payment_method === 'Mixto' ? 'Editar mixto' : 'Mixto'}
+                          </button>
                         </div>
                       </td>
                       <td className="history-td center nowrap">
