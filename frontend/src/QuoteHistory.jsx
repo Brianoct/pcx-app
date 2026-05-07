@@ -64,6 +64,38 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const canEditPaymentForStatus = (statusValue = '') => (
     PAYMENT_ALLOWED_STATUSES.includes(String(statusValue || '').trim())
   );
+  const paymentMethodPromptValueByMethod = (method = '') => {
+    if (method === 'QR') return '1';
+    if (method === 'Efectivo') return '2';
+    if (method === 'Mixto') return '3';
+    return '0';
+  };
+  const openPaymentMethodChooser = (quote) => {
+    if (!canEditPaymentForStatus(quote?.status)) return;
+    const currentMethodLabel = quote?.payment_method || 'Sin definir';
+    const input = window.prompt(
+      `Pago actual: ${currentMethodLabel}\n\nSelecciona método:\n1 = QR\n2 = Efectivo\n3 = Mixto\n0 = Sin definir`,
+      paymentMethodPromptValueByMethod(quote?.payment_method || '')
+    );
+    if (input === null) return;
+    const choice = String(input || '').trim().toLowerCase();
+    const map = {
+      '0': '',
+      '1': 'QR',
+      '2': 'Efectivo',
+      '3': 'Mixto',
+      'sin definir': '',
+      qr: 'QR',
+      efectivo: 'Efectivo',
+      mixto: 'Mixto'
+    };
+    if (!Object.prototype.hasOwnProperty.call(map, choice)) {
+      alert('Opción inválida. Usa 0, 1, 2 o 3.');
+      return;
+    }
+    const nextMethod = map[choice];
+    updatePaymentMethod(quote, nextMethod, { forcePrompt: nextMethod === 'Mixto' });
+  };
   const formatPaymentDetail = (quote) => {
     const total = toMoneyNumber(quote?.total, 0);
     const method = String(quote?.payment_method || '');
@@ -1307,14 +1339,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
               <table className="history-table">
                 <colgroup>
                   <col style={{ width: '6%' }} />
-                  <col style={{ width: isLeader ? '15%' : '19%' }} />
-                  <col style={{ width: isLeader ? '12%' : '15%' }} />
+                  <col style={{ width: isLeader ? '15%' : '21%' }} />
+                  <col style={{ width: isLeader ? '12%' : '16%' }} />
                   {isLeader && <col style={{ width: '11%' }} />}
-                  <col style={{ width: isLeader ? '14%' : '16%' }} />
-                  <col style={{ width: isLeader ? '10%' : '12%' }} />
-                  <col style={{ width: isLeader ? '10%' : '12%' }} />
-                  <col style={{ width: isLeader ? '11%' : '10%' }} />
-                  <col style={{ width: isLeader ? '11%' : '10%' }} />
+                  <col style={{ width: isLeader ? '17%' : '21%' }} />
+                  <col style={{ width: isLeader ? '11%' : '13%' }} />
+                  <col style={{ width: isLeader ? '12%' : '11%' }} />
+                  <col style={{ width: isLeader ? '16%' : '12%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -1324,7 +1355,6 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                     {isLeader && <th className="history-th center">Vendedor</th>}
                     <th className="history-th center">Total</th>
                     <th className="history-th center">Estado</th>
-                    <th className="history-th center">Pago</th>
                     <th className="history-th center">Fecha</th>
                     <th className="history-th center">Acciones</th>
                   </tr>
@@ -1358,29 +1388,27 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <td className="history-td center" style={{ fontWeight: '600' }}>
                         <div style={{ display: 'grid', gap: '4px', justifyItems: 'center' }}>
                           <span className="nowrap">{Number(quote.total).toFixed(2)} Bs</span>
-                          {quote.payment_method === 'Mixto' && canEditPaymentForStatus(quote.status) ? (
-                            <button
-                              type="button"
-                              onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
-                              style={{
-                                border: 'none',
-                                background: 'transparent',
-                                padding: 0,
-                                margin: 0,
-                                fontSize: '0.72rem',
-                                color: '#93c5fd',
-                                fontWeight: 600,
-                                textDecoration: 'underline',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {formatPaymentDetail(quote)}
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: '0.72rem', color: '#93c5fd', fontWeight: 600 }}>
-                              {formatPaymentDetail(quote)}
-                            </span>
-                          )}
+                          <button
+                            type="button"
+                            disabled={!canEditPaymentForStatus(quote.status)}
+                            onClick={() => openPaymentMethodChooser(quote)}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              padding: 0,
+                              margin: 0,
+                              fontSize: '0.72rem',
+                              color: canEditPaymentForStatus(quote.status) ? '#93c5fd' : '#64748b',
+                              fontWeight: 600,
+                              textDecoration: canEditPaymentForStatus(quote.status) ? 'underline' : 'none',
+                              cursor: canEditPaymentForStatus(quote.status) ? 'pointer' : 'not-allowed'
+                            }}
+                            title={canEditPaymentForStatus(quote.status)
+                              ? 'Haz click para cambiar el método de pago'
+                              : `Disponible cuando el estado sea ${PAYMENT_ALLOWED_STATUSES.join(', ')}`}
+                          >
+                            {formatPaymentDetail(quote)}
+                          </button>
                         </div>
                       </td>
                       <td className="history-td center">
@@ -1405,25 +1433,6 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           <option value="Embalado">Embalado</option>
                           <option value="Enviado">Enviado</option>
                         </select>
-                      </td>
-                      <td className="history-td center">
-                        <div style={{ display: 'grid', gap: '4px' }}>
-                          <select
-                            value={getPaymentSelectValue(quote)}
-                            onChange={(e) => updatePaymentMethod(
-                              quote,
-                              e.target.value,
-                              { forcePrompt: e.target.value === 'Mixto' }
-                            )}
-                            disabled={!canEditPaymentForStatus(quote.status)}
-                            className="history-status-select"
-                            style={paymentMethodSelectStyle(quote.payment_method || '', !canEditPaymentForStatus(quote.status))}
-                          >
-                            {PAYMENT_METHOD_OPTIONS.map((option) => (
-                              <option key={option.value || 'none'} value={option.value}>{option.label}</option>
-                            ))}
-                          </select>
-                        </div>
                       </td>
                       <td className="history-td center nowrap">
                         {formatHistoryDate(quote.created_at)}
