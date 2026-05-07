@@ -441,7 +441,7 @@ const COMMISSION_SETTINGS_DEFAULT = {
 const COMMISSION_SETTINGS_KEYS = Object.keys(COMMISSION_SETTINGS_DEFAULT);
 const QUOTE_STATUSES = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const FINALIZED_QUOTE_STATUSES = ['Confirmado', 'Pagado', 'Embalado', 'Enviado'];
-const QUOTE_PAYMENT_METHODS = ['QR', 'Efectivo'];
+const QUOTE_PAYMENT_METHODS = ['QR', 'Efectivo', 'Mixto'];
 const QUOTE_SAVE_IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
 const quoteSaveIdempotencyCache = new Map();
 
@@ -455,6 +455,17 @@ const normalizeQuotePaymentMethod = (value) => {
   }
   if (normalized === 'efectivo' || normalized === 'cash') {
     return 'Efectivo';
+  }
+  if (
+    normalized === 'mixto'
+    || normalized === 'mixed'
+    || normalized === 'mixta'
+    || normalized === 'qr + efectivo'
+    || normalized === 'efectivo + qr'
+    || normalized === 'qr y efectivo'
+    || normalized === 'efectivo y qr'
+  ) {
+    return 'Mixto';
   }
   return null;
 };
