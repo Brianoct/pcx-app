@@ -10,7 +10,8 @@ const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro
 const PAYMENT_METHOD_OPTIONS = [
   { value: '', label: 'Sin definir' },
   { value: 'QR', label: 'QR' },
-  { value: 'Efectivo', label: 'Efectivo' }
+  { value: 'Efectivo', label: 'Efectivo' },
+  { value: 'Mixto', label: 'Mixto' }
 ];
 
 function QuoteHistory({ token, access, onStatusUpdated }) {
@@ -55,7 +56,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   });
   const getPaymentSelectValue = (quote) => {
     const method = String(quote?.payment_method || '');
-    if (method === 'QR' || method === 'Efectivo') return method;
+    if (method === 'QR' || method === 'Efectivo' || method === 'Mixto') return method;
     return '';
   };
   const formatPaymentDetail = (quote) => {
@@ -1161,7 +1162,26 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                     <span className="mobile-card-id">#{quote.id}</span>
                     <div style={{ display: 'grid', justifyItems: 'end', gap: '2px' }}>
                       <span className="mobile-card-total">{Number(quote.total).toFixed(2)} Bs</span>
-                      <span style={{ fontSize: '0.75rem', color: '#93c5fd' }}>{formatPaymentDetail(quote)}</span>
+                      {quote.payment_method === 'Mixto' ? (
+                        <button
+                          type="button"
+                          onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            padding: 0,
+                            margin: 0,
+                            color: '#93c5fd',
+                            fontSize: '0.75rem',
+                            textDecoration: 'underline',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {formatPaymentDetail(quote)}
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: '0.75rem', color: '#93c5fd' }}>{formatPaymentDetail(quote)}</span>
+                      )}
                     </div>
                   </div>
 
@@ -1212,30 +1232,17 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                     <select
                       className="mobile-select"
                       value={getPaymentSelectValue(quote)}
-                      onChange={(e) => updatePaymentMethod(quote, e.target.value)}
+                      onChange={(e) => updatePaymentMethod(
+                        quote,
+                        e.target.value,
+                        { forcePrompt: e.target.value === 'Mixto' }
+                      )}
                       style={paymentMethodSelectStyle(quote.payment_method || '')}
                     >
                       {PAYMENT_METHOD_OPTIONS.map((option) => (
                         <option key={option.value || 'none'} value={option.value}>{option.label}</option>
                       ))}
                     </select>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
-                      style={{
-                        minHeight: '34px',
-                        background: quote.payment_method === 'Mixto' ? '#7c3aed' : '#312e81',
-                        color: '#ede9fe',
-                        border: '1px solid rgba(167, 139, 250, 0.45)',
-                        fontSize: '0.8rem',
-                        fontWeight: 700
-                      }}
-                    >
-                      {quote.payment_method === 'Mixto'
-                        ? `Editar mixto (Ef ${toMoneyNumber(quote.payment_cash_bs, 0).toFixed(2)} Bs)`
-                        : 'Registrar pago mixto'}
-                    </button>
                     <button
                       className="btn btn-secondary"
                       onClick={() => regeneratePDF(quote)}
@@ -1341,9 +1348,29 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <td className="history-td center" style={{ fontWeight: '600' }}>
                         <div style={{ display: 'grid', gap: '4px', justifyItems: 'center' }}>
                           <span className="nowrap">{Number(quote.total).toFixed(2)} Bs</span>
-                          <span style={{ fontSize: '0.72rem', color: '#93c5fd', fontWeight: 600 }}>
-                            {formatPaymentDetail(quote)}
-                          </span>
+                          {quote.payment_method === 'Mixto' ? (
+                            <button
+                              type="button"
+                              onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                padding: 0,
+                                margin: 0,
+                                fontSize: '0.72rem',
+                                color: '#93c5fd',
+                                fontWeight: 600,
+                                textDecoration: 'underline',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {formatPaymentDetail(quote)}
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '0.72rem', color: '#93c5fd', fontWeight: 600 }}>
+                              {formatPaymentDetail(quote)}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="history-td center">
@@ -1373,7 +1400,11 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                         <div style={{ display: 'grid', gap: '4px' }}>
                           <select
                             value={getPaymentSelectValue(quote)}
-                            onChange={(e) => updatePaymentMethod(quote, e.target.value)}
+                            onChange={(e) => updatePaymentMethod(
+                              quote,
+                              e.target.value,
+                              { forcePrompt: e.target.value === 'Mixto' }
+                            )}
                             className="history-status-select"
                             style={paymentMethodSelectStyle(quote.payment_method || '')}
                           >
@@ -1381,21 +1412,6 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                               <option key={option.value || 'none'} value={option.value}>{option.label}</option>
                             ))}
                           </select>
-                          <button
-                            type="button"
-                            className="btn"
-                            onClick={() => updatePaymentMethod(quote, 'Mixto', { forcePrompt: true })}
-                            style={{
-                              minHeight: '26px',
-                              padding: '4px 8px',
-                              fontSize: '0.7rem',
-                              background: quote.payment_method === 'Mixto' ? '#7c3aed' : '#312e81',
-                              color: '#ede9fe',
-                              border: '1px solid rgba(167, 139, 250, 0.45)'
-                            }}
-                          >
-                            {quote.payment_method === 'Mixto' ? 'Editar mixto' : 'Mixto'}
-                          </button>
                         </div>
                       </td>
                       <td className="history-td center nowrap">
