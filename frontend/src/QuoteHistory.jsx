@@ -34,6 +34,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
+  const [paymentMenuQuoteId, setPaymentMenuQuoteId] = useState(null);
 
   const canViewGlobalHistory = canAccessPanel(access, 'historialGlobal');
   const canViewHistory = canAccessPanel(access, 'historialIndividual');
@@ -64,37 +65,15 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const canEditPaymentForStatus = (statusValue = '') => (
     PAYMENT_ALLOWED_STATUSES.includes(String(statusValue || '').trim())
   );
-  const paymentMethodPromptValueByMethod = (method = '') => {
-    if (method === 'QR') return '1';
-    if (method === 'Efectivo') return '2';
-    if (method === 'Mixto') return '3';
-    return '0';
-  };
   const openPaymentMethodChooser = (quote) => {
     if (!canEditPaymentForStatus(quote?.status)) return;
-    const currentMethodLabel = quote?.payment_method || 'Sin definir';
-    const input = window.prompt(
-      `Pago actual: ${currentMethodLabel}\n\nSelecciona método:\n1 = QR\n2 = Efectivo\n3 = Mixto\n0 = Sin definir`,
-      paymentMethodPromptValueByMethod(quote?.payment_method || '')
-    );
-    if (input === null) return;
-    const choice = String(input || '').trim().toLowerCase();
-    const map = {
-      '0': '',
-      '1': 'QR',
-      '2': 'Efectivo',
-      '3': 'Mixto',
-      'sin definir': '',
-      qr: 'QR',
-      efectivo: 'Efectivo',
-      mixto: 'Mixto'
-    };
-    if (!Object.prototype.hasOwnProperty.call(map, choice)) {
-      alert('Opción inválida. Usa 0, 1, 2 o 3.');
-      return;
-    }
-    const nextMethod = map[choice];
-    updatePaymentMethod(quote, nextMethod, { forcePrompt: nextMethod === 'Mixto' });
+    const quoteId = Number(quote?.id);
+    if (!quoteId) return;
+    setPaymentMenuQuoteId((prev) => (prev === quoteId ? null : quoteId));
+  };
+  const applyPaymentMethodFromMenu = (quote, nextValue) => {
+    setPaymentMenuQuoteId(null);
+    updatePaymentMethod(quote, nextValue, { forcePrompt: nextValue === 'Mixto' });
   };
   const formatPaymentDetail = (quote) => {
     const total = toMoneyNumber(quote?.total, 0);
@@ -1409,6 +1388,42 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           >
                             {formatPaymentDetail(quote)}
                           </button>
+                          {paymentMenuQuoteId === quote.id && (
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
+                              <select
+                                value={getPaymentSelectValue(quote)}
+                                onChange={(e) => applyPaymentMethodFromMenu(quote, e.target.value)}
+                                className="history-status-select"
+                                style={{
+                                  minHeight: '30px',
+                                  padding: '4px 8px',
+                                  fontSize: '0.72rem',
+                                  ...paymentMethodSelectStyle(quote.payment_method || '')
+                                }}
+                              >
+                                {PAYMENT_METHOD_OPTIONS.map((option) => (
+                                  <option key={`${quote.id}-${option.value || 'none'}`} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => setPaymentMenuQuoteId(null)}
+                                style={{
+                                  minHeight: '30px',
+                                  padding: '4px 8px',
+                                  fontSize: '0.72rem',
+                                  background: '#334155',
+                                  color: '#e2e8f0',
+                                  border: '1px solid #475569'
+                                }}
+                              >
+                                Cerrar
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="history-td center">
