@@ -898,16 +898,7 @@ export default function PublicCustomerMenu() {
     if (selectedVariant && !selectedVariant.product) {
       selectedVariant = group.variants.find((variant) => Boolean(variant.product)) || selectedVariant;
     }
-    const selectedProduct = selectedVariant?.product || null;
-    const selectedPrice = selectedProduct
-      ? (ventaType === 'cf'
-        ? Number(selectedProduct.price_cf ?? selectedProduct.cf ?? selectedProduct.price ?? 0)
-        : Number(selectedProduct.price_sf ?? selectedProduct.sf ?? selectedProduct.price ?? 0))
-      : 0;
     const availableVariants = group.variants.filter((variant) => Boolean(variant.product));
-    const groupUnits = availableVariants.reduce((sum, variant) => (
-      sum + Number(quantities[variant.product.sku] || 0)
-    ), 0);
 
     return (
       <div
@@ -916,57 +907,22 @@ export default function PublicCustomerMenu() {
           border: `1px solid ${LIGHT_THEME.border}`,
           background: LIGHT_THEME.surface,
           borderRadius: '12px',
-          padding: isCompactLayout ? '12px' : '14px',
+          padding: isCompactLayout ? '10px' : '11px',
           display: 'grid',
-          gap: '12px'
+          gap: '8px'
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '10px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'grid', gap: '6px', alignContent: 'start' }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: isCompactLayout ? '1.24rem' : '1.4rem', color: LIGHT_THEME.text, lineHeight: 1.1 }}>
-                Tablero {group.title}
-              </div>
-              <div style={{ color: LIGHT_THEME.textMuted, marginTop: '4px' }}>
-                Toca un color para sumar unidades
-              </div>
-              <div style={{ color: '#10b981', fontWeight: 800, marginTop: '8px', fontSize: '1.15rem' }}>
-                {selectedProduct ? `${selectedPrice.toFixed(2)} Bs` : 'No disponible'}
-              </div>
-              {selectedVariant?.label && (
-                <div style={{ marginTop: '5px', fontSize: '0.85rem', color: LIGHT_THEME.textSoft }}>
-                  Color activo: <strong>{selectedVariant.label}</strong>
-                </div>
-              )}
-            </div>
-          </div>
-          <div
-            style={{
-              minWidth: '88px',
-              borderRadius: '10px',
-              border: `1px solid ${LIGHT_THEME.border}`,
-              background: '#fff',
-              color: LIGHT_THEME.textSoft,
-              padding: '8px 10px',
-              textAlign: 'center'
-            }}
-          >
-            <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              En pedido
-            </div>
-            <div style={{ marginTop: '2px', color: LIGHT_THEME.text, fontSize: '1.15rem', fontWeight: 800 }}>
-              {groupUnits}
-            </div>
-          </div>
+        <div style={{ fontWeight: 700, fontSize: isCompactLayout ? '1.08rem' : '1.15rem', color: LIGHT_THEME.text, lineHeight: 1.05 }}>
+          Tablero {group.title}
         </div>
 
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: isCompactLayout
-              ? 'repeat(auto-fit, minmax(90px, 1fr))'
-              : 'repeat(auto-fit, minmax(112px, 1fr))',
-            gap: '9px'
+              ? 'repeat(auto-fit, minmax(84px, 1fr))'
+              : 'repeat(auto-fit, minmax(102px, 1fr))',
+            gap: '7px'
           }}
         >
           {availableVariants.map((variant) => {
@@ -989,10 +945,10 @@ export default function PublicCustomerMenu() {
                   position: 'relative',
                   border: `1px solid ${isSelected ? '#3b82f6' : LIGHT_THEME.border}`,
                   background: isSelected ? 'rgba(59,130,246,0.08)' : '#fff',
-                  borderRadius: '10px',
-                  padding: '7px',
+                  borderRadius: '9px',
+                  padding: '6px',
                   display: 'grid',
-                  gap: '5px',
+                  gap: '4px',
                   justifyItems: 'center',
                   cursor: 'pointer'
                 }}
@@ -1002,14 +958,14 @@ export default function PublicCustomerMenu() {
                     position: 'absolute',
                     top: '-6px',
                     right: '-6px',
-                    minWidth: '22px',
-                    height: '22px',
+                    minWidth: '20px',
+                    height: '20px',
                     borderRadius: '999px',
-                    padding: '0 6px',
+                    padding: '0 5px',
                     display: 'inline-flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '0.74rem',
+                    fontSize: '0.7rem',
                     fontWeight: 800,
                     color: '#fff',
                     background: variantQty > 0 ? '#2563eb' : '#94a3b8',
@@ -1020,8 +976,8 @@ export default function PublicCustomerMenu() {
                 </span>
                 <div
                   style={{
-                    width: isCompactLayout ? '58px' : '64px',
-                    height: isCompactLayout ? '58px' : '64px',
+                    width: isCompactLayout ? '52px' : '56px',
+                    height: isCompactLayout ? '52px' : '56px',
                     borderRadius: '8px',
                     overflow: 'hidden',
                     border: `1px solid ${LIGHT_THEME.border}`,
@@ -1030,16 +986,16 @@ export default function PublicCustomerMenu() {
                 >
                   <ProductImage
                     product={variantProduct}
-                    height={isCompactLayout ? '58px' : '64px'}
+                    height={isCompactLayout ? '52px' : '56px'}
                     enableSkuFallback
                     fit="contain"
                     imagePadding="4px"
                   />
                 </div>
-                <div style={{ fontSize: '0.73rem', fontWeight: 700, color: LIGHT_THEME.text, lineHeight: 1.15 }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: LIGHT_THEME.text, lineHeight: 1.1 }}>
                   {variant.label}
                 </div>
-                <div style={{ fontSize: '0.69rem', color: LIGHT_THEME.textMuted }}>
+                <div style={{ fontSize: '0.64rem', color: LIGHT_THEME.textMuted }}>
                   {variantPrice.toFixed(2)} Bs
                 </div>
               </button>
@@ -1125,8 +1081,8 @@ export default function PublicCustomerMenu() {
                 <div style={{ color: '#10b981', fontWeight: 700, marginBottom: '8px' }}>
                   {displayPrice.toFixed(2)} Bs
                 </div>
-                <div style={{ marginTop: 'auto', color: LIGHT_THEME.textMuted, fontSize: '0.8rem' }}>
-                  Toca la imagen para sumar · Cantidad: <strong style={{ color: LIGHT_THEME.text }}>{qty}</strong>
+                <div style={{ marginTop: 'auto', color: LIGHT_THEME.textMuted, fontSize: '0.78rem' }}>
+                  Cant: <strong style={{ color: LIGHT_THEME.text }}>{qty}</strong>
                 </div>
               </div>
             </div>
