@@ -1091,15 +1091,105 @@ export default function PublicCustomerMenu() {
     );
   };
 
+  const renderAccessorySwatchGrid = (items, emptyMessage) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return <div style={{ color: LIGHT_THEME.textMuted }}>{emptyMessage}</div>;
+    }
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+        {items.map((product) => {
+          const qty = Number(quantities[product.sku] || 0);
+          const displayPrice = ventaType === 'cf'
+            ? Number(product.price_cf ?? product.cf ?? product.price ?? 0)
+            : Number(product.price_sf ?? product.sf ?? product.price ?? 0);
+          return (
+            <button
+              key={`swatch-${product.sku}`}
+              type="button"
+              onClick={() => increase(product.sku)}
+              title={product.name}
+              style={{
+                position: 'relative',
+                width: isCompactLayout ? '84px' : '102px',
+                border: `1px solid ${LIGHT_THEME.border}`,
+                background: '#fff',
+                borderRadius: '9px',
+                padding: '6px',
+                display: 'grid',
+                gap: '4px',
+                justifyItems: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  top: '-6px',
+                  right: '-6px',
+                  minWidth: '20px',
+                  height: '20px',
+                  borderRadius: '999px',
+                  padding: '0 5px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.7rem',
+                  fontWeight: 800,
+                  color: '#fff',
+                  background: qty > 0 ? '#2563eb' : '#94a3b8',
+                  boxShadow: '0 1px 4px rgba(15, 23, 42, 0.22)'
+                }}
+              >
+                {qty}
+              </span>
+              <div
+                style={{
+                  width: isCompactLayout ? '52px' : '56px',
+                  height: isCompactLayout ? '52px' : '56px',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  border: `1px solid ${LIGHT_THEME.border}`,
+                  background: LIGHT_THEME.surfaceAlt
+                }}
+              >
+                <ProductImage
+                  product={product}
+                  height={isCompactLayout ? '52px' : '56px'}
+                  accessorioFallback
+                  fit="contain"
+                  imagePadding="4px"
+                />
+              </div>
+              <div
+                style={{
+                  fontSize: '0.7rem',
+                  fontWeight: 700,
+                  color: LIGHT_THEME.text,
+                  lineHeight: 1.1,
+                  textAlign: 'center'
+                }}
+              >
+                {product.name}
+              </div>
+              <div style={{ fontSize: '0.64rem', color: LIGHT_THEME.textMuted }}>
+                {displayPrice.toFixed(2)} Bs
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
   const sectionRows = activeSegment === SEGMENT_HOGAR
     ? [
       { key: 'hogar-tableros', title: 'Tableros Multifunciones', kind: 'tableros', items: tablerosHogar, empty: 'Sin tableros multifunciones disponibles.' },
-      { key: 'hogar-accesorios', title: 'Accesorios de Plástico', kind: 'grid', items: accesoriosHogar, empty: 'Sin accesorios de plástico disponibles.' },
+      { key: 'hogar-accesorios', title: 'Accesorios de Plástico', kind: 'swatches', items: accesoriosHogar, empty: 'Sin accesorios de plástico disponibles.' },
       { key: 'hogar-combos', title: 'Combos', kind: 'grid', items: combosHogar, empty: 'Sin combos para hogar disponibles.' }
     ]
     : [
       { key: 'talleres-tableros', title: 'Tableros Metálicos Industriales', kind: 'tableros', items: tablerosTalleres, empty: 'Sin tableros industriales disponibles.' },
-      { key: 'talleres-accesorios', title: 'Accesorios', kind: 'grid', items: accesoriosTalleres, empty: 'Sin accesorios disponibles.' },
+      { key: 'talleres-accesorios', title: 'Accesorios', kind: 'swatches', items: accesoriosTalleres, empty: 'Sin accesorios disponibles.' },
       { key: 'talleres-combos', title: 'Combos', kind: 'grid', items: combosTalleres, empty: 'Sin combos disponibles.' }
     ];
 
@@ -1171,7 +1261,9 @@ export default function PublicCustomerMenu() {
                   ? (section.items.length === 0
                     ? <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.9rem' }}>{section.empty}</div>
                     : section.items.map((group) => renderTableroGroupCard(group)))
-                  : renderAccessoryGrid(section.items, section.empty)}
+                  : section.kind === 'swatches'
+                    ? renderAccessorySwatchGrid(section.items, section.empty)
+                    : renderAccessoryGrid(section.items, section.empty)}
               </section>
             ))}
           </div>
