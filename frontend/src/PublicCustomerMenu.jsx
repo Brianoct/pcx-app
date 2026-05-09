@@ -379,6 +379,7 @@ export default function PublicCustomerMenu() {
   const [isProvincia, setIsProvincia] = useState(false);
   const [ventaType, setVentaType] = useState('sf');
   const [notes, setNotes] = useState('');
+  const [isCheckoutExpanded, setIsCheckoutExpanded] = useState(false);
   const [isCompactLayout, setIsCompactLayout] = useState(() => (
     typeof window !== 'undefined' ? window.innerWidth < 980 : false
   ));
@@ -566,6 +567,13 @@ export default function PublicCustomerMenu() {
   ), [products, quantities, ventaType]);
   const cartUnits = cartItems.reduce((sum, item) => sum + Number(item.qty || 0), 0);
   const cartTotal = cartItems.reduce((sum, item) => sum + Number(item.lineTotal || 0), 0);
+  const ventaTypeLabel = ventaType === 'cf' ? 'Con factura' : 'Sin factura';
+
+  useEffect(() => {
+    if (cartItems.length === 0 && isCheckoutExpanded) {
+      setIsCheckoutExpanded(false);
+    }
+  }, [cartItems.length, isCheckoutExpanded]);
 
   const setQty = (sku, qty) => {
     const normalizedQty = Math.max(0, Number.parseInt(qty, 10) || 0);
@@ -852,6 +860,12 @@ export default function PublicCustomerMenu() {
       setSuccess(data || { message: 'Pedido enviado correctamente' });
       setQuantities({});
       setNotes('');
+      setCustomerName('');
+      setCustomerPhone('');
+      setDepartment('');
+      setProvincia('');
+      setIsProvincia(false);
+      setIsCheckoutExpanded(false);
     } catch (err) {
       setError(err.message || 'No se pudo enviar el pedido');
     } finally {
@@ -909,7 +923,9 @@ export default function PublicCustomerMenu() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: isCompactLayout ? '1fr' : 'minmax(0, 1.1fr) minmax(320px, 0.9fr)',
+            gridTemplateColumns: isCompactLayout
+              ? 'minmax(0, 1fr)'
+              : 'minmax(0, 1fr) minmax(260px, 0.65fr) 118px',
             gap: isCompactLayout ? '12px' : '16px',
             alignItems: 'start'
           }}
@@ -933,15 +949,20 @@ export default function PublicCustomerMenu() {
 
           <div style={{ display: 'grid', gap: '12px', alignContent: 'start' }}>
             <div>
-              <div style={{ fontWeight: 800, fontSize: '1.45rem', color: LIGHT_THEME.text, lineHeight: 1.1 }}>
+              <div style={{ fontWeight: 800, fontSize: isCompactLayout ? '1.24rem' : '1.4rem', color: LIGHT_THEME.text, lineHeight: 1.1 }}>
                 Tablero {group.title}
               </div>
               <div style={{ color: LIGHT_THEME.textMuted, marginTop: '4px' }}>
-                Selecciona un color y ajusta cantidad
+                Toca un color para sumar unidades
               </div>
               <div style={{ color: '#10b981', fontWeight: 800, marginTop: '8px', fontSize: '1.15rem' }}>
                 {selectedProduct ? `${selectedPrice.toFixed(2)} Bs` : 'No disponible'}
               </div>
+              {selectedVariant?.label && (
+                <div style={{ marginTop: '5px', fontSize: '0.85rem', color: LIGHT_THEME.textSoft }}>
+                  Color activo: <strong>{selectedVariant.label}</strong>
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -982,60 +1003,180 @@ export default function PublicCustomerMenu() {
               </button>
             </div>
           </div>
+
+          {!isCompactLayout && (
+            <div
+              style={{
+                border: `1px solid ${LIGHT_THEME.border}`,
+                borderRadius: '10px',
+                background: '#fff',
+                padding: '8px',
+                display: 'grid',
+                gap: '8px',
+                maxHeight: '320px',
+                overflowY: 'auto'
+              }}
+            >
+              {availableVariants.map((variant) => {
+                const variantProduct = variant.product;
+                if (!variantProduct) return null;
+                const variantQty = Number(quantities[variantProduct.sku] || 0);
+                const isSelected = variant.key === selectedVariant?.key;
+                const variantPrice = ventaType === 'cf'
+                  ? Number(variantProduct.price_cf ?? variantProduct.cf ?? variantProduct.price ?? 0)
+                  : Number(variantProduct.price_sf ?? variantProduct.sf ?? variantProduct.price ?? 0);
+                return (
+                  <button
+                    key={`${group.key}-rail-${variant.key}`}
+                    type="button"
+                    onClick={() => {
+                      selectTableroVariant(group.key, variant.key);
+                      increase(variantProduct.sku);
+                    }}
+                    style={{
+                      position: 'relative',
+                      border: `1px solid ${isSelected ? '#3b82f6' : LIGHT_THEME.border}`,
+                      background: isSelected ? 'rgba(59,130,246,0.08)' : '#fff',
+                      borderRadius: '10px',
+                      padding: '6px',
+                      display: 'grid',
+                      gap: '4px',
+                      justifyItems: 'center',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: '-6px',
+                        right: '-6px',
+                        minWidth: '22px',
+                        height: '22px',
+                        borderRadius: '999px',
+                        padding: '0 6px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.74rem',
+                        fontWeight: 800,
+                        color: '#fff',
+                        background: variantQty > 0 ? '#2563eb' : '#94a3b8',
+                        boxShadow: '0 1px 4px rgba(15, 23, 42, 0.22)'
+                      }}
+                    >
+                      {variantQty}
+                    </span>
+                    <div
+                      style={{
+                        width: '62px',
+                        height: '62px',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        border: `1px solid ${LIGHT_THEME.border}`,
+                        background: LIGHT_THEME.surfaceAlt
+                      }}
+                    >
+                      <ProductImage
+                        product={variantProduct}
+                        height="62px"
+                        enableSkuFallback
+                        fit="contain"
+                        imagePadding="4px"
+                      />
+                    </div>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: LIGHT_THEME.text }}>
+                      {variant.label}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', color: LIGHT_THEME.textMuted }}>
+                      {variantPrice.toFixed(2)} Bs
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {availableVariants.map((variant) => {
-            const variantProduct = variant.product;
-            if (!variantProduct) return null;
-            const isSelected = variant.key === selectedVariant?.key;
-            return (
-              <button
-                key={`${group.key}-thumb-${variant.key}`}
-                type="button"
-                onClick={() => selectTableroVariant(group.key, variant.key)}
-                style={{
-                  border: `1px solid ${isSelected ? '#3b82f6' : LIGHT_THEME.border}`,
-                  background: isSelected ? 'rgba(59,130,246,0.08)' : '#fff',
-                  borderRadius: '10px',
-                  padding: '6px',
-                  width: isCompactLayout ? '66px' : '74px',
-                  display: 'grid',
-                  gap: '5px',
-                  justifyItems: 'center',
-                  cursor: 'pointer'
-                }}
-              >
-                <div style={{
-                  width: isCompactLayout ? '52px' : '60px',
-                  height: isCompactLayout ? '52px' : '60px',
-                  borderRadius: '8px',
-                  overflow: 'hidden',
-                  border: `1px solid ${LIGHT_THEME.border}`,
-                  background: LIGHT_THEME.surfaceAlt
-                }}>
-                  <ProductImage
-                    product={variantProduct}
-                    height={isCompactLayout ? '52px' : '60px'}
-                    enableSkuFallback
-                    fit="contain"
-                    imagePadding="4px"
-                  />
-                </div>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 700, color: LIGHT_THEME.text }}>
-                  <span style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '999px',
-                    background: variant.hex,
-                    border: variant.hex === '#f8fafc' ? '1px solid #94a3b8' : '1px solid rgba(15,23,42,0.22)'
-                  }} />
-                  {variant.label}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        {isCompactLayout && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {availableVariants.map((variant) => {
+              const variantProduct = variant.product;
+              if (!variantProduct) return null;
+              const isSelected = variant.key === selectedVariant?.key;
+              const variantQty = Number(quantities[variantProduct.sku] || 0);
+              return (
+                <button
+                  key={`${group.key}-thumb-${variant.key}`}
+                  type="button"
+                  onClick={() => {
+                    selectTableroVariant(group.key, variant.key);
+                    increase(variantProduct.sku);
+                  }}
+                  style={{
+                    position: 'relative',
+                    border: `1px solid ${isSelected ? '#3b82f6' : LIGHT_THEME.border}`,
+                    background: isSelected ? 'rgba(59,130,246,0.08)' : '#fff',
+                    borderRadius: '10px',
+                    padding: '6px',
+                    width: '66px',
+                    display: 'grid',
+                    gap: '5px',
+                    justifyItems: 'center',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: '-6px',
+                      right: '-6px',
+                      minWidth: '20px',
+                      height: '20px',
+                      borderRadius: '999px',
+                      padding: '0 5px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      color: '#fff',
+                      background: variantQty > 0 ? '#2563eb' : '#94a3b8',
+                      boxShadow: '0 1px 3px rgba(15, 23, 42, 0.2)'
+                    }}
+                  >
+                    {variantQty}
+                  </span>
+                  <div style={{
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    border: `1px solid ${LIGHT_THEME.border}`,
+                    background: LIGHT_THEME.surfaceAlt
+                  }}>
+                    <ProductImage
+                      product={variantProduct}
+                      height="52px"
+                      enableSkuFallback
+                      fit="contain"
+                      imagePadding="4px"
+                    />
+                  </div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', fontWeight: 700, color: LIGHT_THEME.text }}>
+                    <span style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '999px',
+                      background: variant.hex,
+                      border: variant.hex === '#f8fafc' ? '1px solid #94a3b8' : '1px solid rgba(15,23,42,0.22)'
+                    }} />
+                    {variant.label}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -1209,9 +1350,9 @@ export default function PublicCustomerMenu() {
             top: isCompactLayout ? 'auto' : '88px'
           }}
         >
-          <h3 style={{ marginBottom: '8px', color: LIGHT_THEME.text }}>Tu pedido</h3>
-          <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.9rem', marginBottom: '12px' }}>
-            {cartUnits} unidad(es)
+          <h3 style={{ marginBottom: '6px', color: LIGHT_THEME.text }}>Tu pedido (POS)</h3>
+          <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.86rem', marginBottom: '10px' }}>
+            {cartUnits} unidad(es) · {ventaTypeLabel}
           </div>
           <div style={{ marginBottom: '10px' }}>
             <div style={{ marginBottom: '6px', color: LIGHT_THEME.textSoft, fontSize: '0.9rem' }}>Tipo de venta</div>
@@ -1239,55 +1380,100 @@ export default function PublicCustomerMenu() {
             </div>
           </div>
 
-          <div style={{ maxHeight: '180px', overflowY: 'auto', marginBottom: '8px', paddingRight: '4px' }}>
+          <div style={{ maxHeight: isCompactLayout ? '240px' : '300px', overflowY: 'auto', marginBottom: '8px', paddingRight: '4px' }}>
             {cartItems.length === 0 ? (
               <div style={{ color: LIGHT_THEME.textMuted }}>Aún no agregaste productos.</div>
-            ) : cartItems.map((item) => (
-              <div key={`cart-${item.sku}`} style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) auto auto',
-                alignItems: 'center',
-                gap: '8px',
-                marginBottom: '8px',
-                color: LIGHT_THEME.text,
-                borderBottom: `1px dashed ${LIGHT_THEME.border}`,
-                paddingBottom: '6px'
-              }}>
-                <div
-                  style={{
-                    minWidth: 0,
-                    fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}
-                  title={`${item.name} x${item.qty}`}
-                >
-                  {item.name} x{item.qty}
+            ) : cartItems.map((item) => {
+              const unitPrice = Number(item.qty || 0) > 0 ? Number(item.lineTotal || 0) / Number(item.qty || 1) : 0;
+              return (
+                <div key={`cart-${item.sku}`} style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(0, 1fr) auto',
+                  alignItems: 'start',
+                  gap: '10px',
+                  marginBottom: '8px',
+                  color: LIGHT_THEME.text,
+                  borderBottom: `1px dashed ${LIGHT_THEME.border}`,
+                  paddingBottom: '7px'
+                }}>
+                  <div style={{ minWidth: 0, display: 'grid', gap: '2px' }}>
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                      title={item.name}
+                    >
+                      {item.name}
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: LIGHT_THEME.textMuted }}>
+                      SKU: {String(item.sku || '').toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: LIGHT_THEME.textSoft }}>
+                      {ventaTypeLabel} · {unitPrice.toFixed(2)} Bs c/u
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
+                    <strong style={{ fontSize: '0.9rem' }}>{item.lineTotal.toFixed(2)} Bs</strong>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => decrease(item.sku)}
+                        className="btn"
+                        style={{ minHeight: '28px', minWidth: '28px', padding: 0, background: '#e2e8f0', color: '#0f172a', border: `1px solid ${LIGHT_THEME.border}` }}
+                      >
+                        -
+                      </button>
+                      <span
+                        style={{
+                          minWidth: '30px',
+                          height: '28px',
+                          borderRadius: '7px',
+                          border: `1px solid ${LIGHT_THEME.border}`,
+                          background: '#fff',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.84rem',
+                          fontWeight: 700
+                        }}
+                      >
+                        {item.qty}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => increase(item.sku)}
+                        className="btn"
+                        style={{ minHeight: '28px', minWidth: '28px', padding: 0, background: '#2563eb', color: '#fff', border: '1px solid #1d4ed8' }}
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setQty(item.sku, 0)}
+                        aria-label={`Eliminar ${item.name}`}
+                        className="btn"
+                        style={{
+                          minHeight: '28px',
+                          minWidth: '28px',
+                          padding: 0,
+                          borderRadius: '7px',
+                          border: '1px solid #fecdd3',
+                          background: '#fff1f2',
+                          color: '#e11d48',
+                          fontWeight: 800,
+                          fontSize: '0.9rem'
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <strong>{item.lineTotal.toFixed(2)} Bs</strong>
-                <button
-                  type="button"
-                  onClick={() => setQty(item.sku, 0)}
-                  aria-label={`Eliminar ${item.name}`}
-                  style={{
-                    minWidth: isCompactLayout ? '30px' : '58px',
-                    height: isCompactLayout ? '30px' : '26px',
-                    borderRadius: isCompactLayout ? '999px' : '8px',
-                    border: '1px solid #fecdd3',
-                    background: isCompactLayout ? '#fff1f2' : '#fff',
-                    color: '#e11d48',
-                    fontWeight: 700,
-                    fontSize: isCompactLayout ? '0.9rem' : '0.72rem',
-                    cursor: 'pointer',
-                    lineHeight: 1,
-                    padding: isCompactLayout ? 0 : '0 8px'
-                  }}
-                >
-                  {isCompactLayout ? '×' : 'Quitar'}
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div style={{
             marginBottom: '12px',
@@ -1301,78 +1487,98 @@ export default function PublicCustomerMenu() {
             <strong style={{ color: LIGHT_THEME.text, fontSize: '1rem' }}>{cartTotal.toFixed(2)} Bs</strong>
           </div>
 
-          <form onSubmit={submitOrder} style={{ display: 'grid', gap: '8px' }}>
-            <input
-              type="text"
-              placeholder="Nombre/Apellidos"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              required
-              style={{ minHeight: '40px', borderRadius: '8px', border: `1px solid ${LIGHT_THEME.border}`, background: LIGHT_THEME.inputBg, color: LIGHT_THEME.text, padding: '8px 10px' }}
-            />
-            <input
-              type="text"
-              placeholder="Telefono"
-              value={customerPhone}
-              onChange={(e) => setCustomerPhone(e.target.value)}
-              required
-              style={{ minHeight: '40px', borderRadius: '8px', border: `1px solid ${LIGHT_THEME.border}`, background: LIGHT_THEME.inputBg, color: LIGHT_THEME.text, padding: '8px 10px' }}
-            />
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: LIGHT_THEME.textSoft, fontSize: '0.9rem' }}>
-              <input
-                type="checkbox"
-                checked={isProvincia}
-                onChange={(e) => setIsProvincia(e.target.checked)}
-              />
-              Provincia (no departamento)
-            </label>
-            {isProvincia ? (
+          <button
+            type="button"
+            className="btn"
+            disabled={cartItems.length === 0}
+            onClick={() => setIsCheckoutExpanded((prev) => !prev)}
+            style={{
+              width: '100%',
+              minHeight: '40px',
+              marginBottom: isCheckoutExpanded ? '10px' : 0,
+              background: isCheckoutExpanded ? '#1e293b' : LIGHT_THEME.primary,
+              color: '#fff',
+              border: `1px solid ${isCheckoutExpanded ? '#334155' : LIGHT_THEME.primary}`,
+              fontWeight: 700
+            }}
+          >
+            {isCheckoutExpanded ? 'Ocultar datos del cliente' : 'Finalizar pedido · ingresar datos del cliente'}
+          </button>
+
+          {isCheckoutExpanded && (
+            <form onSubmit={submitOrder} style={{ display: 'grid', gap: '8px' }}>
               <input
                 type="text"
-                maxLength={26}
-                placeholder="Provincia"
-                value={provincia}
-                onChange={(e) => setProvincia(e.target.value)}
+                placeholder="Nombre/Apellidos"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
                 required
                 style={{ minHeight: '40px', borderRadius: '8px', border: `1px solid ${LIGHT_THEME.border}`, background: LIGHT_THEME.inputBg, color: LIGHT_THEME.text, padding: '8px 10px' }}
               />
-            ) : (
-              <select
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
+              <input
+                type="text"
+                placeholder="Telefono"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
                 required
-                style={{
-                  minHeight: '40px',
-                  borderRadius: '8px',
-                  border: `1px solid ${LIGHT_THEME.border}`,
-                  background: LIGHT_THEME.inputBg,
-                  color: LIGHT_THEME.text,
-                  padding: '8px 34px 8px 10px',
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 12px center',
-                  backgroundSize: '12px',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="" disabled>Departamento</option>
-                {DEPARTMENT_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
-            )}
-            <textarea
-              rows={3}
-              placeholder="Nota (opcional)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              style={{ borderRadius: '8px', border: `1px solid ${LIGHT_THEME.border}`, background: LIGHT_THEME.inputBg, color: LIGHT_THEME.text, padding: '8px 10px' }}
-            />
-            <button type="submit" className="btn btn-primary" disabled={saving || cartItems.length === 0}>
-              {saving ? 'Enviando...' : 'Enviar pedido'}
-            </button>
-          </form>
+                style={{ minHeight: '40px', borderRadius: '8px', border: `1px solid ${LIGHT_THEME.border}`, background: LIGHT_THEME.inputBg, color: LIGHT_THEME.text, padding: '8px 10px' }}
+              />
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: LIGHT_THEME.textSoft, fontSize: '0.9rem' }}>
+                <input
+                  type="checkbox"
+                  checked={isProvincia}
+                  onChange={(e) => setIsProvincia(e.target.checked)}
+                />
+                Provincia (no departamento)
+              </label>
+              {isProvincia ? (
+                <input
+                  type="text"
+                  maxLength={26}
+                  placeholder="Provincia"
+                  value={provincia}
+                  onChange={(e) => setProvincia(e.target.value)}
+                  required
+                  style={{ minHeight: '40px', borderRadius: '8px', border: `1px solid ${LIGHT_THEME.border}`, background: LIGHT_THEME.inputBg, color: LIGHT_THEME.text, padding: '8px 10px' }}
+                />
+              ) : (
+                <select
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value)}
+                  required
+                  style={{
+                    minHeight: '40px',
+                    borderRadius: '8px',
+                    border: `1px solid ${LIGHT_THEME.border}`,
+                    background: LIGHT_THEME.inputBg,
+                    color: LIGHT_THEME.text,
+                    padding: '8px 34px 8px 10px',
+                    appearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 12px center',
+                    backgroundSize: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="" disabled>Departamento</option>
+                  {DEPARTMENT_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              )}
+              <textarea
+                rows={3}
+                placeholder="Nota (opcional)"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                style={{ borderRadius: '8px', border: `1px solid ${LIGHT_THEME.border}`, background: LIGHT_THEME.inputBg, color: LIGHT_THEME.text, padding: '8px 10px' }}
+              />
+              <button type="submit" className="btn btn-primary" disabled={saving || cartItems.length === 0}>
+                {saving ? 'Enviando...' : 'Enviar pedido'}
+              </button>
+            </form>
+          )}
 
           {error && (
             <div style={{ marginTop: '10px', color: '#fca5a5', fontSize: '0.9rem' }}>{error}</div>
