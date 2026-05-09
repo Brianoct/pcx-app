@@ -899,7 +899,6 @@ export default function PublicCustomerMenu() {
       selectedVariant = group.variants.find((variant) => Boolean(variant.product)) || selectedVariant;
     }
     const selectedProduct = selectedVariant?.product || null;
-    const selectedQty = selectedProduct ? Number(quantities[selectedProduct.sku] || 0) : 0;
     const selectedPrice = selectedProduct
       ? (ventaType === 'cf'
         ? Number(selectedProduct.price_cf ?? selectedProduct.cf ?? selectedProduct.price ?? 0)
