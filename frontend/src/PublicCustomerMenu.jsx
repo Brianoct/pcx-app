@@ -918,10 +918,8 @@ export default function PublicCustomerMenu() {
 
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: isCompactLayout
-              ? 'repeat(auto-fit, minmax(84px, 1fr))'
-              : 'repeat(auto-fit, minmax(102px, 1fr))',
+            display: 'flex',
+            flexWrap: 'wrap',
             gap: '7px'
           }}
         >
@@ -943,6 +941,7 @@ export default function PublicCustomerMenu() {
                 }}
                 style={{
                   position: 'relative',
+                  width: isCompactLayout ? '84px' : '102px',
                   border: `1px solid ${isSelected ? '#3b82f6' : LIGHT_THEME.border}`,
                   background: isSelected ? 'rgba(59,130,246,0.08)' : '#fff',
                   borderRadius: '9px',
@@ -1011,7 +1010,7 @@ export default function PublicCustomerMenu() {
       return <div style={{ color: LIGHT_THEME.textMuted }}>{emptyMessage}</div>;
     }
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: isCompactLayout ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isCompactLayout ? '1fr' : 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
         {items.map((product) => {
           const qty = Number(quantities[product.sku] || 0);
           const displayPrice = ventaType === 'cf'
@@ -1024,7 +1023,7 @@ export default function PublicCustomerMenu() {
               borderRadius: '12px',
               overflow: 'hidden',
               display: 'grid',
-              gridTemplateRows: '156px minmax(0, 1fr)'
+              gridTemplateRows: '122px minmax(0, 1fr)'
             }}>
               <button
                 type="button"
@@ -1062,18 +1061,18 @@ export default function PublicCustomerMenu() {
                 </span>
                 <ProductImage
                   product={product}
-                  height="156px"
+                  height="122px"
                   accessorioFallback
                   fit="contain"
-                  imagePadding="10px"
+                  imagePadding="8px"
                 />
               </button>
-              <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', minHeight: '128px' }}>
+              <div style={{ padding: '9px', display: 'flex', flexDirection: 'column', minHeight: '108px' }}>
                 <div style={{
                   fontWeight: 700,
                   marginBottom: '4px',
                   color: LIGHT_THEME.text,
-                  minHeight: '54px',
+                  minHeight: '42px',
                   lineHeight: 1.2
                 }}>
                   {product.name}
