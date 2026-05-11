@@ -83,6 +83,34 @@ const LIGHT_THEME = {
   inputBg: '#ffffff',
   primary: '#e11d48'
 };
+const SEGMENT_VISUALS = {
+  [SEGMENT_TALLERES]: {
+    heroTitle: 'PCX Acero',
+    heroSubtitle: 'Shops, fabricas y garajes',
+    heroBg: 'linear-gradient(140deg, #0f172a 0%, #111827 55%, #1f2937 100%)',
+    heroPattern: 'radial-gradient(circle at 10px 10px, rgba(255,255,255,0.16) 1.4px, transparent 1.5px)',
+    heroPatternSize: '26px 26px',
+    heroText: '#e2e8f0',
+    heroSubText: '#94a3b8',
+    accent: '#ef4444',
+    panelBg: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+    sectionBg: 'linear-gradient(180deg, rgba(15,23,42,0.04), rgba(255,255,255,0.98))',
+    sectionBorder: '#cdd8e6'
+  },
+  [SEGMENT_HOGAR]: {
+    heroTitle: 'PCX Armonia',
+    heroSubtitle: 'Disenada para tu espacio',
+    heroBg: 'linear-gradient(140deg, #f3e5dd 0%, #fdf7f2 62%, #f7ede7 100%)',
+    heroPattern: 'radial-gradient(circle at 10px 10px, rgba(155,122,104,0.20) 1.2px, transparent 1.3px)',
+    heroPatternSize: '24px 24px',
+    heroText: '#8b6b5c',
+    heroSubText: '#b08b7b',
+    accent: '#c78f76',
+    panelBg: 'linear-gradient(180deg, #fffaf7 0%, #ffffff 100%)',
+    sectionBg: 'linear-gradient(180deg, rgba(227,201,186,0.24), rgba(255,255,255,0.98))',
+    sectionBorder: '#e8d5c9'
+  }
+};
 
 function normalizeText(value) {
   return String(value || '')
@@ -1177,6 +1205,7 @@ export default function PublicCustomerMenu() {
       </div>
     );
   };
+  const segmentVisual = SEGMENT_VISUALS[activeSegment] || SEGMENT_VISUALS[SEGMENT_TALLERES];
 
   const sectionRows = activeSegment === SEGMENT_HOGAR
     ? [
@@ -1200,7 +1229,7 @@ export default function PublicCustomerMenu() {
           alignItems: 'start'
         }}
       >
-        <div className="card" style={{ marginBottom: 0, background: LIGHT_THEME.surface, border: `1px solid ${LIGHT_THEME.border}`, boxShadow: '0 8px 22px rgba(15, 23, 42, 0.08)' }}>
+        <div className="card" style={{ marginBottom: 0, background: segmentVisual.panelBg, border: `1px solid ${segmentVisual.sectionBorder}`, boxShadow: '0 8px 22px rgba(15, 23, 42, 0.08)' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
             <img
               src={pdfLogo}
@@ -1210,11 +1239,6 @@ export default function PublicCustomerMenu() {
             />
             <h2 style={{ margin: 0, color: LIGHT_THEME.text, fontSize: isCompactLayout ? '1.22rem' : '1.35rem' }}>Tienda</h2>
           </div>
-          {menuData?.default_store && (
-            <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.84rem', marginBottom: '8px' }}>
-              Despacho base: {menuData.default_store}
-            </div>
-          )}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
             {SEGMENT_OPTIONS.map((segment) => (
               <button
@@ -1223,7 +1247,14 @@ export default function PublicCustomerMenu() {
                 className="btn"
                 onClick={() => setActiveSegment(segment.key)}
                 style={activeSegment === segment.key
-                  ? { background: LIGHT_THEME.primary, color: '#fff', border: `1px solid ${LIGHT_THEME.primary}`, minHeight: '30px', padding: '4px 10px', fontSize: '0.84rem' }
+                  ? {
+                    background: SEGMENT_VISUALS[segment.key]?.accent || LIGHT_THEME.primary,
+                    color: '#fff',
+                    border: `1px solid ${SEGMENT_VISUALS[segment.key]?.accent || LIGHT_THEME.primary}`,
+                    minHeight: '30px',
+                    padding: '4px 10px',
+                    fontSize: '0.84rem'
+                  }
                   : { background: '#fff', color: LIGHT_THEME.textSoft, border: `1px solid ${LIGHT_THEME.border}`, minHeight: '30px', padding: '4px 10px', fontSize: '0.84rem' }}
               >
                 {segment.title}
@@ -1231,13 +1262,47 @@ export default function PublicCustomerMenu() {
             ))}
           </div>
 
+          <div
+            style={{
+              position: 'relative',
+              overflow: 'hidden',
+              borderRadius: '12px',
+              padding: isCompactLayout ? '10px 12px' : '12px 14px',
+              marginBottom: '12px',
+              border: `1px solid ${segmentVisual.accent}66`,
+              background: segmentVisual.heroBg
+            }}
+          >
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundImage: segmentVisual.heroPattern,
+                backgroundSize: segmentVisual.heroPatternSize,
+                opacity: activeSegment === SEGMENT_TALLERES ? 0.5 : 0.35
+              }}
+            />
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+              <div>
+                <div style={{ fontSize: isCompactLayout ? '1rem' : '1.08rem', fontWeight: 800, color: segmentVisual.heroText }}>
+                  {segmentVisual.heroTitle}
+                </div>
+                <div style={{ marginTop: '2px', fontSize: '0.82rem', color: segmentVisual.heroSubText }}>
+                  {segmentVisual.heroSubtitle}
+                </div>
+              </div>
+              <div style={{ width: isCompactLayout ? '44px' : '56px', height: '4px', borderRadius: '999px', background: segmentVisual.accent }} />
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gap: '12px' }}>
             {sectionRows.map((section) => (
               <section
                 key={section.key}
                 style={{
-                  border: `1px solid ${LIGHT_THEME.border}`,
-                  background: LIGHT_THEME.surface,
+                  border: `1px solid ${segmentVisual.sectionBorder}`,
+                  background: segmentVisual.sectionBg,
                   borderRadius: '12px',
                   padding: isCompactLayout ? '10px' : '12px',
                   display: 'grid',
