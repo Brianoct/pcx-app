@@ -8,8 +8,8 @@ const CATEGORY_ACCESORIOS = 'Accesorios';
 const SEGMENT_TALLERES = 'talleres';
 const SEGMENT_HOGAR = 'hogar';
 const SEGMENT_OPTIONS = [
-  { key: SEGMENT_TALLERES, title: 'Para Talleres y Profesionales' },
-  { key: SEGMENT_HOGAR, title: 'Para el Hogar (Multifunciones)' }
+  { key: SEGMENT_TALLERES, title: 'Herramientas' },
+  { key: SEGMENT_HOGAR, title: 'Hogar' }
 ];
 const INDUSTRIAL_TABLERO_MODELS = new Set(['T10x99', 'T61x95', 'T94x95']);
 const HOGAR_TABLERO_MODELS = new Set(['T47x64']);
@@ -888,7 +888,6 @@ export default function PublicCustomerMenu() {
     );
   }
 
-  const sellerName = String(menuData?.seller?.display_name || 'Ventas PCX');
   const desktopWorkspaceMaxWidth = 1240;
   const desktopCartPanelWidth = 430;
 
@@ -941,13 +940,13 @@ export default function PublicCustomerMenu() {
                 }}
                 style={{
                   position: 'relative',
-                  width: isCompactLayout ? '84px' : '102px',
+                  width: isCompactLayout ? '112px' : '128px',
                   border: `1px solid ${isSelected ? '#3b82f6' : LIGHT_THEME.border}`,
                   background: isSelected ? 'rgba(59,130,246,0.08)' : '#fff',
                   borderRadius: '9px',
-                  padding: '6px',
+                  padding: '7px',
                   display: 'grid',
-                  gap: '4px',
+                  gap: '6px',
                   justifyItems: 'center',
                   cursor: 'pointer'
                 }}
@@ -975,20 +974,19 @@ export default function PublicCustomerMenu() {
                 </span>
                 <div
                   style={{
-                    width: isCompactLayout ? '52px' : '56px',
-                    height: isCompactLayout ? '52px' : '56px',
+                    width: isCompactLayout ? '78px' : '84px',
+                    height: isCompactLayout ? '78px' : '84px',
                     borderRadius: '8px',
                     overflow: 'hidden',
-                    border: `1px solid ${LIGHT_THEME.border}`,
                     background: LIGHT_THEME.surfaceAlt
                   }}
                 >
                   <ProductImage
                     product={variantProduct}
-                    height={isCompactLayout ? '52px' : '56px'}
+                    height={isCompactLayout ? '78px' : '84px'}
                     enableSkuFallback
                     fit="contain"
-                    imagePadding="4px"
+                    imagePadding="6px"
                   />
                 </div>
                 <div style={{ fontSize: '0.7rem', fontWeight: 700, color: LIGHT_THEME.text, lineHeight: 1.1 }}>
@@ -1110,13 +1108,13 @@ export default function PublicCustomerMenu() {
               title={product.name}
               style={{
                 position: 'relative',
-                width: isCompactLayout ? '84px' : '102px',
+                width: isCompactLayout ? '112px' : '128px',
                 border: `1px solid ${LIGHT_THEME.border}`,
                 background: '#fff',
                 borderRadius: '9px',
-                padding: '6px',
+                padding: '7px',
                 display: 'grid',
-                gap: '4px',
+                gap: '6px',
                 justifyItems: 'center',
                 cursor: 'pointer'
               }}
@@ -1144,20 +1142,19 @@ export default function PublicCustomerMenu() {
               </span>
               <div
                 style={{
-                  width: isCompactLayout ? '52px' : '56px',
-                  height: isCompactLayout ? '52px' : '56px',
+                  width: isCompactLayout ? '78px' : '84px',
+                  height: isCompactLayout ? '78px' : '84px',
                   borderRadius: '8px',
                   overflow: 'hidden',
-                  border: `1px solid ${LIGHT_THEME.border}`,
                   background: LIGHT_THEME.surfaceAlt
                 }}
               >
                 <ProductImage
                   product={product}
-                  height={isCompactLayout ? '52px' : '56px'}
+                  height={isCompactLayout ? '78px' : '84px'}
                   accessorioFallback
                   fit="contain"
-                  imagePadding="4px"
+                  imagePadding="6px"
                 />
               </div>
               <div
@@ -1183,38 +1180,18 @@ export default function PublicCustomerMenu() {
 
   const sectionRows = activeSegment === SEGMENT_HOGAR
     ? [
-      { key: 'hogar-tableros', title: 'Tableros Multifunciones', kind: 'tableros', items: tablerosHogar, empty: 'Sin tableros multifunciones disponibles.' },
+      { key: 'hogar-tableros', title: 'PCX Armonia', kind: 'tableros', items: tablerosHogar, empty: 'Sin tableros multifunciones disponibles.' },
       { key: 'hogar-accesorios', title: 'Accesorios de Plástico', kind: 'swatches', items: accesoriosHogar, empty: 'Sin accesorios de plástico disponibles.' },
       { key: 'hogar-combos', title: 'Combos', kind: 'grid', items: combosHogar, empty: 'Sin combos para hogar disponibles.' }
     ]
     : [
-      { key: 'talleres-tableros', title: 'Tableros Metálicos Industriales', kind: 'tableros', items: tablerosTalleres, empty: 'Sin tableros industriales disponibles.' },
+      { key: 'talleres-tableros', title: 'PCX Acero', kind: 'tableros', items: tablerosTalleres, empty: 'Sin tableros industriales disponibles.' },
       { key: 'talleres-accesorios', title: 'Accesorios', kind: 'swatches', items: accesoriosTalleres, empty: 'Sin accesorios disponibles.' },
       { key: 'talleres-combos', title: 'Combos', kind: 'grid', items: combosTalleres, empty: 'Sin combos disponibles.' }
     ];
 
   return (
-    <div className="container" style={{ maxWidth: `${desktopWorkspaceMaxWidth}px`, paddingTop: '28px', color: LIGHT_THEME.text, background: LIGHT_THEME.pageBg, borderRadius: '16px' }}>
-      <div className="card" style={{ marginBottom: '14px', background: LIGHT_THEME.surface, border: `1px solid ${LIGHT_THEME.border}`, boxShadow: '0 8px 22px rgba(15, 23, 42, 0.08)' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-          <img
-            src={pdfLogo}
-            alt="PCX"
-            style={{ width: '108px', height: 'auto', display: 'block', objectFit: 'contain' }}
-            loading="eager"
-          />
-          <h2 style={{ marginBottom: 0, color: LIGHT_THEME.primary }}>Catálogo PCX</h2>
-        </div>
-        <p style={{ color: LIGHT_THEME.textSoft, marginBottom: '4px' }}>
-          Hola, soy <strong>{sellerName}</strong>. Este es nuestro catálogo de productos. Selecciona los productos que deseas.
-        </p>
-        {menuData?.default_store && (
-          <p style={{ color: LIGHT_THEME.textMuted, fontSize: '0.9rem' }}>
-            Despacho base: {menuData.default_store}
-          </p>
-        )}
-      </div>
-
+    <div className="container" style={{ maxWidth: `${desktopWorkspaceMaxWidth}px`, paddingTop: '10px', color: LIGHT_THEME.text, background: LIGHT_THEME.pageBg, borderRadius: '16px' }}>
       <div
         style={{
           display: 'grid',
@@ -1224,9 +1201,20 @@ export default function PublicCustomerMenu() {
         }}
       >
         <div className="card" style={{ marginBottom: 0, background: LIGHT_THEME.surface, border: `1px solid ${LIGHT_THEME.border}`, boxShadow: '0 8px 22px rgba(15, 23, 42, 0.08)' }}>
-          <div style={{ color: LIGHT_THEME.textSoft, fontSize: '0.92rem', marginBottom: '8px', fontWeight: 700 }}>
-            Tienda PCX
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+            <img
+              src={pdfLogo}
+              alt="PCX"
+              style={{ width: isCompactLayout ? '74px' : '84px', height: 'auto', display: 'block', objectFit: 'contain' }}
+              loading="eager"
+            />
+            <h2 style={{ margin: 0, color: LIGHT_THEME.text, fontSize: isCompactLayout ? '1.22rem' : '1.35rem' }}>Tienda</h2>
           </div>
+          {menuData?.default_store && (
+            <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.84rem', marginBottom: '8px' }}>
+              Despacho base: {menuData.default_store}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
             {SEGMENT_OPTIONS.map((segment) => (
               <button
@@ -1235,8 +1223,8 @@ export default function PublicCustomerMenu() {
                 className="btn"
                 onClick={() => setActiveSegment(segment.key)}
                 style={activeSegment === segment.key
-                  ? { background: LIGHT_THEME.primary, color: '#fff', border: `1px solid ${LIGHT_THEME.primary}` }
-                  : { background: '#fff', color: LIGHT_THEME.textSoft, border: `1px solid ${LIGHT_THEME.border}` }}
+                  ? { background: LIGHT_THEME.primary, color: '#fff', border: `1px solid ${LIGHT_THEME.primary}`, minHeight: '30px', padding: '4px 10px', fontSize: '0.84rem' }
+                  : { background: '#fff', color: LIGHT_THEME.textSoft, border: `1px solid ${LIGHT_THEME.border}`, minHeight: '30px', padding: '4px 10px', fontSize: '0.84rem' }}
               >
                 {segment.title}
               </button>
@@ -1280,7 +1268,7 @@ export default function PublicCustomerMenu() {
             top: isCompactLayout ? 'auto' : '88px'
           }}
         >
-          <h3 style={{ marginBottom: '6px', color: LIGHT_THEME.text }}>Tu pedido (POS)</h3>
+          <h3 style={{ marginBottom: '6px', color: LIGHT_THEME.text }}>Tu pedido</h3>
           <div style={{ color: LIGHT_THEME.textMuted, fontSize: '0.86rem', marginBottom: '10px' }}>
             {cartUnits} unidad(es) · {ventaTypeLabel}
           </div>
@@ -1292,8 +1280,8 @@ export default function PublicCustomerMenu() {
                 className="btn"
                 onClick={() => setVentaType('sf')}
                 style={ventaType === 'sf'
-                  ? { background: LIGHT_THEME.primary, color: '#fff', border: `1px solid ${LIGHT_THEME.primary}` }
-                  : { background: '#fff', color: LIGHT_THEME.textSoft, border: `1px solid ${LIGHT_THEME.border}` }}
+                  ? { background: LIGHT_THEME.primary, color: '#fff', border: `1px solid ${LIGHT_THEME.primary}`, minHeight: '30px', padding: '4px 8px', fontSize: '0.82rem' }
+                  : { background: '#fff', color: LIGHT_THEME.textSoft, border: `1px solid ${LIGHT_THEME.border}`, minHeight: '30px', padding: '4px 8px', fontSize: '0.82rem' }}
               >
                 Sin factura
               </button>
@@ -1302,8 +1290,8 @@ export default function PublicCustomerMenu() {
                 className="btn"
                 onClick={() => setVentaType('cf')}
                 style={ventaType === 'cf'
-                  ? { background: LIGHT_THEME.primary, color: '#fff', border: `1px solid ${LIGHT_THEME.primary}` }
-                  : { background: '#fff', color: LIGHT_THEME.textSoft, border: `1px solid ${LIGHT_THEME.border}` }}
+                  ? { background: LIGHT_THEME.primary, color: '#fff', border: `1px solid ${LIGHT_THEME.primary}`, minHeight: '30px', padding: '4px 8px', fontSize: '0.82rem' }
+                  : { background: '#fff', color: LIGHT_THEME.textSoft, border: `1px solid ${LIGHT_THEME.border}`, minHeight: '30px', padding: '4px 8px', fontSize: '0.82rem' }}
               >
                 Con factura
               </button>
