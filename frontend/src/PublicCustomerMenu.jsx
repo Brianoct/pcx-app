@@ -947,7 +947,8 @@ export default function PublicCustomerMenu() {
           style={{
             display: 'flex',
             flexWrap: 'wrap',
-            gap: '7px'
+            gap: '7px',
+            justifyContent: 'center'
           }}
         >
           {availableVariants.map((variant) => {
@@ -968,7 +969,9 @@ export default function PublicCustomerMenu() {
                 }}
                 style={{
                   position: 'relative',
-                  width: isCompactLayout ? '112px' : '128px',
+                  width: isCompactLayout ? 'calc((100% - 14px) / 3)' : 'calc((100% - 28px) / 5)',
+                  maxWidth: isCompactLayout ? '160px' : '190px',
+                  boxSizing: 'border-box',
                   border: `1px solid ${isSelected ? '#3b82f6' : LIGHT_THEME.border}`,
                   background: isSelected ? 'rgba(59,130,246,0.08)' : '#fff',
                   borderRadius: '9px',
@@ -1122,7 +1125,7 @@ export default function PublicCustomerMenu() {
       return <div style={{ color: LIGHT_THEME.textMuted }}>{emptyMessage}</div>;
     }
     return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px', justifyContent: 'center' }}>
         {items.map((product) => {
           const qty = Number(quantities[product.sku] || 0);
           const displayPrice = ventaType === 'cf'
@@ -1136,7 +1139,9 @@ export default function PublicCustomerMenu() {
               title={product.name}
               style={{
                 position: 'relative',
-                width: isCompactLayout ? '112px' : '128px',
+                width: isCompactLayout ? 'calc((100% - 14px) / 3)' : 'calc((100% - 28px) / 5)',
+                maxWidth: isCompactLayout ? '160px' : '190px',
+                boxSizing: 'border-box',
                 border: `1px solid ${LIGHT_THEME.border}`,
                 background: '#fff',
                 borderRadius: '9px',
