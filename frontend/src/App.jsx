@@ -13,6 +13,7 @@ import Cupones from './Cupones';
 import TimeOffCalendar from './TimeOffCalendar';
 import QualityControlPanel from './QualityControlPanel';
 import MicrofabricaPanel from './MicrofabricaPanel';
+import ProductionKanban from './ProductionKanban';
 import ExpensesPanel from './ExpensesPanel';
 import CustomerMenuTool from './CustomerMenuTool';
 import PublicCustomerMenu from './PublicCustomerMenu';
@@ -109,6 +110,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
   const canSeeExpenses = canAccessPanel(access, 'gastos_panel');
   const canSeeQualityControl = canAccessPanel(access, 'control_calidad');
   const canSeeMicrofabricaPanel = canAccessPanel(access, 'microfabrica_panel');
+  const canSeeProductionKanban = canAccessPanel(access, 'produccion_kanban');
   const canSeeAdmin = canAccessPanel(access, 'admin');
   const canSeeProjects = canAccessPanel(access, 'proyectos_panel');
   const canSeeCalendar = canAccessPanel(access, 'calendario') || canSeeAdmin;
@@ -157,6 +159,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     canSeeExpenses ? { to: '/gastos', label: 'Gastos' } : null,
     canSeeQualityControl ? { to: '/control-calidad', label: 'Control Calidad' } : null,
     canSeeMicrofabricaPanel ? { to: '/microfabrica', label: 'Microfábrica' } : null,
+    canSeeProductionKanban ? { to: '/produccion-kanban', label: 'Producción Kanban' } : null,
     canSeeProjects ? { to: '/proyectos', label: 'Proyectos' } : null,
     canManageCombos ? { to: '/combos', label: 'Combos' } : null,
     canManageCoupons ? { to: '/cupones', label: 'Cupones' } : null,
@@ -164,7 +167,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
     { to: '/perfil', label: 'Perfil' }
   ].filter(Boolean);
 
-  const rolePreferredOrder = ['cotizar', 'catalogo-clientes', 'history', 'pedidos', 'inventory', 'performance', 'gastos', 'microfabrica', 'proyectos', 'combos', 'cupones', 'calendario', 'perfil'];
+  const rolePreferredOrder = ['cotizar', 'catalogo-clientes', 'history', 'pedidos', 'inventory', 'performance', 'gastos', 'microfabrica', 'produccion-kanban', 'proyectos', 'combos', 'cupones', 'calendario', 'perfil'];
   const roleOrderedSharedNavItems = !isAdminUser
     ? [...sharedNavItems].sort((a, b) => {
         const keyOf = (item) => {
@@ -176,6 +179,7 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
           if (item.to === '/performance') return 'performance';
           if (item.to === '/gastos') return 'gastos';
           if (item.to === '/microfabrica') return 'microfabrica';
+          if (item.to === '/produccion-kanban') return 'produccion-kanban';
           if (item.to === '/proyectos') return 'proyectos';
           if (item.to === '/combos') return 'combos';
           if (item.to === '/cupones') return 'cupones';
@@ -232,7 +236,8 @@ function NavMenu({ displayName, handleLogout, currentCommission, isTopSeller, ac
           label: 'Almacen',
           items: [
             canSeePedidos ? { to: '/pedidos', label: 'Pedidos' } : null,
-            canSeeInventory ? { to: '/inventory', label: 'Inventario' } : null
+            canSeeInventory ? { to: '/inventory', label: 'Inventario' } : null,
+            canSeeProductionKanban ? { to: '/produccion-kanban', label: 'Producción Kanban' } : null
           ].filter(Boolean)
         },
         {
@@ -708,6 +713,8 @@ function App() {
       ? '/pedidos'
       : canAccessPanel(effectiveAccess, 'microfabrica_panel')
         ? '/microfabrica'
+      : canAccessPanel(effectiveAccess, 'produccion_kanban')
+        ? '/produccion-kanban'
       : canAccessPanel(effectiveAccess, 'gastos_panel')
         ? '/gastos'
       : canAccessPanel(effectiveAccess, 'marketing_combos')
@@ -751,6 +758,10 @@ function App() {
     }
     if (String(item?.request?.path || '').includes('/api/projects')) {
       window.location.hash = '#/proyectos';
+      return;
+    }
+    if (String(item?.request?.path || '').includes('/api/production/kanban')) {
+      window.location.hash = '#/produccion-kanban';
       return;
     }
     window.location.hash = '#/history';
@@ -894,6 +905,12 @@ function App() {
           path="/microfabrica"
           element={canAccessPanel(effectiveAccess, 'microfabrica_panel') || canAccessPanel(effectiveAccess, 'admin')
             ? <MicrofabricaPanel token={token} />
+            : <Navigate to={defaultPath} replace />}
+        />
+        <Route
+          path="/produccion-kanban"
+          element={canAccessPanel(effectiveAccess, 'produccion_kanban') || canAccessPanel(effectiveAccess, 'admin')
+            ? <ProductionKanban token={token} />
             : <Navigate to={defaultPath} replace />}
         />
         <Route

@@ -16,6 +16,7 @@ const ACCESS_TEMPLATE = {
   inventario_global: false,
   control_calidad: false,
   microfabrica_panel: false,
+  produccion_kanban: false,
   gastos_panel: false,
   marketing_combos: false,
   marketing_cupones: false,
@@ -54,14 +55,16 @@ const ROLE_DEFAULTS = {
     cotizar: true,
     calendario: true,
     pedidos_individual: true,
-    inventario_individual: true
+    inventario_individual: true,
+    produccion_kanban: true
   },
   'almacen lider': {
     cotizar: true,
     calendario: true,
     pedidos_global: true,
     inventario_global: true,
-    control_calidad: true
+    control_calidad: true,
+    produccion_kanban: true
   },
   marketing: {
     calendario: true,
@@ -75,11 +78,13 @@ const ROLE_DEFAULTS = {
   },
   microfabrica: {
     calendario: true,
-    microfabrica_panel: true
+    microfabrica_panel: true,
+    produccion_kanban: true
   },
   'microfabrica lider': {
     calendario: true,
-    microfabrica_panel: true
+    microfabrica_panel: true,
+    produccion_kanban: true
   }
 };
 
@@ -174,6 +179,15 @@ const PANEL_KEY_ALIASES = {
   microfactory: 'microfabrica_panel',
   microfactory_panel: 'microfabrica_panel',
   microfactorypanel: 'microfabrica_panel',
+  produccion_kanban: 'produccion_kanban',
+  produccionkanban: 'produccion_kanban',
+  produccion: 'produccion_kanban',
+  production_kanban: 'produccion_kanban',
+  productionkanban: 'produccion_kanban',
+  production: 'produccion_kanban',
+  kanban_produccion: 'produccion_kanban',
+  kanbanproduccion: 'produccion_kanban',
+  productionKanban: 'produccion_kanban',
   gastos_panel: 'gastos_panel',
   gastospanel: 'gastos_panel',
   gastos: 'gastos_panel',
@@ -259,6 +273,7 @@ export const ACCESS_LABELS = [
   { key: 'inventario_global', label: 'Inventario global' },
   { key: 'control_calidad', label: 'Control de calidad' },
   { key: 'microfabrica_panel', label: 'Panel Microfábrica' },
+  { key: 'produccion_kanban', label: 'Kanban Producción' },
   { key: 'gastos_panel', label: 'Panel Gastos' },
   { key: 'marketing_combos', label: 'Combos (Marketing)' },
   { key: 'marketing_cupones', label: 'Cupones (Marketing)' },

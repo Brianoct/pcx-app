@@ -106,6 +106,7 @@ const PANEL_KEYS = [
   'inventario_global',
   'control_calidad',
   'microfabrica_panel',
+  'produccion_kanban',
   'gastos_panel',
   'marketing_combos',
   'marketing_cupones',
@@ -129,6 +130,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     inventario_global: false,
     control_calidad: false,
     microfabrica_panel: false,
+    produccion_kanban: false,
     gastos_panel: false,
     marketing_combos: false,
     marketing_cupones: false,
@@ -167,7 +169,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       cotizar: true,
       calendario: true,
       pedidos_individual: true,
-      inventario_individual: true
+      inventario_individual: true,
+      produccion_kanban: true
     };
   }
 
@@ -178,7 +181,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       calendario: true,
       pedidos_global: true,
       inventario_global: true,
-      control_calidad: true
+      control_calidad: true,
+      produccion_kanban: true
     };
   }
 
@@ -204,7 +208,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     return {
       ...base,
       calendario: true,
-      microfabrica_panel: true
+      microfabrica_panel: true,
+      produccion_kanban: true
     };
   }
 
@@ -1603,6 +1608,215 @@ const INVENTORY_CITY_SCOPE = {
   }
 };
 
+const PRODUCTION_KANBAN_STAGES = [
+  'corte_laser',
+  'punzonado',
+  'plegado',
+  'lavado',
+  'pintado',
+  'embalado'
+];
+const PRODUCTION_KANBAN_START_STAGES = new Set(['corte_laser', 'punzonado']);
+const PRODUCTION_KANBAN_ROUTE_BY_START = {
+  corte_laser: ['corte_laser', 'plegado', 'lavado', 'pintado', 'embalado'],
+  punzonado: ['punzonado', 'plegado', 'lavado', 'pintado', 'embalado']
+};
+const PRODUCTION_KANBAN_LOCATION_FIELDS = Object.values(INVENTORY_CITY_SCOPE).map((scope) => ({
+  label: scope.canonical,
+  stockField: scope.stockField,
+  minField: scope.minField
+}));
+
+const normalizeProductionKanbanStage = (value = '', { allowNull = false } = {}) => {
+  if ((value === null || value === undefined || value === '') && allowNull) return null;
+  const normalized = normalizeText(value).replace(/\s+/g, '_');
+  if (normalized === 'corte_laser' || normalized === 'laser' || normalized === 'corte') return 'corte_laser';
+  if (normalized === 'punzonado' || normalized === 'punzonadora' || normalized === 'punch') return 'punzonado';
+  if (normalized === 'plegado' || normalized === 'doblado' || normalized === 'folding') return 'plegado';
+  if (normalized === 'lavado' || normalized === 'wash') return 'lavado';
+  if (normalized === 'pintado' || normalized === 'pintura' || normalized === 'paint') return 'pintado';
+  if (normalized === 'embalado' || normalized === 'empaque' || normalized === 'pack') return 'embalado';
+  return null;
+};
+
+const normalizeProductionStartProcess = (value = '') => {
+  const stage = normalizeProductionKanbanStage(value, { allowNull: true });
+  if (stage === null) return null;
+  return PRODUCTION_KANBAN_START_STAGES.has(stage) ? stage : null;
+};
+
+const getProductionRouteStages = (startProcess = 'corte_laser') => {
+  const normalizedStart = normalizeProductionStartProcess(startProcess) || 'corte_laser';
+  return PRODUCTION_KANBAN_ROUTE_BY_START[normalizedStart] || PRODUCTION_KANBAN_ROUTE_BY_START.corte_laser;
+};
+
+const inferDefaultProductionStartProcess = (product = {}) => {
+  const menuCategory = normalizeText(product.menu_category || '');
+  const sku = String(product.sku || '').trim().toUpperCase();
+  if (menuCategory.includes('tablero') || sku.startsWith('T')) return 'punzonado';
+  return 'corte_laser';
+};
+
+const mapProductionKanbanCardRow = (row = {}) => ({
+  id: Number(row.id),
+  sku: String(row.sku || '').toUpperCase(),
+  product_name: String(row.product_name || row.name || '').trim(),
+  store_location: String(row.store_location || '').trim(),
+  current_stock: Number(row.current_stock || 0),
+  min_stock: Number(row.min_stock || 0),
+  required_qty: Number(row.required_qty || 0),
+  start_process: normalizeProductionStartProcess(row.start_process || 'corte_laser') || 'corte_laser',
+  stage: normalizeProductionKanbanStage(row.stage || '', { allowNull: true }) || 'corte_laser',
+  source: String(row.source || 'min_stock').trim() || 'min_stock',
+  last_moved_at: row.last_moved_at || null,
+  created_at: row.created_at || null,
+  updated_at: row.updated_at || null
+});
+
+let productionKanbanInitPromise = null;
+
+const ensureProductionKanbanTables = async () => {
+  if (!productionKanbanInitPromise) {
+    productionKanbanInitPromise = (async () => {
+      await ensureProductCatalogReady();
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS production_process_routes (
+          sku TEXT PRIMARY KEY REFERENCES products(sku) ON DELETE CASCADE,
+          start_process TEXT NOT NULL CHECK (start_process IN ('corte_laser', 'punzonado')),
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS production_kanban_cards (
+          id SERIAL PRIMARY KEY,
+          sku TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
+          product_name TEXT NOT NULL,
+          store_location TEXT NOT NULL,
+          current_stock INTEGER NOT NULL DEFAULT 0,
+          min_stock INTEGER NOT NULL DEFAULT 0,
+          required_qty INTEGER NOT NULL DEFAULT 0,
+          start_process TEXT NOT NULL CHECK (start_process IN ('corte_laser', 'punzonado')),
+          stage TEXT NOT NULL CHECK (stage IN ('corte_laser', 'punzonado', 'plegado', 'lavado', 'pintado', 'embalado')),
+          source TEXT NOT NULL DEFAULT 'min_stock',
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          last_moved_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (sku, store_location, source)
+        )`
+      );
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_production_kanban_cards_active_stage
+         ON production_kanban_cards (is_active, stage, updated_at DESC)`
+      );
+    })();
+  }
+  await productionKanbanInitPromise;
+};
+
+const syncProductionKanbanFromInventory = async () => {
+  await ensureProductionKanbanTables();
+  const productsRes = await pool.query(
+    `SELECT sku, name, menu_category,
+            stock_cochabamba, stock_santacruz, stock_lima,
+            min_stock_cochabamba, min_stock_santacruz, min_stock_lima
+     FROM products
+     WHERE is_active = TRUE
+     ORDER BY sku`
+  );
+  const routesRes = await pool.query(
+    `SELECT sku, start_process
+     FROM production_process_routes`
+  );
+  const routeBySku = new Map(
+    (routesRes.rows || []).map((row) => [String(row.sku || '').toUpperCase(), normalizeProductionStartProcess(row.start_process || '') || 'corte_laser'])
+  );
+
+  const activeKeys = [];
+  for (const product of productsRes.rows || []) {
+    const sku = String(product.sku || '').toUpperCase();
+    const productName = String(product.name || sku).trim() || sku;
+    const configuredStart = routeBySku.get(sku);
+    const startProcess = configuredStart || inferDefaultProductionStartProcess(product);
+    const validRouteStages = getProductionRouteStages(startProcess);
+    for (const location of PRODUCTION_KANBAN_LOCATION_FIELDS) {
+      const stock = Math.max(0, Number.parseInt(product[location.stockField], 10) || 0);
+      const minStock = Math.max(0, Number.parseInt(product[location.minField], 10) || 0);
+      const requiredQty = Math.max(0, minStock - stock);
+      if (requiredQty <= 0) continue;
+      const locationLabel = location.label;
+      activeKeys.push(`${sku}::${locationLabel}`);
+      await pool.query(
+        `INSERT INTO production_kanban_cards (
+           sku, product_name, store_location, current_stock, min_stock, required_qty, start_process, stage, source, is_active, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 'min_stock', TRUE, NOW())
+         ON CONFLICT (sku, store_location, source) DO UPDATE
+         SET product_name = EXCLUDED.product_name,
+             current_stock = EXCLUDED.current_stock,
+             min_stock = EXCLUDED.min_stock,
+             required_qty = EXCLUDED.required_qty,
+             start_process = EXCLUDED.start_process,
+             is_active = TRUE,
+             stage = CASE
+               WHEN production_kanban_cards.stage IS NULL THEN EXCLUDED.stage
+               WHEN production_kanban_cards.stage IN ('corte_laser', 'punzonado')
+                 AND production_kanban_cards.stage <> EXCLUDED.start_process
+                 THEN EXCLUDED.stage
+               WHEN NOT (production_kanban_cards.stage = ANY($8::text[]))
+                 THEN EXCLUDED.stage
+               ELSE production_kanban_cards.stage
+             END,
+             updated_at = NOW()`,
+        [sku, productName, locationLabel, stock, minStock, requiredQty, startProcess, validRouteStages]
+      );
+    }
+  }
+
+  if (activeKeys.length === 0) {
+    await pool.query(
+      `UPDATE production_kanban_cards
+       SET is_active = FALSE,
+           updated_at = NOW()
+       WHERE source = 'min_stock'
+         AND is_active = TRUE`
+    );
+  } else {
+    await pool.query(
+      `UPDATE production_kanban_cards
+       SET is_active = FALSE,
+           updated_at = NOW()
+       WHERE source = 'min_stock'
+         AND is_active = TRUE
+         AND NOT ((sku || '::' || store_location) = ANY($1::text[]))`,
+      [activeKeys]
+    );
+  }
+
+  const cardsRes = await pool.query(
+    `SELECT id, sku, product_name, store_location, current_stock, min_stock, required_qty,
+            start_process, stage, source, last_moved_at, created_at, updated_at
+     FROM production_kanban_cards
+     WHERE is_active = TRUE
+       AND source = 'min_stock'
+     ORDER BY CASE stage
+         WHEN 'corte_laser' THEN 1
+         WHEN 'punzonado' THEN 2
+         WHEN 'plegado' THEN 3
+         WHEN 'lavado' THEN 4
+         WHEN 'pintado' THEN 5
+         WHEN 'embalado' THEN 6
+         ELSE 99
+       END,
+       required_qty DESC,
+       UPPER(product_name) ASC,
+       UPPER(sku) ASC`
+  );
+  return (cardsRes.rows || []).map(mapProductionKanbanCardRow);
+};
+
 const resolveInventoryScopeByCity = (cityValue = '') => {
   const normalized = normalizeText(cityValue);
   if (!normalized) return null;
@@ -1623,6 +1837,15 @@ const getInventoryAccessScope = (userContext, access) => {
     return { error: 'Tu usuario no tiene ciudad válida configurada para inventario individual' };
   }
   return { isGlobal: false, scope };
+};
+
+const getProductionKanbanAccessScope = (userContext, access) => {
+  const isAdmin = normalizeRole(userContext?.role || '') === ROLE_KEYS.admin;
+  const hasKanbanAccess = Boolean(access?.produccion_kanban) || isAdmin;
+  if (!hasKanbanAccess) {
+    return { error: 'No tienes permiso para Kanban de producción' };
+  }
+  return { allowed: true };
 };
 
 const getPedidosAccessScope = (userContext, access) => {
@@ -7314,6 +7537,150 @@ app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almac
   }
 });
 
+app.get('/api/production/kanban', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+  try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const kanbanScope = getProductionKanbanAccessScope(userContext, access);
+    if (kanbanScope.error) return res.status(403).json({ error: kanbanScope.error });
+
+    const cards = await syncProductionKanbanFromInventory();
+    const totalRequired = cards.reduce((sum, card) => sum + Number(card.required_qty || 0), 0);
+    const byStage = Object.fromEntries(PRODUCTION_KANBAN_STAGES.map((stage) => [stage, 0]));
+    for (const card of cards) {
+      byStage[card.stage] = (byStage[card.stage] || 0) + 1;
+    }
+
+    res.json({
+      stages: PRODUCTION_KANBAN_STAGES,
+      cards,
+      summary: {
+        cards_count: cards.length,
+        total_required_qty: totalRequired,
+        by_stage: byStage
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar kanban de producción' });
+  }
+});
+
+app.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+  try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const kanbanScope = getProductionKanbanAccessScope(userContext, access);
+    if (kanbanScope.error) return res.status(403).json({ error: kanbanScope.error });
+
+    await ensureProductionKanbanTables();
+    const cardId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(cardId) || cardId <= 0) {
+      return res.status(400).json({ error: 'ID de tarjeta inválido' });
+    }
+    const nextStage = normalizeProductionKanbanStage(req.body?.stage || '');
+    if (!nextStage) {
+      return res.status(400).json({ error: 'Etapa inválida' });
+    }
+    const currentRes = await pool.query(
+      `SELECT id, start_process
+       FROM production_kanban_cards
+       WHERE id = $1
+         AND is_active = TRUE
+         AND source = 'min_stock'`,
+      [cardId]
+    );
+    if (currentRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Tarjeta no encontrada o inactiva' });
+    }
+    const card = currentRes.rows[0];
+    const allowedStages = getProductionRouteStages(card.start_process || 'corte_laser');
+    if (!allowedStages.includes(nextStage)) {
+      return res.status(400).json({
+        error: `La etapa ${nextStage} no aplica para esta tarjeta (${card.start_process || 'corte_laser'})`
+      });
+    }
+    const updatedRes = await pool.query(
+      `UPDATE production_kanban_cards
+       SET stage = $2,
+           last_moved_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, sku, product_name, store_location, current_stock, min_stock, required_qty,
+                 start_process, stage, source, last_moved_at, created_at, updated_at`,
+      [cardId, nextStage]
+    );
+    res.json({
+      message: 'Etapa actualizada',
+      card: mapProductionKanbanCardRow(updatedRes.rows[0])
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo actualizar etapa de la tarjeta' });
+  }
+});
+
+app.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+  try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const kanbanScope = getProductionKanbanAccessScope(userContext, access);
+    if (kanbanScope.error) return res.status(403).json({ error: kanbanScope.error });
+
+    await ensureProductionKanbanTables();
+    const sku = validateProductSku(req.params.sku);
+    const startProcess = normalizeProductionStartProcess(req.body?.start_process || '');
+    if (!startProcess) {
+      return res.status(400).json({ error: 'Proceso inicial inválido. Usa corte_laser o punzonado' });
+    }
+    const existsRes = await pool.query(
+      `SELECT sku
+       FROM products
+       WHERE UPPER(sku) = $1
+         AND is_active = TRUE`,
+      [sku]
+    );
+    if (existsRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Producto no encontrado o inactivo' });
+    }
+    await pool.query(
+      `INSERT INTO production_process_routes (sku, start_process, updated_by, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (sku) DO UPDATE
+       SET start_process = EXCLUDED.start_process,
+           updated_by = EXCLUDED.updated_by,
+           updated_at = NOW()`,
+      [sku, startProcess, req.user.id]
+    );
+    await pool.query(
+      `UPDATE production_kanban_cards
+       SET start_process = $2,
+           stage = CASE
+             WHEN stage IN ('corte_laser', 'punzonado') THEN $2
+             ELSE stage
+           END,
+           updated_at = NOW()
+       WHERE UPPER(sku) = $1
+         AND source = 'min_stock'`,
+      [sku, startProcess]
+    );
+    const cards = await syncProductionKanbanFromInventory();
+    const affectedCards = cards.filter((card) => card.sku === sku);
+    res.json({
+      message: 'Proceso inicial actualizado',
+      route: { sku, start_process: startProcess },
+      cards: affectedCards
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    res.status(500).json({ error: 'No se pudo actualizar proceso inicial' });
+  }
+});
+
 // ─── ADMIN DASHBOARD STATISTICS ─────────────────────────────────────────────
 app.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (req, res) => {
   const { month, year } = req.query;
@@ -8197,6 +8564,7 @@ const PORT = process.env.PORT || 4000;
 const startServer = async () => {
   await ensureUsersSchema();
   await ensureQuotesMarketingSchema();
+  await ensureProductionKanbanTables();
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
