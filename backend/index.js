@@ -1609,6 +1609,7 @@ const INVENTORY_CITY_SCOPE = {
 };
 
 const PRODUCTION_KANBAN_STAGES = [
+  'comprar',
   'corte_laser',
   'punzonado',
   'plegado',
@@ -1616,8 +1617,9 @@ const PRODUCTION_KANBAN_STAGES = [
   'pintado',
   'embalado'
 ];
-const PRODUCTION_KANBAN_START_STAGES = new Set(['corte_laser', 'punzonado']);
+const PRODUCTION_KANBAN_START_STAGES = new Set(['comprar', 'corte_laser', 'punzonado']);
 const PRODUCTION_KANBAN_ROUTE_BY_START = {
+  comprar: ['comprar'],
   corte_laser: ['corte_laser', 'plegado', 'lavado', 'pintado', 'embalado'],
   punzonado: ['punzonado', 'plegado', 'lavado', 'pintado', 'embalado']
 };
@@ -1630,6 +1632,7 @@ const PRODUCTION_KANBAN_LOCATION_FIELDS = Object.values(INVENTORY_CITY_SCOPE).ma
 const normalizeProductionKanbanStage = (value = '', { allowNull = false } = {}) => {
   if ((value === null || value === undefined || value === '') && allowNull) return null;
   const normalized = normalizeText(value).replace(/\s+/g, '_');
+  if (normalized === 'comprar' || normalized === 'compra' || normalized === 'buy' || normalized === 'resell') return 'comprar';
   if (normalized === 'corte_laser' || normalized === 'laser' || normalized === 'corte') return 'corte_laser';
   if (normalized === 'punzonado' || normalized === 'punzonadora' || normalized === 'punch') return 'punzonado';
   if (normalized === 'plegado' || normalized === 'doblado' || normalized === 'folding') return 'plegado';
@@ -1657,21 +1660,27 @@ const inferDefaultProductionStartProcess = (product = {}) => {
   return 'corte_laser';
 };
 
-const mapProductionKanbanCardRow = (row = {}) => ({
-  id: Number(row.id),
-  sku: String(row.sku || '').toUpperCase(),
-  product_name: String(row.product_name || row.name || '').trim(),
-  store_location: String(row.store_location || '').trim(),
-  current_stock: Number(row.current_stock || 0),
-  min_stock: Number(row.min_stock || 0),
-  required_qty: Number(row.required_qty || 0),
-  start_process: normalizeProductionStartProcess(row.start_process || 'corte_laser') || 'corte_laser',
-  stage: normalizeProductionKanbanStage(row.stage || '', { allowNull: true }) || 'corte_laser',
-  source: String(row.source || 'min_stock').trim() || 'min_stock',
-  last_moved_at: row.last_moved_at || null,
-  created_at: row.created_at || null,
-  updated_at: row.updated_at || null
-});
+const mapProductionKanbanCardRow = (row = {}) => {
+  const startProcess = normalizeProductionStartProcess(row.start_process || 'corte_laser') || 'corte_laser';
+  const stageCandidate = normalizeProductionKanbanStage(row.stage || '', { allowNull: true }) || startProcess;
+  const validRoute = getProductionRouteStages(startProcess);
+  const safeStage = validRoute.includes(stageCandidate) ? stageCandidate : startProcess;
+  return {
+    id: Number(row.id),
+    sku: String(row.sku || '').toUpperCase(),
+    product_name: String(row.product_name || row.name || '').trim(),
+    store_location: String(row.store_location || '').trim(),
+    current_stock: Number(row.current_stock || 0),
+    min_stock: Number(row.min_stock || 0),
+    required_qty: Number(row.required_qty || 0),
+    start_process: startProcess,
+    stage: safeStage,
+    source: String(row.source || 'min_stock').trim() || 'min_stock',
+    last_moved_at: row.last_moved_at || null,
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null
+  };
+};
 
 let productionKanbanInitPromise = null;
 
@@ -1682,7 +1691,7 @@ const ensureProductionKanbanTables = async () => {
       await pool.query(
         `CREATE TABLE IF NOT EXISTS production_process_routes (
           sku TEXT PRIMARY KEY REFERENCES products(sku) ON DELETE CASCADE,
-          start_process TEXT NOT NULL CHECK (start_process IN ('corte_laser', 'punzonado')),
+          start_process TEXT NOT NULL CHECK (start_process IN ('comprar', 'corte_laser', 'punzonado')),
           updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -1697,8 +1706,8 @@ const ensureProductionKanbanTables = async () => {
           current_stock INTEGER NOT NULL DEFAULT 0,
           min_stock INTEGER NOT NULL DEFAULT 0,
           required_qty INTEGER NOT NULL DEFAULT 0,
-          start_process TEXT NOT NULL CHECK (start_process IN ('corte_laser', 'punzonado')),
-          stage TEXT NOT NULL CHECK (stage IN ('corte_laser', 'punzonado', 'plegado', 'lavado', 'pintado', 'embalado')),
+          start_process TEXT NOT NULL CHECK (start_process IN ('comprar', 'corte_laser', 'punzonado')),
+          stage TEXT NOT NULL CHECK (stage IN ('comprar', 'corte_laser', 'punzonado', 'plegado', 'lavado', 'pintado', 'embalado')),
           source TEXT NOT NULL DEFAULT 'min_stock',
           is_active BOOLEAN NOT NULL DEFAULT TRUE,
           last_moved_at TIMESTAMPTZ,
@@ -1710,6 +1719,45 @@ const ensureProductionKanbanTables = async () => {
       await pool.query(
         `CREATE INDEX IF NOT EXISTS idx_production_kanban_cards_active_stage
          ON production_kanban_cards (is_active, stage, updated_at DESC)`
+      );
+      await pool.query(
+        `ALTER TABLE production_process_routes
+         DROP CONSTRAINT IF EXISTS production_process_routes_start_process_check`
+      );
+      await pool.query(
+        `ALTER TABLE production_process_routes
+         DROP CONSTRAINT IF EXISTS production_process_routes_start_process_allowed`
+      );
+      await pool.query(
+        `ALTER TABLE production_process_routes
+         ADD CONSTRAINT production_process_routes_start_process_allowed
+         CHECK (start_process IN ('comprar', 'corte_laser', 'punzonado'))`
+      );
+      await pool.query(
+        `ALTER TABLE production_kanban_cards
+         DROP CONSTRAINT IF EXISTS production_kanban_cards_start_process_check`
+      );
+      await pool.query(
+        `ALTER TABLE production_kanban_cards
+         DROP CONSTRAINT IF EXISTS production_kanban_cards_start_process_allowed`
+      );
+      await pool.query(
+        `ALTER TABLE production_kanban_cards
+         ADD CONSTRAINT production_kanban_cards_start_process_allowed
+         CHECK (start_process IN ('comprar', 'corte_laser', 'punzonado'))`
+      );
+      await pool.query(
+        `ALTER TABLE production_kanban_cards
+         DROP CONSTRAINT IF EXISTS production_kanban_cards_stage_check`
+      );
+      await pool.query(
+        `ALTER TABLE production_kanban_cards
+         DROP CONSTRAINT IF EXISTS production_kanban_cards_stage_allowed`
+      );
+      await pool.query(
+        `ALTER TABLE production_kanban_cards
+         ADD CONSTRAINT production_kanban_cards_stage_allowed
+         CHECK (stage IN ('comprar', 'corte_laser', 'punzonado', 'plegado', 'lavado', 'pintado', 'embalado'))`
       );
     })();
   }
@@ -1762,7 +1810,7 @@ const syncProductionKanbanFromInventory = async () => {
              is_active = TRUE,
              stage = CASE
                WHEN production_kanban_cards.stage IS NULL THEN EXCLUDED.stage
-               WHEN production_kanban_cards.stage IN ('corte_laser', 'punzonado')
+              WHEN production_kanban_cards.stage IN ('comprar', 'corte_laser', 'punzonado')
                  AND production_kanban_cards.stage <> EXCLUDED.start_process
                  THEN EXCLUDED.stage
                WHEN NOT (production_kanban_cards.stage = ANY($8::text[]))
@@ -1802,12 +1850,13 @@ const syncProductionKanbanFromInventory = async () => {
      WHERE is_active = TRUE
        AND source = 'min_stock'
      ORDER BY CASE stage
-         WHEN 'corte_laser' THEN 1
-         WHEN 'punzonado' THEN 2
-         WHEN 'plegado' THEN 3
-         WHEN 'lavado' THEN 4
-         WHEN 'pintado' THEN 5
-         WHEN 'embalado' THEN 6
+        WHEN 'comprar' THEN 1
+        WHEN 'corte_laser' THEN 2
+        WHEN 'punzonado' THEN 3
+        WHEN 'plegado' THEN 4
+        WHEN 'lavado' THEN 5
+        WHEN 'pintado' THEN 6
+        WHEN 'embalado' THEN 7
          ELSE 99
        END,
        required_qty DESC,
@@ -7634,7 +7683,7 @@ app.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRole([
     const sku = validateProductSku(req.params.sku);
     const startProcess = normalizeProductionStartProcess(req.body?.start_process || '');
     if (!startProcess) {
-      return res.status(400).json({ error: 'Proceso inicial inválido. Usa corte_laser o punzonado' });
+      return res.status(400).json({ error: 'Proceso inicial inválido. Usa comprar, corte_laser o punzonado' });
     }
     const existsRes = await pool.query(
       `SELECT sku
@@ -7659,7 +7708,7 @@ app.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRole([
       `UPDATE production_kanban_cards
        SET start_process = $2,
            stage = CASE
-             WHEN stage IN ('corte_laser', 'punzonado') THEN $2
+             WHEN stage IN ('comprar', 'corte_laser', 'punzonado') THEN $2
              ELSE stage
            END,
            updated_at = NOW()

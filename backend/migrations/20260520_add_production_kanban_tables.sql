@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS production_process_routes (
   sku TEXT PRIMARY KEY REFERENCES products(sku) ON DELETE CASCADE,
-  start_process TEXT NOT NULL CHECK (start_process IN ('corte_laser', 'punzonado')),
+  start_process TEXT NOT NULL CHECK (start_process IN ('comprar', 'corte_laser', 'punzonado')),
   updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS production_kanban_cards (
   current_stock INTEGER NOT NULL DEFAULT 0,
   min_stock INTEGER NOT NULL DEFAULT 0,
   required_qty INTEGER NOT NULL DEFAULT 0,
-  start_process TEXT NOT NULL CHECK (start_process IN ('corte_laser', 'punzonado')),
-  stage TEXT NOT NULL CHECK (stage IN ('corte_laser', 'punzonado', 'plegado', 'lavado', 'pintado', 'embalado')),
+  start_process TEXT NOT NULL CHECK (start_process IN ('comprar', 'corte_laser', 'punzonado')),
+  stage TEXT NOT NULL CHECK (stage IN ('comprar', 'corte_laser', 'punzonado', 'plegado', 'lavado', 'pintado', 'embalado')),
   source TEXT NOT NULL DEFAULT 'min_stock',
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   last_moved_at TIMESTAMPTZ,
