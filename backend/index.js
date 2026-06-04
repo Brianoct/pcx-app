@@ -1210,6 +1210,139 @@ const loadQcSettingsMap = async () => {
   return map;
 };
 
+const PRODUCT_COST_COMPONENT_KEYS = [
+  'acero_carbono_09mm',
+  'pintura_electrostatica',
+  'laser_punzonado',
+  'equipo_plegado',
+  'equipos_pintura',
+  'equipos_soldadura',
+  'equipos_corte',
+  'carton_corrugado',
+  'cinta_embalaje',
+  'utilidad'
+];
+
+const parseNonNegativeAmount = (value, label) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw createHttpError(400, `${label} debe ser un número mayor o igual a 0`);
+  }
+  return parsed;
+};
+
+const normalizeProductCostingProcess = (value = '', { allowNull = false } = {}) => {
+  if ((value === null || value === undefined || value === '') && allowNull) return null;
+  const normalized = normalizeText(value).replace(/\s+/g, '_');
+  if (normalized === 'laser' || normalized === 'corte_laser') return 'laser';
+  if (normalized === 'punzonadora' || normalized === 'punzonado' || normalized === 'punch_press') return 'punzonadora';
+  return null;
+};
+
+const inferProductCostingProcess = (skuValue = '') => {
+  const sku = String(skuValue || '').toUpperCase().trim();
+  if (sku.startsWith('T')) return 'punzonadora';
+  return 'laser';
+};
+
+const parseProductCostingPayload = (payload = {}) => {
+  const src = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  const parsed = {};
+  for (const key of PRODUCT_COST_COMPONENT_KEYS) {
+    parsed[key] = parseNonNegativeAmount(src[key], key);
+  }
+  const mode = normalizeProductCostingProcess(src.laser_punzonado_mode || '');
+  if (!mode) {
+    throw createHttpError(400, 'laser_punzonado_mode inválido. Usa laser o punzonadora');
+  }
+  parsed.laser_punzonado_mode = mode;
+  return parsed;
+};
+
+const buildProductCostingResponseRow = (row = {}) => {
+  const components = Object.fromEntries(
+    PRODUCT_COST_COMPONENT_KEYS.map((key) => [key, Number(row[key] || 0)])
+  );
+  const computedPrice = PRODUCT_COST_COMPONENT_KEYS
+    .reduce((sum, key) => sum + Number(components[key] || 0), 0);
+  const percentages = Object.fromEntries(
+    PRODUCT_COST_COMPONENT_KEYS.map((key) => {
+      const pct = computedPrice > 0 ? ((Number(components[key] || 0) / computedPrice) * 100) : 0;
+      return [key, Number(pct.toFixed(2))];
+    })
+  );
+  return {
+    sku: String(row.sku || '').toUpperCase(),
+    name: String(row.name || '').trim(),
+    current_sf: Number(row.sf_price || 0),
+    current_cf: Number(row.cf_price || 0),
+    laser_punzonado_mode: normalizeProductCostingProcess(row.laser_punzonado_mode || '', { allowNull: true })
+      || inferProductCostingProcess(row.sku),
+    components,
+    percentages,
+    computed_price: Number(computedPrice.toFixed(2)),
+    updated_at: row.updated_at || null
+  };
+};
+
+let productCostingInitPromise = null;
+
+const ensureProductCostingTable = async () => {
+  if (!productCostingInitPromise) {
+    productCostingInitPromise = (async () => {
+      await ensureProductCatalogReady();
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS product_cost_allocations (
+          sku TEXT PRIMARY KEY REFERENCES products(sku) ON DELETE CASCADE,
+          acero_carbono_09mm NUMERIC(12,2) NOT NULL DEFAULT 0,
+          pintura_electrostatica NUMERIC(12,2) NOT NULL DEFAULT 0,
+          laser_punzonado NUMERIC(12,2) NOT NULL DEFAULT 0,
+          laser_punzonado_mode TEXT NOT NULL DEFAULT 'laser',
+          equipo_plegado NUMERIC(12,2) NOT NULL DEFAULT 0,
+          equipos_pintura NUMERIC(12,2) NOT NULL DEFAULT 0,
+          equipos_soldadura NUMERIC(12,2) NOT NULL DEFAULT 0,
+          equipos_corte NUMERIC(12,2) NOT NULL DEFAULT 0,
+          carton_corrugado NUMERIC(12,2) NOT NULL DEFAULT 0,
+          cinta_embalaje NUMERIC(12,2) NOT NULL DEFAULT 0,
+          utilidad NUMERIC(12,2) NOT NULL DEFAULT 0,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          CONSTRAINT product_cost_allocations_mode_chk
+            CHECK (laser_punzonado_mode IN ('laser', 'punzonadora'))
+        )`
+      );
+      for (const key of PRODUCT_COST_COMPONENT_KEYS) {
+        await pool.query(
+          `ALTER TABLE product_cost_allocations
+           ADD COLUMN IF NOT EXISTS ${key} NUMERIC(12,2) NOT NULL DEFAULT 0`
+        );
+      }
+      await pool.query(
+        `ALTER TABLE product_cost_allocations
+         ADD COLUMN IF NOT EXISTS laser_punzonado_mode TEXT NOT NULL DEFAULT 'laser'`
+      );
+      await pool.query(
+        `ALTER TABLE product_cost_allocations
+         ADD COLUMN IF NOT EXISTS updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL`
+      );
+      await pool.query(
+        `ALTER TABLE product_cost_allocations
+         ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()`
+      );
+      await pool.query(
+        `ALTER TABLE product_cost_allocations
+         DROP CONSTRAINT IF EXISTS product_cost_allocations_mode_chk`
+      );
+      await pool.query(
+        `ALTER TABLE product_cost_allocations
+         ADD CONSTRAINT product_cost_allocations_mode_chk
+         CHECK (laser_punzonado_mode IN ('laser', 'punzonadora'))`
+      );
+    })();
+  }
+  await productCostingInitPromise;
+};
+
 const DEFAULT_PRODUCT_CATALOG = [
   { sku: 'T6195R', name: 'Tablero 61x95 Rojo', sf: 330, cf: 383 },
   { sku: 'T6195N', name: 'Tablero 61x95 Negro', sf: 330, cf: 383 },
@@ -7549,6 +7682,169 @@ app.delete('/api/product-catalog/:sku', authenticateToken, requireRole(['admin']
   }
 });
 
+app.get('/api/product-costing', authenticateToken, requireRole(['admin']), async (_req, res) => {
+  try {
+    await ensureProductCostingTable();
+    const result = await pool.query(
+      `SELECT
+         p.sku,
+         p.name,
+         p.sf_price,
+         p.cf_price,
+         c.acero_carbono_09mm,
+         c.pintura_electrostatica,
+         c.laser_punzonado,
+         c.laser_punzonado_mode,
+         c.equipo_plegado,
+         c.equipos_pintura,
+         c.equipos_soldadura,
+         c.equipos_corte,
+         c.carton_corrugado,
+         c.cinta_embalaje,
+         c.utilidad,
+         c.updated_at
+       FROM products p
+       LEFT JOIN product_cost_allocations c ON UPPER(c.sku) = UPPER(p.sku)
+       WHERE p.is_active = TRUE
+       ORDER BY UPPER(p.name) ASC, UPPER(p.sku) ASC`
+    );
+    const rows = (result.rows || []).map(buildProductCostingResponseRow);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar costeo de productos' });
+  }
+});
+
+app.patch('/api/product-costing/:sku', authenticateToken, requireRole(['admin']), async (req, res) => {
+  let client;
+  try {
+    await ensureProductCostingTable();
+    const sku = validateProductSku(req.params.sku);
+    const payload = parseProductCostingPayload(req.body || {});
+    const computedPrice = PRODUCT_COST_COMPONENT_KEYS
+      .reduce((sum, key) => sum + Number(payload[key] || 0), 0);
+    const roundedPrice = Number(computedPrice.toFixed(2));
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const productRes = await client.query(
+      `SELECT sku, name, sf_price, cf_price
+       FROM products
+       WHERE UPPER(sku) = $1
+         AND is_active = TRUE`,
+      [sku]
+    );
+    if (productRes.rowCount === 0) {
+      throw createHttpError(404, 'Producto no encontrado o inactivo');
+    }
+
+    await client.query(
+      `INSERT INTO product_cost_allocations (
+         sku,
+         acero_carbono_09mm,
+         pintura_electrostatica,
+         laser_punzonado,
+         laser_punzonado_mode,
+         equipo_plegado,
+         equipos_pintura,
+         equipos_soldadura,
+         equipos_corte,
+         carton_corrugado,
+         cinta_embalaje,
+         utilidad,
+         updated_by,
+         updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
+       ON CONFLICT (sku) DO UPDATE
+       SET acero_carbono_09mm = EXCLUDED.acero_carbono_09mm,
+           pintura_electrostatica = EXCLUDED.pintura_electrostatica,
+           laser_punzonado = EXCLUDED.laser_punzonado,
+           laser_punzonado_mode = EXCLUDED.laser_punzonado_mode,
+           equipo_plegado = EXCLUDED.equipo_plegado,
+           equipos_pintura = EXCLUDED.equipos_pintura,
+           equipos_soldadura = EXCLUDED.equipos_soldadura,
+           equipos_corte = EXCLUDED.equipos_corte,
+           carton_corrugado = EXCLUDED.carton_corrugado,
+           cinta_embalaje = EXCLUDED.cinta_embalaje,
+           utilidad = EXCLUDED.utilidad,
+           updated_by = EXCLUDED.updated_by,
+           updated_at = NOW()`,
+      [
+        sku,
+        payload.acero_carbono_09mm,
+        payload.pintura_electrostatica,
+        payload.laser_punzonado,
+        payload.laser_punzonado_mode,
+        payload.equipo_plegado,
+        payload.equipos_pintura,
+        payload.equipos_soldadura,
+        payload.equipos_corte,
+        payload.carton_corrugado,
+        payload.cinta_embalaje,
+        payload.utilidad,
+        req.user.id
+      ]
+    );
+
+    const updatedProductRes = await client.query(
+      `UPDATE products
+       SET sf_price = $2,
+           cf_price = $2,
+           last_updated = NOW()
+       WHERE UPPER(sku) = $1
+       RETURNING sku, name, sf_price, cf_price`,
+      [sku, roundedPrice]
+    );
+
+    const updatedCostRes = await client.query(
+      `SELECT
+         acero_carbono_09mm,
+         pintura_electrostatica,
+         laser_punzonado,
+         laser_punzonado_mode,
+         equipo_plegado,
+         equipos_pintura,
+         equipos_soldadura,
+         equipos_corte,
+         carton_corrugado,
+         cinta_embalaje,
+         utilidad,
+         updated_at
+       FROM product_cost_allocations
+       WHERE UPPER(sku) = $1`,
+      [sku]
+    );
+
+    await client.query('COMMIT');
+    client.release();
+    client = null;
+
+    await loadProductCatalogRows();
+
+    const productRow = updatedProductRes.rows[0] || productRes.rows[0];
+    const costingRow = updatedCostRes.rows[0] || payload;
+    res.json(buildProductCostingResponseRow({
+      ...productRow,
+      ...costingRow
+    }));
+  } catch (err) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('Rollback error product costing:', rollbackErr);
+      }
+      client.release();
+    }
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    res.status(500).json({ error: 'No se pudo guardar costeo de producto' });
+  }
+});
+
 // ─── INVENTORY ──────────────────────────────────────────────────────────────
 app.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
@@ -8614,6 +8910,7 @@ const startServer = async () => {
   await ensureUsersSchema();
   await ensureQuotesMarketingSchema();
   await ensureProductionKanbanTables();
+  await ensureProductCostingTable();
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
