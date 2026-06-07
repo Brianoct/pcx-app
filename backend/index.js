@@ -1615,48 +1615,101 @@ const processInboundWhatsAppMessage = async (message = {}, contactsByWaId = new 
     );
     const contactId = Number(contactRes.rows[0].id);
 
-    const convRes = await client.query(
-      `INSERT INTO whatsapp_conversations (
-         contact_id,
-         status,
-         unread_count,
-         last_message_preview,
-         last_message_at,
-         created_at,
-         updated_at
-       )
-       VALUES ($1, 'open', 0, $2, $3, NOW(), NOW())
-       ON CONFLICT (contact_id) DO UPDATE
-       SET last_message_preview = EXCLUDED.last_message_preview,
-           last_message_at = EXCLUDED.last_message_at,
-           updated_at = NOW()
-       RETURNING id, assigned_user_id`,
-      [contactId, textBody || null, createdAt]
-    );
-    const conversationId = Number(convRes.rows[0].id);
-    const currentlyAssigned = convRes.rows[0]?.assigned_user_id ? Number(convRes.rows[0].assigned_user_id) : null;
-
-    const messageRes = await client.query(
-      `INSERT INTO whatsapp_messages (
-         conversation_id,
-         wa_message_id,
-         direction,
-         message_type,
-         text_body,
-         status,
-         from_phone,
-         to_phone,
-         raw_payload,
-         created_at,
-         updated_at
-       )
-       VALUES ($1, $2, 'inbound', $3, $4, 'received', $5, NULL, $6::jsonb, $7, NOW())
-       ON CONFLICT (wa_message_id) DO NOTHING
-       RETURNING id`,
-      [conversationId, waMessageId, messageType, textBody || null, fromPhone, JSON.stringify(message), createdAt]
+    await client.query(`SELECT pg_advisory_xact_lock($1::bigint)`, [contactId]);
+    const existingConvRes = await client.query(
+      `SELECT id, assigned_user_id
+       FROM whatsapp_conversations
+       WHERE contact_id = $1
+       LIMIT 1`,
+      [contactId]
     );
 
-    if (messageRes.rowCount > 0) {
+    let conversationId = null;
+    let currentlyAssigned = null;
+    if (existingConvRes.rowCount > 0) {
+      const convUpdateRes = await client.query(
+        `UPDATE whatsapp_conversations
+         SET last_message_preview = $2,
+             last_message_at = $3,
+             status = 'open',
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING id, assigned_user_id`,
+        [existingConvRes.rows[0].id, textBody || null, createdAt]
+      );
+      conversationId = Number(convUpdateRes.rows[0].id);
+      currentlyAssigned = convUpdateRes.rows[0]?.assigned_user_id ? Number(convUpdateRes.rows[0].assigned_user_id) : null;
+    } else {
+      const convInsertRes = await client.query(
+        `INSERT INTO whatsapp_conversations (
+           contact_id,
+           status,
+           unread_count,
+           last_message_preview,
+           last_message_at,
+           created_at,
+           updated_at
+         )
+         VALUES ($1, 'open', 0, $2, $3, NOW(), NOW())
+         RETURNING id, assigned_user_id`,
+        [contactId, textBody || null, createdAt]
+      );
+      conversationId = Number(convInsertRes.rows[0].id);
+      currentlyAssigned = convInsertRes.rows[0]?.assigned_user_id ? Number(convInsertRes.rows[0].assigned_user_id) : null;
+    }
+
+    let messageInserted = false;
+    if (waMessageId) {
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1)::bigint)`, [waMessageId]);
+      const existingMessageRes = await client.query(
+        `SELECT id
+         FROM whatsapp_messages
+         WHERE wa_message_id = $1
+         LIMIT 1`,
+        [waMessageId]
+      );
+      if (existingMessageRes.rowCount === 0) {
+        await client.query(
+          `INSERT INTO whatsapp_messages (
+             conversation_id,
+             wa_message_id,
+             direction,
+             message_type,
+             text_body,
+             status,
+             from_phone,
+             to_phone,
+             raw_payload,
+             created_at,
+             updated_at
+           )
+           VALUES ($1, $2, 'inbound', $3, $4, 'received', $5, NULL, $6::jsonb, $7, NOW())`,
+          [conversationId, waMessageId, messageType, textBody || null, fromPhone, JSON.stringify(message), createdAt]
+        );
+        messageInserted = true;
+      }
+    } else {
+      await client.query(
+        `INSERT INTO whatsapp_messages (
+           conversation_id,
+           wa_message_id,
+           direction,
+           message_type,
+           text_body,
+           status,
+           from_phone,
+           to_phone,
+           raw_payload,
+           created_at,
+           updated_at
+         )
+         VALUES ($1, NULL, 'inbound', $2, $3, 'received', $4, NULL, $5::jsonb, $6, NOW())`,
+        [conversationId, messageType, textBody || null, fromPhone, JSON.stringify(message), createdAt]
+      );
+      messageInserted = true;
+    }
+
+    if (messageInserted) {
       await client.query(
         `UPDATE whatsapp_conversations
          SET unread_count = COALESCE(unread_count, 0) + 1,
