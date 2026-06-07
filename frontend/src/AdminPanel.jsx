@@ -5,6 +5,7 @@ import { ACCESS_LABELS, buildAccessForUser, ROLE_OPTIONS } from './roleAccess';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
 import ProductCostingAdmin from './ProductCostingAdmin';
+import WhatsAppInboxAdmin from './WhatsAppInboxAdmin';
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
   value: role,
   label: role === 'Almacen Lider'
@@ -2112,7 +2113,7 @@ function AdminAiAnalyticsPanel({ token }) {
 function AdminPanel({ token }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const tabKeys = ['usuarios', 'productos', 'costeo', 'roles', 'comisiones', 'calendario', 'ai_analytics'];
+  const tabKeys = ['usuarios', 'productos', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'calendario', 'ai_analytics'];
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
     return tabKeys.includes(tab) ? tab : 'usuarios';
@@ -2142,6 +2143,12 @@ function AdminPanel({ token }) {
       label: 'Costeo',
       icon: '$',
       hint: 'Costo por insumo y utilidad'
+    },
+    {
+      key: 'whatsapp_inbox',
+      label: 'WhatsApp Inbox',
+      icon: 'WA',
+      hint: 'Inbox estilo Wati con asignación'
     },
     {
       key: 'comisiones',
@@ -2229,6 +2236,7 @@ function AdminPanel({ token }) {
         {activeTab === 'usuarios' && <UserManagement token={token} />}
         {activeTab === 'productos' && <ProductCatalogAdmin token={token} />}
         {activeTab === 'costeo' && <ProductCostingAdmin token={token} />}
+        {activeTab === 'whatsapp_inbox' && <WhatsAppInboxAdmin token={token} />}
         {activeTab === 'roles' && <RoleConfiguration token={token} />}
         {activeTab === 'comisiones' && (
           <div style={{ display: 'grid', gap: '14px' }}>
