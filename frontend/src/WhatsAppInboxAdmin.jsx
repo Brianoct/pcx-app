@@ -407,7 +407,9 @@ export default function WhatsAppInboxAdmin({ token }) {
   const loadConversationsRef = useRef(null);
   const loadMessagesRef = useRef(null);
   const loadKpisRef = useRef(null);
-  const wsDebounceTimerRef = useRef(null);
+  const wsConversationTimerRef = useRef(null);
+  const wsMessagesTimerRef = useRef(null);
+  const wsKpiTimerRef = useRef(null);
 
   const selectedConversation = useMemo(
     () => conversations.find((row) => row.id === selectedConversationId) || null,
@@ -450,14 +452,17 @@ export default function WhatsAppInboxAdmin({ token }) {
       const payload = await apiRequest(`/api/whatsapp/inbox/conversations/${conversationId}/messages`, { token });
       setMessages(Array.isArray(payload?.messages) ? payload.messages : []);
       setConversationMeta(payload?.conversation || null);
-      await apiRequest(`/api/whatsapp/inbox/conversations/${conversationId}/read`, {
-        method: 'PATCH',
-        token,
-        body: {}
-      }).catch(() => {});
-      setConversations((prev) => prev.map((row) => (
-        row.id === conversationId ? { ...row, unread_count: 0 } : row
-      )));
+      const unreadCount = Number(payload?.conversation?.unread_count || 0);
+      if (unreadCount > 0) {
+        await apiRequest(`/api/whatsapp/inbox/conversations/${conversationId}/read`, {
+          method: 'PATCH',
+          token,
+          body: {}
+        }).catch(() => {});
+        setConversations((prev) => prev.map((row) => (
+          row.id === conversationId ? { ...row, unread_count: 0 } : row
+        )));
+      }
     } catch (err) {
       setError(err.message || 'No se pudieron cargar mensajes');
     } finally {
@@ -509,19 +514,33 @@ export default function WhatsAppInboxAdmin({ token }) {
     const wsUrl = `${WS_BASE_URL}/ws/whatsapp/inbox?token=${encodeURIComponent(token)}`;
     let socket = null;
 
-    const triggerRealtimeRefresh = (shouldRefreshKpis = false) => {
-      if (wsDebounceTimerRef.current) return;
-      wsDebounceTimerRef.current = setTimeout(() => {
-        wsDebounceTimerRef.current = null;
+    const scheduleConversationsRefresh = (delayMs = 260) => {
+      if (wsConversationTimerRef.current) return;
+      wsConversationTimerRef.current = setTimeout(() => {
+        wsConversationTimerRef.current = null;
         loadConversationsRef.current?.();
-        const activeConversationId = selectedConversationRef.current;
-        if (activeConversationId) {
-          loadMessagesRef.current?.(activeConversationId);
+      }, delayMs);
+    };
+
+    const scheduleMessagesRefresh = (conversationId, delayMs = 260) => {
+      const activeConversationId = selectedConversationRef.current;
+      if (!activeConversationId || Number(activeConversationId) !== Number(conversationId)) return;
+      if (wsMessagesTimerRef.current) return;
+      wsMessagesTimerRef.current = setTimeout(() => {
+        wsMessagesTimerRef.current = null;
+        const nextActiveConversationId = selectedConversationRef.current;
+        if (nextActiveConversationId && Number(nextActiveConversationId) === Number(conversationId)) {
+          loadMessagesRef.current?.(nextActiveConversationId);
         }
-        if (shouldRefreshKpis) {
-          loadKpisRef.current?.();
-        }
-      }, 220);
+      }, delayMs);
+    };
+
+    const scheduleKpiRefresh = (delayMs = 900) => {
+      if (wsKpiTimerRef.current) return;
+      wsKpiTimerRef.current = setTimeout(() => {
+        wsKpiTimerRef.current = null;
+        loadKpisRef.current?.();
+      }, delayMs);
     };
 
     try {
@@ -533,7 +552,8 @@ export default function WhatsAppInboxAdmin({ token }) {
 
     socket.addEventListener('open', () => {
       setWsConnected(true);
-      triggerRealtimeRefresh(true);
+      scheduleConversationsRefresh(120);
+      scheduleKpiRefresh(220);
     });
     socket.addEventListener('close', () => {
       setWsConnected(false);
@@ -545,18 +565,43 @@ export default function WhatsAppInboxAdmin({ token }) {
       try {
         const payload = JSON.parse(String(event?.data || '{}'));
         const eventType = String(payload?.event || '').trim();
+        const eventData = payload?.payload && typeof payload.payload === 'object' ? payload.payload : {};
+        const conversationId = Number(eventData?.conversation_id || 0);
+        const reason = String(eventData?.reason || '').trim().toLowerCase();
         if (eventType === 'pong' || eventType === 'connected') return;
         if (eventType === 'kpi_updated') {
-          triggerRealtimeRefresh(true);
+          scheduleKpiRefresh();
           return;
         }
-        if (
-          eventType === 'message_created'
-          || eventType === 'message_status'
-          || eventType === 'conversation_updated'
-          || eventType === 'conversation_assigned'
-        ) {
-          triggerRealtimeRefresh(eventType !== 'message_status');
+        if (eventType === 'message_status') {
+          const waMessageId = String(eventData?.wa_message_id || '').trim();
+          const nextStatus = String(eventData?.status || '').trim() || null;
+          if (waMessageId && nextStatus) {
+            setMessages((prev) => prev.map((row) => (
+              String(row?.wa_message_id || '').trim() === waMessageId
+                ? { ...row, status: nextStatus }
+                : row
+            )));
+          }
+          return;
+        }
+        if (eventType === 'message_created') {
+          scheduleConversationsRefresh();
+          if (conversationId > 0) scheduleMessagesRefresh(conversationId, 200);
+          return;
+        }
+        if (eventType === 'conversation_updated') {
+          if (reason === 'mark_read') return;
+          scheduleConversationsRefresh();
+          if (conversationId > 0 && (reason === 'inbound_message' || reason === 'outbound_message')) {
+            scheduleMessagesRefresh(conversationId, 220);
+          }
+          return;
+        }
+        if (eventType === 'conversation_assigned') {
+          scheduleConversationsRefresh();
+          scheduleKpiRefresh();
+          return;
         }
       } catch {
         // ignore malformed websocket payloads
@@ -564,9 +609,17 @@ export default function WhatsAppInboxAdmin({ token }) {
     });
 
     return () => {
-      if (wsDebounceTimerRef.current) {
-        clearTimeout(wsDebounceTimerRef.current);
-        wsDebounceTimerRef.current = null;
+      if (wsConversationTimerRef.current) {
+        clearTimeout(wsConversationTimerRef.current);
+        wsConversationTimerRef.current = null;
+      }
+      if (wsMessagesTimerRef.current) {
+        clearTimeout(wsMessagesTimerRef.current);
+        wsMessagesTimerRef.current = null;
+      }
+      if (wsKpiTimerRef.current) {
+        clearTimeout(wsKpiTimerRef.current);
+        wsKpiTimerRef.current = null;
       }
       if (socket && socket.readyState <= 1) {
         socket.close();
