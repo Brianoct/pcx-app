@@ -4919,10 +4919,6 @@ app.patch('/api/whatsapp/inbox/conversations/:id/read', authenticateToken, requi
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Conversación no encontrada' });
     }
-    notifyWhatsAppInboxRealtime('conversation_updated', {
-      conversation_id: conversationId,
-      reason: 'mark_read'
-    });
     return res.json({
       message: 'Conversación marcada como leída',
       id: Number(result.rows[0].id),
