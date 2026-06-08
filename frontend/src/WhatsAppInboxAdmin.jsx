@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { apiRequest } from './apiClient';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { API_BASE, apiRequest } from './apiClient';
 
 const formatDateTime = (value) => {
   if (!value) return '';
@@ -38,6 +38,21 @@ const parseJsonInput = (value, fieldLabel, fallbackValue = null) => {
   }
 };
 
+const toWebSocketBaseUrl = () => {
+  try {
+    const parsed = new URL(API_BASE);
+    parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+    parsed.search = '';
+    parsed.hash = '';
+    parsed.pathname = '';
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+};
+
+const WS_BASE_URL = toWebSocketBaseUrl();
+
 const normalizeMessagePayload = (message = {}) => {
   const rawPayload = message?.raw_payload;
   if (!rawPayload || typeof rawPayload !== 'object') return null;
@@ -47,7 +62,121 @@ const normalizeMessagePayload = (message = {}) => {
   return rawPayload;
 };
 
-const renderMessageBody = (message = {}) => {
+function MediaAssetPreview({ messageType, media, token }) {
+  const [resolvedUrl, setResolvedUrl] = useState(String(media?.link || '').trim());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    let objectUrlToRevoke = null;
+    const mediaLink = String(media?.link || '').trim();
+    const mediaId = String(media?.id || '').trim();
+
+    if (mediaLink) {
+      setResolvedUrl(mediaLink);
+      setLoading(false);
+      setError('');
+      return () => {};
+    }
+    if (!mediaId || !token) {
+      setResolvedUrl('');
+      setLoading(false);
+      setError('');
+      return () => {};
+    }
+
+    setLoading(true);
+    setError('');
+    setResolvedUrl('');
+
+    fetch(`${API_BASE}/api/whatsapp/inbox/media/${encodeURIComponent(mediaId)}/content`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          throw new Error(body || `No se pudo descargar media (${response.status})`);
+        }
+        return response.blob();
+      })
+      .then((blob) => {
+        if (!active) return;
+        objectUrlToRevoke = URL.createObjectURL(blob);
+        setResolvedUrl(objectUrlToRevoke);
+      })
+      .catch(() => {
+        if (!active) return;
+        setError('No se pudo cargar vista previa');
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+      if (objectUrlToRevoke) {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      }
+    };
+  }, [media?.id, media?.link, token]);
+
+  if (loading) return <div style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>Cargando vista previa...</div>;
+  if (!resolvedUrl) return error ? <div style={{ color: '#fca5a5', fontSize: '0.78rem' }}>{error}</div> : null;
+  if (messageType === 'image') {
+    return (
+      <a href={resolvedUrl} target="_blank" rel="noreferrer">
+        <img
+          src={resolvedUrl}
+          alt="Imagen WhatsApp"
+          style={{
+            width: '100%',
+            maxWidth: 260,
+            borderRadius: 10,
+            border: '1px solid rgba(148,163,184,0.4)',
+            marginTop: 4
+          }}
+        />
+      </a>
+    );
+  }
+  if (messageType === 'video') {
+    return (
+      <video
+        controls
+        src={resolvedUrl}
+        style={{
+          width: '100%',
+          maxWidth: 260,
+          borderRadius: 10,
+          border: '1px solid rgba(148,163,184,0.4)',
+          marginTop: 4
+        }}
+      />
+    );
+  }
+  if (messageType === 'audio') {
+    return (
+      <audio controls src={resolvedUrl} style={{ width: '100%', marginTop: 4 }} />
+    );
+  }
+  return (
+    <a
+      href={resolvedUrl}
+      target="_blank"
+      rel="noreferrer"
+      style={{ color: '#93c5fd', fontSize: '0.78rem', marginTop: 4, display: 'inline-block' }}
+    >
+      Abrir documento
+    </a>
+  );
+}
+
+function MessageBody({ message = {}, token }) {
   const payload = normalizeMessagePayload(message);
   const messageType = String(message?.message_type || payload?.type || 'text').trim().toLowerCase();
   const textBody = String(message?.text_body || '').trim();
@@ -72,6 +201,7 @@ const renderMessageBody = (message = {}) => {
             Abrir archivo
           </a>
         )}
+        <MediaAssetPreview messageType={messageType} media={media} token={token} />
         {mediaId && <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Media ID: {mediaId}</div>}
       </div>
     );
@@ -159,7 +289,7 @@ const renderMessageBody = (message = {}) => {
   }
 
   return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.9rem' }}>{textBody || `[${messageType}]`}</div>;
-};
+}
 
 const getStatusVisual = (statusRaw, isOutbound) => {
   const status = String(statusRaw || '').trim().toLowerCase();
@@ -267,7 +397,17 @@ export default function WhatsAppInboxAdmin({ token }) {
   const [templateName, setTemplateName] = useState('');
   const [templateLanguageCode, setTemplateLanguageCode] = useState('es');
   const [templateComponentsJson, setTemplateComponentsJson] = useState('[]');
+  const [wsConnected, setWsConnected] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [kpiWindowDays, setKpiWindowDays] = useState(7);
+  const [kpiLoading, setKpiLoading] = useState(false);
+  const [kpis, setKpis] = useState(null);
   const [error, setError] = useState('');
+  const selectedConversationRef = useRef(null);
+  const loadConversationsRef = useRef(null);
+  const loadMessagesRef = useRef(null);
+  const loadKpisRef = useRef(null);
+  const wsDebounceTimerRef = useRef(null);
 
   const selectedConversation = useMemo(
     () => conversations.find((row) => row.id === selectedConversationId) || null,
@@ -325,8 +465,29 @@ export default function WhatsAppInboxAdmin({ token }) {
     }
   };
 
+  const loadKpis = async (days = kpiWindowDays) => {
+    setKpiLoading(true);
+    try {
+      const payload = await apiRequest(`/api/whatsapp/inbox/kpis?days=${encodeURIComponent(String(days || 7))}`, { token });
+      setKpis(payload || null);
+    } catch (err) {
+      setError(err.message || 'No se pudieron cargar KPI de WhatsApp');
+    } finally {
+      setKpiLoading(false);
+    }
+  };
+
+  loadConversationsRef.current = loadConversations;
+  loadMessagesRef.current = loadMessages;
+  loadKpisRef.current = loadKpis;
+
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
   useEffect(() => {
     loadConversations({ preserveSelection: false });
+    loadKpis(kpiWindowDays);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -344,15 +505,111 @@ export default function WhatsAppInboxAdmin({ token }) {
   }, [selectedConversationId]);
 
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      loadConversations();
-      if (selectedConversationId) {
-        loadMessages(selectedConversationId);
+    if (!token || !WS_BASE_URL) return undefined;
+    const wsUrl = `${WS_BASE_URL}/ws/whatsapp/inbox?token=${encodeURIComponent(token)}`;
+    let socket = null;
+
+    const triggerRealtimeRefresh = (shouldRefreshKpis = false) => {
+      if (wsDebounceTimerRef.current) return;
+      wsDebounceTimerRef.current = setTimeout(() => {
+        wsDebounceTimerRef.current = null;
+        loadConversationsRef.current?.();
+        const activeConversationId = selectedConversationRef.current;
+        if (activeConversationId) {
+          loadMessagesRef.current?.(activeConversationId);
+        }
+        if (shouldRefreshKpis) {
+          loadKpisRef.current?.();
+        }
+      }, 220);
+    };
+
+    try {
+      socket = new WebSocket(wsUrl);
+    } catch {
+      setWsConnected(false);
+      return undefined;
+    }
+
+    socket.addEventListener('open', () => {
+      setWsConnected(true);
+      triggerRealtimeRefresh(true);
+    });
+    socket.addEventListener('close', () => {
+      setWsConnected(false);
+    });
+    socket.addEventListener('error', () => {
+      setWsConnected(false);
+    });
+    socket.addEventListener('message', (event) => {
+      try {
+        const payload = JSON.parse(String(event?.data || '{}'));
+        const eventType = String(payload?.event || '').trim();
+        if (eventType === 'pong' || eventType === 'connected') return;
+        if (eventType === 'kpi_updated') {
+          triggerRealtimeRefresh(true);
+          return;
+        }
+        if (
+          eventType === 'message_created'
+          || eventType === 'message_status'
+          || eventType === 'conversation_updated'
+          || eventType === 'conversation_assigned'
+        ) {
+          triggerRealtimeRefresh(eventType !== 'message_status');
+        }
+      } catch {
+        // ignore malformed websocket payloads
       }
-    }, 15000);
-    return () => clearInterval(intervalId);
+    });
+
+    return () => {
+      if (wsDebounceTimerRef.current) {
+        clearTimeout(wsDebounceTimerRef.current);
+        wsDebounceTimerRef.current = null;
+      }
+      if (socket && socket.readyState <= 1) {
+        socket.close();
+      }
+      setWsConnected(false);
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    loadKpis(kpiWindowDays);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedConversationId, search]);
+  }, [kpiWindowDays]);
+
+  const uploadComposerMedia = async (file) => {
+    if (!file || !token) return;
+    setUploadingMedia(true);
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const payload = await apiRequest('/api/whatsapp/inbox/media/upload', {
+        method: 'POST',
+        token,
+        body: formData,
+        timeoutMs: 120000
+      });
+      const nextType = String(payload?.suggested_message_type || '').trim().toLowerCase();
+      if (['image', 'video', 'audio', 'document'].includes(nextType)) {
+        setComposerType(nextType);
+      }
+      setMediaId(String(payload?.media_id || '').trim());
+      setMediaUrl('');
+      setMediaFilename(String(payload?.filename || file.name || '').trim());
+      if (!mediaCaption && ['image', 'video', 'document'].includes(nextType)) {
+        setMediaCaption(String(file.name || '').trim());
+      }
+    } catch (err) {
+      setError(err.message || 'No se pudo subir el archivo');
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
 
   const buildOutgoingBody = () => {
     if (composerType === 'text') {
@@ -526,6 +783,11 @@ export default function WhatsAppInboxAdmin({ token }) {
     }
   };
 
+  const kpiTotals = kpis?.totals || {};
+  const kpiAgents = Array.isArray(kpis?.by_agent) ? kpis.by_agent : [];
+  const formatPercent = (value) => `${Number(value || 0).toFixed(1)}%`;
+  const formatMinutes = (value) => (value === null || value === undefined ? '—' : `${Number(value).toFixed(1)} min`);
+
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div className="card" style={{ marginBottom: 0, padding: 16 }}>
@@ -535,18 +797,45 @@ export default function WhatsAppInboxAdmin({ token }) {
             <p style={{ color: '#94a3b8', margin: 0 }}>
               Estilo operativo tipo Wati/AiSensy: conversaciones, asignación round-robin y respuesta centralizada.
             </p>
+            <div style={{ marginTop: 6, fontSize: '0.76rem', color: wsConnected ? '#86efac' : '#fbbf24' }}>
+              WebSocket: {wsConnected ? 'conectado (tiempo real)' : 'desconectado (usa Actualizar manual)'}
+            </div>
           </div>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => {
-              loadConversations();
-              if (selectedConversationId) loadMessages(selectedConversationId);
-            }}
-            disabled={loadingConversations || loadingMessages}
-          >
-            Actualizar
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <label style={{ color: '#94a3b8', fontSize: '0.78rem' }}>
+              Ventana KPI
+              <select
+                value={kpiWindowDays}
+                onChange={(event) => setKpiWindowDays(Number.parseInt(event.target.value, 10) || 7)}
+                style={{
+                  marginLeft: 6,
+                  minHeight: 34,
+                  borderRadius: 8,
+                  border: '1px solid #334155',
+                  background: '#0f172a',
+                  color: '#f8fafc',
+                  padding: '4px 8px'
+                }}
+              >
+                <option value={3}>3 dias</option>
+                <option value={7}>7 dias</option>
+                <option value={14}>14 dias</option>
+                <option value={30}>30 dias</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                loadConversations();
+                loadKpis(kpiWindowDays);
+                if (selectedConversationId) loadMessages(selectedConversationId);
+              }}
+              disabled={loadingConversations || loadingMessages}
+            >
+              Actualizar
+            </button>
+          </div>
         </div>
       </div>
 
@@ -561,6 +850,71 @@ export default function WhatsAppInboxAdmin({ token }) {
           {error}
         </div>
       )}
+
+      <div className="card" style={{ marginBottom: 0, padding: 14, display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h4 style={{ margin: 0 }}>KPI WhatsApp ({kpiWindowDays} días)</h4>
+          {kpiLoading && <span style={{ color: '#93c5fd', fontSize: '0.78rem' }}>Actualizando KPI...</span>}
+        </div>
+        <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Conversaciones</div>
+            <div style={{ color: '#f8fafc', fontWeight: 700 }}>{Number(kpiTotals.total_conversations || 0)}</div>
+          </div>
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Primer respuesta</div>
+            <div style={{ color: '#f8fafc', fontWeight: 700 }}>{formatMinutes(kpiTotals.avg_first_response_minutes)}</div>
+          </div>
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Read rate</div>
+            <div style={{ color: '#f8fafc', fontWeight: 700 }}>{formatPercent(kpiTotals.read_rate_percent)}</div>
+          </div>
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Enviados / leídos</div>
+            <div style={{ color: '#f8fafc', fontWeight: 700 }}>
+              {Number(kpiTotals.outbound_total || 0)} / {Number(kpiTotals.outbound_read || 0)}
+            </div>
+          </div>
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Abiertas</div>
+            <div style={{ color: '#f8fafc', fontWeight: 700 }}>
+              {Number(kpiTotals.open_conversations || 0)}
+            </div>
+          </div>
+          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>No leídas</div>
+            <div style={{ color: '#f8fafc', fontWeight: 700 }}>
+              {Number(kpiTotals.unread_messages || 0)}
+            </div>
+          </div>
+        </div>
+        {kpiAgents.length > 0 && (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+              <thead>
+                <tr style={{ color: '#94a3b8', textAlign: 'left' }}>
+                  <th style={{ padding: '6px 4px' }}>Agente</th>
+                  <th style={{ padding: '6px 4px' }}>Convs</th>
+                  <th style={{ padding: '6px 4px' }}>Abiertas</th>
+                  <th style={{ padding: '6px 4px' }}>1ra resp.</th>
+                  <th style={{ padding: '6px 4px' }}>Read rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kpiAgents.slice(0, 6).map((row) => (
+                  <tr key={`${row.user_id ?? 'none'}-${row.user_name}`} style={{ borderTop: '1px solid #1e293b', color: '#e2e8f0' }}>
+                    <td style={{ padding: '6px 4px' }}>{row.user_name}</td>
+                    <td style={{ padding: '6px 4px' }}>{Number(row.conversations_total || 0)}</td>
+                    <td style={{ padding: '6px 4px' }}>{Number(row.open_conversations || 0)}</td>
+                    <td style={{ padding: '6px 4px' }}>{formatMinutes(row.avg_first_response_minutes)}</td>
+                    <td style={{ padding: '6px 4px' }}>{formatPercent(row.read_rate_percent)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div style={{
         display: 'grid',
@@ -651,7 +1005,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                         background: isOutbound ? 'linear-gradient(180deg, #1d4ed8 0%, #1e40af 100%)' : '#1f2937',
                         color: '#f8fafc'
                       }}>
-                        {renderMessageBody(message)}
+                        <MessageBody message={message} token={token} />
                         <div style={{
                           marginTop: 4,
                           display: 'flex',
@@ -716,6 +1070,48 @@ export default function WhatsAppInboxAdmin({ token }) {
 
             {['image', 'video', 'audio', 'document'].includes(composerType) && (
               <div style={{ display: 'grid', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <label
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '7px 10px',
+                      borderRadius: 8,
+                      border: '1px solid #334155',
+                      background: '#0f172a',
+                      color: '#f8fafc',
+                      cursor: uploadingMedia ? 'default' : 'pointer',
+                      opacity: uploadingMedia ? 0.75 : 1
+                    }}
+                  >
+                    <input
+                      type="file"
+                      accept={composerType === 'image'
+                        ? 'image/*'
+                        : composerType === 'video'
+                          ? 'video/*'
+                          : composerType === 'audio'
+                            ? 'audio/*'
+                            : '*/*'}
+                      style={{ display: 'none' }}
+                      disabled={uploadingMedia}
+                      onChange={(event) => {
+                        const nextFile = event.target.files && event.target.files[0];
+                        if (nextFile) {
+                          uploadComposerMedia(nextFile);
+                        }
+                        event.target.value = '';
+                      }}
+                    />
+                    {uploadingMedia ? 'Subiendo archivo...' : 'Subir archivo directo'}
+                  </label>
+                  {mediaId && (
+                    <span style={{ color: '#86efac', fontSize: '0.75rem' }}>
+                      Media cargada: {mediaId}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={mediaUrl}
@@ -779,6 +1175,23 @@ export default function WhatsAppInboxAdmin({ token }) {
                       padding: '8px 10px'
                     }}
                   />
+                )}
+                {(mediaUrl.trim() || mediaId.trim()) && (
+                  <div style={{
+                    border: '1px dashed #334155',
+                    borderRadius: 10,
+                    padding: '8px 10px',
+                    background: '#0b1220'
+                  }}>
+                    <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginBottom: 4 }}>
+                      Vista previa del archivo
+                    </div>
+                    <MediaAssetPreview
+                      messageType={composerType}
+                      media={{ link: mediaUrl.trim() || null, id: mediaId.trim() || null }}
+                      token={token}
+                    />
+                  </div>
                 )}
               </div>
             )}

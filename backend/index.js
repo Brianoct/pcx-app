@@ -4,12 +4,18 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const http = require('http');
 const path = require('path');
 const fs = require('fs/promises');
 const fsSync = require('fs');
+const multer = require('multer');
+const { WebSocketServer } = require('ws');
 require('dotenv').config();
 
 const app = express();
+const httpServer = http.createServer(app);
+const whatsappWsServer = new WebSocketServer({ noServer: true });
+const whatsappWsClients = new Set();
 app.use(cors());
 app.use(express.json({
   limit: '20mb',
@@ -1356,8 +1362,164 @@ const WHATSAPP_GRAPH_VERSION = String(process.env.WHATSAPP_GRAPH_VERSION || 'v20
 const WHATSAPP_API_BASE = String(process.env.WHATSAPP_API_BASE || 'https://graph.facebook.com').trim();
 const WHATSAPP_APP_SECRET = String(process.env.WHATSAPP_APP_SECRET || '').trim();
 const WHATSAPP_OUTBOUND_TYPES = new Set(['text', 'image', 'video', 'audio', 'document', 'location', 'contacts', 'interactive', 'template']);
+const WHATSAPP_MEDIA_UPLOAD_MAX_BYTES = 16 * 1024 * 1024;
+const whatsappMediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: WHATSAPP_MEDIA_UPLOAD_MAX_BYTES
+  }
+});
+let whatsappWsGatewayReady = false;
 
 const normalizeWhatsAppPhone = (value = '') => String(value || '').replace(/\D/g, '').trim();
+
+const guessWhatsAppMessageTypeFromMime = (mimeType = '', filename = '') => {
+  const mime = String(mimeType || '').trim().toLowerCase();
+  const lowerName = String(filename || '').trim().toLowerCase();
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  if (mime === 'application/pdf') return 'document';
+  if (mime) return 'document';
+  if (/\.(png|jpg|jpeg|webp|gif|bmp|svg)$/.test(lowerName)) return 'image';
+  if (/\.(mp4|mov|avi|mkv|webm)$/.test(lowerName)) return 'video';
+  if (/\.(mp3|wav|ogg|m4a|aac|flac|opus)$/.test(lowerName)) return 'audio';
+  return 'document';
+};
+
+const notifyWhatsAppInboxRealtime = (event, payload = {}) => {
+  if (!event || whatsappWsClients.size === 0) return;
+  const message = JSON.stringify({
+    channel: 'whatsapp_inbox',
+    event: String(event).trim(),
+    payload,
+    emitted_at: new Date().toISOString()
+  });
+  for (const client of whatsappWsClients) {
+    if (!client || client.readyState !== 1) continue;
+    try {
+      client.send(message);
+    } catch {
+      // ignore individual websocket delivery failures
+    }
+  }
+};
+
+const resolveWebSocketToken = (requestUrl, authHeader = '', hostHeader = 'localhost') => {
+  const parsedUrl = new URL(String(requestUrl || '/'), `http://${hostHeader}`);
+  const tokenFromQuery = String(parsedUrl.searchParams.get('token') || '').trim();
+  if (tokenFromQuery) return tokenFromQuery;
+  const header = String(authHeader || '').trim();
+  if (header.toLowerCase().startsWith('bearer ')) {
+    return header.slice(7).trim();
+  }
+  return '';
+};
+
+const authenticateWhatsAppWsClient = async (token) => {
+  if (!token) throw createHttpError(401, 'Token requerido');
+  let decoded = null;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    throw createHttpError(403, 'Token inválido');
+  }
+  const userId = Number(decoded?.id || 0);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    throw createHttpError(403, 'Token inválido');
+  }
+  const userRes = await pool.query(
+    `SELECT id, email, role, panel_access, is_active
+     FROM users
+     WHERE id = $1
+     LIMIT 1`,
+    [userId]
+  );
+  if (userRes.rowCount === 0 || !userRes.rows[0].is_active) {
+    throw createHttpError(403, 'Usuario no autorizado');
+  }
+  const userRow = userRes.rows[0];
+  if (normalizeRole(userRow.role || '') !== ROLE_KEYS.admin) {
+    throw createHttpError(403, 'Permisos insuficientes');
+  }
+  return {
+    id: Number(userRow.id),
+    email: String(userRow.email || '').trim(),
+    role: String(userRow.role || '').trim(),
+    panel_access: userRow.panel_access || null
+  };
+};
+
+const initWhatsAppInboxWebSocketGateway = () => {
+  if (whatsappWsGatewayReady) return;
+  whatsappWsGatewayReady = true;
+
+  whatsappWsServer.on('connection', (socket, request, user) => {
+    socket.user = user || null;
+    whatsappWsClients.add(socket);
+    try {
+      socket.send(JSON.stringify({
+        channel: 'whatsapp_inbox',
+        event: 'connected',
+        payload: {
+          user_id: user?.id || null
+        },
+        emitted_at: new Date().toISOString()
+      }));
+    } catch {
+      // ignore immediate send error
+    }
+    socket.on('close', () => {
+      whatsappWsClients.delete(socket);
+    });
+    socket.on('error', () => {
+      whatsappWsClients.delete(socket);
+    });
+    socket.on('message', (raw) => {
+      const message = String(raw || '').trim().toLowerCase();
+      if (message === 'ping') {
+        try {
+          socket.send(JSON.stringify({
+            channel: 'whatsapp_inbox',
+            event: 'pong',
+            payload: {},
+            emitted_at: new Date().toISOString()
+          }));
+        } catch {
+          // ignore ping response failure
+        }
+      }
+    });
+    if (request && typeof request.on === 'function') {
+      request.on('close', () => {
+        whatsappWsClients.delete(socket);
+      });
+    }
+  });
+
+  httpServer.on('upgrade', async (request, socket, head) => {
+    const hostHeader = String(request.headers.host || 'localhost').trim() || 'localhost';
+    const parsedUrl = new URL(String(request.url || '/'), `http://${hostHeader}`);
+    if (parsedUrl.pathname !== '/ws/whatsapp/inbox') {
+      socket.destroy();
+      return;
+    }
+    try {
+      const token = resolveWebSocketToken(request.url, request.headers.authorization, hostHeader);
+      const user = await authenticateWhatsAppWsClient(token);
+      whatsappWsServer.handleUpgrade(request, socket, head, (ws) => {
+        whatsappWsServer.emit('connection', ws, request, user);
+      });
+    } catch {
+      try {
+        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+      } catch {
+        // ignore socket write errors
+      }
+      socket.destroy();
+    }
+  });
+};
 
 const parseJsonInput = (value, { expected = 'object', fieldLabel = 'JSON' } = {}) => {
   if (value === null || value === undefined || value === '') return null;
@@ -1622,6 +1784,81 @@ const sendWhatsAppMessage = async ({ payload }) => {
   };
 };
 
+const uploadMediaToWhatsApp = async ({ fileBuffer, mimeType = '', filename = '' }) => {
+  if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
+    throw createHttpError(500, 'Configuración de WhatsApp incompleta en el servidor');
+  }
+  if (!fileBuffer || !Buffer.isBuffer(fileBuffer) || fileBuffer.length === 0) {
+    throw createHttpError(400, 'Archivo inválido para subir a WhatsApp');
+  }
+  const safeMimeType = String(mimeType || '').trim() || 'application/octet-stream';
+  const safeFilename = String(filename || '').trim() || 'archivo.bin';
+  const formData = new FormData();
+  formData.append('messaging_product', 'whatsapp');
+  formData.append('type', safeMimeType);
+  formData.append('file', new Blob([fileBuffer], { type: safeMimeType }), safeFilename);
+
+  const url = `${WHATSAPP_API_BASE}/${WHATSAPP_GRAPH_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/media`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`
+    },
+    body: formData
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = payload?.error?.message || `WhatsApp media upload error ${response.status}`;
+    throw createHttpError(response.status || 500, message);
+  }
+  return payload;
+};
+
+const fetchWhatsAppMediaMeta = async (mediaId) => {
+  if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
+    throw createHttpError(500, 'Configuración de WhatsApp incompleta en el servidor');
+  }
+  const cleanMediaId = String(mediaId || '').trim();
+  if (!cleanMediaId) throw createHttpError(400, 'media_id inválido');
+  const url = `${WHATSAPP_API_BASE}/${WHATSAPP_GRAPH_VERSION}/${cleanMediaId}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`
+    }
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = payload?.error?.message || `WhatsApp media meta error ${response.status}`;
+    throw createHttpError(response.status || 500, message);
+  }
+  return payload || {};
+};
+
+const fetchWhatsAppMediaBinary = async (mediaUrl) => {
+  if (!WHATSAPP_ACCESS_TOKEN) {
+    throw createHttpError(500, 'Configuración de WhatsApp incompleta en el servidor');
+  }
+  const cleanUrl = String(mediaUrl || '').trim();
+  if (!cleanUrl) throw createHttpError(400, 'URL de media inválida');
+  const response = await fetch(cleanUrl, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`
+    }
+  });
+  if (!response.ok) {
+    throw createHttpError(response.status || 500, `No se pudo descargar media de WhatsApp (${response.status})`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  const bodyBuffer = Buffer.from(arrayBuffer);
+  return {
+    buffer: bodyBuffer,
+    contentType: String(response.headers.get('content-type') || '').trim() || null,
+    contentLength: response.headers.get('content-length')
+  };
+};
+
 let whatsappInboxInitPromise = null;
 
 const ensureWhatsAppInboxTables = async () => {
@@ -1806,6 +2043,7 @@ const processInboundWhatsAppMessage = async (message = {}, contactsByWaId = new 
   const createdAt = Number.isFinite(Number(message.timestamp))
     ? new Date(Number(message.timestamp) * 1000)
     : new Date();
+  let broadcastPayload = null;
 
   const client = await pool.connect();
   try {
@@ -1930,9 +2168,25 @@ const processInboundWhatsAppMessage = async (message = {}, contactsByWaId = new 
       if (!currentlyAssigned) {
         await assignConversationRoundRobin(client, conversationId, { reason: 'auto_round_robin_inbound', changedBy: null });
       }
+      broadcastPayload = {
+        conversation_id: conversationId,
+        wa_message_id: waMessageId || null,
+        direction: 'inbound',
+        message_type: messageType
+      };
     }
 
     await client.query('COMMIT');
+    if (broadcastPayload) {
+      notifyWhatsAppInboxRealtime('message_created', broadcastPayload);
+      notifyWhatsAppInboxRealtime('conversation_updated', {
+        conversation_id: conversationId,
+        reason: 'inbound_message'
+      });
+      notifyWhatsAppInboxRealtime('kpi_updated', {
+        reason: 'inbound_message'
+      });
+    }
   } catch (err) {
     try {
       await client.query('ROLLBACK');
@@ -1954,13 +2208,26 @@ const processWhatsAppStatusUpdates = async (statuses = []) => {
     const timestamp = Number.isFinite(Number(statusEntry?.timestamp))
       ? new Date(Number(statusEntry.timestamp) * 1000)
       : new Date();
-    await pool.query(
+    const updateRes = await pool.query(
       `UPDATE whatsapp_messages
        SET status = COALESCE($2, status),
            updated_at = $3
-       WHERE wa_message_id = $1`,
+       WHERE wa_message_id = $1
+       RETURNING conversation_id, wa_message_id, status`,
       [waMessageId, statusText, timestamp]
     );
+    for (const row of (updateRes.rows || [])) {
+      notifyWhatsAppInboxRealtime('message_status', {
+        conversation_id: Number(row.conversation_id),
+        wa_message_id: String(row.wa_message_id || '').trim() || waMessageId,
+        status: String(row.status || statusText || '').trim() || null
+      });
+    }
+    if (updateRes.rowCount > 0) {
+      notifyWhatsAppInboxRealtime('kpi_updated', {
+        reason: 'message_status'
+      });
+    }
   }
 };
 
@@ -4220,6 +4487,100 @@ app.post('/api/whatsapp/webhook', async (req, res) => {
 });
 
 // ─── WHATSAPP ADMIN INBOX ────────────────────────────────────────────────────
+app.post(
+  '/api/whatsapp/inbox/media/upload',
+  authenticateToken,
+  requireRole(['admin']),
+  (req, res, next) => {
+    whatsappMediaUpload.single('file')(req, res, (err) => {
+      if (!err) return next();
+      if (err?.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({
+          error: `Archivo demasiado grande. Límite: ${Math.round(WHATSAPP_MEDIA_UPLOAD_MAX_BYTES / (1024 * 1024))}MB`
+        });
+      }
+      return next(err);
+    });
+  },
+  async (req, res) => {
+    try {
+      await ensureWhatsAppInboxTables();
+      if (!req.file || !Buffer.isBuffer(req.file.buffer) || req.file.size <= 0) {
+        return res.status(400).json({ error: 'Debes adjuntar un archivo en el campo file' });
+      }
+      const mimeType = String(req.file.mimetype || '').trim() || 'application/octet-stream';
+      const filename = String(req.file.originalname || '').trim() || 'archivo.bin';
+      const uploadResult = await uploadMediaToWhatsApp({
+        fileBuffer: req.file.buffer,
+        mimeType,
+        filename
+      });
+      const mediaId = String(uploadResult?.id || '').trim();
+      if (!mediaId) {
+        return res.status(502).json({ error: 'WhatsApp no devolvió media_id para el archivo subido' });
+      }
+      return res.status(201).json({
+        media_id: mediaId,
+        mime_type: mimeType,
+        filename,
+        size_bytes: Number(req.file.size || 0),
+        suggested_message_type: guessWhatsAppMessageTypeFromMime(mimeType, filename),
+        raw_response: uploadResult
+      });
+    } catch (err) {
+      console.error(err);
+      if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+      return res.status(500).json({ error: 'No se pudo subir archivo a WhatsApp media API' });
+    }
+  }
+);
+
+app.get('/api/whatsapp/inbox/media/:id/meta', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const mediaId = String(req.params.id || '').trim();
+    if (!mediaId) return res.status(400).json({ error: 'media_id inválido' });
+    const meta = await fetchWhatsAppMediaMeta(mediaId);
+    return res.json({
+      id: String(meta?.id || mediaId).trim(),
+      mime_type: String(meta?.mime_type || '').trim() || null,
+      sha256: String(meta?.sha256 || '').trim() || null,
+      file_size: Number(meta?.file_size || 0) || null,
+      messaging_product: String(meta?.messaging_product || '').trim() || 'whatsapp'
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo obtener metadatos de media' });
+  }
+});
+
+app.get('/api/whatsapp/inbox/media/:id/content', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const mediaId = String(req.params.id || '').trim();
+    if (!mediaId) return res.status(400).json({ error: 'media_id inválido' });
+    const meta = await fetchWhatsAppMediaMeta(mediaId);
+    const mediaUrl = String(meta?.url || '').trim();
+    if (!mediaUrl) return res.status(404).json({ error: 'Media no disponible para descarga' });
+
+    const mediaFile = await fetchWhatsAppMediaBinary(mediaUrl);
+    const mimeType = String(mediaFile.contentType || meta?.mime_type || 'application/octet-stream').trim();
+    const disposition = parseOptionalBoolean(req.query.download, false) ? 'attachment' : 'inline';
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=30');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${mediaId}"`);
+    if (mediaFile.contentLength) {
+      res.setHeader('Content-Length', String(mediaFile.contentLength));
+    }
+    return res.status(200).send(mediaFile.buffer);
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo descargar media de WhatsApp' });
+  }
+});
+
 app.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
     await ensureWhatsAppInboxTables();
@@ -4287,6 +4648,163 @@ app.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole(['ad
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo cargar inbox de WhatsApp' });
+  }
+});
+
+app.get('/api/whatsapp/inbox/kpis', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const daysRaw = Number.parseInt(req.query.days, 10);
+    const days = Math.min(90, Math.max(1, Number.isInteger(daysRaw) ? daysRaw : 7));
+    const sinceParam = `${days} days`;
+
+    const [conversationSummaryRes, outboundSummaryRes, firstResponseSummaryRes, agentRowsRes] = await Promise.all([
+      pool.query(
+        `SELECT
+           COUNT(*)::int AS total_conversations,
+           COUNT(*) FILTER (WHERE status = 'open')::int AS open_conversations,
+           COALESCE(SUM(unread_count), 0)::int AS unread_messages
+         FROM whatsapp_conversations`
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE direction = 'outbound' AND created_at >= NOW() - $1::interval)::int AS outbound_total,
+           COUNT(*) FILTER (WHERE direction = 'outbound' AND status = 'delivered' AND created_at >= NOW() - $1::interval)::int AS outbound_delivered,
+           COUNT(*) FILTER (WHERE direction = 'outbound' AND status = 'read' AND created_at >= NOW() - $1::interval)::int AS outbound_read,
+           COUNT(*) FILTER (WHERE direction = 'outbound' AND status = 'failed' AND created_at >= NOW() - $1::interval)::int AS outbound_failed
+         FROM whatsapp_messages`,
+        [sinceParam]
+      ),
+      pool.query(
+        `WITH first_inbound AS (
+           SELECT conversation_id, MIN(created_at) AS first_inbound_at
+           FROM whatsapp_messages
+           WHERE direction = 'inbound'
+             AND created_at >= NOW() - $1::interval
+           GROUP BY conversation_id
+         ),
+         first_response AS (
+           SELECT
+             fi.conversation_id,
+             fi.first_inbound_at,
+             MIN(m.created_at) AS first_outbound_at
+           FROM first_inbound fi
+           LEFT JOIN whatsapp_messages m
+             ON m.conversation_id = fi.conversation_id
+            AND m.direction = 'outbound'
+            AND m.created_at >= fi.first_inbound_at
+           GROUP BY fi.conversation_id, fi.first_inbound_at
+         )
+         SELECT
+           COUNT(*)::int AS inbound_conversations,
+           COUNT(*) FILTER (WHERE first_outbound_at IS NOT NULL)::int AS responded_conversations,
+           AVG(EXTRACT(EPOCH FROM (first_outbound_at - first_inbound_at)) / 60.0)
+             FILTER (WHERE first_outbound_at IS NOT NULL) AS avg_first_response_minutes
+         FROM first_response`,
+        [sinceParam]
+      ),
+      pool.query(
+        `WITH first_inbound AS (
+           SELECT conversation_id, MIN(created_at) AS first_inbound_at
+           FROM whatsapp_messages
+           WHERE direction = 'inbound'
+             AND created_at >= NOW() - $1::interval
+           GROUP BY conversation_id
+         ),
+         first_response AS (
+           SELECT
+             fi.conversation_id,
+             fi.first_inbound_at,
+             MIN(m.created_at) AS first_outbound_at
+           FROM first_inbound fi
+           LEFT JOIN whatsapp_messages m
+             ON m.conversation_id = fi.conversation_id
+            AND m.direction = 'outbound'
+            AND m.created_at >= fi.first_inbound_at
+           GROUP BY fi.conversation_id, fi.first_inbound_at
+         ),
+         outbound_by_agent AS (
+           SELECT
+             c.assigned_user_id AS user_id,
+             COUNT(*)::int AS outbound_total,
+             COUNT(*) FILTER (WHERE m.status = 'read')::int AS outbound_read
+           FROM whatsapp_messages m
+           JOIN whatsapp_conversations c ON c.id = m.conversation_id
+           WHERE m.direction = 'outbound'
+             AND m.created_at >= NOW() - $1::interval
+           GROUP BY c.assigned_user_id
+         )
+         SELECT
+           c.assigned_user_id AS user_id,
+           COALESCE(u.display_name, u.email, 'Sin asignar') AS user_name,
+           COUNT(c.id)::int AS conversations_total,
+           COUNT(c.id) FILTER (WHERE c.status = 'open')::int AS open_conversations,
+           COUNT(fr.conversation_id) FILTER (WHERE fr.first_outbound_at IS NOT NULL)::int AS conversations_responded,
+           AVG(EXTRACT(EPOCH FROM (fr.first_outbound_at - fr.first_inbound_at)) / 60.0)
+             FILTER (WHERE fr.first_outbound_at IS NOT NULL) AS avg_first_response_minutes,
+           COALESCE(MAX(oba.outbound_total), 0)::int AS outbound_total,
+           COALESCE(MAX(oba.outbound_read), 0)::int AS outbound_read
+         FROM whatsapp_conversations c
+         LEFT JOIN users u ON u.id = c.assigned_user_id
+         LEFT JOIN first_response fr ON fr.conversation_id = c.id
+         LEFT JOIN outbound_by_agent oba ON oba.user_id IS NOT DISTINCT FROM c.assigned_user_id
+         WHERE COALESCE(c.last_message_at, c.updated_at, c.created_at) >= NOW() - $1::interval
+         GROUP BY c.assigned_user_id, COALESCE(u.display_name, u.email, 'Sin asignar')
+         ORDER BY conversations_total DESC, user_name ASC`,
+        [sinceParam]
+      )
+    ]);
+
+    const summary = conversationSummaryRes.rows[0] || {};
+    const outbound = outboundSummaryRes.rows[0] || {};
+    const responseSummary = firstResponseSummaryRes.rows[0] || {};
+    const outboundTotal = Number(outbound.outbound_total || 0);
+    const outboundRead = Number(outbound.outbound_read || 0);
+    const readRate = outboundTotal > 0 ? (outboundRead / outboundTotal) * 100 : 0;
+
+    const byAgent = (agentRowsRes.rows || []).map((row) => {
+      const agentOutboundTotal = Number(row.outbound_total || 0);
+      const agentOutboundRead = Number(row.outbound_read || 0);
+      return {
+        user_id: row.user_id !== null ? Number(row.user_id) : null,
+        user_name: String(row.user_name || 'Sin asignar').trim() || 'Sin asignar',
+        conversations_total: Number(row.conversations_total || 0),
+        open_conversations: Number(row.open_conversations || 0),
+        conversations_responded: Number(row.conversations_responded || 0),
+        avg_first_response_minutes: row.avg_first_response_minutes !== null
+          ? Number(row.avg_first_response_minutes)
+          : null,
+        outbound_total: agentOutboundTotal,
+        outbound_read: agentOutboundRead,
+        read_rate_percent: agentOutboundTotal > 0
+          ? (agentOutboundRead / agentOutboundTotal) * 100
+          : 0
+      };
+    });
+
+    return res.json({
+      window_days: days,
+      totals: {
+        total_conversations: Number(summary.total_conversations || 0),
+        open_conversations: Number(summary.open_conversations || 0),
+        unread_messages: Number(summary.unread_messages || 0),
+        outbound_total: outboundTotal,
+        outbound_delivered: Number(outbound.outbound_delivered || 0),
+        outbound_read: outboundRead,
+        outbound_failed: Number(outbound.outbound_failed || 0),
+        read_rate_percent: readRate,
+        inbound_conversations: Number(responseSummary.inbound_conversations || 0),
+        responded_conversations: Number(responseSummary.responded_conversations || 0),
+        avg_first_response_minutes: responseSummary.avg_first_response_minutes !== null
+          ? Number(responseSummary.avg_first_response_minutes)
+          : null
+      },
+      by_agent: byAgent
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudieron cargar KPI de WhatsApp inbox' });
   }
 });
 
@@ -4401,6 +4919,10 @@ app.patch('/api/whatsapp/inbox/conversations/:id/read', authenticateToken, requi
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Conversación no encontrada' });
     }
+    notifyWhatsAppInboxRealtime('conversation_updated', {
+      conversation_id: conversationId,
+      reason: 'mark_read'
+    });
     return res.json({
       message: 'Conversación marcada como leída',
       id: Number(result.rows[0].id),
@@ -4434,6 +4956,11 @@ app.patch('/api/whatsapp/inbox/conversations/:id/status', authenticateToken, req
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Conversación no encontrada' });
     }
+    notifyWhatsAppInboxRealtime('conversation_updated', {
+      conversation_id: conversationId,
+      reason: 'status_change',
+      status
+    });
     return res.json({
       message: 'Estado de conversación actualizado',
       id: Number(result.rows[0].id),
@@ -4514,6 +5041,18 @@ app.patch('/api/whatsapp/inbox/conversations/:id/assign', authenticateToken, req
     await client.query('COMMIT');
     client.release();
     client = null;
+    notifyWhatsAppInboxRealtime('conversation_assigned', {
+      conversation_id: conversationId,
+      assigned_user_id: nextUserId,
+      reason
+    });
+    notifyWhatsAppInboxRealtime('conversation_updated', {
+      conversation_id: conversationId,
+      reason: 'assignment_change'
+    });
+    notifyWhatsAppInboxRealtime('kpi_updated', {
+      reason: 'assignment_change'
+    });
 
     return res.json({
       message: 'Conversación asignada',
@@ -4614,6 +5153,19 @@ app.post('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, re
     await client.query('COMMIT');
     client.release();
     client = null;
+    notifyWhatsAppInboxRealtime('message_created', {
+      conversation_id: conversationId,
+      wa_message_id: String(sendResult.wa_message_id || '').trim() || null,
+      direction: 'outbound',
+      message_type: messageType
+    });
+    notifyWhatsAppInboxRealtime('conversation_updated', {
+      conversation_id: conversationId,
+      reason: 'outbound_message'
+    });
+    notifyWhatsAppInboxRealtime('kpi_updated', {
+      reason: 'outbound_message'
+    });
 
     return res.status(201).json({
       message: 'Mensaje enviado',
@@ -9992,7 +10544,8 @@ const startServer = async () => {
   await ensureProductionKanbanTables();
   await ensureProductCostingTable();
   await ensureWhatsAppInboxTables();
-  app.listen(PORT, () => {
+  initWhatsAppInboxWebSocketGateway();
+  httpServer.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 };
