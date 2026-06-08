@@ -847,9 +847,6 @@ export default function WhatsAppInboxAdmin({ token }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
             <h3 style={{ marginBottom: 4 }}>WhatsApp Inbox</h3>
-            <p style={{ color: '#94a3b8', margin: 0 }}>
-              Estilo operativo tipo Wati/AiSensy: conversaciones, asignación round-robin y respuesta centralizada.
-            </p>
             <div style={{ marginTop: 6, fontSize: '0.76rem', color: wsConnected ? '#86efac' : '#fbbf24' }}>
               WebSocket: {wsConnected ? 'conectado (tiempo real)' : 'desconectado (usa Actualizar manual)'}
             </div>
