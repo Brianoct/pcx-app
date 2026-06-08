@@ -16,6 +16,160 @@ const normalizePhoneDisplay = (phone = '') => {
   return `+${digits}`;
 };
 
+const COMPOSER_TYPES = [
+  { value: 'text', label: 'Texto' },
+  { value: 'image', label: 'Imagen' },
+  { value: 'video', label: 'Video' },
+  { value: 'audio', label: 'Audio' },
+  { value: 'document', label: 'Documento' },
+  { value: 'location', label: 'Ubicación' },
+  { value: 'contacts', label: 'Contacto(s)' },
+  { value: 'interactive', label: 'Botones/Lista' },
+  { value: 'template', label: 'Plantilla' }
+];
+
+const parseJsonInput = (value, fieldLabel, fallbackValue = null) => {
+  const raw = String(value || '').trim();
+  if (!raw) return fallbackValue;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error(`${fieldLabel} debe ser JSON válido`);
+  }
+};
+
+const normalizeMessagePayload = (message = {}) => {
+  const rawPayload = message?.raw_payload;
+  if (!rawPayload || typeof rawPayload !== 'object') return null;
+  if (message.direction === 'outbound' && rawPayload.request && typeof rawPayload.request === 'object') {
+    return rawPayload.request;
+  }
+  return rawPayload;
+};
+
+const renderMessageBody = (message = {}) => {
+  const payload = normalizeMessagePayload(message);
+  const messageType = String(message?.message_type || payload?.type || 'text').trim().toLowerCase();
+  const textBody = String(message?.text_body || '').trim();
+
+  if (messageType === 'text') {
+    return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.9rem' }}>{textBody || '[Sin texto]'}</div>;
+  }
+
+  if (['image', 'video', 'audio', 'document'].includes(messageType)) {
+    const media = payload?.[messageType] || {};
+    const link = String(media?.link || '').trim();
+    const mediaId = String(media?.id || '').trim();
+    const caption = String(media?.caption || '').trim();
+    const filename = String(media?.filename || '').trim();
+    return (
+      <div style={{ display: 'grid', gap: 5 }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{textBody || `[${messageType}]`}</div>
+        {caption && <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.85rem' }}>{caption}</div>}
+        {filename && <div style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>Archivo: {filename}</div>}
+        {link && (
+          <a href={link} target="_blank" rel="noreferrer" style={{ color: '#93c5fd', fontSize: '0.78rem' }}>
+            Abrir archivo
+          </a>
+        )}
+        {mediaId && <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Media ID: {mediaId}</div>}
+      </div>
+    );
+  }
+
+  if (messageType === 'location') {
+    const location = payload?.location || {};
+    const latitude = Number(location?.latitude);
+    const longitude = Number(location?.longitude);
+    const mapsLink = Number.isFinite(latitude) && Number.isFinite(longitude)
+      ? `https://maps.google.com/?q=${latitude},${longitude}`
+      : '';
+    return (
+      <div style={{ display: 'grid', gap: 5 }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{textBody || '[Ubicación]'}</div>
+        {location?.name && <div style={{ fontSize: '0.82rem' }}>{location.name}</div>}
+        {location?.address && <div style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>{location.address}</div>}
+        {mapsLink && (
+          <a href={mapsLink} target="_blank" rel="noreferrer" style={{ color: '#93c5fd', fontSize: '0.78rem' }}>
+            Ver en mapa
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  if (messageType === 'contacts') {
+    const contacts = Array.isArray(payload?.contacts) ? payload.contacts : [];
+    const firstContact = contacts[0];
+    const firstName = String(firstContact?.name?.formatted_name || '').trim();
+    const firstPhone = Array.isArray(firstContact?.phones) ? firstContact.phones[0]?.phone : '';
+    return (
+      <div style={{ display: 'grid', gap: 4 }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{textBody || '[Contacto]'}</div>
+        {firstName && <div style={{ fontSize: '0.82rem' }}>{firstName}</div>}
+        {firstPhone && <div style={{ color: '#93c5fd', fontSize: '0.8rem' }}>{firstPhone}</div>}
+        <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>
+          {contacts.length > 1 ? `${contacts.length} contactos enviados` : '1 contacto enviado'}
+        </div>
+      </div>
+    );
+  }
+
+  if (messageType === 'interactive') {
+    const interactive = payload?.interactive || {};
+    const interactiveType = String(interactive?.type || '').trim();
+    const bodyText = String(interactive?.body?.text || '').trim();
+    const buttonTitles = Array.isArray(interactive?.action?.buttons)
+      ? interactive.action.buttons.map((btn) => String(btn?.reply?.title || '').trim()).filter(Boolean)
+      : [];
+    const listButton = String(interactive?.action?.button || '').trim();
+    return (
+      <div style={{ display: 'grid', gap: 5 }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>
+          {bodyText || textBody || '[Interactivo]'}
+        </div>
+        {interactiveType && <div style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>Tipo: {interactiveType}</div>}
+        {buttonTitles.length > 0 && (
+          <div style={{ color: '#93c5fd', fontSize: '0.78rem' }}>
+            Botones: {buttonTitles.join(' | ')}
+          </div>
+        )}
+        {listButton && <div style={{ color: '#93c5fd', fontSize: '0.78rem' }}>Lista: {listButton}</div>}
+      </div>
+    );
+  }
+
+  if (messageType === 'template') {
+    const template = payload?.template || {};
+    const name = String(template?.name || '').trim();
+    const lang = String(template?.language?.code || '').trim();
+    const componentsCount = Array.isArray(template?.components) ? template.components.length : 0;
+    return (
+      <div style={{ display: 'grid', gap: 5 }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{textBody || '[Plantilla]'}</div>
+        {name && <div style={{ fontSize: '0.82rem' }}>Template: {name}</div>}
+        {lang && <div style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>Idioma: {lang}</div>}
+        {componentsCount > 0 && (
+          <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>
+            Componentes: {componentsCount}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.9rem' }}>{textBody || `[${messageType}]`}</div>;
+};
+
+const getStatusVisual = (statusRaw, isOutbound) => {
+  const status = String(statusRaw || '').trim().toLowerCase();
+  if (!isOutbound) return { label: status || 'received', color: '#9ca3af' };
+  if (status === 'read') return { label: 'read', color: '#86efac' };
+  if (status === 'delivered') return { label: 'delivered', color: '#93c5fd' };
+  if (status === 'failed') return { label: 'failed', color: '#fca5a5' };
+  return { label: status || 'sent', color: '#bfdbfe' };
+};
+
 function ConversationItem({ row, isActive, onClick }) {
   return (
     <button
@@ -94,7 +248,25 @@ export default function WhatsAppInboxAdmin({ token }) {
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
+  const [composerType, setComposerType] = useState('text');
   const [draft, setDraft] = useState('');
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [mediaId, setMediaId] = useState('');
+  const [mediaCaption, setMediaCaption] = useState('');
+  const [mediaFilename, setMediaFilename] = useState('');
+  const [locationLat, setLocationLat] = useState('');
+  const [locationLng, setLocationLng] = useState('');
+  const [locationName, setLocationName] = useState('');
+  const [locationAddress, setLocationAddress] = useState('');
+  const [contactsJson, setContactsJson] = useState(
+    '[\n  {\n    "name": { "formatted_name": "Contacto PCX" },\n    "phones": [{ "phone": "59170000000", "type": "MOBILE" }]\n  }\n]'
+  );
+  const [interactiveJson, setInteractiveJson] = useState(
+    '{\n  "type": "button",\n  "body": { "text": "Seleccione una opción" },\n  "action": {\n    "buttons": [\n      { "type": "reply", "reply": { "id": "catalogo", "title": "Catalogo" } },\n      { "type": "reply", "reply": { "id": "asesor", "title": "Hablar con asesor" } }\n    ]\n  }\n}'
+  );
+  const [templateName, setTemplateName] = useState('');
+  const [templateLanguageCode, setTemplateLanguageCode] = useState('es');
+  const [templateComponentsJson, setTemplateComponentsJson] = useState('[]');
   const [error, setError] = useState('');
 
   const selectedConversation = useMemo(
@@ -182,17 +354,123 @@ export default function WhatsAppInboxAdmin({ token }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConversationId, search]);
 
+  const buildOutgoingBody = () => {
+    if (composerType === 'text') {
+      const text = draft.trim();
+      if (!text) throw new Error('El mensaje de texto no puede estar vacío');
+      return { type: 'text', text };
+    }
+
+    if (['image', 'video', 'audio', 'document'].includes(composerType)) {
+      const payload = {
+        type: composerType
+      };
+      if (mediaUrl.trim()) payload.media_url = mediaUrl.trim();
+      if (mediaId.trim()) payload.media_id = mediaId.trim();
+      if (!payload.media_url && !payload.media_id) {
+        throw new Error(`Para ${composerType} debes enviar media_url o media_id`);
+      }
+      if (mediaCaption.trim()) payload.caption = mediaCaption.trim();
+      if (composerType === 'document' && mediaFilename.trim()) payload.filename = mediaFilename.trim();
+      return payload;
+    }
+
+    if (composerType === 'location') {
+      const latitude = Number(locationLat);
+      const longitude = Number(locationLng);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        throw new Error('Ubicación inválida: latitude y longitude son requeridos');
+      }
+      return {
+        type: 'location',
+        location: {
+          latitude,
+          longitude,
+          name: locationName.trim() || undefined,
+          address: locationAddress.trim() || undefined
+        }
+      };
+    }
+
+    if (composerType === 'contacts') {
+      const contacts = parseJsonInput(contactsJson, 'contacts', []);
+      if (!Array.isArray(contacts) || contacts.length === 0) {
+        throw new Error('contacts debe incluir al menos un contacto');
+      }
+      return {
+        type: 'contacts',
+        contacts
+      };
+    }
+
+    if (composerType === 'interactive') {
+      const interactive = parseJsonInput(interactiveJson, 'interactive');
+      if (!interactive || typeof interactive !== 'object' || Array.isArray(interactive)) {
+        throw new Error('interactive debe ser un objeto');
+      }
+      return {
+        type: 'interactive',
+        interactive
+      };
+    }
+
+    if (composerType === 'template') {
+      const name = templateName.trim();
+      if (!name) throw new Error('template_name es requerido');
+      const components = parseJsonInput(templateComponentsJson, 'template_components', []);
+      if (!Array.isArray(components)) throw new Error('template_components debe ser un arreglo');
+      return {
+        type: 'template',
+        template_name: name,
+        template_language_code: templateLanguageCode.trim() || 'es',
+        template_components: components
+      };
+    }
+
+    throw new Error('Tipo de mensaje no soportado');
+  };
+
+  const canSendMessage = useMemo(() => {
+    if (!selectedConversationId || sending) return false;
+    if (composerType === 'text') return Boolean(draft.trim());
+    if (['image', 'video', 'audio', 'document'].includes(composerType)) {
+      return Boolean(mediaUrl.trim() || mediaId.trim());
+    }
+    if (composerType === 'location') {
+      return Boolean(locationLat.trim() && locationLng.trim());
+    }
+    if (composerType === 'template') {
+      return Boolean(templateName.trim());
+    }
+    return true;
+  }, [selectedConversationId, sending, composerType, draft, mediaUrl, mediaId, locationLat, locationLng, templateName]);
+
+  const resetComposer = () => {
+    setDraft('');
+    setMediaUrl('');
+    setMediaId('');
+    setMediaCaption('');
+    setMediaFilename('');
+    setLocationLat('');
+    setLocationLng('');
+    setLocationName('');
+    setLocationAddress('');
+    setTemplateName('');
+    setTemplateComponentsJson('[]');
+  };
+
   const sendMessage = async () => {
-    if (!selectedConversationId || !draft.trim()) return;
+    if (!selectedConversationId) return;
     setSending(true);
     setError('');
     try {
+      const body = buildOutgoingBody();
       await apiRequest(`/api/whatsapp/inbox/conversations/${selectedConversationId}/messages`, {
         method: 'POST',
         token,
-        body: { text: draft.trim() }
+        body
       });
-      setDraft('');
+      resetComposer();
       await Promise.all([
         loadMessages(selectedConversationId),
         loadConversations()
@@ -359,6 +637,7 @@ export default function WhatsAppInboxAdmin({ token }) {
               <div style={{ display: 'grid', gap: 10 }}>
                 {messages.map((message) => {
                   const isOutbound = message.direction === 'outbound';
+                  const statusVisual = getStatusVisual(message.status, isOutbound);
                   return (
                     <div key={message.id} style={{
                       display: 'flex',
@@ -372,9 +651,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                         background: isOutbound ? 'linear-gradient(180deg, #1d4ed8 0%, #1e40af 100%)' : '#1f2937',
                         color: '#f8fafc'
                       }}>
-                        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.9rem' }}>
-                          {message.text_body || '[Sin texto]'}
-                        </div>
+                        {renderMessageBody(message)}
                         <div style={{
                           marginTop: 4,
                           display: 'flex',
@@ -384,7 +661,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                           color: isOutbound ? '#bfdbfe' : '#9ca3af'
                         }}>
                           <span>{formatDateTime(message.created_at)}</span>
-                          <span>{message.status || (isOutbound ? 'sent' : 'received')}</span>
+                          <span style={{ color: statusVisual.color }}>{statusVisual.label}</span>
                         </div>
                       </div>
                     </div>
@@ -395,27 +672,282 @@ export default function WhatsAppInboxAdmin({ token }) {
           </div>
 
           <div style={{ borderTop: '1px solid #334155', padding: 12, display: 'grid', gap: 8 }}>
-            <textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              rows={3}
-              placeholder="Escribe un mensaje..."
-              style={{
-                width: '100%',
-                borderRadius: 10,
-                border: '1px solid #334155',
-                background: '#111827',
-                color: '#f8fafc',
-                padding: '9px 10px',
-                resize: 'vertical'
-              }}
-            />
+            <div style={{ display: 'grid', gridTemplateColumns: '180px minmax(0, 1fr)', gap: 8 }}>
+              <select
+                value={composerType}
+                onChange={(event) => setComposerType(event.target.value)}
+                style={{
+                  minHeight: 40,
+                  borderRadius: 10,
+                  border: '1px solid #334155',
+                  background: '#0f172a',
+                  color: '#f8fafc',
+                  padding: '8px 10px'
+                }}
+              >
+                {COMPOSER_TYPES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <div style={{ color: '#94a3b8', fontSize: '0.78rem', display: 'flex', alignItems: 'center' }}>
+                Envia texto, media, ubicacion, contactos, botones/lista y plantillas desde este panel.
+              </div>
+            </div>
+
+            {composerType === 'text' && (
+              <textarea
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                rows={3}
+                placeholder="Escribe un mensaje..."
+                style={{
+                  width: '100%',
+                  borderRadius: 10,
+                  border: '1px solid #334155',
+                  background: '#111827',
+                  color: '#f8fafc',
+                  padding: '9px 10px',
+                  resize: 'vertical'
+                }}
+              />
+            )}
+
+            {['image', 'video', 'audio', 'document'].includes(composerType) && (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <input
+                  type="text"
+                  value={mediaUrl}
+                  onChange={(event) => setMediaUrl(event.target.value)}
+                  placeholder="media_url (https://...)"
+                  style={{
+                    width: '100%',
+                    minHeight: 38,
+                    borderRadius: 8,
+                    border: '1px solid #334155',
+                    background: '#111827',
+                    color: '#f8fafc',
+                    padding: '8px 10px'
+                  }}
+                />
+                <input
+                  type="text"
+                  value={mediaId}
+                  onChange={(event) => setMediaId(event.target.value)}
+                  placeholder="media_id (opcional si usas URL)"
+                  style={{
+                    width: '100%',
+                    minHeight: 38,
+                    borderRadius: 8,
+                    border: '1px solid #334155',
+                    background: '#111827',
+                    color: '#f8fafc',
+                    padding: '8px 10px'
+                  }}
+                />
+                {composerType !== 'audio' && (
+                  <input
+                    type="text"
+                    value={mediaCaption}
+                    onChange={(event) => setMediaCaption(event.target.value)}
+                    placeholder="Caption (opcional)"
+                    style={{
+                      width: '100%',
+                      minHeight: 38,
+                      borderRadius: 8,
+                      border: '1px solid #334155',
+                      background: '#111827',
+                      color: '#f8fafc',
+                      padding: '8px 10px'
+                    }}
+                  />
+                )}
+                {composerType === 'document' && (
+                  <input
+                    type="text"
+                    value={mediaFilename}
+                    onChange={(event) => setMediaFilename(event.target.value)}
+                    placeholder="Nombre archivo (opcional)"
+                    style={{
+                      width: '100%',
+                      minHeight: 38,
+                      borderRadius: 8,
+                      border: '1px solid #334155',
+                      background: '#111827',
+                      color: '#f8fafc',
+                      padding: '8px 10px'
+                    }}
+                  />
+                )}
+              </div>
+            )}
+
+            {composerType === 'location' && (
+              <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                <input
+                  type="text"
+                  value={locationLat}
+                  onChange={(event) => setLocationLat(event.target.value)}
+                  placeholder="Latitude"
+                  style={{
+                    width: '100%',
+                    minHeight: 38,
+                    borderRadius: 8,
+                    border: '1px solid #334155',
+                    background: '#111827',
+                    color: '#f8fafc',
+                    padding: '8px 10px'
+                  }}
+                />
+                <input
+                  type="text"
+                  value={locationLng}
+                  onChange={(event) => setLocationLng(event.target.value)}
+                  placeholder="Longitude"
+                  style={{
+                    width: '100%',
+                    minHeight: 38,
+                    borderRadius: 8,
+                    border: '1px solid #334155',
+                    background: '#111827',
+                    color: '#f8fafc',
+                    padding: '8px 10px'
+                  }}
+                />
+                <input
+                  type="text"
+                  value={locationName}
+                  onChange={(event) => setLocationName(event.target.value)}
+                  placeholder="Nombre (opcional)"
+                  style={{
+                    width: '100%',
+                    minHeight: 38,
+                    borderRadius: 8,
+                    border: '1px solid #334155',
+                    background: '#111827',
+                    color: '#f8fafc',
+                    padding: '8px 10px'
+                  }}
+                />
+                <input
+                  type="text"
+                  value={locationAddress}
+                  onChange={(event) => setLocationAddress(event.target.value)}
+                  placeholder="Direccion (opcional)"
+                  style={{
+                    width: '100%',
+                    minHeight: 38,
+                    borderRadius: 8,
+                    border: '1px solid #334155',
+                    background: '#111827',
+                    color: '#f8fafc',
+                    padding: '8px 10px'
+                  }}
+                />
+              </div>
+            )}
+
+            {composerType === 'contacts' && (
+              <textarea
+                value={contactsJson}
+                onChange={(event) => setContactsJson(event.target.value)}
+                rows={6}
+                placeholder='[{"name":{"formatted_name":"Contacto"},"phones":[{"phone":"59170000000","type":"MOBILE"}]}]'
+                style={{
+                  width: '100%',
+                  borderRadius: 10,
+                  border: '1px solid #334155',
+                  background: '#111827',
+                  color: '#f8fafc',
+                  padding: '9px 10px',
+                  resize: 'vertical',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                  fontSize: '0.8rem'
+                }}
+              />
+            )}
+
+            {composerType === 'interactive' && (
+              <textarea
+                value={interactiveJson}
+                onChange={(event) => setInteractiveJson(event.target.value)}
+                rows={7}
+                placeholder='{"type":"button","body":{"text":"Seleccione"},"action":{"buttons":[...]}}'
+                style={{
+                  width: '100%',
+                  borderRadius: 10,
+                  border: '1px solid #334155',
+                  background: '#111827',
+                  color: '#f8fafc',
+                  padding: '9px 10px',
+                  resize: 'vertical',
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                  fontSize: '0.8rem'
+                }}
+              />
+            )}
+
+            {composerType === 'template' && (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 140px' }}>
+                  <input
+                    type="text"
+                    value={templateName}
+                    onChange={(event) => setTemplateName(event.target.value)}
+                    placeholder="template_name"
+                    style={{
+                      width: '100%',
+                      minHeight: 38,
+                      borderRadius: 8,
+                      border: '1px solid #334155',
+                      background: '#111827',
+                      color: '#f8fafc',
+                      padding: '8px 10px'
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={templateLanguageCode}
+                    onChange={(event) => setTemplateLanguageCode(event.target.value)}
+                    placeholder="Idioma (es)"
+                    style={{
+                      width: '100%',
+                      minHeight: 38,
+                      borderRadius: 8,
+                      border: '1px solid #334155',
+                      background: '#111827',
+                      color: '#f8fafc',
+                      padding: '8px 10px'
+                    }}
+                  />
+                </div>
+                <textarea
+                  value={templateComponentsJson}
+                  onChange={(event) => setTemplateComponentsJson(event.target.value)}
+                  rows={5}
+                  placeholder='[{"type":"body","parameters":[{"type":"text","text":"Brian"}]}]'
+                  style={{
+                    width: '100%',
+                    borderRadius: 10,
+                    border: '1px solid #334155',
+                    background: '#111827',
+                    color: '#f8fafc',
+                    padding: '9px 10px',
+                    resize: 'vertical',
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                    fontSize: '0.8rem'
+                  }}
+                />
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 className="btn btn-primary"
                 onClick={sendMessage}
-                disabled={sending || !selectedConversation || !draft.trim()}
+                disabled={!canSendMessage}
               >
                 {sending ? 'Enviando...' : 'Enviar mensaje'}
               </button>
