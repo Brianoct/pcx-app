@@ -1355,8 +1355,80 @@ const WHATSAPP_PHONE_NUMBER_ID = String(process.env.WHATSAPP_PHONE_NUMBER_ID || 
 const WHATSAPP_GRAPH_VERSION = String(process.env.WHATSAPP_GRAPH_VERSION || 'v20.0').trim();
 const WHATSAPP_API_BASE = String(process.env.WHATSAPP_API_BASE || 'https://graph.facebook.com').trim();
 const WHATSAPP_APP_SECRET = String(process.env.WHATSAPP_APP_SECRET || '').trim();
+const WHATSAPP_OUTBOUND_TYPES = new Set(['text', 'image', 'video', 'audio', 'document', 'location', 'contacts', 'interactive', 'template']);
 
 const normalizeWhatsAppPhone = (value = '') => String(value || '').replace(/\D/g, '').trim();
+
+const parseJsonInput = (value, { expected = 'object', fieldLabel = 'JSON' } = {}) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (expected === 'array' && !Array.isArray(parsed)) throw new Error('not_array');
+      if (expected === 'object' && (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))) throw new Error('not_object');
+      return parsed;
+    } catch {
+      throw createHttpError(400, `${fieldLabel} no tiene formato JSON válido`);
+    }
+  }
+  if (expected === 'array' && !Array.isArray(value)) {
+    throw createHttpError(400, `${fieldLabel} debe ser un arreglo`);
+  }
+  if (expected === 'object' && (!value || typeof value !== 'object' || Array.isArray(value))) {
+    throw createHttpError(400, `${fieldLabel} debe ser un objeto`);
+  }
+  return value;
+};
+
+const parseOptionalBoolean = (value, defaultValue = false) => {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'si', 'sí', 'yes'].includes(normalized)) return true;
+  if (['0', 'false', 'no'].includes(normalized)) return false;
+  return defaultValue;
+};
+
+const getWhatsAppMessagePreviewFromPayload = (payload = {}) => {
+  const type = String(payload?.type || '').trim().toLowerCase();
+  if (type === 'text') return String(payload?.text?.body || '').trim();
+  if (type === 'image') return String(payload?.image?.caption || '').trim() || '[Imagen]';
+  if (type === 'video') return String(payload?.video?.caption || '').trim() || '[Video]';
+  if (type === 'audio') return '[Audio]';
+  if (type === 'document') {
+    const caption = String(payload?.document?.caption || '').trim();
+    const filename = String(payload?.document?.filename || '').trim();
+    return caption || filename || '[Documento]';
+  }
+  if (type === 'location') {
+    const name = String(payload?.location?.name || '').trim();
+    if (name) return `[Ubicación] ${name}`;
+    const latitude = Number(payload?.location?.latitude);
+    const longitude = Number(payload?.location?.longitude);
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      return `[Ubicación] ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+    }
+    return '[Ubicación]';
+  }
+  if (type === 'contacts') {
+    const first = Array.isArray(payload?.contacts) ? payload.contacts[0] : null;
+    const displayName = String(first?.name?.formatted_name || '').trim();
+    return displayName ? `[Contacto] ${displayName}` : '[Contacto]';
+  }
+  if (type === 'interactive') {
+    const bodyText = String(payload?.interactive?.body?.text || '').trim();
+    const interactiveType = String(payload?.interactive?.type || '').trim();
+    if (bodyText) return bodyText;
+    if (interactiveType) return `[Interactivo: ${interactiveType}]`;
+    return '[Interactivo]';
+  }
+  if (type === 'template') {
+    const templateName = String(payload?.template?.name || '').trim();
+    return templateName ? `[Plantilla] ${templateName}` : '[Plantilla]';
+  }
+  const fallbackType = String(type || 'mensaje').trim();
+  return fallbackType ? `[${fallbackType}]` : '';
+};
 
 const extractWhatsAppTextBody = (message = {}) => {
   if (!message || typeof message !== 'object') return '';
@@ -1367,14 +1439,187 @@ const extractWhatsAppTextBody = (message = {}) => {
     if (buttonReply) return buttonReply;
     const listReply = String(message?.interactive?.list_reply?.title || '').trim();
     if (listReply) return listReply;
+    const interactiveBody = String(message?.interactive?.body?.text || '').trim();
+    if (interactiveBody) return interactiveBody;
   }
-  if (message.type === 'image') return '[Imagen]';
-  if (message.type === 'video') return '[Video]';
+  if (message.type === 'location') {
+    const name = String(message?.location?.name || '').trim();
+    const address = String(message?.location?.address || '').trim();
+    const latitude = Number(message?.location?.latitude);
+    const longitude = Number(message?.location?.longitude);
+    if (name) return `[Ubicación] ${name}`;
+    if (address) return `[Ubicación] ${address}`;
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      return `[Ubicación] ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+    }
+    return '[Ubicación]';
+  }
+  if (message.type === 'contacts') {
+    const firstContact = Array.isArray(message?.contacts) ? message.contacts[0] : null;
+    const fullName = String(firstContact?.name?.formatted_name || '').trim();
+    return fullName ? `[Contacto] ${fullName}` : '[Contacto]';
+  }
+  if (message.type === 'image') return String(message?.image?.caption || '').trim() || '[Imagen]';
+  if (message.type === 'video') return String(message?.video?.caption || '').trim() || '[Video]';
   if (message.type === 'audio') return '[Audio]';
-  if (message.type === 'document') return '[Documento]';
+  if (message.type === 'document') {
+    return String(message?.document?.caption || '').trim()
+      || String(message?.document?.filename || '').trim()
+      || '[Documento]';
+  }
   if (message.type === 'sticker') return '[Sticker]';
+  if (message.type === 'reaction') return String(message?.reaction?.emoji || '').trim() || '[Reacción]';
   const fallbackType = String(message.type || 'mensaje').trim();
   return fallbackType ? `[${fallbackType}]` : '';
+};
+
+const buildOutboundWhatsAppPayload = ({ toPhone, body = {} }) => {
+  const to = normalizeWhatsAppPhone(toPhone);
+  if (!to) throw createHttpError(400, 'Número de destino inválido');
+
+  const directPayload = parseJsonInput(body?.payload, { expected: 'object', fieldLabel: 'payload' });
+  if (directPayload) {
+    const type = String(directPayload.type || '').trim().toLowerCase();
+    if (!WHATSAPP_OUTBOUND_TYPES.has(type)) {
+      throw createHttpError(400, 'payload.type no está soportado');
+    }
+    const payload = {
+      ...directPayload,
+      messaging_product: 'whatsapp',
+      to,
+      type
+    };
+    return {
+      payload,
+      messageType: type,
+      previewText: getWhatsAppMessagePreviewFromPayload(payload)
+    };
+  }
+
+  const type = String(body?.type || 'text').trim().toLowerCase();
+  if (!WHATSAPP_OUTBOUND_TYPES.has(type)) {
+    throw createHttpError(
+      400,
+      'Tipo de mensaje no soportado. Usa text, image, video, audio, document, location, contacts, interactive o template'
+    );
+  }
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type
+  };
+
+  if (type === 'text') {
+    const textBody = typeof body?.text === 'string'
+      ? body.text
+      : String(body?.text?.body || body?.body || '').trim();
+    if (!textBody) throw createHttpError(400, 'El mensaje de texto no puede estar vacío');
+    payload.text = {
+      body: textBody,
+      preview_url: parseOptionalBoolean(body?.preview_url ?? body?.previewUrl, false)
+    };
+  } else if (['image', 'video', 'audio', 'document'].includes(type)) {
+    const mediaLink = String(body?.media_url || body?.mediaUrl || body?.url || '').trim();
+    const mediaId = String(body?.media_id || body?.mediaId || body?.id || '').trim();
+    if (!mediaLink && !mediaId) {
+      throw createHttpError(400, `Para ${type} debes enviar media_url o media_id`);
+    }
+    payload[type] = {};
+    if (mediaLink) payload[type].link = mediaLink;
+    if (mediaId) payload[type].id = mediaId;
+    const caption = String(body?.caption || '').trim();
+    if (caption && (type === 'image' || type === 'video' || type === 'document')) {
+      payload[type].caption = caption;
+    }
+    if (type === 'document') {
+      const filename = String(body?.filename || '').trim();
+      if (filename) payload.document.filename = filename;
+    }
+  } else if (type === 'location') {
+    const location = parseJsonInput(body?.location, { expected: 'object', fieldLabel: 'location' }) || body;
+    const latitude = Number(location?.latitude);
+    const longitude = Number(location?.longitude);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      throw createHttpError(400, 'Ubicación inválida: latitude y longitude son requeridos');
+    }
+    payload.location = {
+      latitude,
+      longitude
+    };
+    const name = String(location?.name || '').trim();
+    const address = String(location?.address || '').trim();
+    if (name) payload.location.name = name;
+    if (address) payload.location.address = address;
+  } else if (type === 'contacts') {
+    const contacts = parseJsonInput(body?.contacts, { expected: 'array', fieldLabel: 'contacts' })
+      || (Array.isArray(body?.contact) ? body.contact : (body?.contact ? [body.contact] : null));
+    if (!Array.isArray(contacts) || contacts.length === 0) {
+      throw createHttpError(400, 'Debes enviar al menos un contacto en contacts');
+    }
+    payload.contacts = contacts;
+  } else if (type === 'interactive') {
+    const interactive = parseJsonInput(body?.interactive, { expected: 'object', fieldLabel: 'interactive' });
+    if (!interactive || !String(interactive?.type || '').trim()) {
+      throw createHttpError(400, 'interactive.type es requerido para mensajes interactivos');
+    }
+    payload.interactive = interactive;
+  } else if (type === 'template') {
+    const template = parseJsonInput(body?.template, { expected: 'object', fieldLabel: 'template' });
+    if (template) {
+      if (!String(template?.name || '').trim()) throw createHttpError(400, 'template.name es requerido');
+      if (!String(template?.language?.code || '').trim()) throw createHttpError(400, 'template.language.code es requerido');
+      payload.template = template;
+    } else {
+      const templateName = String(body?.template_name || body?.templateName || '').trim();
+      const languageCode = String(body?.template_language_code || body?.templateLanguageCode || body?.language_code || 'es').trim();
+      const components = parseJsonInput(
+        body?.template_components ?? body?.templateComponents,
+        { expected: 'array', fieldLabel: 'template_components' }
+      ) || [];
+      if (!templateName) throw createHttpError(400, 'template_name es requerido');
+      payload.template = {
+        name: templateName,
+        language: { code: languageCode || 'es' }
+      };
+      if (components.length > 0) payload.template.components = components;
+    }
+  }
+
+  return {
+    payload,
+    messageType: type,
+    previewText: getWhatsAppMessagePreviewFromPayload(payload)
+  };
+};
+
+const sendWhatsAppMessage = async ({ payload }) => {
+  if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
+    throw createHttpError(500, 'Configuración de WhatsApp incompleta en el servidor');
+  }
+  if (!payload || typeof payload !== 'object') {
+    throw createHttpError(400, 'Payload de WhatsApp inválido');
+  }
+
+  const url = `${WHATSAPP_API_BASE}/${WHATSAPP_GRAPH_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+  const responsePayload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = responsePayload?.error?.message || `WhatsApp API error ${response.status}`;
+    throw createHttpError(response.status || 500, message);
+  }
+  const waMessageId = String(responsePayload?.messages?.[0]?.id || '').trim() || null;
+  return {
+    wa_message_id: waMessageId,
+    raw_response: responsePayload
+  };
 };
 
 let whatsappInboxInitPromise = null;
@@ -1549,44 +1794,6 @@ const assignConversationRoundRobin = async (client, conversationId, { reason = '
     [conversationId, previousUserId, nextUserId, reason, changedBy]
   );
   return nextUserId;
-};
-
-const sendWhatsAppTextMessage = async ({ toPhone, textBody }) => {
-  if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
-    throw createHttpError(500, 'Configuración de WhatsApp incompleta en el servidor');
-  }
-  const to = normalizeWhatsAppPhone(toPhone);
-  const body = String(textBody || '').trim();
-  if (!to) throw createHttpError(400, 'Número de destino inválido');
-  if (!body) throw createHttpError(400, 'Mensaje vacío');
-
-  const url = `${WHATSAPP_API_BASE}/${WHATSAPP_GRAPH_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: {
-        body,
-        preview_url: false
-      }
-    })
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = payload?.error?.message || `WhatsApp API error ${response.status}`;
-    throw createHttpError(response.status || 500, message);
-  }
-  const waMessageId = String(payload?.messages?.[0]?.id || '').trim() || null;
-  return {
-    wa_message_id: waMessageId,
-    raw_response: payload
-  };
 };
 
 const processInboundWhatsAppMessage = async (message = {}, contactsByWaId = new Map()) => {
@@ -4125,6 +4332,7 @@ app.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, req
          status,
          from_phone,
          to_phone,
+         raw_payload,
          created_at,
          updated_at
        FROM whatsapp_messages
@@ -4164,6 +4372,7 @@ app.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, req
         status: String(row.status || '').trim() || null,
         from_phone: String(row.from_phone || '').trim() || null,
         to_phone: String(row.to_phone || '').trim() || null,
+        raw_payload: row.raw_payload || null,
         created_at: row.created_at || null,
         updated_at: row.updated_at || null
       }))
@@ -4335,11 +4544,6 @@ app.post('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, re
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });
     }
-    const textBody = String(req.body?.text || '').trim();
-    if (!textBody) {
-      return res.status(400).json({ error: 'El mensaje no puede estar vacío' });
-    }
-
     const conversationRes = await pool.query(
       `SELECT
          c.id,
@@ -4358,10 +4562,16 @@ app.post('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, re
       return res.status(400).json({ error: 'La conversación no tiene teléfono válido' });
     }
 
-    const sendResult = await sendWhatsAppTextMessage({
+    const outboundPayloadData = buildOutboundWhatsAppPayload({
       toPhone: contactPhone,
-      textBody
+      body: req.body || {}
     });
+    const sendResult = await sendWhatsAppMessage({
+      payload: outboundPayloadData.payload
+    });
+    const messageType = String(outboundPayloadData.messageType || 'text').trim() || 'text';
+    const previewText = String(outboundPayloadData.previewText || '').trim()
+      || `[${messageType}]`;
 
     client = await pool.connect();
     await client.query('BEGIN');
@@ -4379,14 +4589,18 @@ app.post('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, re
          created_at,
          updated_at
        )
-       VALUES ($1, $2, 'outbound', 'text', $3, 'sent', NULL, $4, $5::jsonb, NOW(), NOW())
+       VALUES ($1, $2, 'outbound', $3, $4, 'sent', NULL, $5, $6::jsonb, NOW(), NOW())
        RETURNING id, wa_message_id, direction, message_type, text_body, status, from_phone, to_phone, created_at, updated_at`,
       [
         conversationId,
         sendResult.wa_message_id,
-        textBody,
+        messageType,
+        previewText,
         contactPhone,
-        JSON.stringify(sendResult.raw_response || {})
+        JSON.stringify({
+          request: outboundPayloadData.payload,
+          response: sendResult.raw_response || {}
+        })
       ]
     );
     await client.query(
@@ -4395,7 +4609,7 @@ app.post('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, re
            last_message_at = NOW(),
            updated_at = NOW()
        WHERE id = $1`,
-      [conversationId, textBody]
+      [conversationId, previewText]
     );
     await client.query('COMMIT');
     client.release();
