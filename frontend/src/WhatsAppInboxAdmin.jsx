@@ -458,6 +458,43 @@ function ConversationItem({ row, isActive, onClick }) {
   );
 }
 
+function CollapsibleSection({ title, isOpen, onToggle, badge, children }) {
+  return (
+    <div style={{
+      border: '1px solid #334155',
+      borderRadius: 10,
+      background: '#0b1220',
+      padding: '10px 10px',
+      display: 'grid',
+      gap: 8
+    }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 8,
+          width: '100%',
+          border: 'none',
+          background: 'transparent',
+          color: '#e2e8f0',
+          cursor: 'pointer',
+          padding: 0
+        }}
+      >
+        <span style={{ fontSize: '0.92rem', fontWeight: 700, textAlign: 'left' }}>{title}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {badge}
+          <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>{isOpen ? 'Ocultar' : 'Ver'}</span>
+        </span>
+      </button>
+      {isOpen && <div style={{ display: 'grid', gap: 8 }}>{children}</div>}
+    </div>
+  );
+}
+
 export default function WhatsAppInboxAdmin({ token }) {
   const [search, setSearch] = useState('');
   const [conversations, setConversations] = useState([]);
@@ -502,6 +539,10 @@ export default function WhatsAppInboxAdmin({ token }) {
   const [customer360, setCustomer360] = useState(null);
   const [customer360Loading, setCustomer360Loading] = useState(false);
   const [pipelineSaving, setPipelineSaving] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [showSidebarManagement, setShowSidebarManagement] = useState(true);
+  const [showSidebarFollowups, setShowSidebarFollowups] = useState(false);
+  const [showSidebarCustomer360, setShowSidebarCustomer360] = useState(false);
   const [error, setError] = useState('');
   const selectedConversationRef = useRef(null);
   const loadConversationsRef = useRef(null);
@@ -1204,6 +1245,13 @@ export default function WhatsAppInboxAdmin({ token }) {
             >
               Actualizar
             </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setSidebarVisible((prev) => !prev)}
+            >
+              {sidebarVisible ? 'Ocultar panel lateral' : 'Mostrar panel lateral'}
+            </button>
           </div>
         </div>
       </div>
@@ -1287,7 +1335,9 @@ export default function WhatsAppInboxAdmin({ token }) {
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '320px minmax(0, 1fr) 380px',
+        gridTemplateColumns: sidebarVisible
+          ? '320px minmax(0, 1fr) minmax(300px, 380px)'
+          : '320px minmax(0, 1fr)',
         gap: 12
       }}>
         <section className="card" style={{ marginBottom: 0, padding: 12, minHeight: 620 }}>
@@ -1790,316 +1840,304 @@ export default function WhatsAppInboxAdmin({ token }) {
           </div>
         </section>
 
-        <aside className="card" style={{ marginBottom: 0, padding: 14, minHeight: 620 }}>
-          {!conversationMeta ? (
-            <div style={{ color: '#94a3b8' }}>Selecciona una conversación para ver detalles.</div>
-          ) : (
-            <div style={{ display: 'grid', gap: 12, maxHeight: 592, overflowY: 'auto', paddingRight: 4 }}>
-              <div>
-                <h4 style={{ marginBottom: 6 }}>Detalles</h4>
-                <div style={{ color: '#cbd5e1', fontSize: '0.86rem', display: 'grid', gap: 4 }}>
-                  <div><strong>Contacto:</strong> {conversationMeta.contact_name || 'Sin nombre'}</div>
-                  <div><strong>Número:</strong> {normalizePhoneDisplay(conversationMeta.contact_phone)}</div>
-                  <div><strong>Estado:</strong> {conversationMeta.status === 'closed' ? 'Cerrado' : 'Abierto'}</div>
-                  <div><strong>Últ. inbound:</strong> {formatDateTime(conversationMeta.last_inbound_at)}</div>
-                  <div><strong>Últ. outbound:</strong> {formatDateTime(conversationMeta.last_outbound_at)}</div>
-                  {selectedSlaBadge && (
-                    <div style={{
-                      marginTop: 2,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 'fit-content',
-                      fontSize: '0.74rem',
+        {sidebarVisible && (
+          <aside className="card" style={{ marginBottom: 0, padding: 14, minHeight: 620 }}>
+            {!conversationMeta ? (
+              <div style={{ color: '#94a3b8' }}>Selecciona una conversación para ver detalles.</div>
+            ) : (
+              <div style={{ display: 'grid', gap: 12, maxHeight: 592, overflowY: 'auto', paddingRight: 4 }}>
+                <CollapsibleSection
+                  title="Gestión conversación"
+                  isOpen={showSidebarManagement}
+                  onToggle={() => setShowSidebarManagement((prev) => !prev)}
+                  badge={selectedSlaBadge ? (
+                    <span style={{
+                      fontSize: '0.7rem',
                       color: selectedSlaBadge.color,
                       border: `1px solid ${selectedSlaBadge.border}`,
                       background: selectedSlaBadge.background,
                       borderRadius: 999,
-                      padding: '3px 9px'
+                      padding: '2px 8px'
                     }}>
                       {selectedSlaBadge.label}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Asignado a</span>
-                <select
-                  value={conversationMeta.assigned_user_id ?? ''}
-                  onChange={(event) => changeAssignment(conversationMeta.id, event.target.value)}
-                  style={{
-                    minHeight: 38,
-                    borderRadius: 8,
-                    border: '1px solid #334155',
-                    background: '#0f172a',
-                    color: '#f1f5f9',
-                    padding: '6px 8px'
-                  }}
+                    </span>
+                  ) : null}
                 >
-                  <option value="">Sin asignar</option>
-                  {salesUsers.map((user) => (
-                    <option key={user.id} value={String(user.id)}>
-                      {user.name} ({user.city || 'Sin ciudad'})
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <div style={{ color: '#cbd5e1', fontSize: '0.84rem', display: 'grid', gap: 4 }}>
+                    <div><strong>Contacto:</strong> {conversationMeta.contact_name || 'Sin nombre'}</div>
+                    <div><strong>Número:</strong> {normalizePhoneDisplay(conversationMeta.contact_phone)}</div>
+                    <div><strong>Estado:</strong> {conversationMeta.status === 'closed' ? 'Cerrado' : 'Abierto'}</div>
+                    <div><strong>Últ. inbound:</strong> {formatDateTime(conversationMeta.last_inbound_at)}</div>
+                    <div><strong>Últ. outbound:</strong> {formatDateTime(conversationMeta.last_outbound_at)}</div>
+                  </div>
 
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Pipeline</span>
-                <select
-                  value={String(conversationMeta.pipeline_stage || 'new')}
-                  onChange={(event) => changePipelineStage(conversationMeta.id, event.target.value)}
-                  disabled={pipelineSaving}
-                  style={{
-                    minHeight: 38,
-                    borderRadius: 8,
-                    border: '1px solid #334155',
-                    background: '#0f172a',
-                    color: '#f1f5f9',
-                    padding: '6px 8px'
-                  }}
-                >
-                  {PIPELINE_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>{item.label}</option>
-                  ))}
-                </select>
-              </label>
-
-              <button
-                type="button"
-                className="btn"
-                onClick={() => changeAssignment(conversationMeta.id, 'auto')}
-                style={{ background: '#2563eb', color: '#fff' }}
-              >
-                Asignar round-robin
-              </button>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => toggleStatus(conversationMeta.id, 'open')}
-                  style={{ background: '#059669', color: '#fff' }}
-                >
-                  Marcar abierta
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => toggleStatus(conversationMeta.id, 'closed')}
-                  style={{ background: '#b91c1c', color: '#fff' }}
-                >
-                  Cerrar chat
-                </button>
-              </div>
-
-              <div style={{
-                border: '1px solid #334155',
-                borderRadius: 10,
-                background: '#0b1220',
-                padding: '10px 10px',
-                display: 'grid',
-                gap: 8
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <h4 style={{ margin: 0, fontSize: '0.92rem' }}>Seguimientos</h4>
-                  {followupsLoading && <span style={{ color: '#93c5fd', fontSize: '0.72rem' }}>Actualizando…</span>}
-                </div>
-                <div style={{ display: 'grid', gap: 6 }}>
-                  <textarea
-                    value={followupNote}
-                    onChange={(event) => setFollowupNote(event.target.value)}
-                    rows={2}
-                    placeholder="Llamar al cliente, enviar cotización final, etc."
-                    style={{
-                      width: '100%',
-                      borderRadius: 8,
-                      border: '1px solid #334155',
-                      background: '#111827',
-                      color: '#f8fafc',
-                      padding: '8px 9px',
-                      resize: 'vertical',
-                      fontSize: '0.8rem'
-                    }}
-                  />
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                    <input
-                      type="datetime-local"
-                      value={followupDueAt}
-                      onChange={(event) => setFollowupDueAt(event.target.value)}
-                      style={{
-                        width: '100%',
-                        minHeight: 36,
-                        borderRadius: 8,
-                        border: '1px solid #334155',
-                        background: '#111827',
-                        color: '#f8fafc',
-                        padding: '6px 8px'
-                      }}
-                    />
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Asignado a</span>
                     <select
-                      value={followupAssignedUserId}
-                      onChange={(event) => setFollowupAssignedUserId(event.target.value)}
+                      value={conversationMeta.assigned_user_id ?? ''}
+                      onChange={(event) => changeAssignment(conversationMeta.id, event.target.value)}
                       style={{
-                        width: '100%',
-                        minHeight: 36,
+                        minHeight: 38,
                         borderRadius: 8,
                         border: '1px solid #334155',
-                        background: '#111827',
-                        color: '#f8fafc',
+                        background: '#0f172a',
+                        color: '#f1f5f9',
                         padding: '6px 8px'
                       }}
                     >
                       <option value="">Sin asignar</option>
                       {salesUsers.map((user) => (
-                        <option key={user.id} value={String(user.id)}>{user.name}</option>
+                        <option key={user.id} value={String(user.id)}>
+                          {user.name} ({user.city || 'Sin ciudad'})
+                        </option>
                       ))}
                     </select>
-                  </div>
+                  </label>
+
+                  <label style={{ display: 'grid', gap: 6 }}>
+                    <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Pipeline</span>
+                    <select
+                      value={String(conversationMeta.pipeline_stage || 'new')}
+                      onChange={(event) => changePipelineStage(conversationMeta.id, event.target.value)}
+                      disabled={pipelineSaving}
+                      style={{
+                        minHeight: 38,
+                        borderRadius: 8,
+                        border: '1px solid #334155',
+                        background: '#0f172a',
+                        color: '#f1f5f9',
+                        padding: '6px 8px'
+                      }}
+                    >
+                      {PIPELINE_OPTIONS.map((item) => (
+                        <option key={item.value} value={item.value}>{item.label}</option>
+                      ))}
+                    </select>
+                  </label>
+
                   <button
                     type="button"
-                    className="btn btn-secondary"
-                    style={{ minHeight: 34 }}
-                    onClick={createFollowup}
+                    className="btn"
+                    onClick={() => changeAssignment(conversationMeta.id, 'auto')}
+                    style={{ background: '#2563eb', color: '#fff' }}
                   >
-                    Crear recordatorio
+                    Asignar round-robin
                   </button>
-                </div>
-                {followups.length === 0 ? (
-                  <div style={{ color: '#94a3b8', fontSize: '0.76rem' }}>No hay seguimientos.</div>
-                ) : (
-                  <div style={{ display: 'grid', gap: 6 }}>
-                    {followups.slice(0, 10).map((item) => {
-                      const pending = item.status === 'pending';
-                      const overdue = pending && item.due_at && new Date(item.due_at).getTime() < Date.now();
-                      return (
-                        <div
-                          key={item.id}
-                          style={{
-                            border: overdue ? '1px solid rgba(248,113,113,0.45)' : '1px solid #334155',
-                            background: overdue ? 'rgba(127,29,29,0.28)' : '#111827',
-                            borderRadius: 8,
-                            padding: '7px 8px',
-                            display: 'grid',
-                            gap: 4
-                          }}
-                        >
-                          <div style={{ color: '#e2e8f0', fontSize: '0.8rem' }}>{item.note}</div>
-                          <div style={{ color: overdue ? '#fecaca' : '#94a3b8', fontSize: '0.72rem' }}>
-                            {formatDateTime(item.due_at)} ({formatRelativeMinutes(item.due_at)})
-                          </div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            <button
-                              type="button"
-                              className="btn"
-                              style={{ minHeight: 28, padding: '4px 8px', fontSize: '0.72rem', background: '#059669', color: '#fff' }}
-                              onClick={() => updateFollowup(item.id, { status: 'done' })}
-                            >
-                              Completar
-                            </button>
-                            <button
-                              type="button"
-                              className="btn"
-                              style={{ minHeight: 28, padding: '4px 8px', fontSize: '0.72rem' }}
-                              onClick={() => updateFollowup(item.id, { status: 'pending' })}
-                            >
-                              Pendiente
-                            </button>
-                            <button
-                              type="button"
-                              className="btn"
-                              style={{ minHeight: 28, padding: '4px 8px', fontSize: '0.72rem', background: '#7f1d1d', color: '#fff' }}
-                              onClick={() => updateFollowup(item.id, { status: 'cancelled' })}
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
 
-              <div style={{
-                border: '1px solid #334155',
-                borderRadius: 10,
-                background: '#0b1220',
-                padding: '10px 10px',
-                display: 'grid',
-                gap: 8
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <h4 style={{ margin: 0, fontSize: '0.92rem' }}>Customer 360</h4>
-                  {customer360Loading && <span style={{ color: '#93c5fd', fontSize: '0.72rem' }}>Cargando…</span>}
-                </div>
-                <div style={{ display: 'grid', gap: 4, color: '#cbd5e1', fontSize: '0.78rem' }}>
-                  <div><strong>Cotizaciones:</strong> {Number(customerSummary.quotes_total || 0)}</div>
-                  <div><strong>Cerradas:</strong> {Number(customerSummary.closed_quotes || 0)}</div>
-                  <div><strong>Monto cerrado:</strong> Bs {Number(customerSummary.closed_amount_bs || 0).toFixed(2)}</div>
-                  <div><strong>Última cotización:</strong> {formatDateTime(customerSummary.last_quote_at)}</div>
-                </div>
-                <div>
-                  <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginBottom: 4 }}>Top productos</div>
-                  {customerTopProducts.length === 0 ? (
-                    <div style={{ color: '#64748b', fontSize: '0.74rem' }}>Sin historial de productos.</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {customerTopProducts.slice(0, 6).map((item, idx) => (
-                        <span
-                          key={`${item.sku || item.name}-${idx}`}
-                          style={{
-                            borderRadius: 999,
-                            border: '1px solid rgba(71,85,105,0.8)',
-                            background: '#111827',
-                            color: '#cbd5e1',
-                            fontSize: '0.7rem',
-                            padding: '4px 8px'
-                          }}
-                        >
-                          {item.name} · {Number(item.qty || 0)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginBottom: 4 }}>Últimas cotizaciones</div>
-                  {customerRecentQuotes.length === 0 ? (
-                    <div style={{ color: '#64748b', fontSize: '0.74rem' }}>Sin cotizaciones vinculadas.</div>
-                  ) : (
-                    <div style={{ display: 'grid', gap: 5 }}>
-                      {customerRecentQuotes.slice(0, 5).map((quote) => (
-                        <div key={quote.id} style={{
-                          border: '1px solid #334155',
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => toggleStatus(conversationMeta.id, 'open')}
+                      style={{ background: '#059669', color: '#fff' }}
+                    >
+                      Marcar abierta
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => toggleStatus(conversationMeta.id, 'closed')}
+                      style={{ background: '#b91c1c', color: '#fff' }}
+                    >
+                      Cerrar chat
+                    </button>
+                  </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection
+                  title="Seguimientos"
+                  isOpen={showSidebarFollowups}
+                  onToggle={() => setShowSidebarFollowups((prev) => !prev)}
+                  badge={followupsLoading ? <span style={{ color: '#93c5fd', fontSize: '0.72rem' }}>Actualizando...</span> : null}
+                >
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    <textarea
+                      value={followupNote}
+                      onChange={(event) => setFollowupNote(event.target.value)}
+                      rows={2}
+                      placeholder="Llamar al cliente, enviar cotización final, etc."
+                      style={{
+                        width: '100%',
+                        borderRadius: 8,
+                        border: '1px solid #334155',
+                        background: '#111827',
+                        color: '#f8fafc',
+                        padding: '8px 9px',
+                        resize: 'vertical',
+                        fontSize: '0.8rem'
+                      }}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      <input
+                        type="datetime-local"
+                        value={followupDueAt}
+                        onChange={(event) => setFollowupDueAt(event.target.value)}
+                        style={{
+                          width: '100%',
+                          minHeight: 36,
                           borderRadius: 8,
+                          border: '1px solid #334155',
                           background: '#111827',
-                          padding: '6px 8px',
-                          display: 'grid',
-                          gap: 2
-                        }}>
-                          <div style={{ color: '#e2e8f0', fontSize: '0.76rem', fontWeight: 600 }}>
-                            #{quote.id} · {quote.status || 'sin estado'}
-                          </div>
-                          <div style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
-                            Bs {Number(quote.total || 0).toFixed(2)} · {formatDateTime(quote.created_at)}
-                          </div>
-                          {(quote.store_location || quote.department) && (
-                            <div style={{ color: '#64748b', fontSize: '0.7rem' }}>
-                              {[quote.store_location, quote.department].filter(Boolean).join(' · ')}
+                          color: '#f8fafc',
+                          padding: '6px 8px'
+                        }}
+                      />
+                      <select
+                        value={followupAssignedUserId}
+                        onChange={(event) => setFollowupAssignedUserId(event.target.value)}
+                        style={{
+                          width: '100%',
+                          minHeight: 36,
+                          borderRadius: 8,
+                          border: '1px solid #334155',
+                          background: '#111827',
+                          color: '#f8fafc',
+                          padding: '6px 8px'
+                        }}
+                      >
+                        <option value="">Sin asignar</option>
+                        {salesUsers.map((user) => (
+                          <option key={user.id} value={String(user.id)}>{user.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ minHeight: 34 }}
+                      onClick={createFollowup}
+                    >
+                      Crear recordatorio
+                    </button>
+                  </div>
+                  {followups.length === 0 ? (
+                    <div style={{ color: '#94a3b8', fontSize: '0.76rem' }}>No hay seguimientos.</div>
+                  ) : (
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {followups.slice(0, 10).map((item) => {
+                        const pending = item.status === 'pending';
+                        const overdue = pending && item.due_at && new Date(item.due_at).getTime() < Date.now();
+                        return (
+                          <div
+                            key={item.id}
+                            style={{
+                              border: overdue ? '1px solid rgba(248,113,113,0.45)' : '1px solid #334155',
+                              background: overdue ? 'rgba(127,29,29,0.28)' : '#111827',
+                              borderRadius: 8,
+                              padding: '7px 8px',
+                              display: 'grid',
+                              gap: 4
+                            }}
+                          >
+                            <div style={{ color: '#e2e8f0', fontSize: '0.8rem' }}>{item.note}</div>
+                            <div style={{ color: overdue ? '#fecaca' : '#94a3b8', fontSize: '0.72rem' }}>
+                              {formatDateTime(item.due_at)} ({formatRelativeMinutes(item.due_at)})
                             </div>
-                          )}
-                        </div>
-                      ))}
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className="btn"
+                                style={{ minHeight: 28, padding: '4px 8px', fontSize: '0.72rem', background: '#059669', color: '#fff' }}
+                                onClick={() => updateFollowup(item.id, { status: 'done' })}
+                              >
+                                Completar
+                              </button>
+                              <button
+                                type="button"
+                                className="btn"
+                                style={{ minHeight: 28, padding: '4px 8px', fontSize: '0.72rem' }}
+                                onClick={() => updateFollowup(item.id, { status: 'pending' })}
+                              >
+                                Pendiente
+                              </button>
+                              <button
+                                type="button"
+                                className="btn"
+                                style={{ minHeight: 28, padding: '4px 8px', fontSize: '0.72rem', background: '#7f1d1d', color: '#fff' }}
+                                onClick={() => updateFollowup(item.id, { status: 'cancelled' })}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-                </div>
+                </CollapsibleSection>
+
+                <CollapsibleSection
+                  title="Customer 360"
+                  isOpen={showSidebarCustomer360}
+                  onToggle={() => setShowSidebarCustomer360((prev) => !prev)}
+                  badge={customer360Loading ? <span style={{ color: '#93c5fd', fontSize: '0.72rem' }}>Cargando...</span> : null}
+                >
+                  <div style={{ display: 'grid', gap: 4, color: '#cbd5e1', fontSize: '0.78rem' }}>
+                    <div><strong>Cotizaciones:</strong> {Number(customerSummary.quotes_total || 0)}</div>
+                    <div><strong>Cerradas:</strong> {Number(customerSummary.closed_quotes || 0)}</div>
+                    <div><strong>Monto cerrado:</strong> Bs {Number(customerSummary.closed_amount_bs || 0).toFixed(2)}</div>
+                    <div><strong>Última cotización:</strong> {formatDateTime(customerSummary.last_quote_at)}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginBottom: 4 }}>Top productos</div>
+                    {customerTopProducts.length === 0 ? (
+                      <div style={{ color: '#64748b', fontSize: '0.74rem' }}>Sin historial de productos.</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {customerTopProducts.slice(0, 6).map((item, idx) => (
+                          <span
+                            key={`${item.sku || item.name}-${idx}`}
+                            style={{
+                              borderRadius: 999,
+                              border: '1px solid rgba(71,85,105,0.8)',
+                              background: '#111827',
+                              color: '#cbd5e1',
+                              fontSize: '0.7rem',
+                              padding: '4px 8px'
+                            }}
+                          >
+                            {item.name} · {Number(item.qty || 0)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginBottom: 4 }}>Últimas cotizaciones</div>
+                    {customerRecentQuotes.length === 0 ? (
+                      <div style={{ color: '#64748b', fontSize: '0.74rem' }}>Sin cotizaciones vinculadas.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 5 }}>
+                        {customerRecentQuotes.slice(0, 5).map((quote) => (
+                          <div key={quote.id} style={{
+                            border: '1px solid #334155',
+                            borderRadius: 8,
+                            background: '#111827',
+                            padding: '6px 8px',
+                            display: 'grid',
+                            gap: 2
+                          }}>
+                            <div style={{ color: '#e2e8f0', fontSize: '0.76rem', fontWeight: 600 }}>
+                              #{quote.id} · {quote.status || 'sin estado'}
+                            </div>
+                            <div style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
+                              Bs {Number(quote.total || 0).toFixed(2)} · {formatDateTime(quote.created_at)}
+                            </div>
+                            {(quote.store_location || quote.department) && (
+                              <div style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                                {[quote.store_location, quote.department].filter(Boolean).join(' · ')}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleSection>
               </div>
-            </div>
-          )}
-        </aside>
+            )}
+          </aside>
+        )}
       </div>
     </div>
   );
