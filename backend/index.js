@@ -1362,6 +1362,8 @@ const WHATSAPP_GRAPH_VERSION = String(process.env.WHATSAPP_GRAPH_VERSION || 'v20
 const WHATSAPP_API_BASE = String(process.env.WHATSAPP_API_BASE || 'https://graph.facebook.com').trim();
 const WHATSAPP_APP_SECRET = String(process.env.WHATSAPP_APP_SECRET || '').trim();
 const WHATSAPP_OUTBOUND_TYPES = new Set(['text', 'image', 'video', 'audio', 'document', 'location', 'contacts', 'interactive', 'template']);
+const WHATSAPP_PIPELINE_STAGES = ['new', 'qualified', 'quoted', 'negotiation', 'won', 'lost'];
+const WHATSAPP_FOLLOWUP_STATUSES = ['pending', 'done', 'cancelled'];
 const WHATSAPP_MEDIA_UPLOAD_MAX_BYTES = 16 * 1024 * 1024;
 const whatsappMediaUpload = multer({
   storage: multer.memoryStorage(),
@@ -1372,6 +1374,14 @@ const whatsappMediaUpload = multer({
 let whatsappWsGatewayReady = false;
 
 const normalizeWhatsAppPhone = (value = '') => String(value || '').replace(/\D/g, '').trim();
+const normalizeWhatsAppPipelineStage = (value = '') => {
+  const stage = String(value || '').trim().toLowerCase();
+  return WHATSAPP_PIPELINE_STAGES.includes(stage) ? stage : 'new';
+};
+const normalizeWhatsAppFollowupStatus = (value = '') => {
+  const status = String(value || '').trim().toLowerCase();
+  return WHATSAPP_FOLLOWUP_STATUSES.includes(status) ? status : 'pending';
+};
 
 const guessWhatsAppMessageTypeFromMime = (mimeType = '', filename = '') => {
   const mime = String(mimeType || '').trim().toLowerCase();
@@ -1940,6 +1950,64 @@ const ensureWhatsAppInboxTables = async () => {
         `INSERT INTO whatsapp_round_robin_state (singleton_id, last_assigned_user_id, updated_at)
          VALUES (1, NULL, NOW())
          ON CONFLICT (singleton_id) DO NOTHING`
+      );
+      await pool.query(
+        `ALTER TABLE whatsapp_conversations
+         ADD COLUMN IF NOT EXISTS pipeline_stage TEXT NOT NULL DEFAULT 'new'`
+      );
+      await pool.query(
+        `ALTER TABLE whatsapp_conversations
+         DROP CONSTRAINT IF EXISTS whatsapp_conversations_pipeline_stage_chk`
+      );
+      await pool.query(
+        `ALTER TABLE whatsapp_conversations
+         ADD CONSTRAINT whatsapp_conversations_pipeline_stage_chk
+         CHECK (pipeline_stage IN ('new', 'qualified', 'quoted', 'negotiation', 'won', 'lost'))`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS whatsapp_followup_tasks (
+          id BIGSERIAL PRIMARY KEY,
+          conversation_id BIGINT NOT NULL REFERENCES whatsapp_conversations(id) ON DELETE CASCADE,
+          assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          note TEXT,
+          due_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          completed_at TIMESTAMP WITHOUT TIME ZONE,
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          CONSTRAINT whatsapp_followup_tasks_status_chk CHECK (status IN ('pending', 'done', 'cancelled'))
+        )`
+      );
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_whatsapp_followup_tasks_conversation
+         ON whatsapp_followup_tasks (conversation_id, status, due_at ASC)`
+      );
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_whatsapp_followup_tasks_due_pending
+         ON whatsapp_followup_tasks (due_at ASC)
+         WHERE status = 'pending'`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS whatsapp_quick_replies (
+          id BIGSERIAL PRIMARY KEY,
+          title TEXT NOT NULL,
+          reply_type TEXT NOT NULL DEFAULT 'text',
+          body_text TEXT,
+          template_name TEXT,
+          template_language_code TEXT NOT NULL DEFAULT 'es',
+          template_components JSONB NOT NULL DEFAULT '[]'::jsonb,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          CONSTRAINT whatsapp_quick_replies_type_chk CHECK (reply_type IN ('text', 'template'))
+        )`
+      );
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_whatsapp_quick_replies_active
+         ON whatsapp_quick_replies (is_active, reply_type, title ASC)`
       );
     })();
   }
@@ -4595,6 +4663,7 @@ app.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole(['ad
         `SELECT
            c.id,
            c.status,
+           c.pipeline_stage,
            c.unread_count,
            c.last_message_preview,
            c.last_message_at,
@@ -4603,10 +4672,32 @@ app.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole(['ad
            ct.profile_name AS contact_name,
            u.id AS assigned_user_id,
            u.email AS assigned_user_email,
-           u.display_name AS assigned_user_display_name
+           u.display_name AS assigned_user_display_name,
+           msg.last_inbound_at,
+           msg.last_outbound_at,
+           msg.first_inbound_at,
+           msg.first_outbound_at,
+           fu.next_followup_due_at,
+           COALESCE(fu.has_overdue_followup, FALSE) AS has_overdue_followup
          FROM whatsapp_conversations c
          JOIN whatsapp_contacts ct ON ct.id = c.contact_id
          LEFT JOIN users u ON u.id = c.assigned_user_id
+         LEFT JOIN LATERAL (
+           SELECT
+             MAX(m.created_at) FILTER (WHERE m.direction = 'inbound') AS last_inbound_at,
+             MAX(m.created_at) FILTER (WHERE m.direction = 'outbound') AS last_outbound_at,
+             MIN(m.created_at) FILTER (WHERE m.direction = 'inbound') AS first_inbound_at,
+             MIN(m.created_at) FILTER (WHERE m.direction = 'outbound') AS first_outbound_at
+           FROM whatsapp_messages m
+           WHERE m.conversation_id = c.id
+         ) msg ON TRUE
+         LEFT JOIN LATERAL (
+           SELECT
+             MIN(t.due_at) FILTER (WHERE t.status = 'pending') AS next_followup_due_at,
+             BOOL_OR(t.status = 'pending' AND t.due_at < NOW()) AS has_overdue_followup
+           FROM whatsapp_followup_tasks t
+           WHERE t.conversation_id = c.id
+         ) fu ON TRUE
          WHERE ($1 = '' OR ct.wa_phone ILIKE $2 OR COALESCE(ct.profile_name, '') ILIKE $2)
          ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC, c.id DESC
          LIMIT $3 OFFSET $4`,
@@ -4618,9 +4709,16 @@ app.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole(['ad
     const conversations = (conversationsRes.rows || []).map((row) => ({
       id: Number(row.id),
       status: String(row.status || 'open').trim() || 'open',
+      pipeline_stage: normalizeWhatsAppPipelineStage(row.pipeline_stage),
       unread_count: Number(row.unread_count || 0),
       last_message_preview: String(row.last_message_preview || '').trim() || '',
       last_message_at: row.last_message_at || null,
+      last_inbound_at: row.last_inbound_at || null,
+      last_outbound_at: row.last_outbound_at || null,
+      first_inbound_at: row.first_inbound_at || null,
+      first_outbound_at: row.first_outbound_at || null,
+      next_followup_due_at: row.next_followup_due_at || null,
+      has_overdue_followup: Boolean(row.has_overdue_followup),
       updated_at: row.updated_at || null,
       contact_phone: String(row.contact_phone || '').trim(),
       contact_name: String(row.contact_name || '').trim() || null,
@@ -4648,6 +4746,603 @@ app.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole(['ad
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo cargar inbox de WhatsApp' });
+  }
+});
+
+app.patch('/api/whatsapp/inbox/conversations/:id/pipeline', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const conversationId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(conversationId) || conversationId <= 0) {
+      return res.status(400).json({ error: 'ID de conversación inválido' });
+    }
+    const requestedStage = String(req.body?.pipeline_stage || '').trim().toLowerCase();
+    if (!WHATSAPP_PIPELINE_STAGES.includes(requestedStage)) {
+      return res.status(400).json({ error: `pipeline_stage inválido. Usa: ${WHATSAPP_PIPELINE_STAGES.join(', ')}` });
+    }
+    const updateRes = await pool.query(
+      `UPDATE whatsapp_conversations
+       SET pipeline_stage = $2,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, pipeline_stage`,
+      [conversationId, requestedStage]
+    );
+    if (updateRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Conversación no encontrada' });
+    }
+    notifyWhatsAppInboxRealtime('conversation_updated', {
+      conversation_id: conversationId,
+      reason: 'pipeline_change',
+      pipeline_stage: requestedStage
+    });
+    notifyWhatsAppInboxRealtime('kpi_updated', {
+      reason: 'pipeline_change'
+    });
+    return res.json({
+      message: 'Pipeline actualizado',
+      conversation_id: conversationId,
+      pipeline_stage: normalizeWhatsAppPipelineStage(updateRes.rows[0]?.pipeline_stage)
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo actualizar pipeline de conversación' });
+  }
+});
+
+app.get('/api/whatsapp/inbox/shortcuts', authenticateToken, requireRole(['admin']), async (_req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const shortcutsRes = await pool.query(
+      `SELECT id, title, reply_type, body_text, template_name, template_language_code, template_components,
+              is_active, created_by, updated_by, created_at, updated_at
+       FROM whatsapp_quick_replies
+       ORDER BY is_active DESC, reply_type ASC, title ASC, id ASC`
+    );
+    return res.json({
+      shortcuts: (shortcutsRes.rows || []).map((row) => ({
+        id: Number(row.id),
+        title: String(row.title || '').trim(),
+        reply_type: String(row.reply_type || 'text').trim(),
+        body_text: String(row.body_text || '').trim() || '',
+        template_name: String(row.template_name || '').trim() || null,
+        template_language_code: String(row.template_language_code || 'es').trim() || 'es',
+        template_components: Array.isArray(row.template_components) ? row.template_components : [],
+        is_active: Boolean(row.is_active),
+        created_by: row.created_by !== null ? Number(row.created_by) : null,
+        updated_by: row.updated_by !== null ? Number(row.updated_by) : null,
+        created_at: row.created_at || null,
+        updated_at: row.updated_at || null
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudieron cargar respuestas rápidas' });
+  }
+});
+
+app.post('/api/whatsapp/inbox/shortcuts', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const title = String(req.body?.title || '').trim();
+    const replyType = String(req.body?.reply_type || 'text').trim().toLowerCase();
+    if (!title) return res.status(400).json({ error: 'title es requerido' });
+    if (!['text', 'template'].includes(replyType)) {
+      return res.status(400).json({ error: 'reply_type inválido. Usa text o template' });
+    }
+    const bodyText = String(req.body?.body_text || '').trim() || null;
+    const templateName = String(req.body?.template_name || '').trim() || null;
+    const templateLanguageCode = String(req.body?.template_language_code || 'es').trim() || 'es';
+    const templateComponents = parseJsonInput(req.body?.template_components, {
+      expected: 'array',
+      fieldLabel: 'template_components'
+    }) || [];
+    const isActive = req.body?.is_active === undefined ? true : Boolean(req.body.is_active);
+    if (replyType === 'text' && !bodyText) {
+      return res.status(400).json({ error: 'body_text es requerido para respuestas tipo text' });
+    }
+    if (replyType === 'template' && !templateName) {
+      return res.status(400).json({ error: 'template_name es requerido para respuestas tipo template' });
+    }
+    const insertRes = await pool.query(
+      `INSERT INTO whatsapp_quick_replies (
+         title, reply_type, body_text, template_name, template_language_code, template_components,
+         is_active, created_by, updated_by, created_at, updated_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6::jsonb,
+         $7, $8, $8, NOW(), NOW()
+       )
+       RETURNING id, title, reply_type, body_text, template_name, template_language_code, template_components, is_active, created_at, updated_at`,
+      [
+        title,
+        replyType,
+        bodyText,
+        templateName,
+        templateLanguageCode,
+        JSON.stringify(templateComponents),
+        isActive,
+        req.user.id
+      ]
+    );
+    return res.status(201).json({
+      message: 'Respuesta rápida creada',
+      row: {
+        id: Number(insertRes.rows[0].id),
+        title: String(insertRes.rows[0].title || '').trim(),
+        reply_type: String(insertRes.rows[0].reply_type || '').trim(),
+        body_text: String(insertRes.rows[0].body_text || '').trim() || '',
+        template_name: String(insertRes.rows[0].template_name || '').trim() || null,
+        template_language_code: String(insertRes.rows[0].template_language_code || 'es').trim() || 'es',
+        template_components: Array.isArray(insertRes.rows[0].template_components) ? insertRes.rows[0].template_components : [],
+        is_active: Boolean(insertRes.rows[0].is_active),
+        created_at: insertRes.rows[0].created_at || null,
+        updated_at: insertRes.rows[0].updated_at || null
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo crear respuesta rápida' });
+  }
+});
+
+app.patch('/api/whatsapp/inbox/shortcuts/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const shortcutId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(shortcutId) || shortcutId <= 0) return res.status(400).json({ error: 'ID inválido' });
+    const currentRes = await pool.query(
+      `SELECT id, title, reply_type, body_text, template_name, template_language_code, template_components, is_active
+       FROM whatsapp_quick_replies
+       WHERE id = $1`,
+      [shortcutId]
+    );
+    if (currentRes.rowCount === 0) return res.status(404).json({ error: 'Respuesta rápida no encontrada' });
+    const current = currentRes.rows[0];
+    const replyType = req.body?.reply_type !== undefined
+      ? String(req.body.reply_type || '').trim().toLowerCase()
+      : String(current.reply_type || 'text').trim().toLowerCase();
+    if (!['text', 'template'].includes(replyType)) {
+      return res.status(400).json({ error: 'reply_type inválido. Usa text o template' });
+    }
+    const title = req.body?.title !== undefined
+      ? String(req.body.title || '').trim()
+      : String(current.title || '').trim();
+    if (!title) return res.status(400).json({ error: 'title es requerido' });
+    const bodyText = req.body?.body_text !== undefined
+      ? String(req.body.body_text || '').trim() || null
+      : (String(current.body_text || '').trim() || null);
+    const templateName = req.body?.template_name !== undefined
+      ? String(req.body.template_name || '').trim() || null
+      : (String(current.template_name || '').trim() || null);
+    const templateLanguageCode = req.body?.template_language_code !== undefined
+      ? String(req.body.template_language_code || 'es').trim() || 'es'
+      : (String(current.template_language_code || 'es').trim() || 'es');
+    const templateComponents = req.body?.template_components !== undefined
+      ? (parseJsonInput(req.body.template_components, {
+          expected: 'array',
+          fieldLabel: 'template_components'
+        }) || [])
+      : (Array.isArray(current.template_components) ? current.template_components : []);
+    const isActive = req.body?.is_active !== undefined
+      ? Boolean(req.body.is_active)
+      : Boolean(current.is_active);
+    if (replyType === 'text' && !bodyText) {
+      return res.status(400).json({ error: 'body_text es requerido para respuestas tipo text' });
+    }
+    if (replyType === 'template' && !templateName) {
+      return res.status(400).json({ error: 'template_name es requerido para respuestas tipo template' });
+    }
+    const updateRes = await pool.query(
+      `UPDATE whatsapp_quick_replies
+       SET title = $2,
+           reply_type = $3,
+           body_text = $4,
+           template_name = $5,
+           template_language_code = $6,
+           template_components = $7::jsonb,
+           is_active = $8,
+           updated_by = $9,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, title, reply_type, body_text, template_name, template_language_code, template_components, is_active, created_at, updated_at`,
+      [shortcutId, title, replyType, bodyText, templateName, templateLanguageCode, JSON.stringify(templateComponents), isActive, req.user.id]
+    );
+    return res.json({
+      message: 'Respuesta rápida actualizada',
+      row: {
+        id: Number(updateRes.rows[0].id),
+        title: String(updateRes.rows[0].title || '').trim(),
+        reply_type: String(updateRes.rows[0].reply_type || '').trim(),
+        body_text: String(updateRes.rows[0].body_text || '').trim() || '',
+        template_name: String(updateRes.rows[0].template_name || '').trim() || null,
+        template_language_code: String(updateRes.rows[0].template_language_code || 'es').trim() || 'es',
+        template_components: Array.isArray(updateRes.rows[0].template_components) ? updateRes.rows[0].template_components : [],
+        is_active: Boolean(updateRes.rows[0].is_active),
+        created_at: updateRes.rows[0].created_at || null,
+        updated_at: updateRes.rows[0].updated_at || null
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo actualizar respuesta rápida' });
+  }
+});
+
+app.get('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const conversationId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(conversationId) || conversationId <= 0) {
+      return res.status(400).json({ error: 'ID de conversación inválido' });
+    }
+    const includeCompleted = parseOptionalBoolean(req.query.include_completed, false);
+    const rowsRes = await pool.query(
+      `SELECT
+         t.id,
+         t.conversation_id,
+         t.assigned_user_id,
+         au.email AS assigned_user_email,
+         au.display_name AS assigned_user_display_name,
+         t.note,
+         t.due_at,
+         t.status,
+         t.completed_at,
+         t.created_by,
+         cu.email AS created_by_email,
+         cu.display_name AS created_by_display_name,
+         t.created_at,
+         t.updated_at
+       FROM whatsapp_followup_tasks t
+       LEFT JOIN users au ON au.id = t.assigned_user_id
+       LEFT JOIN users cu ON cu.id = t.created_by
+       WHERE t.conversation_id = $1
+         AND ($2::boolean OR t.status = 'pending')
+       ORDER BY
+         CASE WHEN t.status = 'pending' THEN 0 ELSE 1 END ASC,
+         t.due_at ASC,
+         t.id ASC`,
+      [conversationId, includeCompleted]
+    );
+    return res.json({
+      followups: (rowsRes.rows || []).map((row) => ({
+        id: Number(row.id),
+        conversation_id: Number(row.conversation_id),
+        assigned_user_id: row.assigned_user_id !== null ? Number(row.assigned_user_id) : null,
+        assigned_user_name: row.assigned_user_id
+          ? resolveUserDisplayName(
+              { display_name: row.assigned_user_display_name, email: row.assigned_user_email },
+              'Vendedor'
+            )
+          : null,
+        note: String(row.note || '').trim() || '',
+        due_at: row.due_at || null,
+        status: normalizeWhatsAppFollowupStatus(row.status),
+        completed_at: row.completed_at || null,
+        created_by: row.created_by !== null ? Number(row.created_by) : null,
+        created_by_name: row.created_by
+          ? resolveUserDisplayName(
+              { display_name: row.created_by_display_name, email: row.created_by_email },
+              'Usuario'
+            )
+          : null,
+        created_at: row.created_at || null,
+        updated_at: row.updated_at || null
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudieron cargar recordatorios de seguimiento' });
+  }
+});
+
+app.post('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const conversationId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(conversationId) || conversationId <= 0) {
+      return res.status(400).json({ error: 'ID de conversación inválido' });
+    }
+    const dueAtRaw = String(req.body?.due_at || '').trim();
+    const dueAtDate = dueAtRaw ? new Date(dueAtRaw) : null;
+    if (!dueAtDate || Number.isNaN(dueAtDate.getTime())) {
+      return res.status(400).json({ error: 'due_at inválido. Usa formato ISO de fecha/hora' });
+    }
+    const note = String(req.body?.note || '').trim();
+    if (!note) return res.status(400).json({ error: 'note es requerido' });
+    const assignedUserRaw = req.body?.assigned_user_id;
+    let assignedUserId = null;
+    if (assignedUserRaw !== undefined && assignedUserRaw !== null && assignedUserRaw !== '') {
+      const parsedAssigned = Number.parseInt(assignedUserRaw, 10);
+      if (!Number.isInteger(parsedAssigned) || parsedAssigned <= 0) {
+        return res.status(400).json({ error: 'assigned_user_id inválido' });
+      }
+      const allowedUsers = await loadEligibleWhatsAppSalesUsers();
+      if (!allowedUsers.some((row) => Number(row.id) === parsedAssigned)) {
+        return res.status(400).json({ error: 'assigned_user_id no corresponde a vendedor activo' });
+      }
+      assignedUserId = parsedAssigned;
+    }
+    const status = normalizeWhatsAppFollowupStatus(req.body?.status || 'pending');
+    const insertRes = await pool.query(
+      `INSERT INTO whatsapp_followup_tasks (
+         conversation_id,
+         assigned_user_id,
+         note,
+         due_at,
+         status,
+         completed_at,
+         created_by,
+         created_at,
+         updated_at
+       ) VALUES (
+         $1, $2, $3, $4, $5,
+         CASE WHEN $5 = 'done' THEN NOW() ELSE NULL END,
+         $6, NOW(), NOW()
+       )
+       RETURNING id, conversation_id, assigned_user_id, note, due_at, status, completed_at, created_by, created_at, updated_at`,
+      [conversationId, assignedUserId, note, dueAtDate, status, req.user.id]
+    );
+    notifyWhatsAppInboxRealtime('conversation_updated', {
+      conversation_id: conversationId,
+      reason: 'followup_created'
+    });
+    notifyWhatsAppInboxRealtime('kpi_updated', {
+      reason: 'followup_created'
+    });
+    return res.status(201).json({
+      message: 'Seguimiento creado',
+      row: {
+        id: Number(insertRes.rows[0].id),
+        conversation_id: Number(insertRes.rows[0].conversation_id),
+        assigned_user_id: insertRes.rows[0].assigned_user_id !== null ? Number(insertRes.rows[0].assigned_user_id) : null,
+        note: String(insertRes.rows[0].note || '').trim() || '',
+        due_at: insertRes.rows[0].due_at || null,
+        status: normalizeWhatsAppFollowupStatus(insertRes.rows[0].status),
+        completed_at: insertRes.rows[0].completed_at || null,
+        created_by: insertRes.rows[0].created_by !== null ? Number(insertRes.rows[0].created_by) : null,
+        created_at: insertRes.rows[0].created_at || null,
+        updated_at: insertRes.rows[0].updated_at || null
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo crear seguimiento' });
+  }
+});
+
+app.patch('/api/whatsapp/inbox/followups/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const followupId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(followupId) || followupId <= 0) {
+      return res.status(400).json({ error: 'ID de seguimiento inválido' });
+    }
+    const currentRes = await pool.query(
+      `SELECT id, conversation_id, assigned_user_id, note, due_at, status
+       FROM whatsapp_followup_tasks
+       WHERE id = $1`,
+      [followupId]
+    );
+    if (currentRes.rowCount === 0) return res.status(404).json({ error: 'Seguimiento no encontrado' });
+    const current = currentRes.rows[0];
+
+    let assignedUserId = current.assigned_user_id !== null ? Number(current.assigned_user_id) : null;
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'assigned_user_id')) {
+      const assignedRaw = req.body.assigned_user_id;
+      if (assignedRaw === null || assignedRaw === '' || assignedRaw === undefined) {
+        assignedUserId = null;
+      } else {
+        const parsedAssigned = Number.parseInt(assignedRaw, 10);
+        if (!Number.isInteger(parsedAssigned) || parsedAssigned <= 0) {
+          return res.status(400).json({ error: 'assigned_user_id inválido' });
+        }
+        const allowedUsers = await loadEligibleWhatsAppSalesUsers();
+        if (!allowedUsers.some((row) => Number(row.id) === parsedAssigned)) {
+          return res.status(400).json({ error: 'assigned_user_id no corresponde a vendedor activo' });
+        }
+        assignedUserId = parsedAssigned;
+      }
+    }
+
+    const note = Object.prototype.hasOwnProperty.call(req.body || {}, 'note')
+      ? String(req.body?.note || '').trim()
+      : String(current.note || '').trim();
+    const dueAt = Object.prototype.hasOwnProperty.call(req.body || {}, 'due_at')
+      ? new Date(String(req.body?.due_at || '').trim())
+      : new Date(current.due_at);
+    if (!dueAt || Number.isNaN(dueAt.getTime())) {
+      return res.status(400).json({ error: 'due_at inválido. Usa formato ISO de fecha/hora' });
+    }
+    const status = Object.prototype.hasOwnProperty.call(req.body || {}, 'status')
+      ? normalizeWhatsAppFollowupStatus(req.body?.status)
+      : normalizeWhatsAppFollowupStatus(current.status);
+    const updateRes = await pool.query(
+      `UPDATE whatsapp_followup_tasks
+       SET assigned_user_id = $2,
+           note = $3,
+           due_at = $4,
+           status = $5,
+           completed_at = CASE
+             WHEN $5 = 'done' THEN COALESCE(completed_at, NOW())
+             WHEN $5 = 'pending' THEN NULL
+             ELSE completed_at
+           END,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id, conversation_id, assigned_user_id, note, due_at, status, completed_at, created_by, created_at, updated_at`,
+      [followupId, assignedUserId, note, dueAt, status]
+    );
+    const updated = updateRes.rows[0];
+    notifyWhatsAppInboxRealtime('conversation_updated', {
+      conversation_id: Number(updated.conversation_id),
+      reason: 'followup_updated'
+    });
+    notifyWhatsAppInboxRealtime('kpi_updated', {
+      reason: 'followup_updated'
+    });
+    return res.json({
+      message: 'Seguimiento actualizado',
+      row: {
+        id: Number(updated.id),
+        conversation_id: Number(updated.conversation_id),
+        assigned_user_id: updated.assigned_user_id !== null ? Number(updated.assigned_user_id) : null,
+        note: String(updated.note || '').trim() || '',
+        due_at: updated.due_at || null,
+        status: normalizeWhatsAppFollowupStatus(updated.status),
+        completed_at: updated.completed_at || null,
+        created_by: updated.created_by !== null ? Number(updated.created_by) : null,
+        created_at: updated.created_at || null,
+        updated_at: updated.updated_at || null
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo actualizar seguimiento' });
+  }
+});
+
+app.get('/api/whatsapp/inbox/conversations/:id/customer-360', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureWhatsAppInboxTables();
+    const conversationId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(conversationId) || conversationId <= 0) {
+      return res.status(400).json({ error: 'ID de conversación inválido' });
+    }
+    const conversationRes = await pool.query(
+      `SELECT c.id, c.contact_id, ct.wa_phone, ct.profile_name
+       FROM whatsapp_conversations c
+       JOIN whatsapp_contacts ct ON ct.id = c.contact_id
+       WHERE c.id = $1`,
+      [conversationId]
+    );
+    if (conversationRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Conversación no encontrada' });
+    }
+    const conversation = conversationRes.rows[0];
+    const contactPhone = normalizeWhatsAppPhone(conversation.wa_phone || '');
+    if (!contactPhone) {
+      return res.json({
+        contact: {
+          phone: '',
+          name: String(conversation.profile_name || '').trim() || null
+        },
+        summary: {
+          quotes_total: 0,
+          closed_quotes: 0,
+          closed_amount_bs: 0,
+          last_quote_at: null
+        },
+        recent_quotes: [],
+        top_products: []
+      });
+    }
+
+    const quotesRes = await pool.query(
+      `SELECT
+         q.id,
+         q.customer_name,
+         q.customer_phone,
+         q.alternative_name,
+         q.alternative_phone,
+         q.department,
+         q.provincia,
+         q.store_location,
+         q.vendor,
+         q.status,
+         q.total,
+         q.created_at,
+         q.line_items
+       FROM quotes q
+       WHERE regexp_replace(COALESCE(q.customer_phone, ''), '\\D', '', 'g') = $1
+          OR regexp_replace(COALESCE(q.alternative_phone, ''), '\\D', '', 'g') = $1
+       ORDER BY q.created_at DESC
+       LIMIT 60`,
+      [contactPhone]
+    );
+    const rows = quotesRes.rows || [];
+    const closedStatuses = new Set(['confirmado', 'pagado', 'embalado', 'enviado']);
+    const summary = {
+      quotes_total: rows.length,
+      closed_quotes: 0,
+      closed_amount_bs: 0,
+      last_quote_at: rows[0]?.created_at || null
+    };
+    const productTotals = new Map();
+    const parseLineItems = (lineItemsValue) => {
+      if (Array.isArray(lineItemsValue)) return lineItemsValue;
+      if (lineItemsValue && typeof lineItemsValue === 'object') return [lineItemsValue];
+      const raw = String(lineItemsValue || '').trim();
+      if (!raw) return [];
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    };
+    for (const row of rows) {
+      const statusText = String(row.status || '').trim().toLowerCase();
+      const total = Number(row.total || 0);
+      if (closedStatuses.has(statusText)) {
+        summary.closed_quotes += 1;
+        summary.closed_amount_bs += Number.isFinite(total) ? total : 0;
+      }
+      const lineItems = parseLineItems(row.line_items);
+      for (const item of lineItems) {
+        const sku = String(item?.sku || '').trim().toUpperCase();
+        const productName = String(item?.name || item?.product_name || '').trim();
+        const qty = Number(item?.qty || item?.quantity || 0);
+        if (!sku && !productName) continue;
+        const key = sku || productName;
+        const previous = productTotals.get(key) || { sku: sku || null, name: productName || key, qty: 0 };
+        previous.qty += Number.isFinite(qty) ? qty : 0;
+        if (!previous.name && productName) previous.name = productName;
+        if (!previous.sku && sku) previous.sku = sku;
+        productTotals.set(key, previous);
+      }
+    }
+    const topProducts = [...productTotals.values()]
+      .sort((a, b) => Number(b.qty || 0) - Number(a.qty || 0))
+      .slice(0, 8)
+      .map((item) => ({
+        sku: item.sku || null,
+        name: item.name || item.sku || 'Producto',
+        qty: Number(item.qty || 0)
+      }));
+    const recentQuotes = rows.slice(0, 12).map((row) => ({
+      id: Number(row.id),
+      customer_name: String(row.customer_name || '').trim() || null,
+      customer_phone: String(row.customer_phone || '').trim() || null,
+      alternative_name: String(row.alternative_name || '').trim() || null,
+      alternative_phone: String(row.alternative_phone || '').trim() || null,
+      department: String(row.department || '').trim() || null,
+      provincia: String(row.provincia || '').trim() || null,
+      store_location: String(row.store_location || '').trim() || null,
+      vendor: String(row.vendor || '').trim() || null,
+      status: String(row.status || '').trim() || null,
+      total: Number(row.total || 0),
+      created_at: row.created_at || null
+    }));
+    return res.json({
+      contact: {
+        phone: contactPhone,
+        name: String(conversation.profile_name || '').trim() || null
+      },
+      summary,
+      recent_quotes: recentQuotes,
+      top_products: topProducts
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo cargar Customer 360' });
   }
 });
 
@@ -4820,6 +5515,7 @@ app.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, req
       `SELECT
          c.id,
          c.status,
+         c.pipeline_stage,
          c.unread_count,
          c.last_message_preview,
          c.last_message_at,
@@ -4828,10 +5524,28 @@ app.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, req
          ct.profile_name AS contact_name,
          u.id AS assigned_user_id,
          u.email AS assigned_user_email,
-         u.display_name AS assigned_user_display_name
+         u.display_name AS assigned_user_display_name,
+         msg.last_inbound_at,
+         msg.last_outbound_at,
+         fu.next_followup_due_at,
+         COALESCE(fu.has_overdue_followup, FALSE) AS has_overdue_followup
        FROM whatsapp_conversations c
        JOIN whatsapp_contacts ct ON ct.id = c.contact_id
        LEFT JOIN users u ON u.id = c.assigned_user_id
+       LEFT JOIN LATERAL (
+         SELECT
+           MAX(m.created_at) FILTER (WHERE m.direction = 'inbound') AS last_inbound_at,
+           MAX(m.created_at) FILTER (WHERE m.direction = 'outbound') AS last_outbound_at
+         FROM whatsapp_messages m
+         WHERE m.conversation_id = c.id
+       ) msg ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT
+           MIN(t.due_at) FILTER (WHERE t.status = 'pending') AS next_followup_due_at,
+           BOOL_OR(t.status = 'pending' AND t.due_at < NOW()) AS has_overdue_followup
+         FROM whatsapp_followup_tasks t
+         WHERE t.conversation_id = c.id
+       ) fu ON TRUE
        WHERE c.id = $1`,
       [conversationId]
     );
@@ -4864,6 +5578,7 @@ app.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, req
       conversation: {
         id: Number(conversationRow.id),
         status: String(conversationRow.status || 'open').trim() || 'open',
+        pipeline_stage: normalizeWhatsAppPipelineStage(conversationRow.pipeline_stage),
         unread_count: Number(conversationRow.unread_count || 0),
         contact_phone: String(conversationRow.contact_phone || '').trim(),
         contact_name: String(conversationRow.contact_name || '').trim() || null,
@@ -4879,6 +5594,10 @@ app.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, req
           : null,
         last_message_preview: String(conversationRow.last_message_preview || '').trim() || '',
         last_message_at: conversationRow.last_message_at || null,
+        last_inbound_at: conversationRow.last_inbound_at || null,
+        last_outbound_at: conversationRow.last_outbound_at || null,
+        next_followup_due_at: conversationRow.next_followup_due_at || null,
+        has_overdue_followup: Boolean(conversationRow.has_overdue_followup),
         updated_at: conversationRow.updated_at || null
       },
       messages: (messagesRes.rows || []).map((row) => ({
