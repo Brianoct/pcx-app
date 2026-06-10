@@ -2614,6 +2614,212 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
   return normalized;
 };
 
+let productionResourceCatalogInitPromise = null;
+const PRODUCTION_RESOURCE_CODE_REGEX = /^[A-Z0-9_-]{2,40}$/;
+
+const parseOptionalPositiveInteger = (value, label) => {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw createHttpError(400, `${label} debe ser un entero mayor a 0`);
+  }
+  return parsed;
+};
+
+const parseOptionalPositiveAmount = (value, label) => {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw createHttpError(400, `${label} debe ser un número mayor a 0`);
+  }
+  return parsed;
+};
+
+const normalizeProductionResourceCode = (value, label = 'code') => {
+  const code = String(value || '').trim().toUpperCase();
+  if (!code) throw createHttpError(400, `${label} requerido`);
+  if (!PRODUCTION_RESOURCE_CODE_REGEX.test(code)) {
+    throw createHttpError(400, `${label} inválido. Usa 2-40 caracteres A-Z, 0-9, guion o guion bajo`);
+  }
+  return code;
+};
+
+const normalizeProductionResourceName = (value, label = 'name') => {
+  const name = String(value || '').trim();
+  if (!name) throw createHttpError(400, `${label} requerido`);
+  if (name.length > 140) throw createHttpError(400, `${label} demasiado largo (máx 140)`);
+  return name;
+};
+
+const normalizeOptionalShortText = (value, label, { maxLength = 140 } = {}) => {
+  if (value === undefined) return undefined;
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (text.length > maxLength) throw createHttpError(400, `${label} demasiado largo (máx ${maxLength})`);
+  return text;
+};
+
+const normalizeOptionalBooleanField = (value, label = 'is_active') => {
+  if (value === undefined) return undefined;
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['1', 'true', 'si', 'sí', 'yes', 'active', 'activo'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'inactive', 'inactivo'].includes(normalized)) return false;
+  throw createHttpError(400, `${label} debe ser booleano`);
+};
+
+const normalizeEquipmentPayload = (payload = {}, { partial = false } = {}) => {
+  const src = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  const hasCode = Object.prototype.hasOwnProperty.call(src, 'code');
+  const hasName = Object.prototype.hasOwnProperty.call(src, 'name');
+  const hasReplacementCost = Object.prototype.hasOwnProperty.call(src, 'replacement_cost_bs');
+  const hasUsefulLifeMonths = Object.prototype.hasOwnProperty.call(src, 'useful_life_months');
+  const hasMonthlyExtraCost = Object.prototype.hasOwnProperty.call(src, 'monthly_extra_cost_bs');
+  const hasMonthlyCapacity = Object.prototype.hasOwnProperty.call(src, 'monthly_capacity_units');
+  const hasUsageUnit = Object.prototype.hasOwnProperty.call(src, 'usage_unit');
+  const hasNotes = Object.prototype.hasOwnProperty.call(src, 'notes');
+  const hasIsActive = Object.prototype.hasOwnProperty.call(src, 'is_active');
+
+  if (!partial && (!hasCode || !hasName)) {
+    throw createHttpError(400, 'Debes enviar code y name');
+  }
+  if (partial && !hasCode && !hasName && !hasReplacementCost && !hasUsefulLifeMonths && !hasMonthlyExtraCost && !hasMonthlyCapacity && !hasUsageUnit && !hasNotes && !hasIsActive) {
+    throw createHttpError(400, 'No se enviaron cambios para actualizar equipo');
+  }
+
+  const normalized = {};
+  if (hasCode) normalized.code = normalizeProductionResourceCode(src.code, 'code');
+  if (hasName) normalized.name = normalizeProductionResourceName(src.name, 'name');
+  if (hasReplacementCost) normalized.replacement_cost_bs = parseNonNegativeAmount(src.replacement_cost_bs, 'replacement_cost_bs');
+  if (hasUsefulLifeMonths) normalized.useful_life_months = parseOptionalPositiveInteger(src.useful_life_months, 'useful_life_months');
+  if (hasMonthlyExtraCost) normalized.monthly_extra_cost_bs = parseNonNegativeAmount(src.monthly_extra_cost_bs, 'monthly_extra_cost_bs');
+  if (hasMonthlyCapacity) normalized.monthly_capacity_units = parseOptionalPositiveAmount(src.monthly_capacity_units, 'monthly_capacity_units');
+  if (hasUsageUnit) normalized.usage_unit = normalizeOptionalShortText(src.usage_unit, 'usage_unit', { maxLength: 80 });
+  if (hasNotes) normalized.notes = normalizeOptionalShortText(src.notes, 'notes', { maxLength: 1000 });
+  if (hasIsActive) normalized.is_active = normalizeOptionalBooleanField(src.is_active, 'is_active');
+
+  if (!partial) {
+    if (!Object.prototype.hasOwnProperty.call(normalized, 'replacement_cost_bs')) normalized.replacement_cost_bs = 0;
+    if (!Object.prototype.hasOwnProperty.call(normalized, 'monthly_extra_cost_bs')) normalized.monthly_extra_cost_bs = 0;
+    if (!Object.prototype.hasOwnProperty.call(normalized, 'is_active')) normalized.is_active = true;
+  }
+  return normalized;
+};
+
+const normalizeMaterialPayload = (payload = {}, { partial = false } = {}) => {
+  const src = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  const hasCode = Object.prototype.hasOwnProperty.call(src, 'code');
+  const hasName = Object.prototype.hasOwnProperty.call(src, 'name');
+  const hasUnitMeasure = Object.prototype.hasOwnProperty.call(src, 'unit_measure');
+  const hasUnitCost = Object.prototype.hasOwnProperty.call(src, 'unit_cost_bs');
+  const hasWastePct = Object.prototype.hasOwnProperty.call(src, 'waste_pct');
+  const hasNotes = Object.prototype.hasOwnProperty.call(src, 'notes');
+  const hasIsActive = Object.prototype.hasOwnProperty.call(src, 'is_active');
+
+  if (!partial && (!hasCode || !hasName || !hasUnitMeasure)) {
+    throw createHttpError(400, 'Debes enviar code, name y unit_measure');
+  }
+  if (partial && !hasCode && !hasName && !hasUnitMeasure && !hasUnitCost && !hasWastePct && !hasNotes && !hasIsActive) {
+    throw createHttpError(400, 'No se enviaron cambios para actualizar material');
+  }
+
+  const normalized = {};
+  if (hasCode) normalized.code = normalizeProductionResourceCode(src.code, 'code');
+  if (hasName) normalized.name = normalizeProductionResourceName(src.name, 'name');
+  if (hasUnitMeasure) normalized.unit_measure = normalizeProductionResourceName(src.unit_measure, 'unit_measure');
+  if (hasUnitCost) normalized.unit_cost_bs = parseNonNegativeAmount(src.unit_cost_bs, 'unit_cost_bs');
+  if (hasWastePct) {
+    const wastePct = parseNonNegativeAmount(src.waste_pct, 'waste_pct');
+    if (wastePct > 100) throw createHttpError(400, 'waste_pct no puede ser mayor a 100');
+    normalized.waste_pct = wastePct;
+  }
+  if (hasNotes) normalized.notes = normalizeOptionalShortText(src.notes, 'notes', { maxLength: 1000 });
+  if (hasIsActive) normalized.is_active = normalizeOptionalBooleanField(src.is_active, 'is_active');
+
+  if (!partial) {
+    if (!Object.prototype.hasOwnProperty.call(normalized, 'unit_cost_bs')) normalized.unit_cost_bs = 0;
+    if (!Object.prototype.hasOwnProperty.call(normalized, 'waste_pct')) normalized.waste_pct = 0;
+    if (!Object.prototype.hasOwnProperty.call(normalized, 'is_active')) normalized.is_active = true;
+  }
+  return normalized;
+};
+
+const buildEquipmentResponseRow = (row = {}) => ({
+  id: Number(row.id),
+  code: String(row.code || '').trim().toUpperCase(),
+  name: String(row.name || '').trim(),
+  replacement_cost_bs: Number(row.replacement_cost_bs || 0),
+  useful_life_months: row.useful_life_months !== null ? Number(row.useful_life_months) : null,
+  monthly_extra_cost_bs: Number(row.monthly_extra_cost_bs || 0),
+  monthly_capacity_units: row.monthly_capacity_units !== null ? Number(row.monthly_capacity_units) : null,
+  usage_unit: String(row.usage_unit || '').trim() || null,
+  notes: String(row.notes || '').trim() || null,
+  is_active: Boolean(row.is_active),
+  updated_by: row.updated_by !== null ? Number(row.updated_by) : null,
+  created_at: row.created_at || null,
+  updated_at: row.updated_at || null
+});
+
+const buildMaterialResponseRow = (row = {}) => ({
+  id: Number(row.id),
+  code: String(row.code || '').trim().toUpperCase(),
+  name: String(row.name || '').trim(),
+  unit_measure: String(row.unit_measure || '').trim(),
+  unit_cost_bs: Number(row.unit_cost_bs || 0),
+  waste_pct: Number(row.waste_pct || 0),
+  notes: String(row.notes || '').trim() || null,
+  is_active: Boolean(row.is_active),
+  updated_by: row.updated_by !== null ? Number(row.updated_by) : null,
+  created_at: row.created_at || null,
+  updated_at: row.updated_at || null
+});
+
+const ensureProductionResourceCatalogReady = async () => {
+  if (!productionResourceCatalogInitPromise) {
+    productionResourceCatalogInitPromise = (async () => {
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS production_equipment_catalog (
+          id BIGSERIAL PRIMARY KEY,
+          code TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          replacement_cost_bs NUMERIC(12,2) NOT NULL DEFAULT 0,
+          useful_life_months INTEGER,
+          monthly_extra_cost_bs NUMERIC(12,2) NOT NULL DEFAULT 0,
+          monthly_capacity_units NUMERIC(12,2),
+          usage_unit TEXT,
+          notes TEXT,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          CONSTRAINT production_equipment_replacement_cost_chk CHECK (replacement_cost_bs >= 0),
+          CONSTRAINT production_equipment_monthly_extra_cost_chk CHECK (monthly_extra_cost_bs >= 0),
+          CONSTRAINT production_equipment_useful_life_chk CHECK (useful_life_months IS NULL OR useful_life_months > 0),
+          CONSTRAINT production_equipment_monthly_capacity_chk CHECK (monthly_capacity_units IS NULL OR monthly_capacity_units > 0)
+        )`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS production_material_catalog (
+          id BIGSERIAL PRIMARY KEY,
+          code TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          unit_measure TEXT NOT NULL,
+          unit_cost_bs NUMERIC(12,2) NOT NULL DEFAULT 0,
+          waste_pct NUMERIC(6,2) NOT NULL DEFAULT 0,
+          notes TEXT,
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          CONSTRAINT production_material_unit_cost_chk CHECK (unit_cost_bs >= 0),
+          CONSTRAINT production_material_waste_chk CHECK (waste_pct >= 0 AND waste_pct <= 100)
+        )`
+      );
+    })();
+  }
+  await productionResourceCatalogInitPromise;
+};
+
 const inferProductMenuCategory = (productRow = {}) => {
   const explicit = normalizeText(productRow.menu_category || '');
   if (explicit) {
@@ -10030,6 +10236,259 @@ app.delete('/api/product-catalog/:sku', authenticateToken, requireRole(['admin']
     if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
     if (err?.code === '42P01') return res.status(409).json({ error: 'No se pudo validar combos asociados' });
     res.status(500).json({ error: 'No se pudo eliminar producto' });
+  }
+});
+
+app.get('/api/admin/equipos', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductionResourceCatalogReady();
+    const includeInactive = parseOptionalBoolean(req.query.include_inactive, false);
+    const whereSql = includeInactive ? '' : 'WHERE is_active = TRUE';
+    const rowsRes = await pool.query(
+      `SELECT
+         id, code, name, replacement_cost_bs, useful_life_months, monthly_extra_cost_bs,
+         monthly_capacity_units, usage_unit, notes, is_active, updated_by, created_at, updated_at
+       FROM production_equipment_catalog
+       ${whereSql}
+       ORDER BY UPPER(name) ASC, UPPER(code) ASC, id ASC`
+    );
+    return res.json((rowsRes.rows || []).map(buildEquipmentResponseRow));
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo cargar catálogo de equipos' });
+  }
+});
+
+app.post('/api/admin/equipos', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductionResourceCatalogReady();
+    const payload = normalizeEquipmentPayload(req.body || {}, { partial: false });
+    const insertRes = await pool.query(
+      `INSERT INTO production_equipment_catalog (
+         code, name, replacement_cost_bs, useful_life_months, monthly_extra_cost_bs,
+         monthly_capacity_units, usage_unit, notes, is_active, updated_by, created_at, updated_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
+       )
+       RETURNING id, code, name, replacement_cost_bs, useful_life_months, monthly_extra_cost_bs,
+                 monthly_capacity_units, usage_unit, notes, is_active, updated_by, created_at, updated_at`,
+      [
+        payload.code,
+        payload.name,
+        payload.replacement_cost_bs,
+        payload.useful_life_months,
+        payload.monthly_extra_cost_bs,
+        payload.monthly_capacity_units,
+        payload.usage_unit || null,
+        payload.notes || null,
+        Boolean(payload.is_active),
+        req.user.id
+      ]
+    );
+    return res.status(201).json(buildEquipmentResponseRow(insertRes.rows[0]));
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err?.code === '23505') return res.status(409).json({ error: 'El código de equipo ya existe' });
+    return res.status(500).json({ error: 'No se pudo crear equipo' });
+  }
+});
+
+app.patch('/api/admin/equipos/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductionResourceCatalogReady();
+    const equipmentId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(equipmentId) || equipmentId <= 0) {
+      return res.status(400).json({ error: 'ID de equipo inválido' });
+    }
+    const payload = normalizeEquipmentPayload(req.body || {}, { partial: true });
+    const sets = [];
+    const values = [];
+    const assignField = (fieldName, value) => {
+      values.push(value);
+      sets.push(`${fieldName} = $${values.length}`);
+    };
+    if (Object.prototype.hasOwnProperty.call(payload, 'code')) assignField('code', payload.code);
+    if (Object.prototype.hasOwnProperty.call(payload, 'name')) assignField('name', payload.name);
+    if (Object.prototype.hasOwnProperty.call(payload, 'replacement_cost_bs')) assignField('replacement_cost_bs', payload.replacement_cost_bs);
+    if (Object.prototype.hasOwnProperty.call(payload, 'useful_life_months')) assignField('useful_life_months', payload.useful_life_months);
+    if (Object.prototype.hasOwnProperty.call(payload, 'monthly_extra_cost_bs')) assignField('monthly_extra_cost_bs', payload.monthly_extra_cost_bs);
+    if (Object.prototype.hasOwnProperty.call(payload, 'monthly_capacity_units')) assignField('monthly_capacity_units', payload.monthly_capacity_units);
+    if (Object.prototype.hasOwnProperty.call(payload, 'usage_unit')) assignField('usage_unit', payload.usage_unit || null);
+    if (Object.prototype.hasOwnProperty.call(payload, 'notes')) assignField('notes', payload.notes || null);
+    if (Object.prototype.hasOwnProperty.call(payload, 'is_active')) assignField('is_active', Boolean(payload.is_active));
+    assignField('updated_by', req.user.id);
+    sets.push('updated_at = NOW()');
+    values.push(equipmentId);
+
+    const updateRes = await pool.query(
+      `UPDATE production_equipment_catalog
+       SET ${sets.join(', ')}
+       WHERE id = $${values.length}
+       RETURNING id, code, name, replacement_cost_bs, useful_life_months, monthly_extra_cost_bs,
+                 monthly_capacity_units, usage_unit, notes, is_active, updated_by, created_at, updated_at`,
+      values
+    );
+    if (updateRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Equipo no encontrado' });
+    }
+    return res.json(buildEquipmentResponseRow(updateRes.rows[0]));
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err?.code === '23505') return res.status(409).json({ error: 'El código de equipo ya existe' });
+    return res.status(500).json({ error: 'No se pudo actualizar equipo' });
+  }
+});
+
+app.delete('/api/admin/equipos/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductionResourceCatalogReady();
+    const equipmentId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(equipmentId) || equipmentId <= 0) {
+      return res.status(400).json({ error: 'ID de equipo inválido' });
+    }
+    const result = await pool.query(
+      `UPDATE production_equipment_catalog
+       SET is_active = FALSE,
+           updated_by = $2,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id`,
+      [equipmentId, req.user.id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Equipo no encontrado' });
+    }
+    return res.json({ message: 'Equipo desactivado', id: equipmentId });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo desactivar equipo' });
+  }
+});
+
+app.get('/api/admin/materiales', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductionResourceCatalogReady();
+    const includeInactive = parseOptionalBoolean(req.query.include_inactive, false);
+    const whereSql = includeInactive ? '' : 'WHERE is_active = TRUE';
+    const rowsRes = await pool.query(
+      `SELECT
+         id, code, name, unit_measure, unit_cost_bs, waste_pct,
+         notes, is_active, updated_by, created_at, updated_at
+       FROM production_material_catalog
+       ${whereSql}
+       ORDER BY UPPER(name) ASC, UPPER(code) ASC, id ASC`
+    );
+    return res.json((rowsRes.rows || []).map(buildMaterialResponseRow));
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo cargar catálogo de materiales' });
+  }
+});
+
+app.post('/api/admin/materiales', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductionResourceCatalogReady();
+    const payload = normalizeMaterialPayload(req.body || {}, { partial: false });
+    const insertRes = await pool.query(
+      `INSERT INTO production_material_catalog (
+         code, name, unit_measure, unit_cost_bs, waste_pct, notes, is_active, updated_by, created_at, updated_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+       )
+       RETURNING id, code, name, unit_measure, unit_cost_bs, waste_pct, notes, is_active, updated_by, created_at, updated_at`,
+      [
+        payload.code,
+        payload.name,
+        payload.unit_measure,
+        payload.unit_cost_bs,
+        payload.waste_pct,
+        payload.notes || null,
+        Boolean(payload.is_active),
+        req.user.id
+      ]
+    );
+    return res.status(201).json(buildMaterialResponseRow(insertRes.rows[0]));
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err?.code === '23505') return res.status(409).json({ error: 'El código de material ya existe' });
+    return res.status(500).json({ error: 'No se pudo crear material' });
+  }
+});
+
+app.patch('/api/admin/materiales/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductionResourceCatalogReady();
+    const materialId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(materialId) || materialId <= 0) {
+      return res.status(400).json({ error: 'ID de material inválido' });
+    }
+    const payload = normalizeMaterialPayload(req.body || {}, { partial: true });
+    const sets = [];
+    const values = [];
+    const assignField = (fieldName, value) => {
+      values.push(value);
+      sets.push(`${fieldName} = $${values.length}`);
+    };
+    if (Object.prototype.hasOwnProperty.call(payload, 'code')) assignField('code', payload.code);
+    if (Object.prototype.hasOwnProperty.call(payload, 'name')) assignField('name', payload.name);
+    if (Object.prototype.hasOwnProperty.call(payload, 'unit_measure')) assignField('unit_measure', payload.unit_measure);
+    if (Object.prototype.hasOwnProperty.call(payload, 'unit_cost_bs')) assignField('unit_cost_bs', payload.unit_cost_bs);
+    if (Object.prototype.hasOwnProperty.call(payload, 'waste_pct')) assignField('waste_pct', payload.waste_pct);
+    if (Object.prototype.hasOwnProperty.call(payload, 'notes')) assignField('notes', payload.notes || null);
+    if (Object.prototype.hasOwnProperty.call(payload, 'is_active')) assignField('is_active', Boolean(payload.is_active));
+    assignField('updated_by', req.user.id);
+    sets.push('updated_at = NOW()');
+    values.push(materialId);
+
+    const updateRes = await pool.query(
+      `UPDATE production_material_catalog
+       SET ${sets.join(', ')}
+       WHERE id = $${values.length}
+       RETURNING id, code, name, unit_measure, unit_cost_bs, waste_pct, notes, is_active, updated_by, created_at, updated_at`,
+      values
+    );
+    if (updateRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Material no encontrado' });
+    }
+    return res.json(buildMaterialResponseRow(updateRes.rows[0]));
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    if (err?.code === '23505') return res.status(409).json({ error: 'El código de material ya existe' });
+    return res.status(500).json({ error: 'No se pudo actualizar material' });
+  }
+});
+
+app.delete('/api/admin/materiales/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductionResourceCatalogReady();
+    const materialId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(materialId) || materialId <= 0) {
+      return res.status(400).json({ error: 'ID de material inválido' });
+    }
+    const result = await pool.query(
+      `UPDATE production_material_catalog
+       SET is_active = FALSE,
+           updated_by = $2,
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING id`,
+      [materialId, req.user.id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Material no encontrado' });
+    }
+    return res.json({ message: 'Material desactivado', id: materialId });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo desactivar material' });
   }
 });
 
