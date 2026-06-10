@@ -2614,6 +2614,186 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
   return normalized;
 };
 
+const PRODUCT_PROCESS_KEYS = ['laser', 'punzonado'];
+let productProductionMappingInitPromise = null;
+
+const normalizeProductProcessKey = (value = '') => {
+  const processKey = String(value || '').trim().toLowerCase();
+  if (!processKey) return '';
+  if (!PRODUCT_PROCESS_KEYS.includes(processKey)) {
+    throw createHttpError(400, `Proceso inválido. Usa: ${PRODUCT_PROCESS_KEYS.join(', ')}`);
+  }
+  return processKey;
+};
+
+const parseIntegerIdArray = (value, fieldLabel) => {
+  if (value === undefined || value === null || value === '') return [];
+  if (!Array.isArray(value)) throw createHttpError(400, `${fieldLabel} debe ser un arreglo`);
+  const unique = new Set();
+  const parsed = [];
+  for (const item of value) {
+    const id = Number.parseInt(item, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw createHttpError(400, `${fieldLabel} contiene IDs inválidos`);
+    }
+    if (!unique.has(id)) {
+      unique.add(id);
+      parsed.push(id);
+    }
+  }
+  return parsed;
+};
+
+const parseProcessArray = (value, fieldLabel = 'processes') => {
+  if (value === undefined || value === null || value === '') return [];
+  if (!Array.isArray(value)) throw createHttpError(400, `${fieldLabel} debe ser un arreglo`);
+  const unique = new Set();
+  const parsed = [];
+  for (const item of value) {
+    const processKey = normalizeProductProcessKey(item);
+    if (processKey && !unique.has(processKey)) {
+      unique.add(processKey);
+      parsed.push(processKey);
+    }
+  }
+  return parsed;
+};
+
+const normalizeProductProductionConfigPayload = (payload = {}) => {
+  const src = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+  return {
+    equipment_ids: parseIntegerIdArray(src.equipment_ids, 'equipment_ids'),
+    material_ids: parseIntegerIdArray(src.material_ids, 'material_ids'),
+    processes: parseProcessArray(src.processes, 'processes')
+  };
+};
+
+const ensureProductProductionMappingReady = async () => {
+  if (!productProductionMappingInitPromise) {
+    productProductionMappingInitPromise = (async () => {
+      await ensureProductCatalogReady();
+      await ensureProductionResourceCatalogReady();
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS product_equipment_map (
+          sku TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
+          equipment_id BIGINT NOT NULL REFERENCES production_equipment_catalog(id) ON DELETE RESTRICT,
+          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (sku, equipment_id)
+        )`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS product_material_map (
+          sku TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
+          material_id BIGINT NOT NULL REFERENCES production_material_catalog(id) ON DELETE RESTRICT,
+          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (sku, material_id)
+        )`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS product_process_map (
+          sku TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
+          process_key TEXT NOT NULL,
+          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (sku, process_key),
+          CONSTRAINT product_process_map_process_chk CHECK (process_key IN ('laser', 'punzonado'))
+        )`
+      );
+    })();
+  }
+  await productProductionMappingInitPromise;
+};
+
+const assertProductProductionReferencesExist = async (db, { equipment_ids = [], material_ids = [] } = {}) => {
+  if (equipment_ids.length > 0) {
+    const eqRes = await db.query(
+      `SELECT id
+       FROM production_equipment_catalog
+       WHERE id = ANY($1::bigint[])`,
+      [equipment_ids]
+    );
+    if (eqRes.rowCount !== equipment_ids.length) {
+      throw createHttpError(400, 'Uno o más equipment_ids no existen');
+    }
+  }
+  if (material_ids.length > 0) {
+    const mtRes = await db.query(
+      `SELECT id
+       FROM production_material_catalog
+       WHERE id = ANY($1::bigint[])`,
+      [material_ids]
+    );
+    if (mtRes.rowCount !== material_ids.length) {
+      throw createHttpError(400, 'Uno o más material_ids no existen');
+    }
+  }
+};
+
+const saveProductProductionConfig = async (db, sku, config = {}) => {
+  const normalizedSku = validateProductSku(sku);
+  const payload = normalizeProductProductionConfigPayload(config);
+  await assertProductProductionReferencesExist(db, payload);
+
+  await db.query('DELETE FROM product_equipment_map WHERE UPPER(sku) = $1', [normalizedSku]);
+  await db.query('DELETE FROM product_material_map WHERE UPPER(sku) = $1', [normalizedSku]);
+  await db.query('DELETE FROM product_process_map WHERE UPPER(sku) = $1', [normalizedSku]);
+
+  for (const equipmentId of payload.equipment_ids) {
+    await db.query(
+      `INSERT INTO product_equipment_map (sku, equipment_id, created_at)
+       VALUES ($1, $2, NOW())`,
+      [normalizedSku, equipmentId]
+    );
+  }
+  for (const materialId of payload.material_ids) {
+    await db.query(
+      `INSERT INTO product_material_map (sku, material_id, created_at)
+       VALUES ($1, $2, NOW())`,
+      [normalizedSku, materialId]
+    );
+  }
+  for (const processKey of payload.processes) {
+    await db.query(
+      `INSERT INTO product_process_map (sku, process_key, created_at)
+       VALUES ($1, $2, NOW())`,
+      [normalizedSku, processKey]
+    );
+  }
+  return payload;
+};
+
+const getProductProductionConfig = async (db, sku) => {
+  const normalizedSku = validateProductSku(sku);
+  const [equipmentRes, materialRes, processRes] = await Promise.all([
+    db.query(
+      `SELECT equipment_id
+       FROM product_equipment_map
+       WHERE UPPER(sku) = $1
+       ORDER BY equipment_id ASC`,
+      [normalizedSku]
+    ),
+    db.query(
+      `SELECT material_id
+       FROM product_material_map
+       WHERE UPPER(sku) = $1
+       ORDER BY material_id ASC`,
+      [normalizedSku]
+    ),
+    db.query(
+      `SELECT process_key
+       FROM product_process_map
+       WHERE UPPER(sku) = $1
+       ORDER BY process_key ASC`,
+      [normalizedSku]
+    )
+  ]);
+  return {
+    sku: normalizedSku,
+    equipment_ids: (equipmentRes.rows || []).map((row) => Number(row.equipment_id)),
+    material_ids: (materialRes.rows || []).map((row) => Number(row.material_id)),
+    processes: (processRes.rows || []).map((row) => String(row.process_key || '').trim().toLowerCase()).filter(Boolean)
+  };
+};
+
 let productionResourceCatalogInitPromise = null;
 const PRODUCTION_RESOURCE_CODE_REGEX = /^[A-Z0-9_-]{2,40}$/;
 
@@ -10104,11 +10284,17 @@ app.get('/api/product-catalog', authenticateToken, async (req, res) => {
 });
 
 app.post('/api/product-catalog', authenticateToken, requireRole(['admin']), async (req, res) => {
+  let client;
   try {
-    await ensureProductCatalogReady();
+    await ensureProductProductionMappingReady();
     const sku = validateProductSku(req.body?.sku);
     const normalized = normalizeProductPayload(req.body, { partial: false });
-    const result = await pool.query(
+    const productionConfig = normalizeProductProductionConfigPayload(req.body || {});
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const result = await client.query(
       `INSERT INTO products (sku, name, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, last_updated)
        VALUES ($1, $2, $3, $4, TRUE, $5, $6, $7, NOW())
        RETURNING sku, name, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url`,
@@ -10122,6 +10308,11 @@ app.post('/api/product-catalog', authenticateToken, requireRole(['admin']), asyn
         normalized.image_url || null
       ]
     );
+    await saveProductProductionConfig(client, sku, productionConfig);
+    await client.query('COMMIT');
+    client.release();
+    client = null;
+
     await loadProductCatalogRows();
     res.status(201).json({
       sku: String(result.rows[0].sku || '').toUpperCase(),
@@ -10131,9 +10322,20 @@ app.post('/api/product-catalog', authenticateToken, requireRole(['admin']), asyn
       is_active: Boolean(result.rows[0].is_active),
       is_gift_eligible: Boolean(result.rows[0].is_gift_eligible),
       menu_category: String(result.rows[0].menu_category || '').trim() || null,
-      image_url: String(result.rows[0].image_url || '').trim() || null
+      image_url: String(result.rows[0].image_url || '').trim() || null,
+      equipment_ids: productionConfig.equipment_ids,
+      material_ids: productionConfig.material_ids,
+      processes: productionConfig.processes
     });
   } catch (err) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('Rollback error create product-catalog:', rollbackErr);
+      }
+      client.release();
+    }
     console.error(err);
     if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
     if (err?.code === '23505') return res.status(409).json({ error: 'El SKU ya existe' });
@@ -10236,6 +10438,112 @@ app.delete('/api/product-catalog/:sku', authenticateToken, requireRole(['admin']
     if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
     if (err?.code === '42P01') return res.status(409).json({ error: 'No se pudo validar combos asociados' });
     res.status(500).json({ error: 'No se pudo eliminar producto' });
+  }
+});
+
+app.get('/api/admin/product-production/options', authenticateToken, requireRole(['admin']), async (_req, res) => {
+  try {
+    await ensureProductProductionMappingReady();
+    const [equipmentRes, materialRes] = await Promise.all([
+      pool.query(
+        `SELECT id, code, name
+         FROM production_equipment_catalog
+         WHERE is_active = TRUE
+         ORDER BY UPPER(name) ASC, UPPER(code) ASC, id ASC`
+      ),
+      pool.query(
+        `SELECT id, code, name, unit_measure
+         FROM production_material_catalog
+         WHERE is_active = TRUE
+         ORDER BY UPPER(name) ASC, UPPER(code) ASC, id ASC`
+      )
+    ]);
+    return res.json({
+      process_options: PRODUCT_PROCESS_KEYS.map((key) => ({
+        value: key,
+        label: key === 'laser' ? 'Laser' : 'Punzonado'
+      })),
+      equipment_options: (equipmentRes.rows || []).map((row) => ({
+        id: Number(row.id),
+        code: String(row.code || '').trim().toUpperCase(),
+        name: String(row.name || '').trim()
+      })),
+      material_options: (materialRes.rows || []).map((row) => ({
+        id: Number(row.id),
+        code: String(row.code || '').trim().toUpperCase(),
+        name: String(row.name || '').trim(),
+        unit_measure: String(row.unit_measure || '').trim() || null
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudieron cargar opciones de producción' });
+  }
+});
+
+app.get('/api/admin/product-production/:sku', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductProductionMappingReady();
+    const sku = validateProductSku(req.params.sku);
+    const productRes = await pool.query(
+      `SELECT sku
+       FROM products
+       WHERE UPPER(sku) = $1
+       LIMIT 1`,
+      [sku]
+    );
+    if (productRes.rowCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+    const config = await getProductProductionConfig(pool, sku);
+    return res.json(config);
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo cargar configuración de producción del producto' });
+  }
+});
+
+app.put('/api/admin/product-production/:sku', authenticateToken, requireRole(['admin']), async (req, res) => {
+  let client;
+  try {
+    await ensureProductProductionMappingReady();
+    const sku = validateProductSku(req.params.sku);
+    const payload = normalizeProductProductionConfigPayload(req.body || {});
+
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const productRes = await client.query(
+      `SELECT sku
+       FROM products
+       WHERE UPPER(sku) = $1
+       LIMIT 1`,
+      [sku]
+    );
+    if (productRes.rowCount === 0) throw createHttpError(404, 'Producto no encontrado');
+
+    await saveProductProductionConfig(client, sku, payload);
+
+    await client.query('COMMIT');
+    client.release();
+    client = null;
+
+    return res.json({
+      sku,
+      ...payload
+    });
+  } catch (err) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        console.error('Rollback error product-production config:', rollbackErr);
+      }
+      client.release();
+    }
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo guardar configuración de producción del producto' });
   }
 });
 
