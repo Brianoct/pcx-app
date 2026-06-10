@@ -722,8 +722,19 @@ function ProductCatalogAdmin({ token }) {
     sku: '',
     name: '',
     sf: '',
-    cf: ''
+    cf: '',
+    equipment_ids: [],
+    material_ids: [],
+    processes: []
   });
+  const [productionOptions, setProductionOptions] = useState({
+    equipment_options: [],
+    material_options: [],
+    process_options: []
+  });
+  const [configModal, setConfigModal] = useState(null);
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
   const visibleProducts = products.filter((row) => Boolean(row.is_active));
   const inactiveProducts = products.filter((row) => !row.is_active);
 
@@ -740,8 +751,23 @@ function ProductCatalogAdmin({ token }) {
     }
   };
 
+  const loadProductionOptions = async () => {
+    try {
+      const data = await apiRequest('/api/admin/product-production/options', { token });
+      setProductionOptions({
+        equipment_options: Array.isArray(data?.equipment_options) ? data.equipment_options : [],
+        material_options: Array.isArray(data?.material_options) ? data.material_options : [],
+        process_options: Array.isArray(data?.process_options) ? data.process_options : []
+      });
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    }
+  };
+
   useEffect(() => {
     loadProducts();
+    loadProductionOptions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const onRowField = (sku, field, value) => {
@@ -749,6 +775,34 @@ function ProductCatalogAdmin({ token }) {
       row.sku === sku ? { ...row, [field]: value } : row
     )));
     setMessage('');
+  };
+
+  const toggleInArray = (items = [], value) => {
+    const set = new Set(Array.isArray(items) ? items : []);
+    if (set.has(value)) set.delete(value);
+    else set.add(value);
+    return [...set];
+  };
+
+  const toggleNewProductEquipment = (equipmentId) => {
+    setNewProduct((prev) => ({
+      ...prev,
+      equipment_ids: toggleInArray(prev.equipment_ids, equipmentId)
+    }));
+  };
+
+  const toggleNewProductMaterial = (materialId) => {
+    setNewProduct((prev) => ({
+      ...prev,
+      material_ids: toggleInArray(prev.material_ids, materialId)
+    }));
+  };
+
+  const toggleNewProductProcess = (processKey) => {
+    setNewProduct((prev) => ({
+      ...prev,
+      processes: toggleInArray(prev.processes, processKey)
+    }));
   };
 
   const createProduct = async (e) => {
@@ -760,7 +814,10 @@ function ProductCatalogAdmin({ token }) {
         sku: String(newProduct.sku || '').toUpperCase().trim(),
         name: String(newProduct.name || '').trim(),
         sf: Number(newProduct.sf || 0),
-        cf: Number(newProduct.cf || 0)
+        cf: Number(newProduct.cf || 0),
+        equipment_ids: Array.isArray(newProduct.equipment_ids) ? newProduct.equipment_ids : [],
+        material_ids: Array.isArray(newProduct.material_ids) ? newProduct.material_ids : [],
+        processes: Array.isArray(newProduct.processes) ? newProduct.processes : []
       };
       if (!payload.sku || !payload.name) {
         throw new Error('SKU y nombre son requeridos');
@@ -796,7 +853,15 @@ function ProductCatalogAdmin({ token }) {
         });
         setMessage('Producto agregado.');
       }
-      setNewProduct({ sku: '', name: '', sf: '', cf: '' });
+      setNewProduct({
+        sku: '',
+        name: '',
+        sf: '',
+        cf: '',
+        equipment_ids: [],
+        material_ids: [],
+        processes: []
+      });
       if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
         await loadProducts();
       }
@@ -887,6 +952,80 @@ function ProductCatalogAdmin({ token }) {
     }
   };
 
+  const openProductionConfig = async (row) => {
+    if (!row?.sku) return;
+    setConfigLoading(true);
+    setMessage('');
+    setConfigModal({
+      sku: row.sku,
+      equipment_ids: [],
+      material_ids: [],
+      processes: []
+    });
+    try {
+      const payload = await apiRequest(`/api/admin/product-production/${encodeURIComponent(row.sku)}`, { token });
+      setConfigModal({
+        sku: row.sku,
+        equipment_ids: Array.isArray(payload?.equipment_ids) ? payload.equipment_ids : [],
+        material_ids: Array.isArray(payload?.material_ids) ? payload.material_ids : [],
+        processes: Array.isArray(payload?.processes) ? payload.processes : []
+      });
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+      setConfigModal(null);
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  const updateConfigSelection = (field, value) => {
+    setConfigModal((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        [field]: toggleInArray(prev[field] || [], value)
+      };
+    });
+  };
+
+  const saveProductionConfig = async () => {
+    if (!configModal?.sku) return;
+    setConfigSaving(true);
+    setMessage('');
+    try {
+      const payload = {
+        equipment_ids: Array.isArray(configModal.equipment_ids) ? configModal.equipment_ids : [],
+        material_ids: Array.isArray(configModal.material_ids) ? configModal.material_ids : [],
+        processes: Array.isArray(configModal.processes) ? configModal.processes : []
+      };
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Configuración producción ${configModal.sku}`,
+          path: `/api/admin/product-production/${encodeURIComponent(configModal.sku)}`,
+          options: {
+            method: 'PUT',
+            body: payload,
+            retries: 0
+          },
+          meta: { sku: configModal.sku }
+        });
+        setMessage(`Sin conexión: configuración de ${configModal.sku} en cola para sincronizar.`);
+      } else {
+        await apiRequest(`/api/admin/product-production/${encodeURIComponent(configModal.sku)}`, {
+          method: 'PUT',
+          token,
+          body: payload
+        });
+        setMessage(`Configuración de producción guardada para ${configModal.sku}.`);
+      }
+      setConfigModal(null);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
       <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px' }}>
@@ -929,6 +1068,65 @@ function ProductCatalogAdmin({ token }) {
           >
             {saving ? 'Guardando...' : 'Agregar'}
           </button>
+
+          <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 10 }}>
+            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
+              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Procesos</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                {productionOptions.process_options.map((option) => (
+                  <label key={`new-process-${option.value}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                    <input
+                      type="checkbox"
+                      checked={Array.isArray(newProduct.processes) && newProduct.processes.includes(option.value)}
+                      onChange={() => toggleNewProductProcess(option.value)}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+                {productionOptions.process_options.length === 0 && (
+                  <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>No hay procesos disponibles</span>
+                )}
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
+              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Equipos utilizados</div>
+              <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                {productionOptions.equipment_options.map((equipment) => (
+                  <label key={`new-eq-${equipment.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                    <input
+                      type="checkbox"
+                      checked={Array.isArray(newProduct.equipment_ids) && newProduct.equipment_ids.includes(equipment.id)}
+                      onChange={() => toggleNewProductEquipment(equipment.id)}
+                    />
+                    {equipment.code} · {equipment.name}
+                  </label>
+                ))}
+                {productionOptions.equipment_options.length === 0 && (
+                  <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>No hay equipos activos. Agrégalos en la pestaña Equipos.</span>
+                )}
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
+              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Materiales utilizados</div>
+              <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                {productionOptions.material_options.map((material) => (
+                  <label key={`new-mt-${material.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                    <input
+                      type="checkbox"
+                      checked={Array.isArray(newProduct.material_ids) && newProduct.material_ids.includes(material.id)}
+                      onChange={() => toggleNewProductMaterial(material.id)}
+                    />
+                    {material.code} · {material.name}{material.unit_measure ? ` (${material.unit_measure})` : ''}
+                  </label>
+                ))}
+                {productionOptions.material_options.length === 0 && (
+                  <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>No hay materiales activos. Agrégalos en la pestaña Materiales.</span>
+                )}
+              </div>
+            </div>
+          </div>
         </form>
       </div>
 
@@ -950,7 +1148,7 @@ function ProductCatalogAdmin({ token }) {
           <p style={{ color: '#94a3b8' }}>Cargando productos...</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table className="table" style={{ minWidth: '960px' }}>
+            <table className="table" style={{ minWidth: '1040px' }}>
               <thead>
                 <tr>
                   <th>SKU</th>
@@ -1006,6 +1204,13 @@ function ProductCatalogAdmin({ token }) {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => openProductionConfig(row)}
+                          disabled={saving || configLoading}
+                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#0ea5e9', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
+                        >
+                          Producción
+                        </button>
                         <button
                           onClick={() => saveProduct(row)}
                           disabled={saving}
@@ -1078,6 +1283,872 @@ function ProductCatalogAdmin({ token }) {
           </div>
         </div>
       )}
+
+      {configModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(2,6,23,0.72)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 16,
+          zIndex: 1000
+        }}>
+          <div style={{
+            width: 'min(880px, 100%)',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            background: '#111827',
+            border: '1px solid #334155',
+            borderRadius: 12,
+            padding: 16,
+            display: 'grid',
+            gap: 12
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <h3 style={{ margin: 0 }}>Configurar producción · {configModal.sku}</h3>
+              {configLoading && <span style={{ color: '#93c5fd', fontSize: '0.82rem' }}>Cargando...</span>}
+            </div>
+
+            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
+              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Procesos</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                {productionOptions.process_options.map((option) => (
+                  <label key={`cfg-process-${option.value}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                    <input
+                      type="checkbox"
+                      checked={Array.isArray(configModal.processes) && configModal.processes.includes(option.value)}
+                      onChange={() => updateConfigSelection('processes', option.value)}
+                      disabled={configLoading || configSaving}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
+              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Equipos</div>
+              <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                {productionOptions.equipment_options.map((equipment) => (
+                  <label key={`cfg-eq-${equipment.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                    <input
+                      type="checkbox"
+                      checked={Array.isArray(configModal.equipment_ids) && configModal.equipment_ids.includes(equipment.id)}
+                      onChange={() => updateConfigSelection('equipment_ids', equipment.id)}
+                      disabled={configLoading || configSaving}
+                    />
+                    {equipment.code} · {equipment.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
+              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Materiales</div>
+              <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                {productionOptions.material_options.map((material) => (
+                  <label key={`cfg-mt-${material.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                    <input
+                      type="checkbox"
+                      checked={Array.isArray(configModal.material_ids) && configModal.material_ids.includes(material.id)}
+                      onChange={() => updateConfigSelection('material_ids', material.id)}
+                      disabled={configLoading || configSaving}
+                    />
+                    {material.code} · {material.name}{material.unit_measure ? ` (${material.unit_measure})` : ''}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => setConfigModal(null)}
+                disabled={configSaving}
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={saveProductionConfig}
+                disabled={configSaving || configLoading}
+                style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#2563eb', color: 'white', fontWeight: 700, cursor: 'pointer' }}
+              >
+                {configSaving ? 'Guardando...' : 'Guardar configuración'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EquipmentCatalogAdmin({ token }) {
+  const { enqueueWrite } = useOutbox();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [newRow, setNewRow] = useState({
+    code: '',
+    name: '',
+    replacement_cost_bs: '',
+    useful_life_months: '',
+    monthly_extra_cost_bs: '',
+    monthly_capacity_units: '',
+    usage_unit: '',
+    notes: ''
+  });
+
+  const loadRows = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const data = await apiRequest('/api/admin/equipos?include_inactive=1', { token });
+      setRows(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRows();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const onRowField = (id, field, value) => {
+    setRows((prev) => prev.map((row) => (
+      row.id === id ? { ...row, [field]: value } : row
+    )));
+    setMessage('');
+  };
+
+  const buildPayload = (input = {}) => {
+    const payload = {
+      code: String(input.code || '').toUpperCase().trim(),
+      name: String(input.name || '').trim(),
+      replacement_cost_bs: Number(input.replacement_cost_bs || 0),
+      useful_life_months: input.useful_life_months === '' || input.useful_life_months === null || input.useful_life_months === undefined
+        ? null
+        : Number.parseInt(input.useful_life_months, 10),
+      monthly_extra_cost_bs: Number(input.monthly_extra_cost_bs || 0),
+      monthly_capacity_units: input.monthly_capacity_units === '' || input.monthly_capacity_units === null || input.monthly_capacity_units === undefined
+        ? null
+        : Number(input.monthly_capacity_units),
+      usage_unit: String(input.usage_unit || '').trim() || null,
+      notes: String(input.notes || '').trim() || null
+    };
+    if (!payload.code || !payload.name) {
+      throw new Error('Código y nombre son requeridos');
+    }
+    if (!Number.isFinite(payload.replacement_cost_bs) || payload.replacement_cost_bs < 0) {
+      throw new Error('Costo de reposición inválido');
+    }
+    if (!Number.isFinite(payload.monthly_extra_cost_bs) || payload.monthly_extra_cost_bs < 0) {
+      throw new Error('Costo mensual extra inválido');
+    }
+    if (payload.useful_life_months !== null && (!Number.isInteger(payload.useful_life_months) || payload.useful_life_months <= 0)) {
+      throw new Error('Vida útil (meses) inválida');
+    }
+    if (payload.monthly_capacity_units !== null && (!Number.isFinite(payload.monthly_capacity_units) || payload.monthly_capacity_units <= 0)) {
+      throw new Error('Capacidad mensual inválida');
+    }
+    return payload;
+  };
+
+  const createRow = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage('');
+    try {
+      const payload = buildPayload(newRow);
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Crear equipo ${payload.code}`,
+          path: '/api/admin/equipos',
+          options: {
+            method: 'POST',
+            body: payload,
+            retries: 0
+          },
+          meta: { code: payload.code, name: payload.name }
+        });
+        setRows((prev) => [...prev, { ...payload, id: Date.now(), is_active: true }]);
+        setMessage('Sin conexión: equipo en cola para sincronizar.');
+      } else {
+        await apiRequest('/api/admin/equipos', {
+          method: 'POST',
+          token,
+          body: payload
+        });
+        setMessage('Equipo agregado.');
+        await loadRows();
+      }
+      setNewRow({
+        code: '',
+        name: '',
+        replacement_cost_bs: '',
+        useful_life_months: '',
+        monthly_extra_cost_bs: '',
+        monthly_capacity_units: '',
+        usage_unit: '',
+        notes: ''
+      });
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveRow = async (row) => {
+    setSaving(true);
+    setMessage('');
+    try {
+      const payload = {
+        ...buildPayload(row),
+        is_active: Boolean(row.is_active)
+      };
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Editar equipo #${row.id}`,
+          path: `/api/admin/equipos/${row.id}`,
+          options: {
+            method: 'PATCH',
+            body: payload,
+            retries: 0
+          },
+          meta: { id: row.id, code: payload.code }
+        });
+        setMessage(`Sin conexión: cambios de ${payload.code} en cola para sincronizar.`);
+      } else {
+        await apiRequest(`/api/admin/equipos/${row.id}`, {
+          method: 'PATCH',
+          token,
+          body: payload
+        });
+        setMessage(`Equipo ${payload.code} actualizado.`);
+        await loadRows();
+      }
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deactivateRow = async (row) => {
+    if (!window.confirm(`¿Desactivar equipo ${row.code}?`)) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Desactivar equipo ${row.code}`,
+          path: `/api/admin/equipos/${row.id}`,
+          options: {
+            method: 'DELETE',
+            retries: 0
+          },
+          meta: { id: row.id, code: row.code }
+        });
+        setRows((prev) => prev.map((item) => (
+          item.id === row.id ? { ...item, is_active: false } : item
+        )));
+        setMessage(`Sin conexión: desactivación de ${row.code} en cola para sincronizar.`);
+      } else {
+        await apiRequest(`/api/admin/equipos/${row.id}`, {
+          method: 'DELETE',
+          token
+        });
+        setMessage(`Equipo ${row.code} desactivado.`);
+        await loadRows();
+      }
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: '16px' }}>
+      <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px' }}>
+        <h3 style={{ marginBottom: '12px' }}>Equipos</h3>
+        <form onSubmit={createRow} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+          <input
+            placeholder="Código"
+            value={newRow.code}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            placeholder="Nombre"
+            value={newRow.name}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, name: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Costo reposición (Bs)"
+            value={newRow.replacement_cost_bs}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, replacement_cost_bs: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            type="number"
+            min="1"
+            step="1"
+            placeholder="Vida útil (meses)"
+            value={newRow.useful_life_months}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, useful_life_months: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Costo mensual extra (Bs)"
+            value={newRow.monthly_extra_cost_bs}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, monthly_extra_cost_bs: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder="Capacidad mensual"
+            value={newRow.monthly_capacity_units}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, monthly_capacity_units: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            placeholder="Unidad de uso (horas, ciclos)"
+            value={newRow.usage_unit}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, usage_unit: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            placeholder="Notas (opcional)"
+            value={newRow.notes}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, notes: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <button
+            type="submit"
+            disabled={saving}
+            style={{ border: 'none', borderRadius: '8px', background: '#3b82f6', color: 'white', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}
+          >
+            {saving ? 'Guardando...' : 'Agregar equipo'}
+          </button>
+        </form>
+      </div>
+
+      {message && (
+        <div style={{
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
+          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+        }}>
+          {message}
+        </div>
+      )}
+
+      <div style={{ background: '#1e293b', borderRadius: '12px', padding: '16px' }}>
+        <h3 style={{ marginBottom: '12px' }}>Catálogo de equipos</h3>
+        {loading ? (
+          <p style={{ color: '#94a3b8' }}>Cargando equipos...</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ minWidth: '1220px' }}>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Nombre</th>
+                  <th style={{ textAlign: 'right' }}>Reposición (Bs)</th>
+                  <th style={{ textAlign: 'right' }}>Vida útil (meses)</th>
+                  <th style={{ textAlign: 'right' }}>Mensual extra (Bs)</th>
+                  <th style={{ textAlign: 'right' }}>Capacidad mensual</th>
+                  <th>Unidad uso</th>
+                  <th>Notas</th>
+                  <th>Activo</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8' }}>Sin equipos</td></tr>
+                ) : rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <input
+                        value={row.code || ''}
+                        onChange={(e) => onRowField(row.id, 'code', e.target.value.toUpperCase())}
+                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={row.name || ''}
+                        onChange={(e) => onRowField(row.id, 'name', e.target.value)}
+                        style={{ width: '100%', minWidth: 180, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={Number(row.replacement_cost_bs || 0)}
+                        onChange={(e) => onRowField(row.id, 'replacement_cost_bs', e.target.value)}
+                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={row.useful_life_months ?? ''}
+                        onChange={(e) => onRowField(row.id, 'useful_life_months', e.target.value)}
+                        style={{ width: 110, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={Number(row.monthly_extra_cost_bs || 0)}
+                        onChange={(e) => onRowField(row.id, 'monthly_extra_cost_bs', e.target.value)}
+                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={row.monthly_capacity_units ?? ''}
+                        onChange={(e) => onRowField(row.id, 'monthly_capacity_units', e.target.value)}
+                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={row.usage_unit || ''}
+                        onChange={(e) => onRowField(row.id, 'usage_unit', e.target.value)}
+                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={row.notes || ''}
+                        onChange={(e) => onRowField(row.id, 'notes', e.target.value)}
+                        style={{ width: '100%', minWidth: 180, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      />
+                    </td>
+                    <td>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(row.is_active)}
+                          onChange={(e) => onRowField(row.id, 'is_active', e.target.checked)}
+                        />
+                        {row.is_active ? 'Sí' : 'No'}
+                      </label>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => saveRow(row)}
+                          disabled={saving}
+                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          onClick={() => deactivateRow(row)}
+                          disabled={saving || !row.is_active}
+                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
+                        >
+                          Desactivar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MaterialsCatalogAdmin({ token }) {
+  const { enqueueWrite } = useOutbox();
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [newRow, setNewRow] = useState({
+    code: '',
+    name: '',
+    unit_measure: '',
+    unit_cost_bs: '',
+    waste_pct: '',
+    notes: ''
+  });
+
+  const loadRows = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const data = await apiRequest('/api/admin/materiales?include_inactive=1', { token });
+      setRows(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRows();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const onRowField = (id, field, value) => {
+    setRows((prev) => prev.map((row) => (
+      row.id === id ? { ...row, [field]: value } : row
+    )));
+    setMessage('');
+  };
+
+  const buildPayload = (input = {}) => {
+    const payload = {
+      code: String(input.code || '').toUpperCase().trim(),
+      name: String(input.name || '').trim(),
+      unit_measure: String(input.unit_measure || '').trim(),
+      unit_cost_bs: Number(input.unit_cost_bs || 0),
+      waste_pct: Number(input.waste_pct || 0),
+      notes: String(input.notes || '').trim() || null
+    };
+    if (!payload.code || !payload.name || !payload.unit_measure) {
+      throw new Error('Código, nombre y unidad son requeridos');
+    }
+    if (!Number.isFinite(payload.unit_cost_bs) || payload.unit_cost_bs < 0) {
+      throw new Error('Costo unitario inválido');
+    }
+    if (!Number.isFinite(payload.waste_pct) || payload.waste_pct < 0 || payload.waste_pct > 100) {
+      throw new Error('Merma % inválida (0-100)');
+    }
+    return payload;
+  };
+
+  const createRow = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage('');
+    try {
+      const payload = buildPayload(newRow);
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Crear material ${payload.code}`,
+          path: '/api/admin/materiales',
+          options: {
+            method: 'POST',
+            body: payload,
+            retries: 0
+          },
+          meta: { code: payload.code, name: payload.name }
+        });
+        setRows((prev) => [...prev, { ...payload, id: Date.now(), is_active: true }]);
+        setMessage('Sin conexión: material en cola para sincronizar.');
+      } else {
+        await apiRequest('/api/admin/materiales', {
+          method: 'POST',
+          token,
+          body: payload
+        });
+        setMessage('Material agregado.');
+        await loadRows();
+      }
+      setNewRow({
+        code: '',
+        name: '',
+        unit_measure: '',
+        unit_cost_bs: '',
+        waste_pct: '',
+        notes: ''
+      });
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveRow = async (row) => {
+    setSaving(true);
+    setMessage('');
+    try {
+      const payload = {
+        ...buildPayload(row),
+        is_active: Boolean(row.is_active)
+      };
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Editar material #${row.id}`,
+          path: `/api/admin/materiales/${row.id}`,
+          options: {
+            method: 'PATCH',
+            body: payload,
+            retries: 0
+          },
+          meta: { id: row.id, code: payload.code }
+        });
+        setMessage(`Sin conexión: cambios de ${payload.code} en cola para sincronizar.`);
+      } else {
+        await apiRequest(`/api/admin/materiales/${row.id}`, {
+          method: 'PATCH',
+          token,
+          body: payload
+        });
+        setMessage(`Material ${payload.code} actualizado.`);
+        await loadRows();
+      }
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deactivateRow = async (row) => {
+    if (!window.confirm(`¿Desactivar material ${row.code}?`)) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        enqueueWrite({
+          label: `Desactivar material ${row.code}`,
+          path: `/api/admin/materiales/${row.id}`,
+          options: {
+            method: 'DELETE',
+            retries: 0
+          },
+          meta: { id: row.id, code: row.code }
+        });
+        setRows((prev) => prev.map((item) => (
+          item.id === row.id ? { ...item, is_active: false } : item
+        )));
+        setMessage(`Sin conexión: desactivación de ${row.code} en cola para sincronizar.`);
+      } else {
+        await apiRequest(`/api/admin/materiales/${row.id}`, {
+          method: 'DELETE',
+          token
+        });
+        setMessage(`Material ${row.code} desactivado.`);
+        await loadRows();
+      }
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: '16px' }}>
+      <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px' }}>
+        <h3 style={{ marginBottom: '12px' }}>Materiales</h3>
+        <form onSubmit={createRow} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+          <input
+            placeholder="Código"
+            value={newRow.code}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            placeholder="Nombre"
+            value={newRow.name}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, name: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            placeholder="Unidad (kg, m2, unidad...)"
+            value={newRow.unit_measure}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, unit_measure: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Costo unitario (Bs)"
+            value={newRow.unit_cost_bs}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, unit_cost_bs: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            placeholder="Merma %"
+            value={newRow.waste_pct}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, waste_pct: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <input
+            placeholder="Notas (opcional)"
+            value={newRow.notes}
+            onChange={(e) => setNewRow((prev) => ({ ...prev, notes: e.target.value }))}
+            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+          />
+          <button
+            type="submit"
+            disabled={saving}
+            style={{ border: 'none', borderRadius: '8px', background: '#3b82f6', color: 'white', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}
+          >
+            {saving ? 'Guardando...' : 'Agregar material'}
+          </button>
+        </form>
+      </div>
+
+      {message && (
+        <div style={{
+          padding: '10px 12px',
+          borderRadius: '8px',
+          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
+          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+        }}>
+          {message}
+        </div>
+      )}
+
+      <div style={{ background: '#1e293b', borderRadius: '12px', padding: '16px' }}>
+        <h3 style={{ marginBottom: '12px' }}>Catálogo de materiales</h3>
+        {loading ? (
+          <p style={{ color: '#94a3b8' }}>Cargando materiales...</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table" style={{ minWidth: '980px' }}>
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Nombre</th>
+                  <th>Unidad</th>
+                  <th style={{ textAlign: 'right' }}>Costo unitario (Bs)</th>
+                  <th style={{ textAlign: 'right' }}>Merma %</th>
+                  <th>Notas</th>
+                  <th>Activo</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={8} style={{ textAlign: 'center', color: '#94a3b8' }}>Sin materiales</td></tr>
+                ) : rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <input
+                        value={row.code || ''}
+                        onChange={(e) => onRowField(row.id, 'code', e.target.value.toUpperCase())}
+                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={row.name || ''}
+                        onChange={(e) => onRowField(row.id, 'name', e.target.value)}
+                        style={{ width: '100%', minWidth: 180, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={row.unit_measure || ''}
+                        onChange={(e) => onRowField(row.id, 'unit_measure', e.target.value)}
+                        style={{ width: 130, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={Number(row.unit_cost_bs || 0)}
+                        onChange={(e) => onRowField(row.id, 'unit_cost_bs', e.target.value)}
+                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={Number(row.waste_pct || 0)}
+                        onChange={(e) => onRowField(row.id, 'waste_pct', e.target.value)}
+                        style={{ width: 100, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        value={row.notes || ''}
+                        onChange={(e) => onRowField(row.id, 'notes', e.target.value)}
+                        style={{ width: '100%', minWidth: 180, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                      />
+                    </td>
+                    <td>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(row.is_active)}
+                          onChange={(e) => onRowField(row.id, 'is_active', e.target.checked)}
+                        />
+                        {row.is_active ? 'Sí' : 'No'}
+                      </label>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => saveRow(row)}
+                          disabled={saving}
+                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          onClick={() => deactivateRow(row)}
+                          disabled={saving || !row.is_active}
+                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
+                        >
+                          Desactivar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1816,7 +2887,7 @@ function RoleConfiguration({ token }) {
 function AdminPanel({ token }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const tabKeys = ['usuarios', 'productos', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'calendario'];
+  const tabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'calendario'];
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
     return tabKeys.includes(tab) ? tab : 'usuarios';
@@ -1840,6 +2911,18 @@ function AdminPanel({ token }) {
       label: 'Productos',
       icon: 'P',
       hint: 'Catálogo usado por cotizador'
+    },
+    {
+      key: 'equipos',
+      label: 'Equipos',
+      icon: 'EQ',
+      hint: 'Maquinaria y costos base'
+    },
+    {
+      key: 'materiales',
+      label: 'Materiales',
+      icon: 'MT',
+      hint: 'Insumos y costos por unidad'
     },
     {
       key: 'costeo',
@@ -1932,6 +3015,8 @@ function AdminPanel({ token }) {
       <div className="admin-content-shell">
         {activeTab === 'usuarios' && <UserManagement token={token} />}
         {activeTab === 'productos' && <ProductCatalogAdmin token={token} />}
+        {activeTab === 'equipos' && <EquipmentCatalogAdmin token={token} />}
+        {activeTab === 'materiales' && <MaterialsCatalogAdmin token={token} />}
         {activeTab === 'costeo' && <ProductCostingAdmin token={token} />}
         {activeTab === 'whatsapp_inbox' && <WhatsAppInboxAdmin token={token} />}
         {activeTab === 'roles' && <RoleConfiguration token={token} />}
