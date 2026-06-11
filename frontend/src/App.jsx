@@ -632,8 +632,6 @@ function App() {
     setAccess(null);
   };
 
-  const handleTopSellerUpdate = () => {};
-
   useEffect(() => {
     if (token && user) {
       fetchPersonalCommission();
@@ -844,7 +842,6 @@ function App() {
                   user={user}
                   role={role}
                   access={effectiveAccess}
-                  onTopSellerChange={handleTopSellerUpdate} 
                 />
               )
               : <Navigate to={defaultPath} replace />
