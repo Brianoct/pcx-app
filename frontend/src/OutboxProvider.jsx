@@ -173,14 +173,6 @@ export function OutboxProvider({ children }) {
   }, [processOutbox]);
 
   useEffect(() => {
-    const onOnline = () => {
-      processOutbox();
-    };
-    window.addEventListener('online', onOnline);
-    return () => window.removeEventListener('online', onOnline);
-  }, [processOutbox]);
-
-  useEffect(() => {
     processOutbox();
     const interval = window.setInterval(processOutbox, 12000);
     return () => window.clearInterval(interval);

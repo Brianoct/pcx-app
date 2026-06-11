@@ -590,8 +590,8 @@ function App() {
     errorCount,
     processing,
     retryItem,
-    retryWithLatestItem,
-    queuePausedReason,
+    retryItemWithLatest,
+    authPaused,
     cancelItem
   } = useOutbox();
   const [outboxPanelOpen, setOutboxPanelOpen] = useState(false);
@@ -767,11 +767,6 @@ function App() {
     window.location.hash = '#/history';
   };
 
-  const retryOutboxWithLatest = (item) => {
-    if (!item?.id) return;
-    retryWithLatestItem(item.id);
-  };
-
   return (
     <Router>
       {!isOnline && (
@@ -784,7 +779,7 @@ function App() {
           Sincronizando acciones pendientes: {pendingCount}
         </div>
       )}
-      {queuePausedReason === 'auth' && (
+      {authPaused && (
         <div className="outbox-banner outbox-banner-warning" role="status" aria-live="polite">
           La sincronizacion esta en pausa por sesion expirada. Cierra sesion y vuelve a iniciar para continuar.
         </div>
@@ -800,7 +795,7 @@ function App() {
           retryItem(itemId);
         }}
         onRetryWithLatest={(itemId) => {
-          retryWithLatestItem(itemId);
+          retryItemWithLatest(itemId);
         }}
         onCancel={(itemId) => {
           cancelItem(itemId);
