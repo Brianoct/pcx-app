@@ -710,7 +710,7 @@ export default function QuoteTool({ token, user }) {
   };
 
   return (
-    <div className="container" style={{ paddingTop: '78px' }}>
+    <div className="container">
       {draftNotice && (
         <div style={{
           marginBottom: '12px',
