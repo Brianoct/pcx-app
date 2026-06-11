@@ -143,15 +143,17 @@ export const NAV_ITEMS = [
   }
 ];
 
-// Grouped navigation shown to admin users (desktop dropdowns + mobile groups).
-const ADMIN_SECTIONS = [
-  { key: 'admin', label: 'Admin', paths: ['/admin', '/calendario', '/perfil'] },
-  { key: 'ventas', label: 'Ventas', paths: ['/', '/history', '/catalogo-clientes'] },
+// Sidebar groups, shown to every user. A section renders only when the user
+// can see at least one of its items, so most roles get a short sidebar.
+const SIDEBAR_SECTIONS = [
+  { key: 'ventas', label: 'Ventas', paths: ['/', '/catalogo-clientes', '/history', '/performance'] },
+  { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory'] },
+  { key: 'produccion', label: 'Producción', paths: ['/microfabrica', '/produccion-kanban', '/control-calidad'] },
+  { key: 'mejoras', label: 'Mejoras', paths: ['/proyectos'] },
   { key: 'marketing', label: 'Marketing', paths: ['/combos', '/cupones'] },
-  { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/produccion-kanban'] },
-  { key: 'mejoras', label: 'Mejoras', paths: ['/proyectos', '/control-calidad'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
-  { key: 'dashboard', label: 'Dashboard', paths: ['/dashboard'] }
+  { key: 'general', label: 'General', paths: ['/calendario'] },
+  { key: 'administracion', label: 'Administración', paths: ['/admin', '/dashboard'] }
 ];
 
 // First matching access wins; used when a user lands on a route they cannot see.
@@ -169,26 +171,23 @@ const DEFAULT_PATH_PRIORITY = [
 export const allowsAny = (access, keys) =>
   !keys || keys.length === 0 || keys.some((key) => canAccessPanel(access, key));
 
-const toNavItem = ({ path, label }) => ({ to: path, label });
-
-export function getFlatNavItems(access) {
-  return NAV_ITEMS
-    .filter((item) => allowsAny(access, item.navAccess || item.routeAccess))
-    .map(toNavItem);
-}
-
-export function getAdminNavSections(access) {
+export function getSidebarSections(access) {
   const byPath = new Map(NAV_ITEMS.map((item) => [item.path, item]));
-  return ADMIN_SECTIONS
+  return SIDEBAR_SECTIONS
     .map((section) => ({
       key: section.key,
       label: section.label,
       items: section.paths
         .map((path) => byPath.get(path))
         .filter((item) => item && allowsAny(access, item.navAccess || item.routeAccess))
-        .map(toNavItem)
+        .map(({ path, label }) => ({ to: path, label }))
     }))
     .filter((section) => section.items.length > 0);
+}
+
+export function getNavLabel(pathname) {
+  const item = NAV_ITEMS.find((entry) => entry.path === pathname);
+  return item ? item.label : 'PCX';
 }
 
 export function getDefaultPath(access) {
