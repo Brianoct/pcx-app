@@ -2,6 +2,7 @@
 import { useState, useEffect, cloneElement } from 'react';
 import { apiRequest } from './apiClient';
 import boliviaAdminMapSvg from './assets/bolivia-admin1.svg?raw';
+import { useToast } from './ui/toastContext';
 
 const BOLIVIA_DEPARTMENT_MAP = {
   'la paz': 'La Paz',
@@ -154,6 +155,7 @@ const normalizeDashboardCardOrder = (candidateOrder) => {
 };
 
 function AdminDashboard({ token }) {
+  const toast = useToast();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -197,7 +199,7 @@ function AdminDashboard({ token }) {
       setStats(data);
     } catch (err) {
       console.error(err);
-      alert('No se pudieron cargar las estadísticas');
+      toast.error('No se pudieron cargar las estadísticas');
     } finally {
       setLoading(false);
     }

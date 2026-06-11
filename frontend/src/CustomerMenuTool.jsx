@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { API_BASE, apiRequest } from './apiClient';
+import { useToast } from './ui/toastContext';
 
 const DEFAULT_WHATSAPP_TEMPLATE = [
   'Hola, soy {nombre} de PCX.',
@@ -49,6 +50,7 @@ function buildWhatsAppShareMessage(template, { sellerName, link }) {
 }
 
 export default function CustomerMenuTool({ token, user }) {
+  const toast = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [linkData, setLinkData] = useState(null);
   const [error, setError] = useState('');
@@ -137,9 +139,9 @@ export default function CustomerMenuTool({ token, user }) {
     if (!url) return;
     try {
       await navigator.clipboard.writeText(url);
-      alert('Enlace copiado');
+      toast.success('Enlace copiado');
     } catch {
-      alert('No se pudo copiar automáticamente. Copia manualmente el enlace.');
+      toast.error('No se pudo copiar automáticamente. Copia manualmente el enlace.');
     }
   };
 

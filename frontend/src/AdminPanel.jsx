@@ -6,6 +6,7 @@ import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
 import ProductCostingAdmin from './ProductCostingAdmin';
 import WhatsAppInboxAdmin from './WhatsAppInboxAdmin';
+import { useToast } from './ui/toastContext';
 const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
   value: role,
   label: role === 'Almacen Lider'
@@ -17,6 +18,7 @@ const ROLE_SELECT_OPTIONS = ROLE_OPTIONS.map((role) => ({
 
 // User management component
 function UserManagement({ token }) {
+  const toast = useToast();
   const { enqueueWrite } = useOutbox();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +56,7 @@ function UserManagement({ token }) {
     e.preventDefault();
 
     if (newUser.phone && !/^\d{8}$/.test(newUser.phone)) {
-      alert('El teléfono debe tener exactamente 8 dígitos numéricos.');
+      toast.error('El teléfono debe tener exactamente 8 dígitos numéricos.');
       return;
     }
 
@@ -71,7 +73,7 @@ function UserManagement({ token }) {
           },
           meta: { email: payload.email || '', role: payload.role || '' }
         });
-        alert('Sin conexión: creación de usuario en cola para sincronizar.');
+        toast.info('Sin conexión: creación de usuario en cola para sincronizar.');
       } else {
         await apiRequest('/api/users', {
           method: 'POST',
@@ -79,7 +81,7 @@ function UserManagement({ token }) {
           body: payload
         });
       }
-      alert('Usuario agregado con éxito');
+      toast.success('Usuario agregado con éxito');
       await refreshUsers();
       setNewUser({
         email: '',
@@ -91,7 +93,7 @@ function UserManagement({ token }) {
         panel_access: buildAccessForUser('Ventas')
       });
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
     }
   };
 
@@ -115,7 +117,7 @@ function UserManagement({ token }) {
         setUsers((prev) => prev.map((u) => (
           u.id === userId ? { ...u, role: newRole, panel_access: payload.panel_access } : u
         )));
-        alert('Sin conexión: cambio de rol en cola para sincronizar.');
+        toast.info('Sin conexión: cambio de rol en cola para sincronizar.');
         return;
       }
       await apiRequest(`/api/users/${userId}`, {
@@ -123,10 +125,10 @@ function UserManagement({ token }) {
         token,
         body: payload
       });
-      alert('Rol actualizado');
+      toast.success('Rol actualizado');
       await refreshUsers();
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
     }
   };
 
@@ -146,17 +148,17 @@ function UserManagement({ token }) {
         setUsers((prev) => prev.map((u) => (
           u.id === userId ? { ...u, is_active: false } : u
         )));
-        alert('Sin conexión: desactivación de usuario en cola para sincronizar.');
+        toast.info('Sin conexión: desactivación de usuario en cola para sincronizar.');
         return;
       }
       await apiRequest(`/api/users/${userId}`, {
         method: 'DELETE',
         token
       });
-      alert('Usuario desactivado');
+      toast.success('Usuario desactivado');
       await refreshUsers();
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
     }
   };
 
@@ -178,7 +180,7 @@ function UserManagement({ token }) {
         setUsers((prev) => prev.map((u) => (
           u.id === userId ? { ...u, is_active: isActive } : u
         )));
-        alert(`Sin conexión: ${isActive ? 'reactivación' : 'desactivación'} en cola para sincronizar.`);
+        toast.info(`Sin conexión: ${isActive ? 'reactivación' : 'desactivación'} en cola para sincronizar.`);
         return;
       }
       await apiRequest(`/api/users/${userId}/activation`, {
@@ -186,10 +188,10 @@ function UserManagement({ token }) {
         token,
         body: { is_active: isActive }
       });
-      alert(`Usuario ${isActive ? 'reactivado' : 'desactivado'}`);
+      toast.success(`Usuario ${isActive ? 'reactivado' : 'desactivado'}`);
       await refreshUsers();
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
     }
   };
 
@@ -211,7 +213,7 @@ function UserManagement({ token }) {
     e.preventDefault();
 
     if (editModal.phone && !/^\d{8}$/.test(editModal.phone)) {
-      alert('El teléfono debe tener exactamente 8 dígitos numéricos.');
+      toast.error('El teléfono debe tener exactamente 8 dígitos numéricos.');
       return;
     }
 
@@ -252,7 +254,7 @@ function UserManagement({ token }) {
             : u
         )));
         setEditModal(null);
-        alert('Sin conexión: edición de usuario en cola para sincronizar.');
+        toast.info('Sin conexión: edición de usuario en cola para sincronizar.');
         return;
       }
       await apiRequest(`/api/users/${editModal.userId}`, {
@@ -260,11 +262,11 @@ function UserManagement({ token }) {
         token,
         body: payload
       });
-      alert('Usuario actualizado con éxito');
+      toast.success('Usuario actualizado con éxito');
       await refreshUsers();
       setEditModal(null);
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
     }
   };
 
@@ -2154,6 +2156,7 @@ function MaterialsCatalogAdmin({ token }) {
 }
 
 function TimeOffAdminPanel({ token }) {
+  const toast = useToast();
   const { enqueueWrite } = useOutbox();
   const [year, setYear] = useState(new Date().getFullYear());
   const [rows, setRows] = useState([]);
@@ -2200,7 +2203,7 @@ function TimeOffAdminPanel({ token }) {
         setRows((prev) => prev.map((row) => (
           row.id === id ? { ...row, status, status_label: status } : row
         )));
-        alert('Sin conexión: cambio de estado en cola para sincronizar.');
+        toast.info('Sin conexión: cambio de estado en cola para sincronizar.');
       } else {
         await apiRequest(`/api/timeoff/requests/${id}/status`, {
           method: 'PATCH',
@@ -2210,7 +2213,7 @@ function TimeOffAdminPanel({ token }) {
         await loadData();
       }
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      toast.error(`Error: ${err.message}`);
     } finally {
       setUpdatingId(null);
     }

@@ -4,6 +4,7 @@ import { generateModernQuotePdf } from './quotePdf';
 import { canAccessPanel } from './roleAccess';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
+import { useToast } from './ui/toastContext';
 const QUOTE_STATUS_OPTIONS = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
 const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'];
@@ -16,6 +17,7 @@ const PAYMENT_METHOD_OPTIONS = [
 const PAYMENT_ALLOWED_STATUSES = ['Pagado', 'Embalado', 'Enviado'];
 
 function QuoteHistory({ token, access, onStatusUpdated }) {
+  const toast = useToast();
   const { enqueueWrite, isWriteIntentError } = useOutbox();
   const [quotes, setQuotes] = useState([]);
   const [filteredQuotes, setFilteredQuotes] = useState([]);
@@ -241,7 +243,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       if (typeof onStatusUpdated === 'function') {
         onStatusUpdated();
       }
-      alert('Sin conexión: cambio guardado en cola y se enviará automáticamente.');
+      toast.info('Sin conexión: cambio guardado en cola y se enviará automáticamente.');
       return;
     }
     try {
@@ -259,9 +261,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         onStatusUpdated();
       }
 
-      alert('Estado actualizado a: ' + newStatus);
+      toast.success('Estado actualizado a: ' + newStatus);
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
       console.error(err);
     }
   };
@@ -275,7 +277,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       ? nextPaymentMethodValue
       : null;
     if (normalizedMethod && !canEditPaymentForStatus(quote?.status)) {
-      alert(`Primero cambia el estado a ${PAYMENT_ALLOWED_STATUSES.join(', ')} para registrar el pago.`);
+      toast.error(`Primero cambia el estado a ${PAYMENT_ALLOWED_STATUSES.join(', ')} para registrar el pago.`);
       return;
     }
     const quoteTotal = toMoneyNumber(quote?.total, 0);
@@ -297,11 +299,11 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         if (promptValue === null) return;
         const parsedPrompt = Number(String(promptValue).replace(',', '.').trim());
         if (!Number.isFinite(parsedPrompt) || parsedPrompt <= 0) {
-          alert('Debes ingresar un monto en efectivo mayor a 0 para pago mixto.');
+          toast.error('Debes ingresar un monto en efectivo mayor a 0 para pago mixto.');
           return;
         }
         if (quoteTotal > 0 && parsedPrompt >= quoteTotal) {
-          alert('Para pago mixto, el efectivo debe ser menor al total del pedido.');
+          toast.error('Para pago mixto, el efectivo debe ser menor al total del pedido.');
           return;
         }
         resolvedCash = parsedPrompt;
@@ -339,7 +341,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       if (typeof onStatusUpdated === 'function') {
         onStatusUpdated();
       }
-      alert('Sin conexión: método de pago guardado en cola y se enviará automáticamente.');
+      toast.info('Sin conexión: método de pago guardado en cola y se enviará automáticamente.');
       return;
     }
     try {
@@ -359,9 +361,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       if (typeof onStatusUpdated === 'function') {
         onStatusUpdated();
       }
-      alert(`Método de pago actualizado: ${normalizedMethod || 'Sin definir'}`);
+      toast.success(`Método de pago actualizado: ${normalizedMethod || 'Sin definir'}`);
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
       console.error(err);
     }
   };
@@ -836,11 +838,11 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const submitEdit = async () => {
     if (!editingQuote) return;
     if (!Array.isArray(productCatalog) || productCatalog.length === 0) {
-      alert('Aún no se cargó el catálogo de productos. Intenta nuevamente en unos segundos.');
+      toast.error('Aún no se cargó el catálogo de productos. Intenta nuevamente en unos segundos.');
       return;
     }
     if (!editingQuote.customer_name.trim() || !editingQuote.customer_phone.trim() || !editingQuote.store_location.trim()) {
-      alert('Completa cliente, teléfono y almacén para guardar los cambios.');
+      toast.error('Completa cliente, teléfono y almacén para guardar los cambios.');
       return;
     }
     setSavingEdit(true);
@@ -921,7 +923,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         applyLocalEdit();
         setEditingQuote(null);
         if (typeof onStatusUpdated === 'function') onStatusUpdated();
-        alert('Sin conexión: edición guardada en cola y se sincronizará automáticamente.');
+        toast.info('Sin conexión: edición guardada en cola y se sincronizará automáticamente.');
         return;
       }
 
@@ -934,7 +936,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       applyLocalEdit();
       setEditingQuote(null);
       if (typeof onStatusUpdated === 'function') onStatusUpdated();
-      alert('Cotización actualizada correctamente');
+      toast.success('Cotización actualizada correctamente');
     } catch (err) {
       if (isWriteIntentError(err)) {
         const payload = {
@@ -1006,10 +1008,10 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         )));
         setEditingQuote(null);
         if (typeof onStatusUpdated === 'function') onStatusUpdated();
-        alert('Conexión inestable: edición guardada en cola y se enviará automáticamente.');
+        toast.info('Conexión inestable: edición guardada en cola y se enviará automáticamente.');
         return;
       }
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
       console.error(err);
     } finally {
       setSavingEdit(false);
@@ -1040,7 +1042,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         });
         setQuotes((prev) => prev.filter((q) => q.id !== quote.id));
         if (typeof onStatusUpdated === 'function') onStatusUpdated();
-        alert(`Sin conexión: eliminación #${quote.id} quedó en cola.`);
+        toast.info(`Sin conexión: eliminación #${quote.id} quedó en cola.`);
         return;
       }
 
@@ -1050,7 +1052,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       });
       setQuotes((prev) => prev.filter((q) => q.id !== quote.id));
       if (typeof onStatusUpdated === 'function') onStatusUpdated();
-      alert(`Cotización #${quote.id} eliminada`);
+      toast.success(`Cotización #${quote.id} eliminada`);
     } catch (err) {
       if (isWriteIntentError(err)) {
         enqueueWrite({
@@ -1068,10 +1070,10 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         });
         setQuotes((prev) => prev.filter((q) => q.id !== quote.id));
         if (typeof onStatusUpdated === 'function') onStatusUpdated();
-        alert(`Conexión inestable: eliminación #${quote.id} quedó en cola.`);
+        toast.info(`Conexión inestable: eliminación #${quote.id} quedó en cola.`);
         return;
       }
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
       console.error(err);
     } finally {
       setDeletingId(null);

@@ -5,6 +5,8 @@ import { generateModernQuotePdf } from './quotePdf';
 import { apiRequest } from './apiClient';
 import { clearDraftState, useDraftState } from './useDraftState';
 import { useOutbox } from './OutboxProvider';
+import { useToast } from './ui/toastContext';
+import Field from './ui/Field';
 
 const clampNumber = (value, min, max) => {
   const numeric = Number(value);
@@ -15,6 +17,7 @@ const clampNumber = (value, min, max) => {
 const DEFAULT_GIFT_QTY = 1;
 
 export default function QuoteTool({ token, user }) {
+  const toast = useToast();
   const [combos, setCombos] = useState([]);
   const [products, setProducts] = useState([]);
   const legacyDraftStorageKey = 'pcx.quoteDraft.v1';
@@ -504,7 +507,7 @@ export default function QuoteTool({ token, user }) {
   const saveAndGeneratePDF = async () => {
     if (isSavingRef.current) return;
     if (!canSave) {
-      alert('Completa todos los campos obligatorios del cliente y verifica que todas las líneas tengan producto y cantidad.');
+      toast.error('Completa todos los campos obligatorios del cliente y verifica que todas las líneas tengan producto y cantidad.');
       return;
     }
     const insufficientStockRows = rows.filter((row) => {
@@ -515,7 +518,7 @@ export default function QuoteTool({ token, user }) {
     if (insufficientStockRows.length > 0) {
       const first = insufficientStockRows[0];
       const label = first.skuDisplay || first.sku || 'producto';
-      alert(`Stock insuficiente para ${label}. Disponible: ${Number(first.availableStock || 0)}.`);
+      toast.error(`Stock insuficiente para ${label}. Disponible: ${Number(first.availableStock || 0)}.`);
       return;
     }
     isSavingRef.current = true;
@@ -637,7 +640,7 @@ export default function QuoteTool({ token, user }) {
           }
         });
         resetQuoteForm();
-        alert(`Sin conexión. La cotización quedó en cola (pendiente de envío): ${queueId.slice(0, 8)}.`);
+        toast.info(`Sin conexión. La cotización quedó en cola (pendiente de envío): ${queueId.slice(0, 8)}.`);
         return;
       }
 
@@ -671,10 +674,10 @@ export default function QuoteTool({ token, user }) {
       });
 
       resetQuoteForm();
-      alert('Cotización guardada y PDF generado');
+      toast.success('Cotización guardada y PDF generado');
     } catch (err) {
       console.error('Error completo al guardar:', err);
-      alert('Error al guardar: ' + (err.message || 'Error desconocido'));
+      toast.error('Error al guardar: ' + (err.message || 'Error desconocido'));
     } finally {
       isSavingRef.current = false;
       setIsSaving(false);
@@ -750,37 +753,37 @@ export default function QuoteTool({ token, user }) {
         <div className="card quote-client-card">
           <div className="quote-client-grid">
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>Cliente</label>
+              <label className="form-label">Cliente</label>
               <input
                 type="text"
                 maxLength={26}
                 placeholder="Nombre (máx 26)"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
-                style={{ width: '100%', padding: '12px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                className="form-input"
               />
-              <div style={{ fontSize: '0.75rem', textAlign: 'right', color: customerName.length >= 23 ? '#e11d48' : '#9ca3af', marginTop: '4px' }}>
+              <div className={`form-counter ${customerName.length >= 23 ? 'limit' : ''}`}>
                 {customerName.length}/26
               </div>
             </div>
 
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>Teléfono</label>
+              <label className="form-label">Teléfono</label>
               <input
                 type="tel"
                 maxLength={26}
                 placeholder="Ej: 77778888 (máx 26)"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
-                style={{ width: '100%', padding: '12px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                className="form-input"
               />
-              <div style={{ fontSize: '0.75rem', textAlign: 'right', color: customerPhone.length >= 23 ? '#e11d48' : '#9ca3af', marginTop: '4px' }}>
+              <div className={`form-counter ${customerPhone.length >= 23 ? 'limit' : ''}`}>
                 {customerPhone.length}/26
               </div>
             </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
+              <label className="form-check-label">
                 <input type="checkbox" checked={isProvincia} onChange={(e) => setIsProvincia(e.target.checked)} />
                 Provincia (no departamento)
               </label>
@@ -788,41 +791,26 @@ export default function QuoteTool({ token, user }) {
 
             {isProvincia ? (
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>Provincia</label>
+                <label className="form-label">Provincia</label>
                 <input
                   type="text"
                   maxLength={26}
                   placeholder="Provincia (máx 26)"
                   value={provincia}
                   onChange={(e) => setProvincia(e.target.value)}
-                  style={{ width: '100%', padding: '12px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                  className="form-input"
                 />
-                <div style={{ fontSize: '0.75rem', textAlign: 'right', color: provincia.length >= 23 ? '#e11d48' : '#9ca3af', marginTop: '4px' }}>
+                <div className={`form-counter ${provincia.length >= 23 ? 'limit' : ''}`}>
                   {provincia.length}/26
                 </div>
               </div>
             ) : (
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>Departamento</label>
+                <label className="form-label">Departamento</label>
                 <select
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
-                  style={{
-                    width: '100%',
-                    minHeight: '44px',
-                    padding: '12px 36px 12px 12px',
-                    fontSize: '1rem',
-                    borderRadius: '8px',
-                    border: '1px solid #374151',
-                    background: '#0f172a',
-                    color: 'white',
-                    appearance: 'none',
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 12px center',
-                    backgroundSize: '12px',
-                    cursor: 'pointer'
-                  }}
+                  className="form-select"
                 >
                   <option value="" disabled>Departamento</option>
                   <option value="Beni">Beni</option>
@@ -839,26 +827,11 @@ export default function QuoteTool({ token, user }) {
             )}
 
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>Almacén</label>
+              <label className="form-label">Almacén</label>
               <select
                 value={almacen}
                 onChange={(e) => setAlmacen(e.target.value)}
-                style={{
-                  width: '100%',
-                  minHeight: '44px',
-                  padding: '12px 36px 12px 12px',
-                  fontSize: '1rem',
-                  borderRadius: '8px',
-                  border: '1px solid #374151',
-                  background: '#0f172a',
-                  color: 'white',
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 12px center',
-                  backgroundSize: '12px',
-                  cursor: 'pointer'
-                }}
+                className="form-select"
               >
                 <option value="" disabled>Almacén</option>
                 <option value="Cochabamba">Cochabamba</option>
@@ -869,28 +842,13 @@ export default function QuoteTool({ token, user }) {
 
             {requiresSellerAssignment && (
               <div>
-                <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
+                <label className="form-label">
                   Vendedor asignado (comisión)
                 </label>
                 <select
                   value={assignedSellerId}
                   onChange={(e) => setAssignedSellerId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    minHeight: '44px',
-                    padding: '12px 36px 12px 12px',
-                    fontSize: '1rem',
-                    borderRadius: '8px',
-                    border: '1px solid #374151',
-                    background: '#0f172a',
-                    color: 'white',
-                    appearance: 'none',
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 12px center',
-                    backgroundSize: '12px',
-                    cursor: 'pointer'
-                  }}
+                  className="form-select"
                 >
                   <option value="" disabled>Seleccionar vendedor</option>
                   {salesUsers.map((seller) => (
@@ -903,27 +861,13 @@ export default function QuoteTool({ token, user }) {
             )}
 
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
+              <label className="form-label">
                 Cupón marketing activo
               </label>
               <select
                 value={selectedCouponCode}
                 onChange={(e) => setSelectedCouponCode(e.target.value)}
-                style={{
-                  width: '100%',
-                  minHeight: '44px',
-                  padding: '12px 36px 12px 12px',
-                  fontSize: '0.95rem',
-                  borderRadius: '8px',
-                  border: '1px solid #374151',
-                  background: '#0f172a',
-                  color: 'white',
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 12px center',
-                  backgroundSize: '12px'
-                }}
+                className="form-select"
               >
                 <option value="">Sin cupón</option>
                 {coupons.map((coupon) => (
@@ -935,40 +879,26 @@ export default function QuoteTool({ token, user }) {
             </div>
 
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
+              <label className="form-label">
                 Regalo para cliente
               </label>
               <select
                 value={selectedGiftSku}
                 onChange={(e) => setSelectedGiftSku(String(e.target.value || '').trim().toUpperCase())}
-                style={{
-                  width: '100%',
-                  minHeight: '44px',
-                  padding: '12px 36px 12px 12px',
-                  fontSize: '0.95rem',
-                  borderRadius: '8px',
-                  border: '1px solid #374151',
-                  background: '#0f172a',
-                  color: 'white',
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 12px center',
-                  backgroundSize: '12px'
-                }}
+                className="form-select"
               >
                 <option value="">Sin regalo</option>
                 {giftOptions.map((giftProduct) => (
                   <option key={giftProduct.sku} value={giftProduct.sku}>{giftProduct.label}</option>
                 ))}
               </select>
-              <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '0.78rem' }}>
+              <div className="form-hint">
                 Lista preseleccionada desde catálogo de productos.
               </div>
             </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
+              <label className="form-check-label">
                 <input type="checkbox" checked={useAlternativeName} onChange={(e) => setUseAlternativeName(e.target.checked)} />
                 Enviar a nombre diferente
               </label>
@@ -980,7 +910,7 @@ export default function QuoteTool({ token, user }) {
                     placeholder="Nombre alternativo para envío"
                     value={alternativeName}
                     onChange={(e) => setAlternativeName(e.target.value)}
-                    style={{ width: '100%', padding: '12px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                    className="form-input"
                   />
                   <input
                     type="tel"
@@ -988,51 +918,30 @@ export default function QuoteTool({ token, user }) {
                     placeholder="Teléfono alternativo para envío"
                     value={alternativePhone}
                     onChange={(e) => setAlternativePhone(e.target.value)}
-                    style={{ width: '100%', padding: '12px', fontSize: '1rem', borderRadius: '8px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                    className="form-input"
                   />
                 </div>
               )}
             </div>
           </div>
 
-          <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', color: '#9ca3af', fontSize: '0.9rem' }}>
-              Notas de envío (opcional, máx 26)
-            </label>
+          <Field label="Notas de envío (opcional, máx 26)" className="quote-notes-field">
             <textarea
               maxLength={26}
               placeholder="Instrucciones, referencias..."
               value={shippingNotes}
               onChange={(e) => setShippingNotes(e.target.value)}
               rows={3}
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '1rem',
-                borderRadius: '8px',
-                border: '1px solid #374151',
-                background: '#0f172a',
-                color: 'white',
-                resize: 'vertical'
-              }}
+              className="form-textarea"
             />
-            <div style={{ fontSize: '0.75rem', textAlign: 'right', color: shippingNotes.length >= 23 ? '#e11d48' : '#9ca3af', marginTop: '4px' }}>
+            <div className={`form-counter ${shippingNotes.length >= 23 ? 'limit' : ''}`}>
               {shippingNotes.length}/26
             </div>
-          </div>
+          </Field>
 
           <button
             onClick={() => setStep(2)}
-            style={{
-              width: '100%',
-              padding: '14px',
-              background: '#e11d48',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '1.1rem',
-              cursor: 'pointer'
-            }}
+            className="btn btn-primary btn-block"
           >
             Siguiente: Productos →
           </button>
@@ -1172,7 +1081,7 @@ export default function QuoteTool({ token, user }) {
                             <select
                               value={row.sku || ''}
                               onChange={(e) => handleProductSelect(row.id, e.target.value)}
-                              style={{ width: '100%', padding: '10px', fontSize: '0.95rem', borderRadius: '6px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                              className="form-select"
                             >
                               <option value="">Seleccionar producto / combo...</option>
                               {allItems.map(item => (
@@ -1188,7 +1097,8 @@ export default function QuoteTool({ token, user }) {
                               min="1"
                               value={row.qty}
                               onChange={(e) => handleQtyChange(row.id, e.target.value)}
-                              style={{ width: '100%', padding: '10px', fontSize: '0.95rem', textAlign: 'center', borderRadius: '6px', border: '1px solid #374151', background: '#0f172a', color: 'white' }}
+                              className="form-input"
+                              style={{ textAlign: 'center' }}
                             />
                           </td>
                           <td style={{ padding: '12px', textAlign: 'center', color: stockColor, fontWeight: '600' }}>

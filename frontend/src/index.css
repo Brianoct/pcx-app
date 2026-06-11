@@ -55,6 +55,158 @@ body {
   margin: 0 auto;
 }
 
+/* ── Toasts ────────────────────────────────────────────────────────────── */
+.toast-viewport {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 1400;
+  display: grid;
+  gap: 8px;
+  width: min(calc(100vw - 32px), 380px);
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.5);
+  animation: toast-in 0.22s ease;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toast-success {
+  background: rgba(6, 78, 59, 0.96);
+  border: 1px solid #10b981;
+  color: #bbf7d0;
+}
+
+.toast-error {
+  background: rgba(127, 29, 29, 0.96);
+  border: 1px solid #ef4444;
+  color: #fecaca;
+}
+
+.toast-info {
+  background: rgba(30, 58, 138, 0.96);
+  border: 1px solid #60a5fa;
+  color: #dbeafe;
+}
+
+.toast-message {
+  flex: 1 1 auto;
+}
+
+.toast-close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  opacity: 0.75;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+/* ── Form primitives ──────────────────────────────────────────────────── */
+.form-field {
+  margin-bottom: 14px;
+  min-width: 0;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #9ca3af;
+  font-size: 0.9rem;
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+  width: 100%;
+  padding: 11px 12px;
+  font-size: 1rem;
+  border-radius: 8px;
+  border: 1px solid #374151;
+  background: #0f172a;
+  color: #fff;
+  font-family: inherit;
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--accent-secondary);
+}
+
+.form-select {
+  min-height: 44px;
+  padding-right: 36px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  cursor: pointer;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 84px;
+}
+
+.form-hint {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.form-counter {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  text-align: right;
+  color: #9ca3af;
+}
+
+.form-counter.limit {
+  color: var(--accent-primary);
+}
+
+.form-check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9ca3af;
+  font-size: 0.9rem;
+}
+
+.quote-notes-field {
+  margin-bottom: 24px;
+}
+
 .card {
   background: var(--bg-secondary);
   border: 1px solid rgba(71, 85, 105, 0.45);
@@ -97,6 +249,10 @@ button, .btn {
 .btn-secondary {
   background: var(--accent-secondary);
   color: white;
+}
+
+.btn-block {
+  width: 100%;
 }
 
 .btn-danger {
