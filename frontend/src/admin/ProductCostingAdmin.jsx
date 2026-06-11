@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { apiRequest } from './apiClient';
+import { apiRequest } from '../apiClient';
 
 const COST_COMPONENTS = [
   { key: 'acero_carbono_09mm', label: 'Acero al Carbono 0,9mm' },

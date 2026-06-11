@@ -2,7 +2,7 @@ import QuoteTool from './QuoteTool';
 import QuoteHistory from './QuoteHistory';
 import PerformanceDashboard from './PerformanceDashboard';
 import AdminDashboard from './AdminDashboard';
-import AdminPanel from './AdminPanel';
+import AdminPanel from './admin/AdminPanel';
 import InventoryPanel from './InventoryPanel';
 import PedidosPanel from './PedidosPanel';
 import Combos from './Combos';
