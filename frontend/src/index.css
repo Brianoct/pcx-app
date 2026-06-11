@@ -203,6 +203,18 @@ body {
   font-size: 0.9rem;
 }
 
+.form-check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #cbd5e1;
+}
+
+.form-input--inline,
+.form-select--inline {
+  width: auto;
+}
+
 .quote-notes-field {
   margin-bottom: 24px;
 }

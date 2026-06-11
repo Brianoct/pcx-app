@@ -337,37 +337,37 @@ function UserManagement({ token }) {
         <form onSubmit={handleAddUser}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Email</label>
+              <label className="form-label">Email</label>
               <input
                 type="email"
                 value={newUser.email}
                 onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                 required
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+                className="form-input"
               />
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Contraseña</label>
+              <label className="form-label">Contraseña</label>
               <input
                 type="password"
                 value={newUser.password}
                 onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                 required
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+                className="form-input"
               />
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Nombre visible</label>
+              <label className="form-label">Nombre visible</label>
               <input
                 type="text"
                 value={newUser.display_name || ''}
                 onChange={(e) => setNewUser({ ...newUser, display_name: e.target.value })}
                 placeholder="Ej: Wendy"
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+                className="form-input"
               />
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Teléfono (8 dígitos)</label>
+              <label className="form-label">Teléfono (8 dígitos)</label>
               <input
                 type="tel"
                 value={newUser.phone}
@@ -376,15 +376,15 @@ function UserManagement({ token }) {
                 maxLength={8}
                 pattern="\d{8}"
                 title="Solo números, exactamente 8 dígitos"
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+                className="form-input"
               />
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Rol</label>
+              <label className="form-label">Rol</label>
               <select
                 value={newUser.role}
                 onChange={(e) => handleNewRoleChange(e.target.value)}
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+                className="form-select"
               >
                 {ROLE_SELECT_OPTIONS.map((roleOption) => (
                   <option key={roleOption.value} value={roleOption.value}>
@@ -394,12 +394,12 @@ function UserManagement({ token }) {
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Ciudad</label>
+              <label className="form-label">Ciudad</label>
               <input
                 type="text"
                 value={newUser.city}
                 onChange={(e) => setNewUser({ ...newUser, city: e.target.value })}
-                style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+                className="form-input"
               />
             </div>
           </div>
@@ -558,7 +558,7 @@ function UserManagement({ token }) {
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <div style={{ display: 'grid', gap: '14px', padding: '16px 20px', overflowY: 'auto', minHeight: 0 }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Email (no editable)</label>
+                  <label className="form-label">Email (no editable)</label>
                   <input
                     type="email"
                     value={editModal.email}
@@ -567,17 +567,17 @@ function UserManagement({ token }) {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Nombre visible</label>
+                  <label className="form-label">Nombre visible</label>
                   <input
                     type="text"
                     value={editModal.display_name || ''}
                     onChange={(e) => setEditModal({ ...editModal, display_name: e.target.value })}
                     placeholder="Ej: Wendy"
-                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+                    className="form-input"
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Teléfono (8 dígitos)</label>
+                  <label className="form-label">Teléfono (8 dígitos)</label>
                   <input
                     type="tel"
                     value={editModal.phone}
@@ -586,15 +586,15 @@ function UserManagement({ token }) {
                     maxLength={8}
                     pattern="\d{8}"
                     title="Solo números, exactamente 8 dígitos"
-                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+                    className="form-input"
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Rol</label>
+                  <label className="form-label">Rol</label>
                   <select
                     value={editModal.role}
                     onChange={(e) => handleEditRoleChange(e.target.value)}
-                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+                    className="form-select"
                   >
                     {ROLE_SELECT_OPTIONS.map((roleOption) => (
                       <option key={roleOption.value} value={roleOption.value}>
@@ -604,12 +604,12 @@ function UserManagement({ token }) {
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '8px', color: '#94a3b8' }}>Ciudad</label>
+                  <label className="form-label">Ciudad</label>
                   <input
                     type="text"
                     value={editModal.city}
                     onChange={(e) => setEditModal({ ...editModal, city: e.target.value })}
-                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#0f172a', color: 'white', border: '1px solid #334155' }}
+                    className="form-input"
                   />
                 </div>
                 <div>

@@ -200,13 +200,13 @@ function EquipmentCatalogAdmin({ token }) {
             placeholder="Código"
             value={newRow.code}
             onChange={(e) => setNewRow((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             placeholder="Nombre"
             value={newRow.name}
             onChange={(e) => setNewRow((prev) => ({ ...prev, name: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             type="number"
@@ -215,7 +215,7 @@ function EquipmentCatalogAdmin({ token }) {
             placeholder="Costo reposición (Bs)"
             value={newRow.replacement_cost_bs}
             onChange={(e) => setNewRow((prev) => ({ ...prev, replacement_cost_bs: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             type="number"
@@ -224,7 +224,7 @@ function EquipmentCatalogAdmin({ token }) {
             placeholder="Vida útil (meses)"
             value={newRow.useful_life_months}
             onChange={(e) => setNewRow((prev) => ({ ...prev, useful_life_months: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             type="number"
@@ -233,7 +233,7 @@ function EquipmentCatalogAdmin({ token }) {
             placeholder="Costo mensual extra (Bs)"
             value={newRow.monthly_extra_cost_bs}
             onChange={(e) => setNewRow((prev) => ({ ...prev, monthly_extra_cost_bs: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             type="number"
@@ -242,19 +242,19 @@ function EquipmentCatalogAdmin({ token }) {
             placeholder="Capacidad mensual"
             value={newRow.monthly_capacity_units}
             onChange={(e) => setNewRow((prev) => ({ ...prev, monthly_capacity_units: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             placeholder="Unidad de uso (horas, ciclos)"
             value={newRow.usage_unit}
             onChange={(e) => setNewRow((prev) => ({ ...prev, usage_unit: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             placeholder="Notas (opcional)"
             value={newRow.notes}
             onChange={(e) => setNewRow((prev) => ({ ...prev, notes: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <button
             type="submit"
@@ -308,14 +308,14 @@ function EquipmentCatalogAdmin({ token }) {
                       <input
                         value={row.code || ''}
                         onChange={(e) => onRowField(row.id, 'code', e.target.value.toUpperCase())}
-                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                        className="form-input" style={{ width: 120 }}
                       />
                     </td>
                     <td>
                       <input
                         value={row.name || ''}
                         onChange={(e) => onRowField(row.id, 'name', e.target.value)}
-                        style={{ width: '100%', minWidth: 180, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                        className="form-input" style={{ minWidth: 180 }}
                       />
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -325,7 +325,7 @@ function EquipmentCatalogAdmin({ token }) {
                         step="0.01"
                         value={Number(row.replacement_cost_bs || 0)}
                         onChange={(e) => onRowField(row.id, 'replacement_cost_bs', e.target.value)}
-                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                        className="form-input" style={{ width: 120, textAlign: 'right' }}
                       />
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -335,7 +335,7 @@ function EquipmentCatalogAdmin({ token }) {
                         step="1"
                         value={row.useful_life_months ?? ''}
                         onChange={(e) => onRowField(row.id, 'useful_life_months', e.target.value)}
-                        style={{ width: 110, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                        className="form-input" style={{ width: 110, textAlign: 'right' }}
                       />
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -345,7 +345,7 @@ function EquipmentCatalogAdmin({ token }) {
                         step="0.01"
                         value={Number(row.monthly_extra_cost_bs || 0)}
                         onChange={(e) => onRowField(row.id, 'monthly_extra_cost_bs', e.target.value)}
-                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                        className="form-input" style={{ width: 120, textAlign: 'right' }}
                       />
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -355,25 +355,25 @@ function EquipmentCatalogAdmin({ token }) {
                         step="0.01"
                         value={row.monthly_capacity_units ?? ''}
                         onChange={(e) => onRowField(row.id, 'monthly_capacity_units', e.target.value)}
-                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                        className="form-input" style={{ width: 120, textAlign: 'right' }}
                       />
                     </td>
                     <td>
                       <input
                         value={row.usage_unit || ''}
                         onChange={(e) => onRowField(row.id, 'usage_unit', e.target.value)}
-                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                        className="form-input" style={{ width: 120 }}
                       />
                     </td>
                     <td>
                       <input
                         value={row.notes || ''}
                         onChange={(e) => onRowField(row.id, 'notes', e.target.value)}
-                        style={{ width: '100%', minWidth: 180, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                        className="form-input" style={{ minWidth: 180 }}
                       />
                     </td>
                     <td>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <label className="form-check-inline">
                         <input
                           type="checkbox"
                           checked={Boolean(row.is_active)}

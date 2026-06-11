@@ -184,19 +184,19 @@ function MaterialsCatalogAdmin({ token }) {
             placeholder="Código"
             value={newRow.code}
             onChange={(e) => setNewRow((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             placeholder="Nombre"
             value={newRow.name}
             onChange={(e) => setNewRow((prev) => ({ ...prev, name: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             placeholder="Unidad (kg, m2, unidad...)"
             value={newRow.unit_measure}
             onChange={(e) => setNewRow((prev) => ({ ...prev, unit_measure: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             type="number"
@@ -205,7 +205,7 @@ function MaterialsCatalogAdmin({ token }) {
             placeholder="Costo unitario (Bs)"
             value={newRow.unit_cost_bs}
             onChange={(e) => setNewRow((prev) => ({ ...prev, unit_cost_bs: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             type="number"
@@ -215,13 +215,13 @@ function MaterialsCatalogAdmin({ token }) {
             placeholder="Merma %"
             value={newRow.waste_pct}
             onChange={(e) => setNewRow((prev) => ({ ...prev, waste_pct: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             placeholder="Notas (opcional)"
             value={newRow.notes}
             onChange={(e) => setNewRow((prev) => ({ ...prev, notes: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <button
             type="submit"
@@ -273,21 +273,21 @@ function MaterialsCatalogAdmin({ token }) {
                       <input
                         value={row.code || ''}
                         onChange={(e) => onRowField(row.id, 'code', e.target.value.toUpperCase())}
-                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                        className="form-input" style={{ width: 120 }}
                       />
                     </td>
                     <td>
                       <input
                         value={row.name || ''}
                         onChange={(e) => onRowField(row.id, 'name', e.target.value)}
-                        style={{ width: '100%', minWidth: 180, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                        className="form-input" style={{ minWidth: 180 }}
                       />
                     </td>
                     <td>
                       <input
                         value={row.unit_measure || ''}
                         onChange={(e) => onRowField(row.id, 'unit_measure', e.target.value)}
-                        style={{ width: 130, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                        className="form-input" style={{ width: 130 }}
                       />
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -297,7 +297,7 @@ function MaterialsCatalogAdmin({ token }) {
                         step="0.01"
                         value={Number(row.unit_cost_bs || 0)}
                         onChange={(e) => onRowField(row.id, 'unit_cost_bs', e.target.value)}
-                        style={{ width: 120, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                        className="form-input" style={{ width: 120, textAlign: 'right' }}
                       />
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -308,18 +308,18 @@ function MaterialsCatalogAdmin({ token }) {
                         step="0.01"
                         value={Number(row.waste_pct || 0)}
                         onChange={(e) => onRowField(row.id, 'waste_pct', e.target.value)}
-                        style={{ width: 100, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                        className="form-input" style={{ width: 100, textAlign: 'right' }}
                       />
                     </td>
                     <td>
                       <input
                         value={row.notes || ''}
                         onChange={(e) => onRowField(row.id, 'notes', e.target.value)}
-                        style={{ width: '100%', minWidth: 180, padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                        className="form-input" style={{ minWidth: 180 }}
                       />
                     </td>
                     <td>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <label className="form-check-inline">
                         <input
                           type="checkbox"
                           checked={Boolean(row.is_active)}

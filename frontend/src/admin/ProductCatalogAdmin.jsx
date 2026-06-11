@@ -324,13 +324,13 @@ function ProductCatalogAdmin({ token }) {
             placeholder="SKU"
             value={newProduct.sku}
             onChange={(e) => setNewProduct((prev) => ({ ...prev, sku: e.target.value.toUpperCase() }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             placeholder="Nombre"
             value={newProduct.name}
             onChange={(e) => setNewProduct((prev) => ({ ...prev, name: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             type="number"
@@ -339,7 +339,7 @@ function ProductCatalogAdmin({ token }) {
             placeholder="Precio SF"
             value={newProduct.sf}
             onChange={(e) => setNewProduct((prev) => ({ ...prev, sf: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <input
             type="number"
@@ -348,7 +348,7 @@ function ProductCatalogAdmin({ token }) {
             placeholder="Precio CF"
             value={newProduct.cf}
             onChange={(e) => setNewProduct((prev) => ({ ...prev, cf: e.target.value }))}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            className="form-input form-input--inline"
           />
           <button
             type="submit"
@@ -363,7 +363,7 @@ function ProductCatalogAdmin({ token }) {
               <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Procesos</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {productionOptions.process_options.map((option) => (
-                  <label key={`new-process-${option.value}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                  <label key={`new-process-${option.value}`} className="form-check-inline">
                     <input
                       type="checkbox"
                       checked={Array.isArray(newProduct.processes) && newProduct.processes.includes(option.value)}
@@ -382,7 +382,7 @@ function ProductCatalogAdmin({ token }) {
               <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Equipos utilizados</div>
               <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 {productionOptions.equipment_options.map((equipment) => (
-                  <label key={`new-eq-${equipment.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                  <label key={`new-eq-${equipment.id}`} className="form-check-inline">
                     <input
                       type="checkbox"
                       checked={Array.isArray(newProduct.equipment_ids) && newProduct.equipment_ids.includes(equipment.id)}
@@ -401,7 +401,7 @@ function ProductCatalogAdmin({ token }) {
               <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Materiales utilizados</div>
               <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 {productionOptions.material_options.map((material) => (
-                  <label key={`new-mt-${material.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                  <label key={`new-mt-${material.id}`} className="form-check-inline">
                     <input
                       type="checkbox"
                       checked={Array.isArray(newProduct.material_ids) && newProduct.material_ids.includes(material.id)}
@@ -458,7 +458,7 @@ function ProductCatalogAdmin({ token }) {
                       <input
                         value={row.name || ''}
                         onChange={(e) => onRowField(row.sku, 'name', e.target.value)}
-                        style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+                        className="form-input"
                       />
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -468,7 +468,7 @@ function ProductCatalogAdmin({ token }) {
                         step="0.01"
                         value={Number(row.sf ?? row.sf_price ?? 0)}
                         onChange={(e) => onRowField(row.sku, 'sf', e.target.value)}
-                        style={{ width: '100px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                        className="form-input" style={{ width: 100, textAlign: 'right' }}
                       />
                     </td>
                     <td style={{ textAlign: 'right' }}>
@@ -478,11 +478,11 @@ function ProductCatalogAdmin({ token }) {
                         step="0.01"
                         value={Number(row.cf ?? row.cf_price ?? 0)}
                         onChange={(e) => onRowField(row.sku, 'cf', e.target.value)}
-                        style={{ width: '100px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', textAlign: 'right' }}
+                        className="form-input" style={{ width: 100, textAlign: 'right' }}
                       />
                     </td>
                     <td>
-                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <label className="form-check-inline">
                         <input
                           type="checkbox"
                           checked={Boolean(row.is_active)}
@@ -604,7 +604,7 @@ function ProductCatalogAdmin({ token }) {
               <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Procesos</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {productionOptions.process_options.map((option) => (
-                  <label key={`cfg-process-${option.value}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                  <label key={`cfg-process-${option.value}`} className="form-check-inline">
                     <input
                       type="checkbox"
                       checked={Array.isArray(configModal.processes) && configModal.processes.includes(option.value)}
@@ -621,7 +621,7 @@ function ProductCatalogAdmin({ token }) {
               <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Equipos</div>
               <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 {productionOptions.equipment_options.map((equipment) => (
-                  <label key={`cfg-eq-${equipment.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                  <label key={`cfg-eq-${equipment.id}`} className="form-check-inline">
                     <input
                       type="checkbox"
                       checked={Array.isArray(configModal.equipment_ids) && configModal.equipment_ids.includes(equipment.id)}
@@ -638,7 +638,7 @@ function ProductCatalogAdmin({ token }) {
               <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Materiales</div>
               <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 {productionOptions.material_options.map((material) => (
-                  <label key={`cfg-mt-${material.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#cbd5e1' }}>
+                  <label key={`cfg-mt-${material.id}`} className="form-check-inline">
                     <input
                       type="checkbox"
                       checked={Array.isArray(configModal.material_ids) && configModal.material_ids.includes(material.id)}
