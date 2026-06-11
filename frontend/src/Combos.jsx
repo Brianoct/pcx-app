@@ -4,8 +4,10 @@ import { sortProductsByCatalogOrder } from './productCatalog';
 import { apiRequest } from './apiClient';
 import { clearDraftState, useDraftState } from './useDraftState';
 import { useOutbox } from './OutboxProvider';
+import { useToast } from './ui/toastContext';
 
 function Combos({ token }) {
+  const toast = useToast();
   const { isOnline, enqueueWrite } = useOutbox();
   const draftKey = 'draft:combos:create';
   const [draftLoaded, setDraftLoaded] = useState(false);
@@ -167,7 +169,7 @@ function Combos({ token }) {
 
   const handleSaveCombo = async () => {
     if (!comboName.trim() || comboItems.every(i => !i.sku)) {
-      alert('Ingrese nombre y al menos un producto válido');
+      toast.error('Ingrese nombre y al menos un producto válido');
       return;
     }
 
@@ -196,7 +198,7 @@ function Combos({ token }) {
         }
       });
       resetForm();
-      alert(`Sin conexión: ${isEditing ? 'edición' : 'creación'} de combo en cola para sincronizar.`);
+      toast.info(`Sin conexión: ${isEditing ? 'edición' : 'creación'} de combo en cola para sincronizar.`);
       return;
     }
 
@@ -208,11 +210,11 @@ function Combos({ token }) {
         timeoutMs: 18000
       });
 
-      alert(isEditing ? 'Combo actualizado correctamente' : 'Combo creado correctamente');
+      toast.success(isEditing ? 'Combo actualizado correctamente' : 'Combo creado correctamente');
       resetForm();
       fetchCombos();
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
     }
   };
 
@@ -229,7 +231,7 @@ function Combos({ token }) {
         meta: { comboId: id }
       });
       setCombos((prev) => prev.filter((combo) => combo.id !== id));
-      alert('Sin conexión: eliminación en cola para sincronizar.');
+      toast.info('Sin conexión: eliminación en cola para sincronizar.');
       return;
     }
 
@@ -239,10 +241,10 @@ function Combos({ token }) {
         token,
         timeoutMs: 18000
       });
-      alert('Combo eliminado');
+      toast.success('Combo eliminado');
       fetchCombos();
     } catch (err) {
-      alert('Error al eliminar: ' + err.message);
+      toast.error('Error al eliminar: ' + err.message);
     }
   };
 

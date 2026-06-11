@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
+import { useToast } from './ui/toastContext';
 
 const RESULT_OPTIONS = [
   { value: 'passed', label: 'Aprobado' },
@@ -10,6 +11,7 @@ const RESULT_OPTIONS = [
 const formatMoney = (value) => `${Number(value || 0).toFixed(2)} Bs`;
 
 export default function QualityControlPanel({ token }) {
+  const toast = useToast();
   const { enqueueWrite, isOnline } = useOutbox();
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -135,7 +137,7 @@ export default function QualityControlPanel({ token }) {
           result: 'passed'
         }));
         setEditingId(null);
-        alert('Sin conexión: cambio guardado en cola y se sincronizará automáticamente.');
+        toast.info('Sin conexión: cambio guardado en cola y se sincronizará automáticamente.');
         return;
       }
 
@@ -208,7 +210,7 @@ export default function QualityControlPanel({ token }) {
           cancelEdit();
         }
         setRecords((prev) => prev.filter((row) => Number(row.id) !== Number(recordId)));
-        alert('Sin conexión: eliminación en cola para sincronizar.');
+        toast.info('Sin conexión: eliminación en cola para sincronizar.');
         return;
       }
 

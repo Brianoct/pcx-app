@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { API_BASE, apiRequest } from './apiClient';
 import pdfLogo from './assets/logo.png';
+import { useToast } from './ui/toastContext';
 
 const CATEGORY_TABLEROS = 'Tableros';
 const CATEGORY_ACCESORIOS = 'Accesorios';
@@ -391,6 +392,7 @@ function ProductImage({
 }
 
 export default function PublicCustomerMenu() {
+  const toast = useToast();
   const { shareToken } = useParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -847,19 +849,19 @@ export default function PublicCustomerMenu() {
   const submitOrder = async (e) => {
     e.preventDefault();
     if (cartItems.length === 0) {
-      alert('Selecciona al menos un producto');
+      toast.error('Selecciona al menos un producto');
       return;
     }
     if (!String(customerName || '').trim() || !String(customerPhone || '').trim()) {
-      alert('Completa nombre y teléfono');
+      toast.error('Completa nombre y teléfono');
       return;
     }
     if (isProvincia && !String(provincia || '').trim()) {
-      alert('Completa la provincia');
+      toast.error('Completa la provincia');
       return;
     }
     if (!isProvincia && !String(department || '').trim()) {
-      alert('Selecciona un departamento');
+      toast.error('Selecciona un departamento');
       return;
     }
 

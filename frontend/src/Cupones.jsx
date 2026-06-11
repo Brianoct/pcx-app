@@ -2,8 +2,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
+import { useToast } from './ui/toastContext';
 
 function Cupones({ token }) {
+  const toast = useToast();
   const { enqueueWrite, isOnline } = useOutbox();
   const [coupons, setCoupons] = useState([]);
   const [code, setCode] = useState('');
@@ -28,7 +30,7 @@ function Cupones({ token }) {
 
   const handleCreateCoupon = async () => {
     if (!code.trim() || discountPercent <= 0 || !validUntil) {
-      alert('Complete todos los campos correctamente');
+      toast.error('Complete todos los campos correctamente');
       return;
     }
 
@@ -55,7 +57,7 @@ function Cupones({ token }) {
       setCode('');
       setDiscountPercent(0);
       setValidUntil('');
-      alert('Sin conexión: cupón en cola para sincronizar.');
+      toast.info('Sin conexión: cupón en cola para sincronizar.');
       return;
     }
 
@@ -66,13 +68,13 @@ function Cupones({ token }) {
         body: payload
       });
 
-      alert('Cupón creado correctamente');
+      toast.success('Cupón creado correctamente');
       setCode('');
       setDiscountPercent(0);
       setValidUntil('');
       fetchCoupons();
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast.error('Error: ' + err.message);
     }
   };
 
@@ -95,7 +97,7 @@ function Cupones({ token }) {
         }
       });
       setCoupons((prev) => prev.filter((item) => Number(item.id) !== Number(id)));
-      alert('Sin conexión: eliminación en cola para sincronizar.');
+      toast.info('Sin conexión: eliminación en cola para sincronizar.');
       return;
     }
 
@@ -104,10 +106,10 @@ function Cupones({ token }) {
         method: 'DELETE',
         token
       });
-      alert('Cupón eliminado');
+      toast.success('Cupón eliminado');
       fetchCoupons();
     } catch (err) {
-      alert('Error al eliminar: ' + err.message);
+      toast.error('Error al eliminar: ' + err.message);
     }
   };
 

@@ -4,8 +4,10 @@ import logo from './assets/logo.png';
 import { buildAccessForUser, canAccessPanel, normalizeRole } from './roleAccess';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
+import { useToast } from './ui/toastContext';
 
 function PedidosPanel({ token, role, access, onStatusUpdated }) {
+  const toast = useToast();
   const [pedidos, setPedidos] = useState([]);
   const [filteredPedidos, setFilteredPedidos] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -177,7 +179,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
             ? { ...q, status: newStatus, sync_status: 'queued', sync_action_id: actionId }
             : q
         )));
-        alert('Sin conexión: estado en cola para sincronizar.');
+        toast.info('Sin conexión: estado en cola para sincronizar.');
         return;
       }
 
@@ -191,9 +193,9 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         onStatusUpdated();
       }
       await fetchPedidos();
-      alert('Estado actualizado correctamente');
+      toast.success('Estado actualizado correctamente');
     } catch (err) {
-      alert('Error al actualizar estado: ' + err.message);
+      toast.error('Error al actualizar estado: ' + err.message);
       console.error(err);
     } finally {
       setUpdatingId(null);
@@ -273,7 +275,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
       items = normalizeChecklistItems(buildChecklistItemsFromQuote(quote));
     }
     if (items.length === 0) {
-      alert('Este pedido no tiene productos.');
+      toast.error('Este pedido no tiene productos.');
       return;
     }
     const checked = items.map((item) => (item.isCheckable ? false : true));

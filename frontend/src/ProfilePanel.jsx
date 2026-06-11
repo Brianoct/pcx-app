@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
+import { useToast } from './ui/toastContext';
 
 export default function ProfilePanel({ token, user, onUserUpdated }) {
+  const toast = useToast();
   const { enqueueWrite, isOnline } = useOutbox();
   const [displayName, setDisplayName] = useState(user?.display_name || '');
   const [email, setEmail] = useState(user?.email || '');
@@ -51,7 +53,7 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
             phone: payload.phone
           });
         }
-        alert('Sin conexión: actualización de perfil en cola.');
+        toast.info('Sin conexión: actualización de perfil en cola.');
         return;
       }
       const data = await apiRequest('/api/me', {
@@ -64,9 +66,9 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
       if (data?.user && typeof onUserUpdated === 'function') {
         onUserUpdated(data.user);
       }
-      alert('Perfil actualizado correctamente');
+      toast.success('Perfil actualizado correctamente');
     } catch (err) {
-      alert('Error: ' + (err.message || 'No se pudo actualizar el perfil'));
+      toast.error('Error: ' + (err.message || 'No se pudo actualizar el perfil'));
     } finally {
       setSavingProfile(false);
     }
@@ -75,11 +77,11 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
   const savePassword = async (event) => {
     event.preventDefault();
     if (!currentPassword || !newPassword) {
-      alert('Completa contraseña actual y nueva contraseña');
+      toast.error('Completa contraseña actual y nueva contraseña');
       return;
     }
     if (newPassword !== confirmPassword) {
-      alert('La confirmación no coincide con la nueva contraseña');
+      toast.error('La confirmación no coincide con la nueva contraseña');
       return;
     }
 
@@ -106,7 +108,7 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
-        alert('Sin conexión: cambio de contraseña en cola.');
+        toast.info('Sin conexión: cambio de contraseña en cola.');
         return;
       }
       await apiRequest('/api/me/password', {
@@ -123,9 +125,9 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      alert('Contraseña actualizada correctamente');
+      toast.success('Contraseña actualizada correctamente');
     } catch (err) {
-      alert('Error: ' + (err.message || 'No se pudo actualizar la contraseña'));
+      toast.error('Error: ' + (err.message || 'No se pudo actualizar la contraseña'));
     } finally {
       setSavingPassword(false);
     }
