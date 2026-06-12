@@ -374,7 +374,7 @@ export default function CustomerMenuTool({ token, user }) {
                 href={linkData.share_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ background: '#e7e0d8', color: 'white', textDecoration: 'none' }}
+                style={{ background: '#e7e0d8', color: '#44403c', textDecoration: 'none' }}
               >
                 Abrir vista cliente
               </a>

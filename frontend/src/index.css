@@ -186,8 +186,16 @@ body {
   border-radius: 8px;
   border: 1px solid #e7e0d8;
   background: #ffffff;
-  color: #fff;
+  color: var(--text-primary);
   font-family: inherit;
+}
+
+/* Native dropdown lists render on a white popup; force readable options even
+   for selects styled as colored chips (status selects keep white text on the
+   chip itself, options stay dark on white). */
+option {
+  color: var(--text-primary);
+  background-color: #ffffff;
 }
 
 .form-input:focus,
@@ -2841,7 +2849,7 @@ button, .btn {
 
 .projects-task-scope button.active {
   background: rgba(255, 127, 48, 0.22);
-  color: #fff;
+  color: #be123c;
 }
 
 .projects-tasks-list {
