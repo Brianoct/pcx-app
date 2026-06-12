@@ -1087,25 +1087,6 @@ button, .btn {
   flex-shrink: 0;
 }
 
-.topbar-user {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  font: inherit;
-  font-weight: 500;
-  font-size: 0.94rem;
-  cursor: pointer;
-  padding: 0;
-  white-space: nowrap;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.topbar-user:hover {
-  color: var(--text-primary);
-}
-
 .shell-content {
   flex: 1 1 auto;
   min-height: 0;
@@ -1153,12 +1134,36 @@ button, .btn {
 }
 
 .commission-chip.is-top {
-  border: 2px solid #fbbf24;
-  box-shadow:
-    0 0 0 1px rgba(251, 191, 36, 0.65),
-    0 0 18px rgba(251, 191, 36, 0.85),
-    0 0 34px rgba(251, 191, 36, 0.48);
-  filter: saturate(1.15);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #78350f;
+  background: linear-gradient(135deg, #fde68a 0%, #fbbf24 100%);
+  border: 1px solid #d97706;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.35);
+}
+
+.commission-chip-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #78350f;
+  color: #fde68a;
+  font-size: 0.7rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.commission-chip-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-right: 7px;
+  border-right: 1px solid rgba(120, 53, 15, 0.35);
 }
 
 /* ── Sync status chip + outbox popover (topbar) ───────────────────────── */
@@ -2777,10 +2782,6 @@ button, .btn {
     max-height: 52vh;
   }
 
-  .topbar-user {
-    font-size: 0.85rem;
-    max-width: 82px;
-  }
 
   .commission-chip {
     font-size: 0.84rem;
@@ -3059,10 +3060,6 @@ button, .btn {
     font-size: 0.95rem;
   }
 
-  .topbar-user {
-    max-width: 64px;
-    font-size: 0.78rem;
-  }
 
   .commission-chip {
     font-size: 0.76rem;

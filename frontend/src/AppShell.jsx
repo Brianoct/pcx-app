@@ -39,7 +39,6 @@ function AppShell({ access, displayName, currentCommission, isTopSeller, onLogou
       />
       <div className="shell-main">
         <TopBar
-          displayName={displayName}
           currentCommission={currentCommission}
           isTopSeller={isTopSeller}
           onToggleSidebar={toggleSidebar}
