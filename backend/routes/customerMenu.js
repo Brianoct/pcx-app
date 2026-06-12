@@ -1,10 +1,11 @@
+const crypto = require('crypto');
 const express = require('express');
 const fs = require('fs/promises');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
-const { CUSTOMER_MENU_CATEGORIES, CUSTOMER_MENU_IMAGE_ALLOWED_EXTENSIONS, CUSTOMER_MENU_IMAGE_DIR, CUSTOMER_MENU_IMAGE_MIME_TO_EXT, CUSTOMER_MENU_TOKEN_PURPOSE, CUSTOMER_MENU_TOKEN_TTL, LEGACY_MENU_IMAGE_DIR, ensureCustomerMenuImageDir, getCatalogImageAbsolutePath, normalizeCatalogImageUrl, resolveCatalogLocalImagePath, rewriteLegacyMenuImagePath, toCustomerMenuImageAbsoluteUrl } = require('../lib/customerMenu');
+const { CUSTOMER_MENU_CATEGORIES, CUSTOMER_MENU_IMAGE_ALLOWED_EXTENSIONS, CUSTOMER_MENU_IMAGE_DIR, CUSTOMER_MENU_IMAGE_MIME_TO_EXT, CUSTOMER_MENU_TOKEN_PURPOSE, LEGACY_MENU_IMAGE_DIR, ensureCustomerMenuImageDir, getCatalogImageAbsolutePath, normalizeCatalogImageUrl, resolveCatalogLocalImagePath, rewriteLegacyMenuImagePath, toCustomerMenuImageAbsoluteUrl } = require('../lib/customerMenu');
 const { resolveInventoryScopeByCity } = require('../lib/inventory');
 const { inferProductMenuCategory, loadProductCatalogRows, normalizeProductSku } = require('../lib/products');
 const { parseAndNormalizeQuoteRows } = require('../lib/quotes');
@@ -132,6 +133,70 @@ router.post('/api/customer-menu/images', authenticateToken, async (req, res) => 
   }
 });
 
+// Short, stable, per-seller share codes (replaces long JWT links).
+const SHORT_CODE_ALPHABET = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+const generateShortCode = (length = 8) => {
+  const bytes = crypto.randomBytes(length);
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += SHORT_CODE_ALPHABET[bytes[i] % SHORT_CODE_ALPHABET.length];
+  }
+  return out;
+};
+
+const getOrCreateShareCode = async (sellerUserId) => {
+  const existing = await pool.query(
+    'SELECT code FROM customer_menu_links WHERE seller_user_id = $1',
+    [sellerUserId]
+  );
+  if (existing.rowCount > 0) return existing.rows[0].code;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidate = generateShortCode();
+    try {
+      await pool.query(
+        'INSERT INTO customer_menu_links (code, seller_user_id) VALUES ($1, $2)',
+        [candidate, sellerUserId]
+      );
+      return candidate;
+    } catch (err) {
+      if (err.code !== '23505') throw err;
+      // Either a code collision (retry) or another request created the
+      // seller's link first (reuse it).
+      const raced = await pool.query(
+        'SELECT code FROM customer_menu_links WHERE seller_user_id = $1',
+        [sellerUserId]
+      );
+      if (raced.rowCount > 0) return raced.rows[0].code;
+    }
+  }
+  throw new Error('No se pudo generar un código de enlace único');
+};
+
+// Resolves both short codes and legacy JWT tokens to a seller id (or null).
+const resolveShareTokenSellerId = async (shareToken) => {
+  const token = String(shareToken || '').trim();
+  if (!token) return null;
+  if (!token.includes('.')) {
+    const linkRes = await pool.query(
+      'SELECT seller_user_id FROM customer_menu_links WHERE code = $1',
+      [token]
+    );
+    if (linkRes.rowCount === 0) return null;
+    return Number(linkRes.rows[0].seller_user_id);
+  }
+  // Legacy JWT links keep working until they expire.
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded?.purpose !== CUSTOMER_MENU_TOKEN_PURPOSE) return null;
+    const sellerUserId = Number.parseInt(decoded?.seller_user_id, 10);
+    return Number.isInteger(sellerUserId) && sellerUserId > 0 ? sellerUserId : null;
+  } catch {
+    return null;
+  }
+};
+
 router.post('/api/customer-menu/share-link', authenticateToken, async (req, res) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
@@ -140,21 +205,13 @@ router.post('/api/customer-menu/share-link', authenticateToken, async (req, res)
   }
 
   try {
-    const shareToken = jwt.sign(
-      {
-        purpose: CUSTOMER_MENU_TOKEN_PURPOSE,
-        seller_user_id: userContext.id
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: CUSTOMER_MENU_TOKEN_TTL }
-    );
+    const code = await getOrCreateShareCode(userContext.id);
     const requestOrigin = String(req.headers.origin || '').trim();
     const publicBase = String(process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL || requestOrigin || 'http://localhost:5173').trim();
-    const shareUrl = `${publicBase.replace(/\/+$/, '')}/#/catalogo/${shareToken}`;
+    const shareUrl = `${publicBase.replace(/\/+$/, '')}/#/catalogo/${code}`;
     return res.json({
-      share_token: shareToken,
+      share_token: code,
       share_url: shareUrl,
-      expires_in: CUSTOMER_MENU_TOKEN_TTL,
       seller: {
         id: userContext.id,
         display_name: resolveUserDisplayName(userContext, 'Vendedor')
@@ -171,13 +228,9 @@ router.get('/api/public/menu/:shareToken', async (req, res) => {
   if (!shareToken) return res.status(400).json({ error: 'Token de catálogo inválido' });
 
   try {
-    const decoded = jwt.verify(shareToken, process.env.JWT_SECRET);
-    if (decoded?.purpose !== CUSTOMER_MENU_TOKEN_PURPOSE) {
-      return res.status(400).json({ error: 'Enlace de catálogo inválido' });
-    }
-    const sellerUserId = Number.parseInt(decoded?.seller_user_id, 10);
-    if (!Number.isInteger(sellerUserId) || sellerUserId <= 0) {
-      return res.status(400).json({ error: 'Enlace de catálogo inválido' });
+    const sellerUserId = await resolveShareTokenSellerId(shareToken);
+    if (!sellerUserId) {
+      return res.status(400).json({ error: 'Enlace de catálogo inválido o vencido' });
     }
 
     const sellerRes = await pool.query(
@@ -290,13 +343,9 @@ router.post('/api/public/menu/:shareToken/order', async (req, res) => {
   const shareToken = String(req.params.shareToken || '').trim();
   if (!shareToken) return res.status(400).json({ error: 'Token de catálogo inválido' });
   try {
-    const decoded = jwt.verify(shareToken, process.env.JWT_SECRET);
-    if (decoded?.purpose !== CUSTOMER_MENU_TOKEN_PURPOSE) {
-      return res.status(400).json({ error: 'Enlace de catálogo inválido' });
-    }
-    const sellerUserId = Number.parseInt(decoded?.seller_user_id, 10);
-    if (!Number.isInteger(sellerUserId) || sellerUserId <= 0) {
-      return res.status(400).json({ error: 'Enlace de catálogo inválido' });
+    const sellerUserId = await resolveShareTokenSellerId(shareToken);
+    if (!sellerUserId) {
+      return res.status(400).json({ error: 'Enlace de catálogo inválido o vencido' });
     }
 
     const sellerRes = await pool.query(
