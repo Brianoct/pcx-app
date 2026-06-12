@@ -17,7 +17,6 @@ const QualityControlPanel = lazy(() => import('./QualityControlPanel'));
 const MicrofabricaPanel = lazy(() => import('./MicrofabricaPanel'));
 const ProductionKanban = lazy(() => import('./ProductionKanban'));
 const ExpensesPanel = lazy(() => import('./ExpensesPanel'));
-const CustomerMenuTool = lazy(() => import('./CustomerMenuTool'));
 const ProjectsPanel = lazy(() => import('./ProjectsPanel'));
 const ProfilePanel = lazy(() => import('./ProfilePanel'));
 
@@ -39,12 +38,6 @@ export const NAV_ITEMS = [
     label: 'Cotizar',
     routeAccess: ['cotizar'],
     render: (ctx) => <QuoteTool token={ctx.token} user={ctx.user} />
-  },
-  {
-    path: '/catalogo-clientes',
-    label: 'Catálogo Cliente',
-    routeAccess: ['menu_cliente'],
-    render: (ctx) => <CustomerMenuTool token={ctx.token} user={ctx.user} />
   },
   {
     path: '/history',
@@ -150,7 +143,7 @@ export const NAV_ITEMS = [
 // Sidebar groups, shown to every user. A section renders only when the user
 // can see at least one of its items, so most roles get a short sidebar.
 const SIDEBAR_SECTIONS = [
-  { key: 'ventas', label: 'Ventas', paths: ['/', '/catalogo-clientes', '/history', '/performance'] },
+  { key: 'ventas', label: 'Ventas', paths: ['/', '/history', '/performance'] },
   { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory'] },
   { key: 'produccion', label: 'Producción', paths: ['/microfabrica', '/produccion-kanban', '/control-calidad'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/proyectos'] },
