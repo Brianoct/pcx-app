@@ -1,12 +1,24 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { canAccessPanel } = require('../lib/rbac');
 const { buildUserPayload, loadUserContext, normalizeDisplayName, resolveUserDisplayName } = require('../lib/users');
 
 const router = express.Router();
+
+// Brute-force protection: only FAILED attempts count against the limit, so
+// normal logins (and CI) are unaffected.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos fallidos. Intenta de nuevo en unos minutos.' }
+});
 
 // ─── REGISTER new user (admin only) ────────────────────────────────────────
 router.post('/api/register', authenticateToken, requireRole(['admin']), async (req, res) => {
@@ -36,7 +48,7 @@ router.post('/api/register', authenticateToken, requireRole(['admin']), async (r
 });
 
 // ─── LOGIN ──────────────────────────────────────────────────────────────────
-router.post('/api/login', async (req, res) => {
+router.post('/api/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Faltan correo o contraseña' });
 

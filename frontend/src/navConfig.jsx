@@ -1,21 +1,25 @@
-import QuoteTool from './QuoteTool';
-import QuoteHistory from './QuoteHistory';
-import PerformanceDashboard from './PerformanceDashboard';
-import AdminDashboard from './AdminDashboard';
-import AdminPanel from './admin/AdminPanel';
-import InventoryPanel from './InventoryPanel';
-import PedidosPanel from './PedidosPanel';
-import Combos from './Combos';
-import Cupones from './Cupones';
-import TimeOffCalendar from './TimeOffCalendar';
-import QualityControlPanel from './QualityControlPanel';
-import MicrofabricaPanel from './MicrofabricaPanel';
-import ProductionKanban from './ProductionKanban';
-import ExpensesPanel from './ExpensesPanel';
-import CustomerMenuTool from './CustomerMenuTool';
-import ProjectsPanel from './ProjectsPanel';
-import ProfilePanel from './ProfilePanel';
+import { lazy } from 'react';
 import { canAccessPanel } from './roleAccess';
+
+// Route-level code splitting: each panel loads on first visit, keeping the
+// initial bundle small for mobile connections.
+const QuoteTool = lazy(() => import('./QuoteTool'));
+const QuoteHistory = lazy(() => import('./QuoteHistory'));
+const PerformanceDashboard = lazy(() => import('./PerformanceDashboard'));
+const AdminDashboard = lazy(() => import('./AdminDashboard'));
+const AdminPanel = lazy(() => import('./admin/AdminPanel'));
+const InventoryPanel = lazy(() => import('./InventoryPanel'));
+const PedidosPanel = lazy(() => import('./PedidosPanel'));
+const Combos = lazy(() => import('./Combos'));
+const Cupones = lazy(() => import('./Cupones'));
+const TimeOffCalendar = lazy(() => import('./TimeOffCalendar'));
+const QualityControlPanel = lazy(() => import('./QualityControlPanel'));
+const MicrofabricaPanel = lazy(() => import('./MicrofabricaPanel'));
+const ProductionKanban = lazy(() => import('./ProductionKanban'));
+const ExpensesPanel = lazy(() => import('./ExpensesPanel'));
+const CustomerMenuTool = lazy(() => import('./CustomerMenuTool'));
+const ProjectsPanel = lazy(() => import('./ProjectsPanel'));
+const ProfilePanel = lazy(() => import('./ProfilePanel'));
 
 /**
  * Single source of truth for every internal destination.
