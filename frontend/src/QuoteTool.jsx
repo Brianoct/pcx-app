@@ -7,6 +7,9 @@ import { clearDraftState, useDraftState } from './useDraftState';
 import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
 import Field from './ui/Field';
+import QuoteCatalogPicker from './QuoteCatalogPicker';
+
+const PRODUCTS_VIEW_STORAGE_KEY = 'pcx.quoteProductsView';
 
 const clampNumber = (value, min, max) => {
   const numeric = Number(value);
@@ -57,6 +60,12 @@ export default function QuoteTool({ token, user }) {
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
+  // Pilot: sellers can quote from the classic line list or the visual catalog.
+  // Both views edit the same rows; the preference persists per device.
+  const [productsView, setProductsView] = useState(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(PRODUCTS_VIEW_STORAGE_KEY) : null;
+    return saved === 'catalogo' ? 'catalogo' : 'lista';
+  });
   const normalizedRole = String(user?.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   const isSalesRole = normalizedRole === 'ventas'
     || normalizedRole === 'ventas lider'
@@ -297,6 +306,64 @@ export default function QuoteTool({ token, user }) {
   const addRow = () => {
     const newRow = { id: Date.now(), sku: '', skuDisplay: '', qty: '', unitPrice: 0, lineTotal: 0, availableStock: null, isCombo: false };
     setRows([...rows, newRow]);
+  };
+
+  const switchProductsView = (view) => {
+    setProductsView(view);
+    try {
+      localStorage.setItem(PRODUCTS_VIEW_STORAGE_KEY, view);
+    } catch {
+      // storage unavailable; preference just won't persist
+    }
+    if (view === 'lista') {
+      setRows((prev) => (prev.length === 0 ? [{ id: Date.now(), sku: '', skuDisplay: '', qty: '', unitPrice: 0, lineTotal: 0, availableStock: null, isCombo: false }] : prev));
+    }
+  };
+
+  // Catalog view: set the absolute quantity for a SKU on the shared rows state.
+  const setCatalogQty = async (sku, qty) => {
+    const normalizedSku = String(sku || '').trim().toUpperCase();
+    if (!normalizedSku) return;
+    const nextQty = Math.max(0, Number.parseInt(qty, 10) || 0);
+
+    if (nextQty === 0) {
+      setRows((prev) => prev.filter((row) => String(row.sku || '').trim().toUpperCase() !== normalizedSku));
+      return;
+    }
+
+    const existing = rows.find((row) => String(row.sku || '').trim().toUpperCase() === normalizedSku);
+    if (existing) {
+      setRows((prev) => prev.map((row) =>
+        String(row.sku || '').trim().toUpperCase() === normalizedSku
+          ? { ...row, qty: nextQty, lineTotal: (row.unitPrice || 0) * nextQty }
+          : row
+      ));
+      return;
+    }
+
+    const item = findItem(normalizedSku);
+    if (!item) return;
+    const unitPrice = ventaType === 'sf' ? Number(item.sf || 0) : Number(item.cf || 0);
+    const newRow = {
+      id: Date.now(),
+      sku: normalizedSku,
+      skuDisplay: item.displayName,
+      qty: nextQty,
+      unitPrice,
+      lineTotal: unitPrice * nextQty,
+      availableStock: null,
+      isCombo: item.isCombo || false,
+      comboItems: item.isCombo ? item.items : undefined
+    };
+    // Drop placeholder rows from the list view so they don't block saving.
+    setRows((prev) => [...prev.filter((row) => row.sku), newRow]);
+
+    if (almacen) {
+      const availableStock = item.isCombo
+        ? await fetchComboAvailableStock(item, almacen)
+        : await fetchStock(normalizedSku, almacen);
+      setRows((prev) => prev.map((row) => (row.id === newRow.id ? { ...row, availableStock } : row)));
+    }
   };
 
   const confirmAndDeleteRow = (id) => {
@@ -967,6 +1034,22 @@ export default function QuoteTool({ token, user }) {
                 Con Factura
               </button>
             </div>
+            <div className="quote-sale-type-group" role="tablist" aria-label="Vista de productos">
+              <button
+                type="button"
+                className={`quote-sale-type-btn ${productsView === 'lista' ? 'active' : ''}`}
+                onClick={() => switchProductsView('lista')}
+              >
+                Lista
+              </button>
+              <button
+                type="button"
+                className={`quote-sale-type-btn ${productsView === 'catalogo' ? 'active' : ''}`}
+                onClick={() => switchProductsView('catalogo')}
+              >
+                Catálogo
+              </button>
+            </div>
           </div>
 
           <div className="quote-products-meta">
@@ -975,7 +1058,14 @@ export default function QuoteTool({ token, user }) {
             <span>Unidades: <strong>{totalUnits}</strong></span>
           </div>
 
-          {isMobile ? (
+          {productsView === 'catalogo' ? (
+            <QuoteCatalogPicker
+              items={allItems}
+              rows={rows}
+              ventaType={ventaType}
+              onSetQty={setCatalogQty}
+            />
+          ) : isMobile ? (
             <div className="mobile-cards-list" style={{ marginBottom: '20px' }}>
               {rows.map((row) => {
                 const stock = row.availableStock;
@@ -1127,15 +1217,17 @@ export default function QuoteTool({ token, user }) {
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-6px', marginBottom: '16px' }}>
-            <button
-              type="button"
-              onClick={addRow}
-              className="btn btn-secondary"
-            >
-              + Agregar línea
-            </button>
-          </div>
+          {productsView === 'lista' && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-6px', marginBottom: '16px' }}>
+              <button
+                type="button"
+                onClick={addRow}
+                className="btn btn-secondary"
+              >
+                + Agregar línea
+              </button>
+            </div>
+          )}
 
           {/* Summary - negotiation friendly discount controls */}
           <div className="quote-summary-panel" style={{
