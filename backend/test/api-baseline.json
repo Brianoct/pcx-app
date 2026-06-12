@@ -1,0 +1,308 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/me",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/me",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/sellers/assignable",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/users/sales",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/users",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/users",
+    "status": 403,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/role-access-defaults",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/roles/access-defaults",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/commission/settings",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/quotes",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/quotes",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/time-off/mine",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/time-off/mine/summary",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/time-off/requests",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/time-off/summary",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/timeoff/requests",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/timeoff/summary",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/users",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/dashboard",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/expenses",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/expenses/variance",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stock",
+    "status": 400,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/products",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/product-catalog",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/product-costing",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/product-production/options",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/equipos",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/materiales",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/combos",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/cupones",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/performance",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/commission/current",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/commission/current/orders",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/production/kanban",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/qc/products",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/qc/checks",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/qc/summary",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/qc/commissions",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/microfabrica/dashboard",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/stats",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/whatsapp/inbox/conversations",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/whatsapp/inbox/shortcuts",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/whatsapp/inbox/kpis",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/whatsapp/webhook",
+    "status": 403,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/customer-menu/images",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/public/menu/invalid-token",
+    "status": 400,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/quotes",
+    "status": 401,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/users",
+    "status": 401,
+    "shape": "object"
+  },
+  {
+    "method": "POST",
+    "path": "/api/cupones",
+    "status": 201,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/cupones",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "POST",
+    "path": "/api/quotes",
+    "status": 400,
+    "shape": "object"
+  }
+]
