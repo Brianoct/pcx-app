@@ -55,6 +55,34 @@ body {
   margin: 0 auto;
 }
 
+.route-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40vh;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.error-boundary {
+  max-width: 560px;
+  margin: 12vh auto 0;
+  padding: 24px;
+  text-align: center;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 14px;
+  background: rgba(127, 29, 29, 0.18);
+}
+
+.error-boundary h2 {
+  margin-bottom: 10px;
+}
+
+.error-boundary p {
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
 /* ── Toasts ────────────────────────────────────────────────────────────── */
 .toast-viewport {
   position: fixed;

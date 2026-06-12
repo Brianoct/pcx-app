@@ -1,11 +1,16 @@
+import { Suspense, lazy } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './Login';
 import AppShell from './AppShell';
-import PublicCustomerMenu from './PublicCustomerMenu';
+import { RouteErrorBoundary } from './ui/ErrorBoundary';
 import { NAV_ITEMS, allowsAny, getDefaultPath } from './navConfig';
 import { useAuth } from './authContext';
 import { useCommission } from './useCommission';
 import './index.css';
+
+const PublicCustomerMenu = lazy(() => import('./PublicCustomerMenu'));
+
+const routeFallback = <div className="route-loading" aria-label="Cargando">Cargando…</div>;
 
 function Protected({ access, anyOf, defaultPath, children }) {
   return allowsAny(access, anyOf) ? children : <Navigate to={defaultPath} replace />;
@@ -37,11 +42,13 @@ function App() {
   if (!token) {
     return (
       <Router>
-        <Routes>
-          <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
-          <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
-          <Route path="*" element={<Login onLogin={login} />} />
-        </Routes>
+        <Suspense fallback={routeFallback}>
+          <Routes>
+            <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
+            <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
+            <Route path="*" element={<Login onLogin={login} />} />
+          </Routes>
+        </Suspense>
       </Router>
     );
   }
@@ -65,23 +72,27 @@ function App() {
         isTopSeller={isTopSeller}
         onLogout={handleLogout}
       >
-        <Routes>
-          {NAV_ITEMS.map((item) => (
-            <Route
-              key={item.path}
-              path={item.path}
-              element={
-                <Protected access={effectiveAccess} anyOf={item.routeAccess} defaultPath={defaultPath}>
-                  {item.render(renderCtx)}
-                </Protected>
-              }
-            />
-          ))}
-          <Route path="/menu-clientes" element={<Navigate to="/catalogo-clientes" replace />} />
-          <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
-          <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
-          <Route path="*" element={<Navigate to={defaultPath} replace />} />
-        </Routes>
+        <RouteErrorBoundary>
+          <Suspense fallback={routeFallback}>
+            <Routes>
+              {NAV_ITEMS.map((item) => (
+                <Route
+                  key={item.path}
+                  path={item.path}
+                  element={
+                    <Protected access={effectiveAccess} anyOf={item.routeAccess} defaultPath={defaultPath}>
+                      {item.render(renderCtx)}
+                    </Protected>
+                  }
+                />
+              ))}
+              <Route path="/menu-clientes" element={<Navigate to="/catalogo-clientes" replace />} />
+              <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
+              <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
+              <Route path="*" element={<Navigate to={defaultPath} replace />} />
+            </Routes>
+          </Suspense>
+        </RouteErrorBoundary>
       </AppShell>
     </Router>
   );
