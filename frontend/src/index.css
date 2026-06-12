@@ -203,6 +203,18 @@ body {
   font-size: 0.9rem;
 }
 
+.form-check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #cbd5e1;
+}
+
+.form-input--inline,
+.form-select--inline {
+  width: auto;
+}
+
 .quote-notes-field {
   margin-bottom: 24px;
 }
@@ -1557,7 +1569,7 @@ button, .btn {
 
 .admin-tabs-nav {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }

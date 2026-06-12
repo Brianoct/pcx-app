@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { API_BASE, apiRequest } from './apiClient';
+import { API_BASE, apiRequest } from '../apiClient';
 
 const formatDateTime = (value) => {
   if (!value) return '';
