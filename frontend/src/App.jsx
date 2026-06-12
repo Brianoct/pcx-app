@@ -86,7 +86,6 @@ function App() {
                   }
                 />
               ))}
-              <Route path="/menu-clientes" element={<Navigate to="/catalogo-clientes" replace />} />
               <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
               <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
               <Route path="*" element={<Navigate to={defaultPath} replace />} />
