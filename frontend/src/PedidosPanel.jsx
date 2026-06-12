@@ -417,9 +417,9 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
           padding: compact ? '8px 12px' : '6px 10px',
           fontSize: compact ? '0.85rem' : '0.8rem',
           borderRadius: '8px',
-          border: '1px solid rgba(16, 185, 129, 0.45)',
+          border: '1px solid rgba(5, 150, 105, 0.45)',
           background: 'rgba(16, 185, 129, 0.15)',
-          color: '#a7f3d0',
+          color: '#047857',
           fontWeight: 700
         }}
       >
@@ -872,9 +872,9 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                 onClick={() => setChecklistModal(null)}
                 style={{
                   padding: '11px 28px',
-                  background: 'linear-gradient(180deg, #a8a29e, #d9d0c5)',
-                  color: '#44403c',
-                  border: 'none',
+                  background: '#ffffff',
+                  color: '#57534e',
+                  border: '1px solid #d9d0c5',
                   borderRadius: '8px',
                   cursor: 'pointer',
                   fontSize: '1rem',
