@@ -58,7 +58,7 @@ function SyncStatus() {
   );
 }
 
-function TopBar({ displayName, currentCommission, isTopSeller, onToggleSidebar }) {
+function TopBar({ currentCommission, isTopSeller, onToggleSidebar }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -79,11 +79,11 @@ function TopBar({ displayName, currentCommission, isTopSeller, onToggleSidebar }
           type="button"
           className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}
           onClick={() => navigate('/performance')}
+          title={isTopSeller ? 'Vendedor top del mes — ver rendimiento' : 'Tu comisión del mes — ver rendimiento'}
         >
+          {isTopSeller && <span className="commission-chip-star" aria-hidden="true">★</span>}
+          {isTopSeller && <span className="commission-chip-label">Top vendedor</span>}
           +{(currentCommission || 0).toFixed(2)} Bs
-        </button>
-        <button type="button" className="topbar-user" onClick={() => navigate('/perfil')}>
-          {displayName}
         </button>
       </div>
     </header>
