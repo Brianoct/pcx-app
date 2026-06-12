@@ -302,13 +302,24 @@ function MessageBody({ message = {}, token }) {
   return <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.9rem' }}>{textBody || `[${messageType}]`}</div>;
 }
 
+const MESSAGE_STATUS_LABELS_ES = {
+  received: 'recibido',
+  read: 'leído',
+  delivered: 'entregado',
+  sent: 'enviado',
+  failed: 'falló',
+  pending: 'pendiente',
+  accepted: 'aceptado'
+};
+
 const getStatusVisual = (statusRaw, isOutbound) => {
   const status = String(statusRaw || '').trim().toLowerCase();
-  if (!isOutbound) return { label: status || 'received', color: '#78716c' };
-  if (status === 'read') return { label: 'read', color: '#34B7F1' };
-  if (status === 'delivered') return { label: 'delivered', color: '#2563eb' };
-  if (status === 'failed') return { label: 'failed', color: '#dc2626' };
-  return { label: status || 'sent', color: '#78716c' };
+  const label = MESSAGE_STATUS_LABELS_ES[status] || status || (isOutbound ? 'enviado' : 'recibido');
+  if (!isOutbound) return { label, color: '#78716c' };
+  if (status === 'read') return { label, color: '#34B7F1' };
+  if (status === 'delivered') return { label, color: '#2563eb' };
+  if (status === 'failed') return { label, color: '#dc2626' };
+  return { label, color: '#78716c' };
 };
 
 const formatRelativeMinutes = (targetDateValue) => {
@@ -1335,7 +1346,7 @@ export default function WhatsAppInboxAdmin({ token }) {
             <div style={{ color: '#292524', fontWeight: 700 }}>{formatMinutes(kpiTotals.avg_first_response_minutes)}</div>
           </div>
           <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: 10, padding: '8px 10px' }}>
-            <div style={{ color: '#78716c', fontSize: '0.74rem' }}>Read rate</div>
+            <div style={{ color: '#78716c', fontSize: '0.74rem' }}>Tasa de lectura</div>
             <div style={{ color: '#292524', fontWeight: 700 }}>{formatPercent(kpiTotals.read_rate_percent)}</div>
           </div>
           <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: 10, padding: '8px 10px' }}>
@@ -1366,7 +1377,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                   <th style={{ padding: '6px 4px' }}>Convs</th>
                   <th style={{ padding: '6px 4px' }}>Abiertas</th>
                   <th style={{ padding: '6px 4px' }}>1ra resp.</th>
-                  <th style={{ padding: '6px 4px' }}>Read rate</th>
+                  <th style={{ padding: '6px 4px' }}>Tasa de lectura</th>
                 </tr>
               </thead>
               <tbody>
