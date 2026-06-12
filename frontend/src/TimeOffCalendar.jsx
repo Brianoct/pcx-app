@@ -144,29 +144,47 @@ export default function TimeOffCalendar({ token }) {
         <h3 style={{ marginBottom: '10px' }}>Registrar permiso</h3>
         <form onSubmit={submitRequest} style={{ display: 'grid', gap: '10px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
-            <select
-              value={form.request_type}
-              onChange={(e) => setForm((prev) => ({ ...prev, request_type: e.target.value }))}
-              className="filter-select"
-            >
-              <option value="vacation">Vacaciones</option>
-              <option value="sick_leave">Baja médica</option>
-              <option value="early_leave">Salida anticipada</option>
-              <option value="other">Otro permiso</option>
-            </select>
-            <input
-              type="date"
-              className="filter-input"
-              value={form.start_date}
-              onChange={(e) => setForm((prev) => ({ ...prev, start_date: e.target.value }))}
-            />
-            <input
-              type="date"
-              className="filter-input"
-              value={form.end_date}
-              onChange={(e) => setForm((prev) => ({ ...prev, end_date: e.target.value }))}
-            />
+            <div>
+              <label className="form-label">Tipo de permiso</label>
+              <select
+                value={form.request_type}
+                onChange={(e) => setForm((prev) => ({ ...prev, request_type: e.target.value }))}
+                className="filter-select"
+                style={{ width: '100%' }}
+              >
+                <option value="vacation">Vacaciones</option>
+                <option value="sick_leave">Baja médica</option>
+                <option value="early_leave">Salida anticipada</option>
+                <option value="other">Otro permiso</option>
+              </select>
+            </div>
+            <div>
+              <label className="form-label">Desde</label>
+              <input
+                type="date"
+                className="filter-input"
+                style={{ width: '100%' }}
+                value={form.start_date}
+                onChange={(e) => setForm((prev) => ({ ...prev, start_date: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="form-label">Hasta (inclusive)</label>
+              <input
+                type="date"
+                className="filter-input"
+                style={{ width: '100%' }}
+                value={form.end_date}
+                onChange={(e) => setForm((prev) => ({ ...prev, end_date: e.target.value }))}
+              />
+            </div>
           </div>
+          {form.start_date && form.end_date && (
+            <div className="form-hint" style={{ marginTop: 0 }}>
+              Solicitando del <strong>{formatDate(form.start_date)}</strong> al{' '}
+              <strong>{formatDate(form.end_date)}</strong>
+            </div>
+          )}
           <textarea
             value={form.notes}
             onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
