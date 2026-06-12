@@ -708,7 +708,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                 style={{
                   padding: '10px 16px',
                   background: currentPage === 1 ? '#e7e0d8' : '#3b82f6',
-                  color: 'white',
+                  color: currentPage === 1 ? '#a8a29e' : 'white',
                   border: 'none',
                   borderRadius: '6px',
                   cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
@@ -727,7 +727,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                 style={{
                   padding: '10px 16px',
                   background: currentPage === totalPages ? '#e7e0d8' : '#3b82f6',
-                  color: 'white',
+                  color: currentPage === totalPages ? '#a8a29e' : 'white',
                   border: 'none',
                   borderRadius: '6px',
                   cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
@@ -873,7 +873,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                 style={{
                   padding: '11px 28px',
                   background: 'linear-gradient(180deg, #a8a29e, #d9d0c5)',
-                  color: 'white',
+                  color: '#44403c',
                   border: 'none',
                   borderRadius: '8px',
                   cursor: 'pointer',

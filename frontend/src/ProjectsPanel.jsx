@@ -1051,7 +1051,7 @@ export default function ProjectsPanel({ token, user }) {
                       type="button"
                       className="btn"
                       onClick={cancelEditTask}
-                      style={{ background: '#d9d0c5', color: '#fff', minHeight: '36px', padding: '8px 12px' }}
+                      style={{ background: '#d9d0c5', color: '#44403c', minHeight: '36px', padding: '8px 12px' }}
                     >
                       Cancelar edición
                     </button>
@@ -1356,7 +1356,7 @@ export default function ProjectsPanel({ token, user }) {
                           type="button"
                           className="btn"
                           onClick={cancelCalendarEdit}
-                          style={{ background: '#d9d0c5', color: '#fff', minHeight: '36px', padding: '8px 14px' }}
+                          style={{ background: '#d9d0c5', color: '#44403c', minHeight: '36px', padding: '8px 14px' }}
                         >
                           Cancelar
                         </button>
