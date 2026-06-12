@@ -327,12 +327,12 @@ function UserManagement({ token }) {
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '50px' }}>Cargando usuarios...</div>;
-  if (error) return <div style={{ color: '#f87171', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
+  if (error) return <div style={{ color: '#dc2626', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
 
   return (
     <div>
       {/* Add new user form */}
-      <div style={{ background: '#1e293b', padding: '24px', borderRadius: '14px', marginBottom: '28px', border: '1px solid rgba(71, 85, 105, 0.5)' }}>
+      <div style={{ background: '#ffffff', padding: '24px', borderRadius: '14px', marginBottom: '28px', border: '1px solid rgba(214, 204, 192, 0.5)' }}>
         <h3 style={{ marginBottom: '16px' }}>Agregar Nuevo Usuario</h3>
         <form onSubmit={handleAddUser}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
@@ -405,7 +405,7 @@ function UserManagement({ token }) {
           </div>
 
           <div style={{ marginTop: '18px' }}>
-            <h4 style={{ marginBottom: '10px', color: '#f1f5f9' }}>Acceso por panel</h4>
+            <h4 style={{ marginBottom: '10px', color: '#292524' }}>Acceso por panel</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
               {ACCESS_LABELS.map((field) => (
                 <label
@@ -414,11 +414,11 @@ function UserManagement({ token }) {
                     display: 'flex',
                     gap: '9px',
                     alignItems: 'center',
-                    color: '#e2e8f0',
-                    border: '1px solid #334155',
+                    color: '#292524',
+                    border: '1px solid #e7e0d8',
                     borderRadius: '10px',
                     padding: '10px 12px',
-                    background: '#111b2d'
+                    background: '#f5f1ec'
                   }}
                 >
                   <input
@@ -432,7 +432,7 @@ function UserManagement({ token }) {
             </div>
           </div>
 
-          <button type="submit" style={{ width: '100%', padding: '14px', background: '#f87171', color: 'white', border: 'none', borderRadius: '10px', marginTop: '22px', fontWeight: '700' }}>
+          <button type="submit" style={{ width: '100%', padding: '14px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '10px', marginTop: '22px', fontWeight: '700' }}>
             Agregar Usuario
           </button>
         </form>
@@ -443,10 +443,10 @@ function UserManagement({ token }) {
       {users.length === 0 ? (
         <p>No hay usuarios.</p>
       ) : (
-        <div style={{ overflowX: 'auto', border: '1px solid rgba(71, 85, 105, 0.45)', borderRadius: '12px' }}>
+        <div style={{ overflowX: 'auto', border: '1px solid rgba(214, 204, 192, 0.45)', borderRadius: '12px' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '1000px' }}>
             <thead>
-              <tr style={{ background: '#0f172a' }}>
+              <tr style={{ background: '#ffffff' }}>
                 <th style={{ padding: '12px' }}>Nombre visible</th>
                 <th style={{ padding: '12px' }}>Email</th>
                 <th style={{ padding: '12px' }}>Teléfono</th>
@@ -459,7 +459,7 @@ function UserManagement({ token }) {
             </thead>
             <tbody>
               {users.map(user => (
-                <tr key={user.id} style={{ borderBottom: '1px solid #334155' }}>
+                <tr key={user.id} style={{ borderBottom: '1px solid #e7e0d8' }}>
                   <td style={{ padding: '12px' }}>{user.display_name || String(user.email || '').split('@')[0] || '—'}</td>
                   <td style={{ padding: '12px' }}>{user.email}</td>
                   <td style={{ padding: '12px' }}>
@@ -470,7 +470,7 @@ function UserManagement({ token }) {
                       value={user.role}
                       onChange={(e) => handleUpdateRole(user.id, e.target.value)}
                       disabled={!user.is_active}
-                      style={{ padding: '6px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+                      style={{ padding: '6px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
                     >
                       {ROLE_SELECT_OPTIONS.map((roleOption) => (
                         <option key={roleOption.value} value={roleOption.value}>
@@ -487,7 +487,7 @@ function UserManagement({ token }) {
                       fontSize: '0.8rem',
                       fontWeight: 700,
                       background: user.is_active ? 'rgba(16,185,129,0.18)' : 'rgba(239,68,68,0.18)',
-                      color: user.is_active ? '#34d399' : '#f87171',
+                      color: user.is_active ? '#047857' : '#dc2626',
                       border: user.is_active ? '1px solid rgba(52,211,153,0.45)' : '1px solid rgba(248,113,113,0.45)'
                     }}>
                       {user.is_active ? 'Activo' : 'Desactivado'}
@@ -513,7 +513,7 @@ function UserManagement({ token }) {
                     ) : (
                       <button
                         onClick={() => handleSetUserActivation(user.id, true)}
-                        style={{ padding: '8px 12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                        style={{ padding: '8px 12px', background: '#047857', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
                       >
                         Reactivar
                       </button>
@@ -540,18 +540,18 @@ function UserManagement({ token }) {
           padding: '22px 10px'
         }}>
           <div style={{
-            background: '#1e293b',
+            background: '#ffffff',
             borderRadius: '12px',
             width: '90%',
             maxWidth: '820px',
-            color: '#f1f5f9',
-            border: '1px solid rgba(71, 85, 105, 0.6)',
+            color: '#292524',
+            border: '1px solid rgba(214, 204, 192, 0.6)',
             maxHeight: 'calc(100vh - 44px)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden'
           }}>
-            <div style={{ padding: '18px 20px 12px', borderBottom: '1px solid rgba(71, 85, 105, 0.45)' }}>
+            <div style={{ padding: '18px 20px 12px', borderBottom: '1px solid rgba(214, 204, 192, 0.45)' }}>
               <h3 style={{ margin: 0, color: '#e11d48' }}>Editar Usuario</h3>
             </div>
 
@@ -563,7 +563,7 @@ function UserManagement({ token }) {
                     type="email"
                     value={editModal.email}
                     disabled
-                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#111827', color: '#6b7280', border: '1px solid #374151' }}
+                    style={{ width: '100%', padding: '12px', borderRadius: '8px', background: '#f5f1ec', color: '#6b7280', border: '1px solid #e7e0d8' }}
                   />
                 </div>
                 <div>
@@ -613,8 +613,8 @@ function UserManagement({ token }) {
                   />
                 </div>
                 <div>
-                  <div style={{ border: '1px solid #334155', borderRadius: '10px', padding: '12px', background: '#111b2d' }}>
-                    <div style={{ color: '#94a3b8', marginBottom: '8px', fontSize: '0.92rem' }}>
+                  <div style={{ border: '1px solid #e7e0d8', borderRadius: '10px', padding: '12px', background: '#f5f1ec' }}>
+                    <div style={{ color: '#78716c', marginBottom: '8px', fontSize: '0.92rem' }}>
                       El acceso principal se administra en <strong>Configuración de Roles</strong>.
                       Personaliza aquí solo si este usuario necesita una excepción.
                     </div>
@@ -643,11 +643,11 @@ function UserManagement({ token }) {
                               display: 'flex',
                               gap: '9px',
                               alignItems: 'center',
-                              color: '#e2e8f0',
-                              border: '1px solid #334155',
+                              color: '#292524',
+                              border: '1px solid #e7e0d8',
                               borderRadius: '10px',
                               padding: '10px 12px',
-                              background: '#0f172a'
+                              background: '#ffffff'
                             }}
                           >
                             <input
@@ -669,15 +669,15 @@ function UserManagement({ token }) {
                 gap: '10px',
                 padding: '12px 20px 16px',
                 justifyContent: 'flex-end',
-                borderTop: '1px solid rgba(71, 85, 105, 0.45)',
-                background: '#1e293b'
+                borderTop: '1px solid rgba(214, 204, 192, 0.45)',
+                background: '#ffffff'
               }}>
                 <button
                   type="button"
                   onClick={() => setEditModal(null)}
                   style={{
                     padding: '10px 18px',
-                    background: '#64748b',
+                    background: '#a8a29e',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',
@@ -691,7 +691,7 @@ function UserManagement({ token }) {
                   type="submit"
                   style={{
                     padding: '10px 18px',
-                    background: '#10b981',
+                    background: '#047857',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',

@@ -117,48 +117,48 @@ function Cupones({ token }) {
 
   return (
     <div style={{ padding: '16px' }}>
-      <h2 style={{ textAlign: 'center', color: '#f87171', marginBottom: '24px' }}>Cupones</h2>
-      {error && <p style={{ textAlign: 'center', color: '#f87171', marginBottom: '12px' }}>{error}</p>}
+      <h2 style={{ textAlign: 'center', color: '#dc2626', marginBottom: '24px' }}>Cupones</h2>
+      {error && <p style={{ textAlign: 'center', color: '#dc2626', marginBottom: '12px' }}>{error}</p>}
 
       {/* Create Coupon Form */}
-      <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '32px' }}>
-        <h3 style={{ color: '#94a3b8', marginBottom: '16px' }}>Crear Nuevo Cupón</h3>
+      <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px', marginBottom: '32px' }}>
+        <h3 style={{ color: '#78716c', marginBottom: '16px' }}>Crear Nuevo Cupón</h3>
 
         <input
           type="text"
           value={code}
           onChange={(e) => setCode(e.target.value)}
           placeholder="Código del cupón (ej: PADRE20)"
-          style={{ width: '100%', padding: '12px', marginBottom: '16px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+          style={{ width: '100%', padding: '12px', marginBottom: '16px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
         />
 
         <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
           <div style={{ flex: 1 }}>
-            <label style={{ color: '#94a3b8', display: 'block', marginBottom: '6px' }}>Porcentaje de descuento</label>
+            <label style={{ color: '#78716c', display: 'block', marginBottom: '6px' }}>Porcentaje de descuento</label>
             <input
               type="number"
               min="1"
               max="50"
               value={discountPercent}
               onChange={(e) => setDiscountPercent(Math.min(50, Math.max(0, parseInt(e.target.value) || 0)))}
-              style={{ width: '100%', padding: '12px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+              style={{ width: '100%', padding: '12px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
             />
           </div>
 
           <div style={{ flex: 1 }}>
-            <label style={{ color: '#94a3b8', display: 'block', marginBottom: '6px' }}>Válido hasta</label>
+            <label style={{ color: '#78716c', display: 'block', marginBottom: '6px' }}>Válido hasta</label>
             <input
               type="date"
               value={validUntil}
               onChange={(e) => setValidUntil(e.target.value)}
-              style={{ width: '100%', padding: '12px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+              style={{ width: '100%', padding: '12px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
             />
           </div>
         </div>
 
         <button
           onClick={handleCreateCoupon}
-          style={{ width: '100%', padding: '14px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', cursor: 'pointer' }}
+          style={{ width: '100%', padding: '14px', background: '#047857', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', cursor: 'pointer' }}
           disabled={!code.trim() || discountPercent <= 0 || !validUntil}
         >
           Crear Cupón
@@ -166,14 +166,14 @@ function Cupones({ token }) {
       </div>
 
       {/* Existing Coupons */}
-      <h3 style={{ color: '#94a3b8', marginBottom: '12px' }}>Cupones Existentes</h3>
+      <h3 style={{ color: '#78716c', marginBottom: '12px' }}>Cupones Existentes</h3>
       {coupons.length === 0 ? (
-        <p style={{ textAlign: 'center', color: '#94a3b8' }}>No hay cupones creados aún</p>
+        <p style={{ textAlign: 'center', color: '#78716c' }}>No hay cupones creados aún</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#0f172a' }}>
+              <tr style={{ background: '#ffffff' }}>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Código</th>
                 <th style={{ padding: '12px', textAlign: 'center' }}>Descuento</th>
                 <th style={{ padding: '12px', textAlign: 'center' }}>Válido hasta</th>
@@ -182,7 +182,7 @@ function Cupones({ token }) {
             </thead>
             <tbody>
               {coupons.map(coupon => (
-                <tr key={coupon.id} style={{ borderBottom: '1px solid #334155' }}>
+                <tr key={coupon.id} style={{ borderBottom: '1px solid #e7e0d8' }}>
                   <td style={{ padding: '12px' }}>{coupon.code}</td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>{coupon.discount_percent}%</td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>

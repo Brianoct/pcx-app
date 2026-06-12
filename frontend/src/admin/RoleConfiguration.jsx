@@ -93,9 +93,9 @@ function RoleConfiguration({ token }) {
   }
 
   return (
-    <div style={{ background: '#1e293b', borderRadius: '12px', padding: '20px' }}>
+    <div style={{ background: '#ffffff', borderRadius: '12px', padding: '20px' }}>
       <h3 style={{ marginBottom: '12px' }}>Configuración de Roles</h3>
-      <p style={{ color: '#94a3b8', marginBottom: '16px' }}>
+      <p style={{ color: '#78716c', marginBottom: '16px' }}>
         Edita los paneles por rol y guarda con un solo clic. Puedes guardar solo la plantilla o guardar y aplicar a todos los usuarios del rol.
       </p>
 
@@ -104,16 +104,16 @@ function RoleConfiguration({ token }) {
           marginBottom: '14px',
           padding: '10px 12px',
           borderRadius: '8px',
-          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
-          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
-          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+          background: message.startsWith('Error') ? 'rgba(254,226,226,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #047857',
+          color: message.startsWith('Error') ? '#b91c1c' : '#047857'
         }}>
           {message}
         </div>
       )}
 
       {rows.length > 0 && (
-        <div style={{ border: '1px solid #334155', borderRadius: '10px', padding: '14px' }}>
+        <div style={{ border: '1px solid #e7e0d8', borderRadius: '10px', padding: '14px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', alignItems: 'center', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <strong>Rol</strong>
@@ -125,9 +125,9 @@ function RoleConfiguration({ token }) {
                   minHeight: '40px',
                   padding: '8px 10px',
                   borderRadius: '8px',
-                  border: '1px solid #334155',
-                  background: '#0f172a',
-                  color: '#e2e8f0'
+                  border: '1px solid #e7e0d8',
+                  background: '#ffffff',
+                  color: '#292524'
                 }}
               >
                 {rows.map((row) => (
@@ -140,11 +140,11 @@ function RoleConfiguration({ token }) {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '8px',
-                color: '#cbd5e1',
-                border: '1px solid #334155',
+                color: '#57534e',
+                border: '1px solid #e7e0d8',
                 borderRadius: '8px',
                 padding: '8px 10px',
-                background: 'rgba(15,23,42,0.7)'
+                background: 'rgba(255,255,255,0.7)'
               }}>
                 <input
                   type="checkbox"
@@ -173,11 +173,11 @@ function RoleConfiguration({ token }) {
                     display: 'flex',
                     gap: '8px',
                     alignItems: 'center',
-                    color: '#cbd5e1',
-                    border: '1px solid #334155',
+                    color: '#57534e',
+                    border: '1px solid #e7e0d8',
                     borderRadius: '8px',
                     padding: '8px 10px',
-                    background: 'rgba(15,23,42,0.7)'
+                    background: 'rgba(255,255,255,0.7)'
                   }}
                 >
                   <input
@@ -191,7 +191,7 @@ function RoleConfiguration({ token }) {
             })}
           </div>
 
-          <div style={{ marginTop: '10px', color: '#94a3b8', fontSize: '0.9rem' }}>
+          <div style={{ marginTop: '10px', color: '#78716c', fontSize: '0.9rem' }}>
             Consejo: activa <strong>Aplicar a usuarios existentes</strong> si quieres que el cambio impacte inmediatamente a todo el equipo de ese rol.
           </div>
         </div>

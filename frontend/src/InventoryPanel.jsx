@@ -308,15 +308,15 @@ function InventoryPanel({ token, role, access }) {
     return sum + (hasAlert ? 1 : 0);
   }, 0);
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando inventario...</div>;
-  if (error) return <div style={{ color: '#f87171', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
+  if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#78716c' }}>Cargando inventario...</div>;
+  if (error) return <div style={{ color: '#dc2626', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
   if (!canViewGlobalInventory && !individualStore) {
     return (
       <div className="container">
-        <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
+        <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
           Inventario
         </h2>
-        <div className="card" style={{ textAlign: 'center', color: '#fca5a5' }}>
+        <div className="card" style={{ textAlign: 'center', color: '#dc2626' }}>
           Tu usuario no tiene una ciudad válida configurada para el panel de inventario individual.
         </div>
       </div>
@@ -325,10 +325,10 @@ function InventoryPanel({ token, role, access }) {
 
   return (
     <div className="container">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
+      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
         Inventario
       </h2>
-      <p style={{ textAlign: 'center', color: '#94a3b8', marginBottom: '14px' }}>
+      <p style={{ textAlign: 'center', color: '#78716c', marginBottom: '14px' }}>
         Vista: {canViewGlobalInventory ? 'Global' : `Individual (${individualStore?.location || 'Ciudad no configurada'})`}
       </p>
       {canViewGlobalInventory && (
@@ -340,9 +340,9 @@ function InventoryPanel({ token, role, access }) {
             style={{
               minHeight: '34px',
               padding: '6px 12px',
-              background: globalStoreView === 'all' ? '#2563eb' : '#1e293b',
-              color: 'white',
-              border: globalStoreView === 'all' ? '1px solid #60a5fa' : '1px solid #334155'
+              background: globalStoreView === 'all' ? '#2563eb' : '#ffffff',
+              color: '#292524',
+              border: globalStoreView === 'all' ? '1px solid #3b82f6' : '1px solid #e7e0d8'
             }}
           >
             Todas
@@ -356,9 +356,9 @@ function InventoryPanel({ token, role, access }) {
               style={{
                 minHeight: '34px',
                 padding: '6px 12px',
-                background: globalStoreView === store.key ? '#2563eb' : '#1e293b',
-                color: 'white',
-                border: globalStoreView === store.key ? '1px solid #60a5fa' : '1px solid #334155'
+                background: globalStoreView === store.key ? '#2563eb' : '#ffffff',
+                color: '#292524',
+                border: globalStoreView === store.key ? '1px solid #3b82f6' : '1px solid #e7e0d8'
               }}
             >
               {store.location}
@@ -371,8 +371,8 @@ function InventoryPanel({ token, role, access }) {
         position: 'sticky',
         top: '70px',
         zIndex: 20,
-        background: '#0f172a',
-        border: '1px solid #334155',
+        background: '#ffffff',
+        border: '1px solid #e7e0d8',
         borderRadius: '12px',
         padding: '12px',
         marginBottom: '16px',
@@ -382,10 +382,10 @@ function InventoryPanel({ token, role, access }) {
         justifyContent: 'space-between',
         gap: '12px'
       }}>
-        <div style={{ color: '#94a3b8', fontSize: '0.95rem' }}>
-          Cambios pendientes: <strong style={{ color: changedSkus.length > 0 ? '#f59e0b' : '#10b981' }}>{changedSkus.length}</strong>
+        <div style={{ color: '#78716c', fontSize: '0.95rem' }}>
+          Cambios pendientes: <strong style={{ color: changedSkus.length > 0 ? '#f59e0b' : '#047857' }}>{changedSkus.length}</strong>
         </div>
-        <div style={{ color: '#fca5a5', fontSize: '0.9rem', fontWeight: 600 }}>
+        <div style={{ color: '#dc2626', fontSize: '0.9rem', fontWeight: 600 }}>
           Bajo mínimo: {lowOrCriticalCount}
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -395,7 +395,7 @@ function InventoryPanel({ token, role, access }) {
             className="btn"
             style={{
               padding: '10px 18px',
-              background: savingMins || changedMinSkus.length === 0 ? '#475569' : '#f59e0b',
+              background: savingMins || changedMinSkus.length === 0 ? '#d9d0c5' : '#f59e0b',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
@@ -412,7 +412,7 @@ function InventoryPanel({ token, role, access }) {
             className="btn"
             style={{
               padding: '10px 18px',
-              background: saving || changedSkus.length === 0 ? '#475569' : '#10b981',
+              background: saving || changedSkus.length === 0 ? '#d9d0c5' : '#047857',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
@@ -431,9 +431,9 @@ function InventoryPanel({ token, role, access }) {
           marginBottom: '12px',
           padding: '10px 12px',
           borderRadius: '8px',
-          color: saveMessage.startsWith('Error') ? '#fecaca' : '#bbf7d0',
-          background: saveMessage.startsWith('Error') ? 'rgba(127, 29, 29, 0.35)' : 'rgba(6, 78, 59, 0.35)',
-          border: saveMessage.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981'
+          color: saveMessage.startsWith('Error') ? '#b91c1c' : '#047857',
+          background: saveMessage.startsWith('Error') ? 'rgba(254, 226, 226, 0.35)' : 'rgba(209, 250, 229, 0.35)',
+          border: saveMessage.startsWith('Error') ? '1px solid #ef4444' : '1px solid #047857'
         }}>
           {saveMessage}
         </div>
@@ -442,7 +442,7 @@ function InventoryPanel({ token, role, access }) {
       {isMobile ? (
         <div className="mobile-cards-list">
           {products.length === 0 ? (
-            <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px 0' }}>
+            <p style={{ textAlign: 'center', color: '#78716c', padding: '30px 0' }}>
               No hay productos registrados.
             </p>
           ) : (
@@ -454,8 +454,8 @@ function InventoryPanel({ token, role, access }) {
                 padding: '8px',
                 textAlign: 'center',
                 borderRadius: '6px',
-                border: changed ? '1px solid #f59e0b' : '1px solid #334155',
-                background: '#0f172a',
+                border: changed ? '1px solid #f59e0b' : '1px solid #e7e0d8',
+                background: '#ffffff',
                 color: 'white'
               };
               const minInputStyle = {
@@ -463,21 +463,21 @@ function InventoryPanel({ token, role, access }) {
                 padding: '8px',
                 textAlign: 'center',
                 borderRadius: '6px',
-                border: minChanged ? '1px solid #f59e0b' : '1px solid #334155',
-                background: '#0f172a',
-                color: '#fbbf24'
+                border: minChanged ? '1px solid #f59e0b' : '1px solid #e7e0d8',
+                background: '#ffffff',
+                color: '#b45309'
               };
               return (
                 <div
                   key={product.sku}
                   className="mobile-card"
-                  style={{ borderColor: changed ? '#f59e0b' : '#334155' }}
+                  style={{ borderColor: changed ? '#f59e0b' : '#e7e0d8' }}
                 >
                   <div className="mobile-card-header">
                     <span className="mobile-card-id">{product.sku}</span>
                     <span
                       className="mobile-card-total"
-                      style={{ color: changed ? '#f59e0b' : '#10b981' }}
+                      style={{ color: changed ? '#f59e0b' : '#047857' }}
                     >
                       {changed ? 'Pendiente' : 'Guardado'}
                     </span>
@@ -500,7 +500,7 @@ function InventoryPanel({ token, role, access }) {
                             style={{
                               ...inputStyle,
                               borderColor: getStockLevel(product, store.field, store.minField) === 'ok' ? inputStyle.border : '#ef4444',
-                              color: getStockLevel(product, store.field, store.minField) === 'ok' ? 'white' : '#fecaca'
+                              color: getStockLevel(product, store.field, store.minField) === 'ok' ? 'white' : '#b91c1c'
                             }}
                           />
                           <input
@@ -537,7 +537,7 @@ function InventoryPanel({ token, role, access }) {
             tableLayout: 'fixed'
           }}>
             <thead>
-              <tr style={{ background: '#0f172a' }}>
+              <tr style={{ background: '#ffffff' }}>
                 <th style={{ padding: '14px 12px', width: '100px', textAlign: 'center' }}>SKU</th>
                 <th style={{ padding: '14px 12px', width: '280px', textAlign: 'center' }}>Producto</th>
                 {visibleStores.map((store) => (
@@ -553,13 +553,13 @@ function InventoryPanel({ token, role, access }) {
             <tbody>
               {products.length === 0 ? (
                 <tr>
-                  <td colSpan={2 + (visibleStores.length * 2) + 2} style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                  <td colSpan={2 + (visibleStores.length * 2) + 2} style={{ textAlign: 'center', padding: '40px', color: '#78716c' }}>
                     No hay productos registrados.
                   </td>
                 </tr>
               ) : (
                 products.map(product => (
-                  <tr key={product.sku} style={{ borderBottom: '1px solid #334155' }}>
+                  <tr key={product.sku} style={{ borderBottom: '1px solid #e7e0d8' }}>
                     <td style={{ padding: '14px 12px', textAlign: 'center' }}>{product.sku}</td>
                     <td style={{ padding: '14px 12px' }}>{product.name}</td>
 
@@ -576,10 +576,10 @@ function InventoryPanel({ token, role, access }) {
                             textAlign: 'center',
                             borderRadius: '6px',
                             border: getStockLevel(product, store.field, store.minField) === 'ok'
-                              ? (changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155')
+                              ? (changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #e7e0d8')
                               : '1px solid #ef4444',
-                            background: '#0f172a',
-                            color: getStockLevel(product, store.field, store.minField) === 'ok' ? 'white' : '#fecaca'
+                            background: '#ffffff',
+                            color: getStockLevel(product, store.field, store.minField) === 'ok' ? 'white' : '#b91c1c'
                           }}
                         />
                       </td>
@@ -596,21 +596,21 @@ function InventoryPanel({ token, role, access }) {
                             padding: '8px',
                             textAlign: 'center',
                             borderRadius: '6px',
-                            border: changedMinSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #334155',
-                            background: '#0f172a',
-                            color: '#fbbf24'
+                            border: changedMinSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #e7e0d8',
+                            background: '#ffffff',
+                            color: '#b45309'
                           }}
                         />
                       </td>
                     ))}
 
-                    <td style={{ padding: '14px 12px', textAlign: 'center', color: '#94a3b8' }}>
+                    <td style={{ padding: '14px 12px', textAlign: 'center', color: '#78716c' }}>
                       {product.last_updated 
                         ? new Date(product.last_updated).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })
                         : '—'}
                     </td>
 
-                    <td style={{ padding: '14px 12px', textAlign: 'center', color: changedSkuSet.has(product.sku) || changedMinSkuSet.has(product.sku) ? '#f59e0b' : '#10b981', fontWeight: '700' }}>
+                    <td style={{ padding: '14px 12px', textAlign: 'center', color: changedSkuSet.has(product.sku) || changedMinSkuSet.has(product.sku) ? '#f59e0b' : '#047857', fontWeight: '700' }}>
                       {changedSkuSet.has(product.sku) || changedMinSkuSet.has(product.sku) ? 'Pendiente' : 'Guardado'}
                     </td>
                   </tr>

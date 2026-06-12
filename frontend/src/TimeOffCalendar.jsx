@@ -11,7 +11,7 @@ const REQUEST_TYPE_LABELS = {
 
 const STATUS_COLORS = {
   pending: '#f59e0b',
-  approved: '#10b981',
+  approved: '#047857',
   rejected: '#ef4444'
 };
 
@@ -116,26 +116,26 @@ export default function TimeOffCalendar({ token }) {
 
   return (
     <div className="container">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>Calendario de permisos</h2>
+      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>Calendario de permisos</h2>
 
       <div className="card" style={{ marginBottom: '16px' }}>
         <h3 style={{ marginBottom: '10px' }}>Cupos anuales ({summary.year})</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '10px' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Vacaciones usadas</div>
-            <div style={{ fontWeight: 700, color: '#f1f5f9' }}>{summary.vacation_used} / 14 días</div>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: '10px', padding: '10px' }}>
+            <div style={{ color: '#78716c', fontSize: '0.9rem' }}>Vacaciones usadas</div>
+            <div style={{ fontWeight: 700, color: '#292524' }}>{summary.vacation_used} / 14 días</div>
           </div>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '10px' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Vacaciones disponibles</div>
-            <div style={{ fontWeight: 700, color: '#10b981' }}>{summary.vacation_remaining} días</div>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: '10px', padding: '10px' }}>
+            <div style={{ color: '#78716c', fontSize: '0.9rem' }}>Vacaciones disponibles</div>
+            <div style={{ fontWeight: 700, color: '#047857' }}>{summary.vacation_remaining} días</div>
           </div>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '10px' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Baja médica usada</div>
-            <div style={{ fontWeight: 700, color: '#f1f5f9' }}>{summary.sick_used} / 5 días</div>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: '10px', padding: '10px' }}>
+            <div style={{ color: '#78716c', fontSize: '0.9rem' }}>Baja médica usada</div>
+            <div style={{ fontWeight: 700, color: '#292524' }}>{summary.sick_used} / 5 días</div>
           </div>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '10px', padding: '10px' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Baja médica disponible</div>
-            <div style={{ fontWeight: 700, color: '#10b981' }}>{summary.sick_remaining} días</div>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: '10px', padding: '10px' }}>
+            <div style={{ color: '#78716c', fontSize: '0.9rem' }}>Baja médica disponible</div>
+            <div style={{ fontWeight: 700, color: '#047857' }}>{summary.sick_remaining} días</div>
           </div>
         </div>
       </div>
@@ -172,7 +172,7 @@ export default function TimeOffCalendar({ token }) {
             onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
             placeholder="Detalle o motivo (opcional)"
             rows={3}
-            style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: 'white' }}
+            style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
           />
           <button type="submit" className="btn btn-primary" disabled={!canSubmit || saving}>
             {saving ? 'Guardando...' : 'Registrar permiso'}
@@ -181,7 +181,7 @@ export default function TimeOffCalendar({ token }) {
       </div>
 
       {error && (
-        <div className="card" style={{ color: '#fecaca', borderColor: '#ef4444' }}>
+        <div className="card" style={{ color: '#b91c1c', borderColor: '#ef4444' }}>
           {error}
         </div>
       )}
@@ -189,9 +189,9 @@ export default function TimeOffCalendar({ token }) {
       <div className="card">
         <h3 style={{ marginBottom: '10px' }}>Mis solicitudes</h3>
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Cargando...</p>
+          <p style={{ color: '#78716c' }}>Cargando...</p>
         ) : entries.length === 0 ? (
-          <p style={{ color: '#94a3b8' }}>Aún no registraste permisos.</p>
+          <p style={{ color: '#78716c' }}>Aún no registraste permisos.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: '760px' }}>
@@ -212,7 +212,7 @@ export default function TimeOffCalendar({ token }) {
                     <td>{formatDate(row.start_date)}</td>
                     <td>{formatDate(row.end_date)}</td>
                     <td>{row.days_count}</td>
-                    <td style={{ color: STATUS_COLORS[row.status] || '#cbd5e1', fontWeight: 700 }}>
+                    <td style={{ color: STATUS_COLORS[row.status] || '#57534e', fontWeight: 700 }}>
                       {row.status === 'pending' ? 'Pendiente' : row.status === 'approved' ? 'Aprobado' : 'Rechazado'}
                     </td>
                     <td>{row.notes || '—'}</td>

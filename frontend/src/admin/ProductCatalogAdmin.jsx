@@ -317,7 +317,7 @@ function ProductCatalogAdmin({ token }) {
 
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px' }}>
+      <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px' }}>
         <h3 style={{ marginBottom: '12px' }}>Agregar producto al cotizador</h3>
         <form onSubmit={createProduct} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
           <input
@@ -359,8 +359,8 @@ function ProductCatalogAdmin({ token }) {
           </button>
 
           <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 10 }}>
-            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
-              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Procesos</div>
+            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
+              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Procesos</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {productionOptions.process_options.map((option) => (
                   <label key={`new-process-${option.value}`} className="form-check-inline">
@@ -373,13 +373,13 @@ function ProductCatalogAdmin({ token }) {
                   </label>
                 ))}
                 {productionOptions.process_options.length === 0 && (
-                  <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>No hay procesos disponibles</span>
+                  <span style={{ color: '#78716c', fontSize: '0.82rem' }}>No hay procesos disponibles</span>
                 )}
               </div>
             </div>
 
-            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
-              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Equipos utilizados</div>
+            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
+              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Equipos utilizados</div>
               <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 {productionOptions.equipment_options.map((equipment) => (
                   <label key={`new-eq-${equipment.id}`} className="form-check-inline">
@@ -392,13 +392,13 @@ function ProductCatalogAdmin({ token }) {
                   </label>
                 ))}
                 {productionOptions.equipment_options.length === 0 && (
-                  <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>No hay equipos activos. Agrégalos en la pestaña Equipos.</span>
+                  <span style={{ color: '#78716c', fontSize: '0.82rem' }}>No hay equipos activos. Agrégalos en la pestaña Equipos.</span>
                 )}
               </div>
             </div>
 
-            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
-              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Materiales utilizados</div>
+            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
+              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Materiales utilizados</div>
               <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 {productionOptions.material_options.map((material) => (
                   <label key={`new-mt-${material.id}`} className="form-check-inline">
@@ -411,7 +411,7 @@ function ProductCatalogAdmin({ token }) {
                   </label>
                 ))}
                 {productionOptions.material_options.length === 0 && (
-                  <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>No hay materiales activos. Agrégalos en la pestaña Materiales.</span>
+                  <span style={{ color: '#78716c', fontSize: '0.82rem' }}>No hay materiales activos. Agrégalos en la pestaña Materiales.</span>
                 )}
               </div>
             </div>
@@ -423,18 +423,18 @@ function ProductCatalogAdmin({ token }) {
         <div style={{
           padding: '10px 12px',
           borderRadius: '8px',
-          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
-          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
-          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+          background: message.startsWith('Error') ? 'rgba(254,226,226,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #047857',
+          color: message.startsWith('Error') ? '#b91c1c' : '#047857'
         }}>
           {message}
         </div>
       )}
 
-      <div style={{ background: '#1e293b', borderRadius: '12px', padding: '16px' }}>
+      <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px' }}>
         <h3 style={{ marginBottom: '12px' }}>Productos del cotizador</h3>
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Cargando productos...</p>
+          <p style={{ color: '#78716c' }}>Cargando productos...</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: '1040px' }}>
@@ -450,7 +450,7 @@ function ProductCatalogAdmin({ token }) {
               </thead>
               <tbody>
                 {products.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', color: '#94a3b8' }}>Sin productos</td></tr>
+                  <tr><td colSpan={6} style={{ textAlign: 'center', color: '#78716c' }}>Sin productos</td></tr>
                 ) : products.map((row) => (
                   <tr key={row.sku}>
                     <td>{row.sku}</td>
@@ -525,9 +525,9 @@ function ProductCatalogAdmin({ token }) {
       </div>
 
       {inactiveProducts.length > 0 && (
-        <div style={{ background: '#1e293b', borderRadius: '12px', padding: '16px' }}>
+        <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px' }}>
           <h4 style={{ marginBottom: '8px' }}>Productos inactivos</h4>
-          <p style={{ marginBottom: '10px', color: '#94a3b8' }}>
+          <p style={{ marginBottom: '10px', color: '#78716c' }}>
             Reactiva un producto marcando <strong>Activo</strong> y guardando.
           </p>
           <div style={{ overflowX: 'auto' }}>
@@ -560,7 +560,7 @@ function ProductCatalogAdmin({ token }) {
                       <button
                         onClick={() => saveProduct({ ...row, is_active: true })}
                         disabled={saving}
-                        style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#10b981', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
+                        style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#047857', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
                       >
                         Reactivar
                       </button>
@@ -577,7 +577,7 @@ function ProductCatalogAdmin({ token }) {
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(2,6,23,0.72)',
+          background: 'rgba(120,100,80,0.72)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -588,8 +588,8 @@ function ProductCatalogAdmin({ token }) {
             width: 'min(880px, 100%)',
             maxHeight: '90vh',
             overflowY: 'auto',
-            background: '#111827',
-            border: '1px solid #334155',
+            background: '#f5f1ec',
+            border: '1px solid #e7e0d8',
             borderRadius: 12,
             padding: 16,
             display: 'grid',
@@ -597,11 +597,11 @@ function ProductCatalogAdmin({ token }) {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <h3 style={{ margin: 0 }}>Configurar producción · {configModal.sku}</h3>
-              {configLoading && <span style={{ color: '#93c5fd', fontSize: '0.82rem' }}>Cargando...</span>}
+              {configLoading && <span style={{ color: '#2563eb', fontSize: '0.82rem' }}>Cargando...</span>}
             </div>
 
-            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
-              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Procesos</div>
+            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
+              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Procesos</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {productionOptions.process_options.map((option) => (
                   <label key={`cfg-process-${option.value}`} className="form-check-inline">
@@ -617,8 +617,8 @@ function ProductCatalogAdmin({ token }) {
               </div>
             </div>
 
-            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
-              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Equipos</div>
+            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
+              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Equipos</div>
               <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 {productionOptions.equipment_options.map((equipment) => (
                   <label key={`cfg-eq-${equipment.id}`} className="form-check-inline">
@@ -634,8 +634,8 @@ function ProductCatalogAdmin({ token }) {
               </div>
             </div>
 
-            <div style={{ border: '1px solid #334155', borderRadius: 10, padding: 10, background: '#0f172a' }}>
-              <div style={{ color: '#e2e8f0', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Materiales</div>
+            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
+              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Materiales</div>
               <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 {productionOptions.material_options.map((material) => (
                   <label key={`cfg-mt-${material.id}`} className="form-check-inline">
@@ -656,7 +656,7 @@ function ProductCatalogAdmin({ token }) {
                 type="button"
                 onClick={() => setConfigModal(null)}
                 disabled={configSaving}
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: 'white', cursor: 'pointer' }}
+                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', cursor: 'pointer' }}
               >
                 Cancelar
               </button>

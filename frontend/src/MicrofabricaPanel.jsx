@@ -56,14 +56,14 @@ export default function MicrofabricaPanel({ token }) {
 
   return (
     <div className="container">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
+      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
         Panel de Microfábrica
       </h2>
 
       <div className="card" style={{ marginBottom: '16px' }}>
         <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', alignItems: 'end' }}>
           <div>
-            <label style={{ display: 'block', color: '#94a3b8', marginBottom: '6px' }}>Mes</label>
+            <label style={{ display: 'block', color: '#78716c', marginBottom: '6px' }}>Mes</label>
             <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="filter-select">
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                 <option key={m} value={m}>
@@ -73,7 +73,7 @@ export default function MicrofabricaPanel({ token }) {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', color: '#94a3b8', marginBottom: '6px' }}>Año</label>
+            <label style={{ display: 'block', color: '#78716c', marginBottom: '6px' }}>Año</label>
             <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="filter-select">
               {[2024, 2025, 2026, 2027, 2028].map((y) => (
                 <option key={y} value={y}>{y}</option>
@@ -84,7 +84,7 @@ export default function MicrofabricaPanel({ token }) {
       </div>
 
       {error && (
-        <div className="card" style={{ borderColor: '#ef4444', color: '#fecaca', marginBottom: '16px' }}>
+        <div className="card" style={{ borderColor: '#ef4444', color: '#b91c1c', marginBottom: '16px' }}>
           {error}
         </div>
       )}
@@ -98,31 +98,31 @@ export default function MicrofabricaPanel({ token }) {
         }}
       >
         <div className="card" style={{ marginBottom: 0, borderColor: 'rgba(16,185,129,0.45)' }}>
-          <div style={{ color: '#94a3b8', marginBottom: '6px' }}>Comisión total del período</div>
-          <div style={{ color: '#10b981', fontSize: '1.5rem', fontWeight: 800 }}>
+          <div style={{ color: '#78716c', marginBottom: '6px' }}>Comisión total del período</div>
+          <div style={{ color: '#047857', fontSize: '1.5rem', fontWeight: 800 }}>
             {formatMoney(totals.total_commission)}
           </div>
         </div>
         <div className="card" style={{ marginBottom: 0 }}>
-          <div style={{ color: '#94a3b8', marginBottom: '6px' }}>Piezas aprobadas</div>
-          <div style={{ color: '#e2e8f0', fontSize: '1.4rem', fontWeight: 700 }}>{totals.qty_passed}</div>
+          <div style={{ color: '#78716c', marginBottom: '6px' }}>Piezas aprobadas</div>
+          <div style={{ color: '#292524', fontSize: '1.4rem', fontWeight: 700 }}>{totals.qty_passed}</div>
         </div>
         <div className="card" style={{ marginBottom: 0 }}>
-          <div style={{ color: '#94a3b8', marginBottom: '6px' }}>Piezas rechazadas</div>
+          <div style={{ color: '#78716c', marginBottom: '6px' }}>Piezas rechazadas</div>
           <div style={{ color: '#f59e0b', fontSize: '1.4rem', fontWeight: 700 }}>{totals.qty_rejected}</div>
         </div>
         <div className="card" style={{ marginBottom: 0 }}>
-          <div style={{ color: '#94a3b8', marginBottom: '6px' }}>Productos con actividad</div>
-          <div style={{ color: '#e2e8f0', fontSize: '1.4rem', fontWeight: 700 }}>{totals.products_with_activity}</div>
+          <div style={{ color: '#78716c', marginBottom: '6px' }}>Productos con actividad</div>
+          <div style={{ color: '#292524', fontSize: '1.4rem', fontWeight: 700 }}>{totals.products_with_activity}</div>
         </div>
       </div>
 
       {topProduct && (
         <div className="card" style={{ marginBottom: '16px' }}>
           <h3 style={{ marginBottom: '8px' }}>Producto con mayor comisión</h3>
-          <div style={{ color: '#cbd5e1' }}>
+          <div style={{ color: '#57534e' }}>
             <strong>{topProduct.product_name}</strong> ({topProduct.sku}) — Subtotal comisión: {' '}
-            <strong style={{ color: '#10b981' }}>{formatMoney(topProduct.subtotal_commission)}</strong>
+            <strong style={{ color: '#047857' }}>{formatMoney(topProduct.subtotal_commission)}</strong>
           </div>
         </div>
       )}
@@ -130,9 +130,9 @@ export default function MicrofabricaPanel({ token }) {
       <div className="card">
         <h3 style={{ marginBottom: '10px' }}>Comisión por producto ({month}/{year})</h3>
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Cargando...</p>
+          <p style={{ color: '#78716c' }}>Cargando...</p>
         ) : rows.length === 0 ? (
-          <p style={{ color: '#94a3b8' }}>Sin productos para el período seleccionado.</p>
+          <p style={{ color: '#78716c' }}>Sin productos para el período seleccionado.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: '1080px' }}>
@@ -158,7 +158,7 @@ export default function MicrofabricaPanel({ token }) {
                     <td>{formatMoney(row.base_price)}</td>
                     <td>{Number(row.commission_rate || 0).toFixed(2)}%</td>
                     <td>{formatMoney(row.commission_per_piece)}</td>
-                    <td style={{ color: '#10b981', fontWeight: 700 }}>{formatMoney(row.subtotal_commission)}</td>
+                    <td style={{ color: '#047857', fontWeight: 700 }}>{formatMoney(row.subtotal_commission)}</td>
                   </tr>
                 ))}
               </tbody>

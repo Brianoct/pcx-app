@@ -93,9 +93,9 @@ function CommissionConfig({ token }) {
   ];
 
   return (
-    <div style={{ background: '#1e293b', borderRadius: '12px', padding: '20px' }}>
+    <div style={{ background: '#ffffff', borderRadius: '12px', padding: '20px' }}>
       <h3 style={{ marginBottom: '12px' }}>Comisiones por Rol</h3>
-      <p style={{ color: '#94a3b8', marginBottom: '16px' }}>
+      <p style={{ color: '#78716c', marginBottom: '16px' }}>
         Aquí defines los porcentajes configurables de comisión. Los cambios impactan el cálculo en tiempo real.
       </p>
 
@@ -108,12 +108,12 @@ function CommissionConfig({ token }) {
               gridTemplateColumns: 'minmax(280px, 1fr) 140px',
               gap: '12px',
               alignItems: 'center',
-              border: '1px solid #334155',
+              border: '1px solid #e7e0d8',
               borderRadius: '10px',
               padding: '10px 12px'
             }}
           >
-            <span style={{ color: '#e2e8f0' }}>{row.label}</span>
+            <span style={{ color: '#292524' }}>{row.label}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifySelf: 'end' }}>
               <input
                 type="number"
@@ -126,19 +126,19 @@ function CommissionConfig({ token }) {
                   width: '88px',
                   padding: '8px',
                   borderRadius: '8px',
-                  border: '1px solid #334155',
-                  background: '#0f172a',
-                  color: 'white',
+                  border: '1px solid #e7e0d8',
+                  background: '#ffffff',
+                  color: '#292524',
                   textAlign: 'right'
                 }}
               />
-              <span style={{ color: '#94a3b8' }}>%</span>
+              <span style={{ color: '#78716c' }}>%</span>
             </div>
           </div>
         ))}
       </div>
 
-      <div style={{ color: '#94a3b8', fontSize: '0.92rem', lineHeight: 1.5, marginBottom: '14px' }}>
+      <div style={{ color: '#78716c', fontSize: '0.92rem', lineHeight: 1.5, marginBottom: '14px' }}>
         <div>• Almacen Lider: compensación por pieza / control de calidad (modelo contractual).</div>
         <div>• Marketing: compensación por contrato.</div>
         <div>• Microfabrica Lider y Microfabrica: ingreso por piezas fabricadas por producto (mensual).</div>
@@ -149,9 +149,9 @@ function CommissionConfig({ token }) {
           marginBottom: '12px',
           padding: '10px 12px',
           borderRadius: '8px',
-          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
-          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
-          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+          background: message.startsWith('Error') ? 'rgba(254,226,226,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #047857',
+          color: message.startsWith('Error') ? '#b91c1c' : '#047857'
         }}>
           {message}
         </div>

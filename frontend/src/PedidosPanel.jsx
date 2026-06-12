@@ -373,8 +373,8 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     doc.save(`etiqueta_${quote.id}_${recipientName.replace(/\s+/g, '_') || 'cliente'}.pdf`);
   };
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando pedidos...</div>;
-  if (error) return <div style={{ color: '#f87171', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
+  if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#78716c' }}>Cargando pedidos...</div>;
+  if (error) return <div style={{ color: '#dc2626', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
 
   // Pagination logic
   const totalPedidos = filteredPedidos.length;
@@ -437,7 +437,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
           borderRadius: '8px',
           border: '1px solid rgba(59, 130, 246, 0.45)',
           background: 'rgba(59, 130, 246, 0.15)',
-          color: '#bfdbfe',
+          color: '#1d4ed8',
           fontWeight: 700
         }}
       >
@@ -448,7 +448,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
 
   return (
     <div className="container">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
+      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
         Pedidos
       </h2>
 
@@ -509,7 +509,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
       </div>
 
       {totalPedidos === 0 ? (
-        <p style={{ textAlign: 'center', color: '#94a3b8' }}>No hay pedidos pendientes que coincidan con la búsqueda.</p>
+        <p style={{ textAlign: 'center', color: '#78716c' }}>No hay pedidos pendientes que coincidan con la búsqueda.</p>
       ) : (
         <>
           {isMobile ? (
@@ -652,11 +652,11 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                           disabled={updatingId === quote.id}
                           className="pedidos-status-select"
                           style={{
-                            background: quote.status === 'Enviado' ? '#10b981' :
+                            background: quote.status === 'Enviado' ? '#047857' :
                                         quote.status === 'Embalado' ? '#8b5cf6' :
                                         quote.status === 'Pagado' ? '#3b82f6' :
                                         quote.status === 'Confirmado' ? '#f59e0b' :
-                                        '#64748b',
+                                        '#a8a29e',
                             color: 'white',
                             cursor: updatingId === quote.id ? 'not-allowed' : 'pointer'
                           }}
@@ -707,7 +707,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                 disabled={currentPage === 1}
                 style={{
                   padding: '10px 16px',
-                  background: currentPage === 1 ? '#334155' : '#3b82f6',
+                  background: currentPage === 1 ? '#e7e0d8' : '#3b82f6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -717,7 +717,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                 Anterior
               </button>
 
-              <span style={{ color: '#94a3b8' }}>
+              <span style={{ color: '#78716c' }}>
                 Página {currentPage} de {totalPages}
               </span>
 
@@ -726,7 +726,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                 disabled={currentPage === totalPages}
                 style={{
                   padding: '10px 16px',
-                  background: currentPage === totalPages ? '#334155' : '#3b82f6',
+                  background: currentPage === totalPages ? '#e7e0d8' : '#3b82f6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -745,7 +745,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         <div style={{
           position: 'fixed',
           inset: 0,
-          background: 'linear-gradient(135deg, rgba(2, 6, 23, 0.86), rgba(15, 23, 42, 0.88))',
+          background: 'linear-gradient(135deg, rgba(120, 100, 80, 0.86), rgba(255, 255, 255, 0.88))',
           backdropFilter: 'blur(2px)',
           display: 'flex',
           alignItems: 'center',
@@ -753,16 +753,16 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
           zIndex: 1000
         }}>
           <div style={{
-            background: 'radial-gradient(120% 140% at 20% 0%, rgba(30, 58, 138, 0.2), rgba(15, 23, 42, 0.95) 50%), #0f172a',
+            background: 'radial-gradient(120% 140% at 20% 0%, rgba(219, 234, 254, 0.2), rgba(255, 255, 255, 0.95) 50%), #ffffff',
             padding: '26px',
             borderRadius: '16px',
             width: '90%',
             maxWidth: '760px',
             maxHeight: '88vh',
             overflowY: 'auto',
-            color: '#f1f5f9',
-            boxShadow: '0 24px 48px rgba(2, 6, 23, 0.65)',
-            border: '1px solid rgba(71, 85, 105, 0.8)'
+            color: '#292524',
+            boxShadow: '0 24px 48px rgba(120, 100, 80, 0.65)',
+            border: '1px solid rgba(214, 204, 192, 0.8)'
           }}>
             <div style={{ marginBottom: '16px', textAlign: 'center' }}>
               <h3 style={{
@@ -774,7 +774,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
               }}>
                 Lista de Empaque
               </h3>
-              <div style={{ color: '#bfdbfe', fontSize: '0.95rem', fontWeight: 600 }}>
+              <div style={{ color: '#1d4ed8', fontSize: '0.95rem', fontWeight: 600 }}>
                 Pedido #{checklistModal.quoteId}
               </div>
             </div>
@@ -790,7 +790,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                   const isGift = promo?.type === 'gift';
                   const accentBg = isGift ? 'rgba(16, 185, 129, 0.16)' : 'rgba(37, 99, 235, 0.16)';
                   const accentBorder = isGift ? '1px solid rgba(52, 211, 153, 0.5)' : '1px solid rgba(96, 165, 250, 0.5)';
-                  const titleColor = isGift ? '#6ee7b7' : '#93c5fd';
+                  const titleColor = isGift ? '#047857' : '#2563eb';
                   const valueColor = isGift ? '#d1fae5' : '#e0f2fe';
                   return (
                     <div
@@ -830,9 +830,9 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                     fontSize: item.isIndented ? '0.98rem' : '1.12rem',
                     padding: '11px 12px',
                     marginLeft: item.isIndented ? '24px' : 0,
-                    background: item.isComboHeader ? 'rgba(225, 29, 72, 0.12)' : 'rgba(30, 41, 59, 0.6)',
+                    background: item.isComboHeader ? 'rgba(225, 29, 72, 0.12)' : 'rgba(245, 241, 236, 0.6)',
                     borderRadius: '10px',
-                    border: item.isComboHeader ? '1px solid rgba(225, 29, 72, 0.35)' : '1px solid #374151'
+                    border: item.isComboHeader ? '1px solid rgba(225, 29, 72, 0.35)' : '1px solid #e7e0d8'
                   }}>
                     {item.isCheckable ? (
                       <input
@@ -842,7 +842,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                         style={{
                           width: '28px',
                           height: '28px',
-                          accentColor: '#10b981'
+                          accentColor: '#047857'
                         }}
                       />
                     ) : (
@@ -872,7 +872,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                 onClick={() => setChecklistModal(null)}
                 style={{
                   padding: '11px 28px',
-                  background: 'linear-gradient(180deg, #64748b, #475569)',
+                  background: 'linear-gradient(180deg, #a8a29e, #d9d0c5)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '8px',
@@ -890,7 +890,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                 style={{
                   padding: '11px 28px',
                   background: checklistModal.checked.every(Boolean)
-                    ? 'linear-gradient(180deg, #10b981, #059669)'
+                    ? 'linear-gradient(180deg, #047857, #059669)'
                     : '#4b5563',
                   color: 'white',
                   border: 'none',

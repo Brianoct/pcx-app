@@ -288,16 +288,16 @@ export default function CustomerMenuTool({ token, user }) {
 
   return (
     <div className="container">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
+      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
         Catálogo para Clientes
       </h2>
       <div className="card" style={{ maxWidth: '920px', margin: '0 auto' }}>
         <h3 style={{ marginBottom: '10px' }}>Comparte tu catálogo personal</h3>
-        <p style={{ color: '#94a3b8', marginBottom: '14px' }}>
+        <p style={{ color: '#78716c', marginBottom: '14px' }}>
           Genera un enlace único para tus clientes. Los pedidos enviados desde ese enlace se registran en tu nombre.
         </p>
         <div style={{ marginBottom: '14px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', color: '#93c5fd', fontSize: '0.9rem' }}>
+          <label style={{ display: 'block', marginBottom: '8px', color: '#2563eb', fontSize: '0.9rem' }}>
             Mensaje personalizado para WhatsApp
           </label>
           <textarea
@@ -308,13 +308,13 @@ export default function CustomerMenuTool({ token, user }) {
               width: '100%',
               borderRadius: '10px',
               border: '1px solid rgba(59,130,246,0.35)',
-              background: 'rgba(15,23,42,0.7)',
-              color: '#e2e8f0',
+              background: 'rgba(255,255,255,0.7)',
+              color: '#292524',
               padding: '10px 12px',
               fontSize: '0.92rem'
             }}
           />
-          <div style={{ marginTop: '6px', color: '#93c5fd', fontSize: '0.8rem' }}>
+          <div style={{ marginTop: '6px', color: '#2563eb', fontSize: '0.8rem' }}>
             Usa {'{nombre}'} para tu nombre y {'{link}'} para el enlace.
           </div>
         </div>
@@ -336,8 +336,8 @@ export default function CustomerMenuTool({ token, user }) {
             padding: '10px 12px',
             borderRadius: '8px',
             border: '1px solid #ef4444',
-            background: 'rgba(127,29,29,0.35)',
-            color: '#fecaca'
+            background: 'rgba(254,226,226,0.35)',
+            color: '#b91c1c'
           }}>
             {error}
           </div>
@@ -346,16 +346,16 @@ export default function CustomerMenuTool({ token, user }) {
         {linkData?.share_url && (
           <div style={{
             border: '1px solid rgba(59, 130, 246, 0.45)',
-            background: 'rgba(30,64,175,0.18)',
+            background: 'rgba(219,234,254,0.18)',
             borderRadius: '12px',
             padding: '14px'
           }}>
-            <div style={{ color: '#93c5fd', marginBottom: '8px', fontSize: '0.9rem' }}>Enlace compartible</div>
+            <div style={{ color: '#2563eb', marginBottom: '8px', fontSize: '0.9rem' }}>Enlace compartible</div>
             <div style={{
               wordBreak: 'break-all',
-              color: '#e2e8f0',
+              color: '#292524',
               fontSize: '0.92rem',
-              background: 'rgba(15,23,42,0.7)',
+              background: 'rgba(255,255,255,0.7)',
               border: '1px solid rgba(59,130,246,0.35)',
               borderRadius: '8px',
               padding: '10px'
@@ -374,7 +374,7 @@ export default function CustomerMenuTool({ token, user }) {
                 href={linkData.share_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ background: '#334155', color: 'white', textDecoration: 'none' }}
+                style={{ background: '#e7e0d8', color: 'white', textDecoration: 'none' }}
               >
                 Abrir vista cliente
               </a>
@@ -386,10 +386,10 @@ export default function CustomerMenuTool({ token, user }) {
       {canManageCatalog && (
         <div className="card" style={{ maxWidth: '1100px', margin: '16px auto 0' }}>
           <h3 style={{ marginBottom: '10px' }}>Gestión rápida de Catálogo Cliente</h3>
-          <p style={{ color: '#94a3b8', marginBottom: '10px' }}>
+          <p style={{ color: '#78716c', marginBottom: '10px' }}>
             Agrega productos, cambia categoría (Tableros/Accesorios), asigna imagen y actualiza precios sin recodificar.
           </p>
-          <div style={{ color: '#93c5fd', fontSize: '0.85rem', marginBottom: '14px' }}>
+          <div style={{ color: '#2563eb', fontSize: '0.85rem', marginBottom: '14px' }}>
             Para variantes de tableros: crea SKUs separados por variante (color/tamaño) y marca categoría <strong>Tableros</strong>.
           </div>
           <div style={{
@@ -397,7 +397,7 @@ export default function CustomerMenuTool({ token, user }) {
             background: 'rgba(6,78,59,0.22)',
             borderRadius: '10px',
             padding: '10px 12px',
-            color: '#bbf7d0',
+            color: '#047857',
             fontSize: '0.84rem',
             marginBottom: '12px',
             lineHeight: 1.4
@@ -415,20 +415,20 @@ export default function CustomerMenuTool({ token, user }) {
             </button>
           </div>
 
-          <div style={{ background: '#1e293b', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
+          <div style={{ background: '#ffffff', borderRadius: '10px', padding: '12px', marginBottom: '12px' }}>
             <h4 style={{ marginBottom: '10px' }}>Agregar producto</h4>
             <form onSubmit={createCatalogProduct} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
               <input
                 placeholder="SKU"
                 value={newProduct.sku}
                 onChange={(e) => setNewProduct((prev) => ({ ...prev, sku: e.target.value.toUpperCase() }))}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
               />
               <input
                 placeholder="Nombre producto/variante"
                 value={newProduct.name}
                 onChange={(e) => setNewProduct((prev) => ({ ...prev, name: e.target.value }))}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
               />
               <input
                 type="number"
@@ -437,7 +437,7 @@ export default function CustomerMenuTool({ token, user }) {
                 placeholder="Precio SF"
                 value={newProduct.sf}
                 onChange={(e) => setNewProduct((prev) => ({ ...prev, sf: e.target.value }))}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
               />
               <input
                 type="number"
@@ -446,9 +446,9 @@ export default function CustomerMenuTool({ token, user }) {
                 placeholder="Precio CF"
                 value={newProduct.cf}
                 onChange={(e) => setNewProduct((prev) => ({ ...prev, cf: e.target.value }))}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
               />
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#cbd5e1', fontSize: '0.9rem' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#57534e', fontSize: '0.9rem' }}>
                 <input
                   type="checkbox"
                   checked={Boolean(newProduct.is_gift_eligible)}
@@ -459,7 +459,7 @@ export default function CustomerMenuTool({ token, user }) {
               <select
                 value={newProduct.menu_category}
                 onChange={(e) => setNewProduct((prev) => ({ ...prev, menu_category: e.target.value }))}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
               >
                 {PRODUCT_CATEGORY_OPTIONS.map((option) => (
                   <option key={option} value={option}>{option}</option>
@@ -469,7 +469,7 @@ export default function CustomerMenuTool({ token, user }) {
                 placeholder="URL imagen (http://... o /menu-images/archivo.jpg)"
                 value={newProduct.image_url}
                 onChange={(e) => setNewProduct((prev) => ({ ...prev, image_url: e.target.value }))}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
               />
               <select
                 value=""
@@ -477,7 +477,7 @@ export default function CustomerMenuTool({ token, user }) {
                   const value = String(e.target.value || '').trim();
                   if (value) setNewProduct((prev) => ({ ...prev, image_url: value }));
                 }}
-                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#fff' }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
               >
                 <option value="">Seleccionar imagen existente...</option>
                 {imageLibrary.map((img) => (
@@ -491,9 +491,9 @@ export default function CustomerMenuTool({ token, user }) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: '8px',
-                border: '1px solid #334155',
-                background: '#0f172a',
-                color: '#e2e8f0',
+                border: '1px solid #e7e0d8',
+                background: '#ffffff',
+                color: '#292524',
                 padding: '10px',
                 cursor: uploadingImageTarget ? 'not-allowed' : 'pointer'
               }}>
@@ -521,11 +521,11 @@ export default function CustomerMenuTool({ token, user }) {
             </form>
             {newProduct.image_url && (
               <div style={{ marginTop: '10px' }}>
-                <div style={{ color: '#94a3b8', fontSize: '0.82rem', marginBottom: '6px' }}>Vista previa</div>
+                <div style={{ color: '#78716c', fontSize: '0.82rem', marginBottom: '6px' }}>Vista previa</div>
                 <img
                   src={resolvePreviewUrl(newProduct.image_url)}
                   alt="Preview producto nuevo"
-                  style={{ width: '100px', height: '100px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #334155', background: '#020617' }}
+                  style={{ width: '100px', height: '100px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #e7e0d8', background: '#ffffff' }}
                 />
               </div>
             )}
@@ -536,27 +536,27 @@ export default function CustomerMenuTool({ token, user }) {
               marginBottom: '12px',
               padding: '10px 12px',
               borderRadius: '8px',
-              border: catalogMessage.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
-              background: catalogMessage.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
-              color: catalogMessage.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+              border: catalogMessage.startsWith('Error') ? '1px solid #ef4444' : '1px solid #047857',
+              background: catalogMessage.startsWith('Error') ? 'rgba(254,226,226,0.35)' : 'rgba(6,78,59,0.35)',
+              color: catalogMessage.startsWith('Error') ? '#b91c1c' : '#047857'
             }}>
               {catalogMessage}
             </div>
           )}
 
-          <div style={{ background: '#1e293b', borderRadius: '10px', padding: '12px' }}>
+          <div style={{ background: '#ffffff', borderRadius: '10px', padding: '12px' }}>
             <h4 style={{ marginBottom: '10px' }}>Productos activos ({activeCatalogProducts.length})</h4>
             {catalogLoading ? (
-              <div style={{ color: '#94a3b8' }}>Cargando catálogo...</div>
+              <div style={{ color: '#78716c' }}>Cargando catálogo...</div>
             ) : (
               <div style={{ display: 'grid', gap: '10px' }}>
                 {activeCatalogProducts.map((row) => (
                   <div
                     key={row.sku}
                     style={{
-                      border: '1px solid #334155',
+                      border: '1px solid #e7e0d8',
                       borderRadius: '10px',
-                      background: '#0f172a',
+                      background: '#ffffff',
                       padding: '10px'
                     }}
                   >
@@ -568,8 +568,8 @@ export default function CustomerMenuTool({ token, user }) {
                       flexWrap: 'wrap',
                       marginBottom: '8px'
                     }}>
-                      <div style={{ color: '#f8fafc', fontWeight: 700, letterSpacing: '0.02em' }}>{row.sku}</div>
-                      <label style={{ color: '#cbd5e1', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ color: '#292524', fontWeight: 700, letterSpacing: '0.02em' }}>{row.sku}</div>
+                      <label style={{ color: '#57534e', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                         <input
                           type="checkbox"
                           checked={Boolean(row.is_active)}
@@ -589,7 +589,7 @@ export default function CustomerMenuTool({ token, user }) {
                         value={row.name || ''}
                         onChange={(e) => onCatalogRowField(row.sku, 'name', e.target.value)}
                         placeholder="Nombre producto/variante"
-                        style={{ gridColumn: 'span 2', minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                        style={{ gridColumn: 'span 2', minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
                       />
                       <input
                         type="number"
@@ -598,7 +598,7 @@ export default function CustomerMenuTool({ token, user }) {
                         value={row.sf ?? row.sf_price ?? 0}
                         onChange={(e) => onCatalogRowField(row.sku, 'sf', e.target.value)}
                         placeholder="SF"
-                        style={{ minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                        style={{ minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
                       />
                       <input
                         type="number"
@@ -607,9 +607,9 @@ export default function CustomerMenuTool({ token, user }) {
                         value={row.cf ?? row.cf_price ?? 0}
                         onChange={(e) => onCatalogRowField(row.sku, 'cf', e.target.value)}
                         placeholder="CF"
-                        style={{ minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                        style={{ minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
                       />
-                      <label style={{ color: '#cbd5e1', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <label style={{ color: '#57534e', fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                         <input
                           type="checkbox"
                           checked={Boolean(row.is_gift_eligible)}
@@ -620,7 +620,7 @@ export default function CustomerMenuTool({ token, user }) {
                       <select
                         value={row.menu_category || ''}
                         onChange={(e) => onCatalogRowField(row.sku, 'menu_category', e.target.value)}
-                        style={{ minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                        style={{ minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
                       >
                         {PRODUCT_CATEGORY_OPTIONS.map((option) => (
                           <option key={option} value={option}>{option}</option>
@@ -639,7 +639,7 @@ export default function CustomerMenuTool({ token, user }) {
                           value={row.image_url || ''}
                           onChange={(e) => onCatalogRowField(row.sku, 'image_url', e.target.value)}
                           placeholder="/customer-menu-images/archivo.jpg o URL"
-                          style={{ width: '100%', minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                          style={{ width: '100%', minHeight: '38px', padding: '8px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
                         />
                         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '6px' }}>
                           <select
@@ -648,7 +648,7 @@ export default function CustomerMenuTool({ token, user }) {
                               const value = String(e.target.value || '').trim();
                               if (value) onCatalogRowField(row.sku, 'image_url', value);
                             }}
-                            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #334155', background: '#020617', color: '#fff' }}
+                            style={{ padding: '8px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524' }}
                           >
                             <option value="">Elegir imagen...</option>
                             {imageLibrary.map((img) => (
@@ -659,9 +659,9 @@ export default function CustomerMenuTool({ token, user }) {
                           </select>
                           <label style={{
                             borderRadius: '8px',
-                            border: '1px solid #334155',
-                            background: '#020617',
-                            color: '#e2e8f0',
+                            border: '1px solid #e7e0d8',
+                            background: '#ffffff',
+                            color: '#292524',
                             padding: '8px 10px',
                             cursor: uploadingImageTarget ? 'not-allowed' : 'pointer',
                             whiteSpace: 'nowrap',
@@ -688,15 +688,15 @@ export default function CustomerMenuTool({ token, user }) {
                           <img
                             src={resolvePreviewUrl(row.image_url)}
                             alt={`preview-${row.sku}`}
-                            style={{ width: '58px', height: '58px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #334155', background: '#020617' }}
+                            style={{ width: '58px', height: '58px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #e7e0d8', background: '#ffffff' }}
                           />
                         ) : (
                           <div style={{
                             width: '58px',
                             height: '58px',
                             borderRadius: '8px',
-                            border: '1px dashed #334155',
-                            background: '#020617'
+                            border: '1px dashed #e7e0d8',
+                            background: '#ffffff'
                           }} />
                         )}
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -725,7 +725,7 @@ export default function CustomerMenuTool({ token, user }) {
             )}
 
             {inactiveCatalogProducts.length > 0 && (
-              <div style={{ marginTop: '12px', color: '#94a3b8', fontSize: '0.9rem' }}>
+              <div style={{ marginTop: '12px', color: '#78716c', fontSize: '0.9rem' }}>
                 Productos inactivos: {inactiveCatalogProducts.length}. Usa Admin si necesitas reactivarlos en lote.
               </div>
             )}

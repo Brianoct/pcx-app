@@ -325,17 +325,17 @@ function ExpensesPanel({ token, user, role }) {
 
       <div className="card" style={{ marginBottom: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
-          <div style={{ border: '1px solid #334155', borderRadius: '10px', padding: '12px', background: '#0f172a' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Total del período</div>
-            <div style={{ color: '#60a5fa', fontWeight: 800, fontSize: '1.25rem' }}>{formatMoney(monthlyTotal)}</div>
+          <div style={{ border: '1px solid #e7e0d8', borderRadius: '10px', padding: '12px', background: '#ffffff' }}>
+            <div style={{ color: '#78716c', fontSize: '0.85rem' }}>Total del período</div>
+            <div style={{ color: '#3b82f6', fontWeight: 800, fontSize: '1.25rem' }}>{formatMoney(monthlyTotal)}</div>
           </div>
-          <div style={{ border: '1px solid #334155', borderRadius: '10px', padding: '12px', background: '#0f172a' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Gastos recurrentes</div>
-            <div style={{ color: '#facc15', fontWeight: 800, fontSize: '1.25rem' }}>{recurringCount}</div>
+          <div style={{ border: '1px solid #e7e0d8', borderRadius: '10px', padding: '12px', background: '#ffffff' }}>
+            <div style={{ color: '#78716c', fontSize: '0.85rem' }}>Gastos recurrentes</div>
+            <div style={{ color: '#b45309', fontWeight: 800, fontSize: '1.25rem' }}>{recurringCount}</div>
           </div>
-          <div style={{ border: '1px solid #334155', borderRadius: '10px', padding: '12px', background: '#0f172a' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Mayor incremento</div>
-            <div style={{ color: biggestIncrease ? '#f87171' : '#94a3b8', fontWeight: 800, fontSize: '1.05rem' }}>
+          <div style={{ border: '1px solid #e7e0d8', borderRadius: '10px', padding: '12px', background: '#ffffff' }}>
+            <div style={{ color: '#78716c', fontSize: '0.85rem' }}>Mayor incremento</div>
+            <div style={{ color: biggestIncrease ? '#dc2626' : '#78716c', fontWeight: 800, fontSize: '1.05rem' }}>
               {biggestIncrease ? `${biggestIncrease.concept} (${formatDelta(biggestIncrease.delta_amount)})` : 'Sin variación positiva'}
             </div>
           </div>
@@ -348,13 +348,13 @@ function ExpensesPanel({ token, user, role }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
             {isAdmin ? (
               <label style={{ display: 'grid', gap: '6px' }}>
-                <span style={{ color: '#94a3b8' }}>Área de Trabajo</span>
+                <span style={{ color: '#78716c' }}>Área de Trabajo</span>
                 <input
                   value={form.department}
                   onChange={(e) => setForm((prev) => ({ ...prev, department: e.target.value }))}
                   list="expense-department-options"
                   placeholder="Ej: Ventas"
-                  style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+                  style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '10px' }}
                 />
                 <datalist id="expense-department-options">
                   {availableDepartments.map((dep) => (
@@ -364,20 +364,20 @@ function ExpensesPanel({ token, user, role }) {
               </label>
             ) : (
               <label style={{ display: 'grid', gap: '6px' }}>
-                <span style={{ color: '#94a3b8' }}>Área de Trabajo</span>
+                <span style={{ color: '#78716c' }}>Área de Trabajo</span>
                 <input
                   value={userDepartment || '—'}
                   disabled
-                  style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#111827', color: '#9ca3af', padding: '10px' }}
+                  style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#f5f1ec', color: '#78716c', padding: '10px' }}
                 />
               </label>
             )}
             <label style={{ display: 'grid', gap: '6px' }}>
-              <span style={{ color: '#94a3b8' }}>Categoría</span>
+              <span style={{ color: '#78716c' }}>Categoría</span>
               <select
                 value={form.category}
                 onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
-                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '10px' }}
               >
                 {CATEGORY_OPTIONS.map((option) => (
                   <option key={option} value={option}>{option}</option>
@@ -385,26 +385,26 @@ function ExpensesPanel({ token, user, role }) {
               </select>
             </label>
             <label style={{ display: 'grid', gap: '6px' }}>
-              <span style={{ color: '#94a3b8' }}>Concepto</span>
+              <span style={{ color: '#78716c' }}>Concepto</span>
               <input
                 value={form.concept}
                 onChange={(e) => setForm((prev) => ({ ...prev, concept: e.target.value }))}
                 placeholder="Ej: Internet oficina"
                 required
-                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '10px' }}
               />
             </label>
             <label style={{ display: 'grid', gap: '6px' }}>
-              <span style={{ color: '#94a3b8' }}>Proveedor</span>
+              <span style={{ color: '#78716c' }}>Proveedor</span>
               <input
                 value={form.vendor}
                 onChange={(e) => setForm((prev) => ({ ...prev, vendor: e.target.value }))}
                 placeholder="Ej: Tigo / Entel"
-                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '10px' }}
               />
             </label>
             <label style={{ display: 'grid', gap: '6px' }}>
-              <span style={{ color: '#94a3b8' }}>Cantidad</span>
+              <span style={{ color: '#78716c' }}>Cantidad</span>
               <input
                 type="number"
                 min="1"
@@ -412,11 +412,11 @@ function ExpensesPanel({ token, user, role }) {
                 value={form.quantity}
                 onChange={(e) => setForm((prev) => ({ ...prev, quantity: e.target.value }))}
                 required
-                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '10px' }}
               />
             </label>
             <label style={{ display: 'grid', gap: '6px' }}>
-              <span style={{ color: '#94a3b8' }}>Monto (Bs)</span>
+              <span style={{ color: '#78716c' }}>Monto (Bs)</span>
               <input
                 type="number"
                 min="0"
@@ -424,30 +424,30 @@ function ExpensesPanel({ token, user, role }) {
                 value={form.amount}
                 onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
                 required
-                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '10px' }}
               />
             </label>
             <label style={{ display: 'grid', gap: '6px' }}>
-              <span style={{ color: '#94a3b8' }}>Fecha</span>
+              <span style={{ color: '#78716c' }}>Fecha</span>
               <input
                 type="date"
                 value={form.expense_date}
                 onChange={(e) => setForm((prev) => ({ ...prev, expense_date: e.target.value }))}
-                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '10px' }}
               />
             </label>
             <label style={{ display: 'grid', gap: '6px' }}>
-              <span style={{ color: '#94a3b8' }}>Moneda (Bs)</span>
+              <span style={{ color: '#78716c' }}>Moneda (Bs)</span>
               <input
                 value={form.currency}
                 onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value.toUpperCase() }))}
-                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+                style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '10px' }}
               />
             </label>
           </div>
 
           <div style={{ display: 'grid', gap: '8px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#cbd5e1' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#57534e' }}>
               <input
                 type="checkbox"
                 checked={form.is_recurring}
@@ -457,11 +457,11 @@ function ExpensesPanel({ token, user, role }) {
             </label>
             {form.is_recurring && (
               <label style={{ display: 'grid', gap: '6px', maxWidth: '320px' }}>
-                <span style={{ color: '#94a3b8' }}>Frecuencia</span>
+                <span style={{ color: '#78716c' }}>Frecuencia</span>
                 <select
                   value={form.recurrence_period}
                   onChange={(e) => setForm((prev) => ({ ...prev, recurrence_period: e.target.value }))}
-                  style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+                  style={{ minHeight: '42px', borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '10px' }}
                 >
                   {RECURRENCE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -472,13 +472,13 @@ function ExpensesPanel({ token, user, role }) {
           </div>
 
           <label style={{ display: 'grid', gap: '6px' }}>
-            <span style={{ color: '#94a3b8' }}>Notas</span>
+            <span style={{ color: '#78716c' }}>Notas</span>
             <textarea
               rows={2}
               value={form.notes}
               onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
               placeholder="Observaciones para auditoría y recorte"
-              style={{ borderRadius: '10px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '10px' }}
+              style={{ borderRadius: '10px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '10px' }}
             />
           </label>
 
@@ -523,7 +523,7 @@ function ExpensesPanel({ token, user, role }) {
               ))}
             </select>
           )}
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#cbd5e1' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#57534e' }}>
             <input
               type="checkbox"
               checked={recurringOnly}
@@ -543,7 +543,7 @@ function ExpensesPanel({ token, user, role }) {
               }
             }}
           />
-          <button className="btn" onClick={loadData} style={{ background: '#334155', color: '#e2e8f0' }}>
+          <button className="btn" onClick={loadData} style={{ background: '#e7e0d8', color: '#292524' }}>
             Buscar
           </button>
         </div>
@@ -553,16 +553,16 @@ function ExpensesPanel({ token, user, role }) {
             marginBottom: '10px',
             padding: '10px 12px',
             borderRadius: '8px',
-            background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
-            border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
-            color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+            background: message.startsWith('Error') ? 'rgba(254,226,226,0.35)' : 'rgba(6,78,59,0.35)',
+            border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #047857',
+            color: message.startsWith('Error') ? '#b91c1c' : '#047857'
           }}>
             {message}
           </div>
         )}
 
         {loading ? (
-          <div style={{ color: '#94a3b8', padding: '8px 0' }}>Cargando gastos...</div>
+          <div style={{ color: '#78716c', padding: '8px 0' }}>Cargando gastos...</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: '1180px' }}>
@@ -583,7 +583,7 @@ function ExpensesPanel({ token, user, role }) {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8' }}>
+                    <td colSpan={10} style={{ textAlign: 'center', color: '#78716c' }}>
                       Sin gastos en el período seleccionado.
                     </td>
                   </tr>
@@ -602,7 +602,7 @@ function ExpensesPanel({ token, user, role }) {
                       <button
                         className="btn"
                         onClick={() => removeExpense(row)}
-                        style={{ minHeight: '34px', padding: '6px 10px', background: '#7f1d1d', color: '#fecaca' }}
+                        style={{ minHeight: '34px', padding: '6px 10px', background: '#fee2e2', color: '#b91c1c' }}
                       >
                         Eliminar
                       </button>
@@ -617,7 +617,7 @@ function ExpensesPanel({ token, user, role }) {
 
       <div className="card" style={{ marginBottom: 0 }}>
         <h3 style={{ marginBottom: '10px' }}>Variación de gastos recurrentes (últimos 6 meses)</h3>
-        <p style={{ color: '#94a3b8', marginBottom: '10px' }}>
+        <p style={{ color: '#78716c', marginBottom: '10px' }}>
           Ordenado por incremento para facilitar decisiones de negociación y recorte.
         </p>
         <div style={{ overflowX: 'auto' }}>
@@ -638,7 +638,7 @@ function ExpensesPanel({ token, user, role }) {
             <tbody>
               {varianceRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#94a3b8' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: '#78716c' }}>
                     Aún no hay suficientes datos recurrentes para comparar.
                   </td>
                 </tr>
@@ -651,10 +651,10 @@ function ExpensesPanel({ token, user, role }) {
                     <td>{RECURRENCE_OPTIONS.find((item) => item.value === row.recurrence_period)?.label || row.recurrence_period || '—'}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatMoney(row.latest_amount)}</td>
                     <td style={{ textAlign: 'right' }}>{formatMoney(row.previous_amount)}</td>
-                    <td style={{ textAlign: 'right', color: delta > 0 ? '#f87171' : (delta < 0 ? '#34d399' : '#cbd5e1'), fontWeight: 700 }}>
+                    <td style={{ textAlign: 'right', color: delta > 0 ? '#dc2626' : (delta < 0 ? '#047857' : '#57534e'), fontWeight: 700 }}>
                       {formatDelta(delta)}
                     </td>
-                    <td style={{ textAlign: 'right', color: delta > 0 ? '#f87171' : (delta < 0 ? '#34d399' : '#cbd5e1') }}>
+                    <td style={{ textAlign: 'right', color: delta > 0 ? '#dc2626' : (delta < 0 ? '#047857' : '#57534e') }}>
                       {row.delta_percent === null || row.delta_percent === undefined
                         ? '—'
                         : `${row.delta_percent > 0 ? '+' : ''}${Number(row.delta_percent).toFixed(2)}%`}
