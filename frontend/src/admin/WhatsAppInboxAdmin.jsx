@@ -304,10 +304,10 @@ function MessageBody({ message = {}, token }) {
 const getStatusVisual = (statusRaw, isOutbound) => {
   const status = String(statusRaw || '').trim().toLowerCase();
   if (!isOutbound) return { label: status || 'received', color: '#78716c' };
-  if (status === 'read') return { label: 'read', color: '#86efac' };
+  if (status === 'read') return { label: 'read', color: '#34B7F1' };
   if (status === 'delivered') return { label: 'delivered', color: '#2563eb' };
   if (status === 'failed') return { label: 'failed', color: '#dc2626' };
-  return { label: status || 'sent', color: '#1d4ed8' };
+  return { label: status || 'sent', color: '#78716c' };
 };
 
 const formatRelativeMinutes = (targetDateValue) => {
@@ -327,7 +327,7 @@ const getSlaBadge = (conversation = {}) => {
   const hasResponded = lastOutboundAt && !Number.isNaN(lastOutboundAt.getTime()) && lastOutboundAt.getTime() >= lastInboundAt.getTime();
   const needsResponse = Number(conversation?.unread_count || 0) > 0 || !hasResponded;
   if (!needsResponse) {
-    return { label: 'SLA ok', color: '#86efac', border: 'rgba(52,211,153,0.45)', background: 'rgba(6,78,59,0.35)' };
+    return { label: 'SLA ok', color: '#047857', border: 'rgba(5,150,105,0.45)', background: 'rgba(209,250,229,0.5)' };
   }
   const elapsedMinutes = Math.max(0, Math.round((Date.now() - lastInboundAt.getTime()) / 60000));
   const firstOutboundAt = conversation?.first_outbound_at ? new Date(conversation.first_outbound_at) : null;
@@ -360,8 +360,8 @@ function ConversationItem({ row, isActive, onClick }) {
       style={{
         width: '100%',
         textAlign: 'left',
-        border: isActive ? '1px solid rgba(59,130,246,0.8)' : '1px solid rgba(51,65,85,0.7)',
-        background: isActive ? 'linear-gradient(180deg, #1e3a5f 0%, #172338 100%)' : 'linear-gradient(180deg, #162132 0%, #f5f1ec 100%)',
+        border: isActive ? '1px solid rgba(37,211,102,0.65)' : '1px solid #e7e0d8',
+        background: isActive ? '#eafaf1' : '#ffffff',
         borderRadius: 12,
         padding: '10px 12px',
         color: '#292524',
@@ -378,7 +378,7 @@ function ConversationItem({ row, isActive, onClick }) {
           {formatDateTime(row.last_message_at)}
         </span>
       </div>
-      <div style={{ color: '#2563eb', fontSize: '0.76rem' }}>{normalizePhoneDisplay(row.contact_phone)}</div>
+      <div style={{ color: '#128C7E', fontSize: '0.76rem' }}>{normalizePhoneDisplay(row.contact_phone)}</div>
       <div style={{
         color: '#57534e',
         fontSize: '0.8rem',
@@ -392,9 +392,9 @@ function ConversationItem({ row, isActive, onClick }) {
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{
             fontSize: '0.72rem',
-            color: row.status === 'closed' ? '#dc2626' : '#86efac',
+            color: row.status === 'closed' ? '#dc2626' : '#047857',
             border: row.status === 'closed' ? '1px solid rgba(248,113,113,0.5)' : '1px solid rgba(52,211,153,0.5)',
-            background: row.status === 'closed' ? 'rgba(254,226,226,0.35)' : 'rgba(6,78,59,0.35)',
+            background: row.status === 'closed' ? 'rgba(254,226,226,0.5)' : 'rgba(209,250,229,0.6)',
             borderRadius: 999,
             padding: '2px 8px'
           }}>
@@ -404,7 +404,7 @@ function ConversationItem({ row, isActive, onClick }) {
             fontSize: '0.72rem',
             color: '#1d4ed8',
             border: '1px solid rgba(59,130,246,0.45)',
-            background: 'rgba(30,58,138,0.32)',
+            background: 'rgba(219,234,254,0.65)',
             borderRadius: 999,
             padding: '2px 8px'
           }}>
@@ -441,7 +441,7 @@ function ConversationItem({ row, isActive, onClick }) {
               minWidth: 20,
               height: 20,
               borderRadius: 999,
-              background: '#f97316',
+              background: '#25D366',
               color: 'white',
               fontSize: '0.74rem',
               display: 'inline-flex',
@@ -1202,7 +1202,7 @@ export default function WhatsAppInboxAdmin({ token }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
             <h3 style={{ marginBottom: 4 }}>WhatsApp Inbox</h3>
-            <div style={{ marginTop: 6, fontSize: '0.76rem', color: wsConnected ? '#86efac' : '#b45309' }}>
+            <div style={{ marginTop: 6, fontSize: '0.76rem', color: wsConnected ? '#047857' : '#b45309' }}>
               WebSocket: {wsConnected ? 'conectado (tiempo real)' : 'desconectado (usa Actualizar manual)'}
             </div>
           </div>
@@ -1395,7 +1395,7 @@ export default function WhatsAppInboxAdmin({ token }) {
             )}
           </div>
 
-          <div style={{ padding: 14, overflowY: 'auto', maxHeight: 470, background: 'linear-gradient(180deg, #ffffff 0%, #faf8f5 100%)' }}>
+          <div style={{ padding: 14, overflowY: 'auto', maxHeight: 470, background: '#efe7dd' }}>
             {loadingMessages ? (
               <div style={{ color: '#78716c', textAlign: 'center', paddingTop: 24 }}>Cargando mensajes...</div>
             ) : !selectedConversation ? (
@@ -1420,8 +1420,8 @@ export default function WhatsAppInboxAdmin({ token }) {
                         maxWidth: '78%',
                         borderRadius: 12,
                         padding: '8px 10px',
-                        border: isOutbound ? '1px solid rgba(59,130,246,0.55)' : '1px solid rgba(214,204,192,0.65)',
-                        background: isOutbound ? 'linear-gradient(180deg, #1d4ed8 0%, #1d4ed8 100%)' : '#f5f1ec',
+                        border: isOutbound ? '1px solid rgba(37,211,102,0.35)' : '1px solid rgba(214,204,192,0.65)',
+                        background: isOutbound ? '#d9fdd3' : '#ffffff',
                         color: '#292524'
                       }}>
                         <MessageBody message={message} token={token} />
@@ -1431,7 +1431,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                           justifyContent: 'space-between',
                           gap: 10,
                           fontSize: '0.72rem',
-                          color: isOutbound ? '#1d4ed8' : '#78716c'
+                          color: isOutbound ? '#5f7a5f' : '#78716c'
                         }}>
                           <span>{formatDateTime(message.created_at)}</span>
                           <span style={{ color: statusVisual.color }}>{statusVisual.label}</span>
