@@ -154,7 +154,7 @@ export default function ProductCostingAdmin({ token }) {
     <div style={{ display: 'grid', gap: 14 }}>
       <div className="card" style={{ marginBottom: 0 }}>
         <h3 style={{ marginBottom: 8 }}>Costeo por producto</h3>
-        <p style={{ color: '#94a3b8', marginBottom: 12 }}>
+        <p style={{ color: '#78716c', marginBottom: 12 }}>
           Define componentes de costo y utilidad por producto. El precio final calculado se guarda como precio del producto en catálogo.
         </p>
         <input
@@ -168,9 +168,9 @@ export default function ProductCostingAdmin({ token }) {
             minHeight: 40,
             padding: '8px 10px',
             borderRadius: 8,
-            border: '1px solid #334155',
-            background: '#0f172a',
-            color: '#f1f5f9'
+            border: '1px solid #e7e0d8',
+            background: '#ffffff',
+            color: '#292524'
           }}
         />
       </div>
@@ -179,16 +179,16 @@ export default function ProductCostingAdmin({ token }) {
         <div style={{
           padding: '10px 12px',
           borderRadius: '8px',
-          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
-          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
-          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+          background: message.startsWith('Error') ? 'rgba(254,226,226,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #047857',
+          color: message.startsWith('Error') ? '#b91c1c' : '#047857'
         }}>
           {message}
         </div>
       )}
 
       {filteredRows.length === 0 ? (
-        <div className="card" style={{ marginBottom: 0, color: '#94a3b8' }}>
+        <div className="card" style={{ marginBottom: 0, color: '#78716c' }}>
           No hay productos para el filtro seleccionado.
         </div>
       ) : filteredRows.map((row) => {
@@ -198,20 +198,20 @@ export default function ProductCostingAdmin({ token }) {
           <div key={row.sku} className="card" style={{ marginBottom: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
               <div>
-                <div style={{ color: '#f8fafc', fontWeight: 700 }}>{row.name}</div>
-                <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{row.sku}</div>
+                <div style={{ color: '#292524', fontWeight: 700 }}>{row.name}</div>
+                <div style={{ color: '#78716c', fontSize: '0.85rem' }}>{row.sku}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Precio actual</div>
-                <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{Number(row.current_sf || 0).toFixed(2)} Bs</div>
-                <div style={{ color: '#10b981', fontWeight: 700, fontSize: '0.9rem' }}>
+                <div style={{ color: '#78716c', fontSize: '0.8rem' }}>Precio actual</div>
+                <div style={{ color: '#292524', fontWeight: 700 }}>{Number(row.current_sf || 0).toFixed(2)} Bs</div>
+                <div style={{ color: '#047857', fontWeight: 700, fontSize: '0.9rem' }}>
                   Precio calculado: {preview.total.toFixed(2)} Bs
                 </div>
               </div>
             </div>
 
             <div style={{ marginBottom: 10 }}>
-              <label style={{ display: 'grid', gap: 6, maxWidth: 280, color: '#cbd5e1', fontSize: '0.86rem' }}>
+              <label style={{ display: 'grid', gap: 6, maxWidth: 280, color: '#57534e', fontSize: '0.86rem' }}>
                 Proceso para Laser/Punzonado
                 <select
                   value={row.draft_mode}
@@ -219,9 +219,9 @@ export default function ProductCostingAdmin({ token }) {
                   style={{
                     minHeight: 38,
                     borderRadius: 8,
-                    border: '1px solid #334155',
-                    background: '#0f172a',
-                    color: '#f1f5f9',
+                    border: '1px solid #e7e0d8',
+                    background: '#ffffff',
+                    color: '#292524',
                     padding: '6px 8px'
                   }}
                 >
@@ -239,13 +239,13 @@ export default function ProductCostingAdmin({ token }) {
                   style={{
                     display: 'grid',
                     gap: 6,
-                    border: '1px solid #334155',
+                    border: '1px solid #e7e0d8',
                     borderRadius: 10,
                     padding: '10px',
-                    background: '#111827'
+                    background: '#f5f1ec'
                   }}
                 >
-                  <span style={{ color: '#e2e8f0', fontSize: '0.82rem' }}>{component.label}</span>
+                  <span style={{ color: '#292524', fontSize: '0.82rem' }}>{component.label}</span>
                   <input
                     type="number"
                     min="0"
@@ -256,14 +256,14 @@ export default function ProductCostingAdmin({ token }) {
                       width: '100%',
                       minHeight: 36,
                       borderRadius: 8,
-                      border: '1px solid #334155',
-                      background: '#0f172a',
-                      color: '#f1f5f9',
+                      border: '1px solid #e7e0d8',
+                      background: '#ffffff',
+                      color: '#292524',
                       padding: '6px 8px',
                       textAlign: 'right'
                     }}
                   />
-                  <span style={{ color: '#94a3b8', fontSize: '0.74rem' }}>
+                  <span style={{ color: '#78716c', fontSize: '0.74rem' }}>
                     {preview.percentages[component.key].toFixed(2)}% del precio final
                   </span>
                 </label>
@@ -271,10 +271,10 @@ export default function ProductCostingAdmin({ token }) {
             </div>
 
             <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-              <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-                Costo sin utilidad: <strong style={{ color: '#e2e8f0' }}>{preview.total_without_profit.toFixed(2)} Bs</strong>
+              <div style={{ color: '#78716c', fontSize: '0.85rem' }}>
+                Costo sin utilidad: <strong style={{ color: '#292524' }}>{preview.total_without_profit.toFixed(2)} Bs</strong>
                 {' · '}
-                Utilidad: <strong style={{ color: '#fbbf24' }}>{Number(preview.parsed.utilidad || 0).toFixed(2)} Bs</strong>
+                Utilidad: <strong style={{ color: '#b45309' }}>{Number(preview.parsed.utilidad || 0).toFixed(2)} Bs</strong>
               </div>
               <button
                 type="button"

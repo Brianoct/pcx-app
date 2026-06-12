@@ -193,7 +193,7 @@ function EquipmentCatalogAdmin({ token }) {
 
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px' }}>
+      <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px' }}>
         <h3 style={{ marginBottom: '12px' }}>Equipos</h3>
         <form onSubmit={createRow} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
           <input
@@ -270,18 +270,18 @@ function EquipmentCatalogAdmin({ token }) {
         <div style={{
           padding: '10px 12px',
           borderRadius: '8px',
-          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
-          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
-          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+          background: message.startsWith('Error') ? 'rgba(254,226,226,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #047857',
+          color: message.startsWith('Error') ? '#b91c1c' : '#047857'
         }}>
           {message}
         </div>
       )}
 
-      <div style={{ background: '#1e293b', borderRadius: '12px', padding: '16px' }}>
+      <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px' }}>
         <h3 style={{ marginBottom: '12px' }}>Catálogo de equipos</h3>
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Cargando equipos...</p>
+          <p style={{ color: '#78716c' }}>Cargando equipos...</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: '1220px' }}>
@@ -301,7 +301,7 @@ function EquipmentCatalogAdmin({ token }) {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={10} style={{ textAlign: 'center', color: '#94a3b8' }}>Sin equipos</td></tr>
+                  <tr><td colSpan={10} style={{ textAlign: 'center', color: '#78716c' }}>Sin equipos</td></tr>
                 ) : rows.map((row) => (
                   <tr key={row.id}>
                     <td>

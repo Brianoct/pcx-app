@@ -76,9 +76,9 @@ function QualityControlCommissionConfig({ token }) {
   if (loading) return <div style={{ textAlign: 'center', padding: '30px' }}>Cargando comisiones por producto...</div>;
 
   return (
-    <div style={{ background: '#1e293b', borderRadius: '12px', padding: '20px' }}>
+    <div style={{ background: '#ffffff', borderRadius: '12px', padding: '20px' }}>
       <h3 style={{ marginBottom: '10px' }}>Control de calidad — comisión por producto</h3>
-      <p style={{ color: '#94a3b8', marginBottom: '14px' }}>
+      <p style={{ color: '#78716c', marginBottom: '14px' }}>
         Define el % por producto para comisión de piezas aprobadas. Aplica a Admin, Almacén Lider, Microfabrica Lider y Microfabrica.
       </p>
       {message && (
@@ -86,9 +86,9 @@ function QualityControlCommissionConfig({ token }) {
           marginBottom: '12px',
           padding: '10px 12px',
           borderRadius: '8px',
-          background: message.startsWith('Error') ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
-          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #10b981',
-          color: message.startsWith('Error') ? '#fecaca' : '#bbf7d0'
+          background: message.startsWith('Error') ? 'rgba(254,226,226,0.35)' : 'rgba(6,78,59,0.35)',
+          border: message.startsWith('Error') ? '1px solid #ef4444' : '1px solid #047857',
+          color: message.startsWith('Error') ? '#b91c1c' : '#047857'
         }}>
           {message}
         </div>
@@ -119,9 +119,9 @@ function QualityControlCommissionConfig({ token }) {
                       width: '110px',
                       padding: '6px 8px',
                       borderRadius: '8px',
-                      border: '1px solid #334155',
-                      background: '#0f172a',
-                      color: 'white',
+                      border: '1px solid #e7e0d8',
+                      background: '#ffffff',
+                      color: '#292524',
                       textAlign: 'right'
                     }}
                   />
@@ -138,9 +138,9 @@ function QualityControlCommissionConfig({ token }) {
                       width: '110px',
                       padding: '6px 8px',
                       borderRadius: '8px',
-                      border: '1px solid #334155',
-                      background: '#0f172a',
-                      color: 'white',
+                      border: '1px solid #e7e0d8',
+                      background: '#ffffff',
+                      color: '#292524',
                       textAlign: 'right'
                     }}
                   />

@@ -74,12 +74,12 @@ function TimeOffAdminPanel({ token }) {
           <select
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            style={{ minHeight: '40px', minWidth: '120px', borderRadius: '8px', border: '1px solid #334155', background: '#0f172a', color: '#e2e8f0', padding: '8px 10px' }}
+            style={{ minHeight: '40px', minWidth: '120px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', padding: '8px 10px' }}
           >
             {[2024, 2025, 2026, 2027, 2028].map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-        <p style={{ marginTop: '8px', color: '#94a3b8' }}>
+        <p style={{ marginTop: '8px', color: '#78716c' }}>
           Política anual: 14 días de vacaciones pagadas y 5 días de enfermedad pagados por usuario.
         </p>
       </div>
@@ -87,7 +87,7 @@ function TimeOffAdminPanel({ token }) {
       <div className="card" style={{ marginBottom: 0 }}>
         <h4 style={{ marginBottom: '10px' }}>Resumen por usuario ({year})</h4>
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Cargando resumen...</p>
+          <p style={{ color: '#78716c' }}>Cargando resumen...</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: '860px' }}>
@@ -103,7 +103,7 @@ function TimeOffAdminPanel({ token }) {
               </thead>
               <tbody>
                 {summary.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', color: '#94a3b8' }}>Sin datos</td></tr>
+                  <tr><td colSpan={6} style={{ textAlign: 'center', color: '#78716c' }}>Sin datos</td></tr>
                 ) : summary.map((row) => (
                   <tr key={row.user_id}>
                     <td>{row.email}</td>
@@ -122,9 +122,9 @@ function TimeOffAdminPanel({ token }) {
 
       <div className="card" style={{ marginBottom: 0 }}>
         <h4 style={{ marginBottom: '10px' }}>Solicitudes ({year})</h4>
-        {error && <div style={{ color: '#fca5a5', marginBottom: '10px' }}>{error}</div>}
+        {error && <div style={{ color: '#dc2626', marginBottom: '10px' }}>{error}</div>}
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Cargando solicitudes...</p>
+          <p style={{ color: '#78716c' }}>Cargando solicitudes...</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: '980px' }}>
@@ -142,7 +142,7 @@ function TimeOffAdminPanel({ token }) {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', color: '#94a3b8' }}>No hay solicitudes</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign: 'center', color: '#78716c' }}>No hay solicitudes</td></tr>
                 ) : rows.map((row) => (
                   <tr key={row.id}>
                     <td>{row.user_email}</td>
@@ -158,7 +158,7 @@ function TimeOffAdminPanel({ token }) {
                           className="btn"
                           disabled={updatingId === row.id || row.status === 'approved'}
                           onClick={() => updateStatus(row.id, 'approved')}
-                          style={{ minHeight: '34px', padding: '6px 10px', background: '#10b981', color: 'white' }}
+                          style={{ minHeight: '34px', padding: '6px 10px', background: '#047857', color: 'white' }}
                         >
                           Aprobar
                         </button>
@@ -174,7 +174,7 @@ function TimeOffAdminPanel({ token }) {
                           className="btn"
                           disabled={updatingId === row.id || row.status === 'pending'}
                           onClick={() => updateStatus(row.id, 'pending')}
-                          style={{ minHeight: '34px', padding: '6px 10px', background: '#334155', color: 'white' }}
+                          style={{ minHeight: '34px', padding: '6px 10px', background: '#e7e0d8', color: 'white' }}
                         >
                           Pendiente
                         </button>

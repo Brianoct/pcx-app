@@ -231,14 +231,14 @@ export default function QualityControlPanel({ token }) {
 
   return (
     <div className="container">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
+      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
         Control de calidad
       </h2>
 
       <div className="card" style={{ marginBottom: '16px' }}>
         <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', alignItems: 'end' }}>
           <div>
-            <label style={{ display: 'block', color: '#94a3b8', marginBottom: '6px' }}>Mes</label>
+            <label style={{ display: 'block', color: '#78716c', marginBottom: '6px' }}>Mes</label>
             <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="filter-select">
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                 <option key={m} value={m}>
@@ -248,15 +248,15 @@ export default function QualityControlPanel({ token }) {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', color: '#94a3b8', marginBottom: '6px' }}>Año</label>
+            <label style={{ display: 'block', color: '#78716c', marginBottom: '6px' }}>Año</label>
             <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="filter-select">
               {[2024, 2025, 2026, 2027, 2028].map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
           </div>
-          <div style={{ alignSelf: 'center', color: '#94a3b8' }}>
-            Comisión mensual total: <strong style={{ color: '#10b981' }}>{formatMoney(totalCommission)}</strong>
+          <div style={{ alignSelf: 'center', color: '#78716c' }}>
+            Comisión mensual total: <strong style={{ color: '#047857' }}>{formatMoney(totalCommission)}</strong>
           </div>
         </div>
       </div>
@@ -268,7 +268,7 @@ export default function QualityControlPanel({ token }) {
         <form onSubmit={submitCheck} style={{ display: 'grid', gap: '10px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
             <div>
-              <label style={{ display: 'block', color: '#94a3b8', marginBottom: '6px' }}>Producto</label>
+              <label style={{ display: 'block', color: '#78716c', marginBottom: '6px' }}>Producto</label>
               <select
                 value={form.sku}
                 onChange={(e) => setForm((prev) => ({ ...prev, sku: e.target.value }))}
@@ -283,7 +283,7 @@ export default function QualityControlPanel({ token }) {
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', color: '#94a3b8', marginBottom: '6px' }}>Cantidad</label>
+              <label style={{ display: 'block', color: '#78716c', marginBottom: '6px' }}>Cantidad</label>
               <input
                 type="number"
                 min="1"
@@ -294,7 +294,7 @@ export default function QualityControlPanel({ token }) {
               />
             </div>
             <div>
-              <label style={{ display: 'block', color: '#94a3b8', marginBottom: '6px' }}>Resultado</label>
+              <label style={{ display: 'block', color: '#78716c', marginBottom: '6px' }}>Resultado</label>
               <select
                 value={form.result}
                 onChange={(e) => setForm((prev) => ({ ...prev, result: e.target.value }))}
@@ -310,7 +310,7 @@ export default function QualityControlPanel({ token }) {
           </div>
 
           {selectedProduct && (
-            <div style={{ color: '#94a3b8' }}>
+            <div style={{ color: '#78716c' }}>
               Comisión por pieza aprobada: {(Number(selectedProduct.base_price || 0) * Number(selectedProduct.commission_rate || 0) / 100).toFixed(2)} Bs
               {' '}({Number(selectedProduct.commission_rate || 0).toFixed(2)}% de {Number(selectedProduct.base_price || 0).toFixed(2)} Bs)
             </div>
@@ -335,7 +335,7 @@ export default function QualityControlPanel({ token }) {
       </div>
 
       {error && (
-        <div className="card" style={{ borderColor: '#ef4444', color: '#fecaca', marginBottom: '16px' }}>
+        <div className="card" style={{ borderColor: '#ef4444', color: '#b91c1c', marginBottom: '16px' }}>
           {error}
         </div>
       )}
@@ -343,9 +343,9 @@ export default function QualityControlPanel({ token }) {
       <div className="card">
         <h3 style={{ marginBottom: '10px' }}>Resumen de productos aprobados/rechazados ({month}/{year})</h3>
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Cargando...</p>
+          <p style={{ color: '#78716c' }}>Cargando...</p>
         ) : summaryRows.length === 0 ? (
-          <p style={{ color: '#94a3b8' }}>Sin registros para el período seleccionado.</p>
+          <p style={{ color: '#78716c' }}>Sin registros para el período seleccionado.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: '900px' }}>
@@ -369,7 +369,7 @@ export default function QualityControlPanel({ token }) {
                     <td>{Number(row.qty_rejected || 0)}</td>
                     <td>{Number(row.commission_rate || 0).toFixed(2)}%</td>
                     <td>{formatMoney(Number(row.base_price || 0) * Number(row.commission_rate || 0) / 100)}</td>
-                    <td style={{ color: '#10b981', fontWeight: 700 }}>{formatMoney(row.commission_total)}</td>
+                    <td style={{ color: '#047857', fontWeight: 700 }}>{formatMoney(row.commission_total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -381,9 +381,9 @@ export default function QualityControlPanel({ token }) {
       <div className="card">
         <h3 style={{ marginBottom: '10px' }}>Registros del período ({month}/{year})</h3>
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Cargando...</p>
+          <p style={{ color: '#78716c' }}>Cargando...</p>
         ) : records.length === 0 ? (
-          <p style={{ color: '#94a3b8' }}>Sin registros para el período seleccionado.</p>
+          <p style={{ color: '#78716c' }}>Sin registros para el período seleccionado.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: '960px' }}>
@@ -405,7 +405,7 @@ export default function QualityControlPanel({ token }) {
                     <td>{row.sku}</td>
                     <td>{row.product_name}</td>
                     <td>{Number(row.quantity || 0)}</td>
-                    <td style={{ color: row.result === 'passed' ? '#10b981' : '#f59e0b', fontWeight: 700 }}>
+                    <td style={{ color: row.result === 'passed' ? '#047857' : '#f59e0b', fontWeight: 700 }}>
                       {row.result === 'passed' ? 'Aprobado' : 'Rechazado'}
                     </td>
                     <td>{row.user_email || '-'}</td>

@@ -51,7 +51,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     if (paymentMethod === 'QR') return '#0ea5e9';
     if (paymentMethod === 'Efectivo') return '#16a34a';
     if (paymentMethod === 'Mixto') return '#a855f7';
-    return '#64748b';
+    return '#a8a29e';
   };
   const paymentMethodSelectStyle = (paymentMethod = '', disabled = false) => ({
     background: getPaymentMethodColor(paymentMethod),
@@ -1084,8 +1084,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     setOpenActionsMenuId((prev) => (prev === quoteId ? null : quoteId));
   };
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando historial...</div>;
-  if (error) return <div style={{ color: '#f87171', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
+  if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#78716c' }}>Cargando historial...</div>;
+  if (error) return <div style={{ color: '#dc2626', textAlign: 'center', padding: '50px' }}>Error: {error}</div>;
 
   const totalQuotes = filteredQuotes.length;
   const totalPages = Math.ceil(totalQuotes / quotesPerPage);
@@ -1113,7 +1113,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   if (!canViewHistory && !canViewGlobalHistory) {
     return (
       <div className="container">
-        <div className="card" style={{ textAlign: 'center', color: '#fca5a5' }}>
+        <div className="card" style={{ textAlign: 'center', color: '#dc2626' }}>
           No tienes acceso al historial.
         </div>
       </div>
@@ -1122,7 +1122,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
 
   return (
     <div className="container">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>
+      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
         Historial de Cotizaciones
       </h2>
 
@@ -1171,7 +1171,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       </div>
 
       {totalQuotes === 0 ? (
-        <p style={{ textAlign: 'center', color: '#94a3b8' }}>
+        <p style={{ textAlign: 'center', color: '#78716c' }}>
           No hay cotizaciones que coincidan con los filtros.
         </p>
       ) : (
@@ -1193,7 +1193,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                             background: 'transparent',
                             padding: 0,
                             margin: 0,
-                            color: '#93c5fd',
+                            color: '#2563eb',
                             fontSize: '0.75rem',
                             textDecoration: 'underline',
                             cursor: 'pointer'
@@ -1202,7 +1202,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           {formatPaymentDetail(quote)}
                         </button>
                       ) : (
-                        <span style={{ fontSize: '0.75rem', color: '#93c5fd' }}>{formatPaymentDetail(quote)}</span>
+                        <span style={{ fontSize: '0.75rem', color: '#2563eb' }}>{formatPaymentDetail(quote)}</span>
                       )}
                     </div>
                   </div>
@@ -1379,7 +1379,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                               padding: 0,
                               margin: 0,
                               fontSize: '0.72rem',
-                              color: canEditPaymentForStatus(quote.status) ? '#93c5fd' : '#64748b',
+                              color: canEditPaymentForStatus(quote.status) ? '#2563eb' : '#a8a29e',
                               fontWeight: 600,
                               textDecoration: canEditPaymentForStatus(quote.status) ? 'underline' : 'none',
                               cursor: canEditPaymentForStatus(quote.status) ? 'pointer' : 'not-allowed'
@@ -1417,9 +1417,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                                   minHeight: '30px',
                                   padding: '4px 8px',
                                   fontSize: '0.72rem',
-                                  background: '#334155',
-                                  color: '#e2e8f0',
-                                  border: '1px solid #475569'
+                                  background: '#e7e0d8',
+                                  color: '#292524',
+                                  border: '1px solid #d9d0c5'
                                 }}
                               >
                                 Cerrar
@@ -1435,11 +1435,11 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           className="history-status-select"
                           style={{
                             background: 
-                              quote.status === 'Enviado' ? '#10b981' :
+                              quote.status === 'Enviado' ? '#047857' :
                               quote.status === 'Embalado' ? '#8b5cf6' :
                               quote.status === 'Pagado' ? '#3b82f6' :
                               quote.status === 'Confirmado' ? '#f59e0b' :
-                              '#64748b',
+                              '#a8a29e',
                             color: 'white',
                             cursor: 'pointer'
                           }}
@@ -1525,7 +1525,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                 disabled={currentPage === 1}
                 style={{
                   padding: '10px 16px',
-                  background: currentPage === 1 ? '#334155' : '#3b82f6',
+                  background: currentPage === 1 ? '#e7e0d8' : '#3b82f6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -1535,7 +1535,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                 Anterior
               </button>
 
-              <span style={{ color: '#94a3b8' }}>
+              <span style={{ color: '#78716c' }}>
                 Página {currentPage} de {totalPages}
               </span>
 
@@ -1544,7 +1544,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                 disabled={currentPage === totalPages}
                 style={{
                   padding: '10px 16px',
-                  background: currentPage === totalPages ? '#334155' : '#3b82f6',
+                  background: currentPage === totalPages ? '#e7e0d8' : '#3b82f6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -1779,7 +1779,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
               </div>
             </div>
 
-            <div style={{ marginTop: '10px', color: '#cbd5e1', display: 'flex', justifyContent: 'flex-end', gap: '16px', fontWeight: 600 }}>
+            <div style={{ marginTop: '10px', color: '#57534e', display: 'flex', justifyContent: 'flex-end', gap: '16px', fontWeight: 600 }}>
               <span>Subtotal: {Number(editingQuote.subtotal || 0).toFixed(2)} Bs</span>
               <span>Total: {Number(editingQuote.total || 0).toFixed(2)} Bs</span>
             </div>

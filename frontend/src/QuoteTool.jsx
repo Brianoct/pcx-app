@@ -720,15 +720,15 @@ export default function QuoteTool({ token, user }) {
           padding: '10px 12px',
           borderRadius: '8px',
           border: '1px solid #0ea5e9',
-          background: 'rgba(2, 132, 199, 0.2)',
-          color: '#bae6fd'
+          background: 'rgba(224, 242, 254, 0.2)',
+          color: '#0369a1'
         }}>
           {draftNotice}
         </div>
       )}
       <header style={{ textAlign: 'center', marginBottom: '14px' }}>
         {currentDateTime && (
-          <div style={{ color: '#9ca3af', fontSize: '1.1rem', fontWeight: '500' }}>
+          <div style={{ color: '#78716c', fontSize: '1.1rem', fontWeight: '500' }}>
             {currentDateTime}
           </div>
         )}
@@ -984,8 +984,8 @@ export default function QuoteTool({ token, user }) {
                   ? 'Cargando...'
                   : Number.isFinite(stockNumber) ? stockNumber : 'N/D';
                 const stockColor = stock === null || stock === undefined
-                  ? '#9ca3af'
-                  : (Number.isFinite(stockNumber) && stockNumber > 0 ? '#10b981' : '#ef4444');
+                  ? '#78716c'
+                  : (Number.isFinite(stockNumber) && stockNumber > 0 ? '#047857' : '#ef4444');
 
                 return (
                   <div key={row.id} className="mobile-card">
@@ -1048,7 +1048,7 @@ export default function QuoteTool({ token, user }) {
             <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
                 <thead>
-                  <tr style={{ background: '#111827' }}>
+                  <tr style={{ background: '#f5f1ec' }}>
                     <th style={{ padding: '12px', textAlign: 'left' }}>Producto / Combo</th>
                     <th style={{ padding: '12px', width: '80px' }}>Cant.</th>
                     <th style={{ padding: '12px', width: '80px', textAlign: 'center' }}>Disp.</th>
@@ -1060,7 +1060,7 @@ export default function QuoteTool({ token, user }) {
                 <tbody>
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#78716c' }}>
                         Agrega líneas arriba
                       </td>
                     </tr>
@@ -1072,11 +1072,11 @@ export default function QuoteTool({ token, user }) {
                         ? 'Cargando...'
                         : Number.isFinite(stockNumber) ? stockNumber : 'N/D';
                       const stockColor = stock === null || stock === undefined
-                        ? '#9ca3af'
-                        : (Number.isFinite(stockNumber) && stockNumber > 0 ? '#10b981' : '#ef4444');
+                        ? '#78716c'
+                        : (Number.isFinite(stockNumber) && stockNumber > 0 ? '#047857' : '#ef4444');
 
                       return (
-                        <tr key={row.id} style={{ borderBottom: '1px solid #374151' }}>
+                        <tr key={row.id} style={{ borderBottom: '1px solid #e7e0d8' }}>
                           <td style={{ padding: '12px' }}>
                             <select
                               value={row.sku || ''}
@@ -1143,23 +1143,23 @@ export default function QuoteTool({ token, user }) {
             bottom: 0,
             left: 0,
             right: 0,
-            background: '#0f172a',
+            background: '#ffffff',
             padding: '16px',
-            borderTop: '1px solid #374151',
+            borderTop: '1px solid #e7e0d8',
             boxShadow: '0 -4px 12px rgba(0,0,0,0.4)',
             zIndex: 10
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
               <div>
-                <small style={{ color: '#9ca3af' }}>Subtotal</small>
+                <small style={{ color: '#78716c' }}>Subtotal</small>
                 <div style={{ fontSize: '1.4rem', fontWeight: '600' }}>{subtotal.toFixed(2)} Bs</div>
               </div>
 
               <div style={{ display: 'grid', gap: '8px', flex: '1 1 320px', minWidth: '280px' }}>
-                <small style={{ color: '#9ca3af' }}>Negociación de descuento</small>
+                <small style={{ color: '#78716c' }}>Negociación de descuento</small>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: '8px' }}>
                   <label style={{ display: 'grid', gap: '4px' }}>
-                    <span style={{ color: '#9ca3af', fontSize: '0.78rem' }}>Descuento %</span>
+                    <span style={{ color: '#78716c', fontSize: '0.78rem' }}>Descuento %</span>
                     <input
                       type="number"
                       min="0"
@@ -1170,15 +1170,15 @@ export default function QuoteTool({ token, user }) {
                       style={{
                         width: '100%',
                         padding: '8px',
-                        background: '#0f172a',
-                        color: 'white',
-                        border: `1px solid ${discountMode === 'percent' ? '#e11d48' : '#374151'}`,
+                        background: '#ffffff',
+                        color: '#292524',
+                        border: `1px solid ${discountMode === 'percent' ? '#e11d48' : '#e7e0d8'}`,
                         borderRadius: '6px'
                       }}
                     />
                   </label>
                   <label style={{ display: 'grid', gap: '4px' }}>
-                    <span style={{ color: '#9ca3af', fontSize: '0.78rem' }}>Descuento Bs</span>
+                    <span style={{ color: '#78716c', fontSize: '0.78rem' }}>Descuento Bs</span>
                     <input
                       type="number"
                       min="0"
@@ -1189,15 +1189,15 @@ export default function QuoteTool({ token, user }) {
                       style={{
                         width: '100%',
                         padding: '8px',
-                        background: '#0f172a',
-                        color: 'white',
-                        border: `1px solid ${discountMode === 'amount' ? '#e11d48' : '#374151'}`,
+                        background: '#ffffff',
+                        color: '#292524',
+                        border: `1px solid ${discountMode === 'amount' ? '#e11d48' : '#e7e0d8'}`,
                         borderRadius: '6px'
                       }}
                     />
                   </label>
                   <label style={{ display: 'grid', gap: '4px' }}>
-                    <span style={{ color: '#9ca3af', fontSize: '0.78rem' }}>Total objetivo Bs</span>
+                    <span style={{ color: '#78716c', fontSize: '0.78rem' }}>Total objetivo Bs</span>
                     <input
                       type="number"
                       min="0"
@@ -1208,9 +1208,9 @@ export default function QuoteTool({ token, user }) {
                       style={{
                         width: '100%',
                         padding: '8px',
-                        background: '#0f172a',
-                        color: 'white',
-                        border: `1px solid ${discountMode === 'target' ? '#e11d48' : '#374151'}`,
+                        background: '#ffffff',
+                        color: '#292524',
+                        border: `1px solid ${discountMode === 'target' ? '#e11d48' : '#e7e0d8'}`,
                         borderRadius: '6px'
                       }}
                     />
@@ -1232,7 +1232,7 @@ export default function QuoteTool({ token, user }) {
               </div>
 
               <div>
-                <small style={{ color: '#9ca3af' }}>Total negociado</small>
+                <small style={{ color: '#78716c' }}>Total negociado</small>
                 <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#e11d48' }}>
                   {total.toFixed(2)} Bs
                 </div>

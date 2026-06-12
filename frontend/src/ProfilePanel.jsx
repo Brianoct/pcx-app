@@ -135,12 +135,12 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
 
   return (
     <div className="container">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#f87171' }}>Perfil</h2>
+      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>Perfil</h2>
 
       <div className="card">
         <h3 style={{ marginBottom: '12px' }}>Datos de usuario</h3>
-        <div style={{ color: '#94a3b8', marginBottom: '12px' }}>
-          Rol actual: <strong style={{ color: '#e2e8f0' }}>{roleLabel}</strong>
+        <div style={{ color: '#78716c', marginBottom: '12px' }}>
+          Rol actual: <strong style={{ color: '#292524' }}>{roleLabel}</strong>
         </div>
 
         <form onSubmit={saveProfile} className="quote-edit-grid">

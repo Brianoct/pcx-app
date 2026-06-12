@@ -252,12 +252,12 @@ function Combos({ token }) {
 
   return (
     <div style={{ padding: '16px' }}>
-      <h2 style={{ textAlign: 'center', color: '#f87171', marginBottom: '24px' }}>Combos</h2>
-      {error && <p style={{ textAlign: 'center', color: '#f87171', marginBottom: '12px' }}>{error}</p>}
+      <h2 style={{ textAlign: 'center', color: '#dc2626', marginBottom: '24px' }}>Combos</h2>
+      {error && <p style={{ textAlign: 'center', color: '#dc2626', marginBottom: '12px' }}>{error}</p>}
 
       {/* Create Combo Form */}
-      <div style={{ background: '#1e293b', padding: '20px', borderRadius: '12px', marginBottom: '32px' }}>
-        <h3 style={{ color: '#94a3b8', marginBottom: '16px' }}>
+      <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px', marginBottom: '32px' }}>
+        <h3 style={{ color: '#78716c', marginBottom: '16px' }}>
           {editingComboId ? `Editar Combo #${editingComboId}` : 'Crear Nuevo Combo'}
         </h3>
 
@@ -266,18 +266,18 @@ function Combos({ token }) {
           value={comboName}
           onChange={(e) => setComboName(e.target.value)}
           placeholder="Nombre del Combo (ej: Combo Básico 3x2)"
-          style={{ width: '100%', padding: '12px', marginBottom: '16px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+          style={{ width: '100%', padding: '12px', marginBottom: '16px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
         />
 
         <div style={{ marginBottom: '16px' }}>
-          <label style={{ color: '#94a3b8', display: 'block', marginBottom: '8px' }}>Productos del Combo</label>
+          <label style={{ color: '#78716c', display: 'block', marginBottom: '8px' }}>Productos del Combo</label>
 
           {comboItems.map((item, index) => (
             <div key={index} style={{ display: 'flex', gap: '12px', marginBottom: '12px', alignItems: 'center' }}>
               <select
                 value={item.sku}
                 onChange={(e) => handleItemChange(index, 'sku', e.target.value)}
-                style={{ flex: 1, padding: '10px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+                style={{ flex: 1, padding: '10px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
               >
                 <option value="">Seleccionar producto...</option>
                 {products.map(p => (
@@ -292,7 +292,7 @@ function Combos({ token }) {
                 min="1"
                 value={item.quantity}
                 onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                style={{ width: '80px', padding: '10px', textAlign: 'center', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+                style={{ width: '80px', padding: '10px', textAlign: 'center', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
               />
 
               <button
@@ -316,66 +316,66 @@ function Combos({ token }) {
 
         <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
           <div style={{ flex: 1 }}>
-            <label style={{ color: '#94a3b8', display: 'block', marginBottom: '6px' }}>Precio base SF</label>
+            <label style={{ color: '#78716c', display: 'block', marginBottom: '6px' }}>Precio base SF</label>
             <input
               type="number"
               value={basePriceSf}
               readOnly
-              style={{ width: '100%', padding: '12px', background: '#0f172a', color: '#94a3b8', border: '1px solid #334155', borderRadius: '6px' }}
+              style={{ width: '100%', padding: '12px', background: '#ffffff', color: '#78716c', border: '1px solid #e7e0d8', borderRadius: '6px' }}
             />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={{ color: '#94a3b8', display: 'block', marginBottom: '6px' }}>Precio base CF</label>
+            <label style={{ color: '#78716c', display: 'block', marginBottom: '6px' }}>Precio base CF</label>
             <input
               type="number"
               value={basePriceCf}
               readOnly
-              style={{ width: '100%', padding: '12px', background: '#0f172a', color: '#94a3b8', border: '1px solid #334155', borderRadius: '6px' }}
+              style={{ width: '100%', padding: '12px', background: '#ffffff', color: '#78716c', border: '1px solid #e7e0d8', borderRadius: '6px' }}
             />
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
           <div style={{ flex: 1 }}>
-            <label style={{ color: '#94a3b8', display: 'block', marginBottom: '6px' }}>Descuento %</label>
+            <label style={{ color: '#78716c', display: 'block', marginBottom: '6px' }}>Descuento %</label>
             <input
               type="number"
               min="0"
               max="100"
               value={discountPercent}
               onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
-              style={{ width: '100%', padding: '12px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+              style={{ width: '100%', padding: '12px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
             />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={{ color: '#94a3b8', display: 'block', marginBottom: '6px' }}>Descuento fijo (Bs)</label>
+            <label style={{ color: '#78716c', display: 'block', marginBottom: '6px' }}>Descuento fijo (Bs)</label>
             <input
               type="number"
               min="0"
               value={discountAmount}
               onChange={(e) => setDiscountAmount(Math.max(0, Number(e.target.value) || 0))}
-              style={{ width: '100%', padding: '12px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+              style={{ width: '100%', padding: '12px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
             />
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
           <div style={{ flex: 1 }}>
-            <label style={{ color: '#94a3b8', display: 'block', marginBottom: '6px' }}>Precio Sin Factura (final)</label>
+            <label style={{ color: '#78716c', display: 'block', marginBottom: '6px' }}>Precio Sin Factura (final)</label>
             <input
               type="number"
               value={comboPriceSf}
               readOnly
-              style={{ width: '100%', padding: '12px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+              style={{ width: '100%', padding: '12px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
             />
           </div>
           <div style={{ flex: 1 }}>
-            <label style={{ color: '#94a3b8', display: 'block', marginBottom: '6px' }}>Precio Con Factura (final)</label>
+            <label style={{ color: '#78716c', display: 'block', marginBottom: '6px' }}>Precio Con Factura (final)</label>
             <input
               type="number"
               value={comboPriceCf}
               readOnly
-              style={{ width: '100%', padding: '12px', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '6px' }}
+              style={{ width: '100%', padding: '12px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
             />
           </div>
         </div>
@@ -383,7 +383,7 @@ function Combos({ token }) {
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button
             onClick={handleSaveCombo}
-            style={{ flex: 1, minWidth: '180px', padding: '14px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', cursor: 'pointer' }}
+            style={{ flex: 1, minWidth: '180px', padding: '14px', background: '#047857', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', cursor: 'pointer' }}
             disabled={!comboName.trim() || comboItems.every(i => !i.sku)}
           >
             {editingComboId ? 'Guardar cambios' : 'Crear Combo'}
@@ -391,7 +391,7 @@ function Combos({ token }) {
           {editingComboId && (
             <button
               onClick={resetForm}
-              style={{ minWidth: '160px', padding: '14px', background: '#475569', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', cursor: 'pointer' }}
+              style={{ minWidth: '160px', padding: '14px', background: '#d9d0c5', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1rem', cursor: 'pointer' }}
             >
               Cancelar edición
             </button>
@@ -400,14 +400,14 @@ function Combos({ token }) {
       </div>
 
       {/* Existing Combos */}
-      <h3 style={{ color: '#94a3b8', marginBottom: '12px' }}>Combos Existentes</h3>
+      <h3 style={{ color: '#78716c', marginBottom: '12px' }}>Combos Existentes</h3>
       {combos.length === 0 ? (
-        <p style={{ textAlign: 'center', color: '#94a3b8' }}>No hay combos creados aún</p>
+        <p style={{ textAlign: 'center', color: '#78716c' }}>No hay combos creados aún</p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#0f172a' }}>
+              <tr style={{ background: '#ffffff' }}>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Nombre</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Precio SF</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Precio CF</th>
@@ -416,7 +416,7 @@ function Combos({ token }) {
             </thead>
             <tbody>
               {combos.map(combo => (
-                <tr key={combo.id} style={{ borderBottom: '1px solid #334155' }}>
+                <tr key={combo.id} style={{ borderBottom: '1px solid #e7e0d8' }}>
                   <td style={{ padding: '12px' }}>{combo.name}</td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>
                     {Number(combo.sf_price).toFixed(2)} Bs

@@ -104,7 +104,7 @@ const getNiceAxisMax = (value) => {
 
 const getDepartmentFillColor = (ratio, hasSales) => {
   if (!hasSales) {
-    return 'rgba(30, 41, 59, 0.78)';
+    return 'rgba(245, 241, 236, 0.78)';
   }
   const t = Math.max(0, Math.min(1, ratio));
   const start = { r: 30, g: 64, b: 175 };
@@ -205,8 +205,8 @@ function AdminDashboard({ token }) {
     }
   };
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>Cargando panel...</div>;
-  if (!stats) return <div style={{ textAlign: 'center', padding: '50px', color: '#f87171' }}>No hay datos disponibles</div>;
+  if (loading) return <div style={{ textAlign: 'center', padding: '50px', color: '#78716c' }}>Cargando panel...</div>;
+  if (!stats) return <div style={{ textAlign: 'center', padding: '50px', color: '#dc2626' }}>No hay datos disponibles</div>;
 
   const popularProducts = Array.isArray(stats.popularProducts) ? stats.popularProducts : [];
   const topSalespeople = Array.isArray(stats.topSalespeople) ? stats.topSalespeople : [];

@@ -14,14 +14,14 @@ const formatMoney = (value) => `${Number(value || 0).toFixed(2)} Bs`;
 function KpiCard({ label, value, hint, accent = '#3b82f6' }) {
   return (
     <div style={{
-      background: '#1e293b',
-      border: '1px solid #334155',
+      background: '#ffffff',
+      border: '1px solid #e7e0d8',
       borderRadius: '12px',
       padding: '14px'
     }}>
-      <div style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '6px' }}>{label}</div>
+      <div style={{ color: '#78716c', fontSize: '0.85rem', marginBottom: '6px' }}>{label}</div>
       <div style={{ color: accent, fontWeight: '800', fontSize: '1.35rem', lineHeight: 1.2 }}>{value}</div>
-      {hint && <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '4px' }}>{hint}</div>}
+      {hint && <div style={{ color: '#a8a29e', fontSize: '0.8rem', marginTop: '4px' }}>{hint}</div>}
     </div>
   );
 }
@@ -166,15 +166,15 @@ function PerformanceDashboard({ token, user, role, access }) {
   if (!canViewGlobal && !canViewIndividual) {
     return (
       <div className="container">
-        <div className="card" style={{ textAlign: 'center', color: '#fca5a5' }}>
+        <div className="card" style={{ textAlign: 'center', color: '#dc2626' }}>
           No tienes acceso al panel de rendimiento.
         </div>
       </div>
     );
   }
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '80px 20px', color: '#94a3b8' }}>Cargando rendimiento...</div>;
-  if (error) return <div style={{ textAlign: 'center', padding: '80px 20px', color: '#f87171' }}>{error}</div>;
+  if (loading) return <div style={{ textAlign: 'center', padding: '80px 20px', color: '#78716c' }}>Cargando rendimiento...</div>;
+  if (error) return <div style={{ textAlign: 'center', padding: '80px 20px', color: '#dc2626' }}>{error}</div>;
 
   const totalTeamVentas = rows.reduce((sum, row) => sum + row.totalVentas, 0);
   const totalTeamCotizaciones = rows.reduce((sum, row) => sum + row.cotizaciones, 0);
@@ -186,20 +186,20 @@ function PerformanceDashboard({ token, user, role, access }) {
 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
-      <h2 style={{ textAlign: 'center', color: '#f87171', marginBottom: '8px' }}>
+      <h2 style={{ textAlign: 'center', color: '#dc2626', marginBottom: '8px' }}>
         Panel de Rendimiento
       </h2>
-      <p style={{ textAlign: 'center', color: '#94a3b8', marginBottom: '22px' }}>
+      <p style={{ textAlign: 'center', color: '#78716c', marginBottom: '22px' }}>
         {viewMode === 'global'
           ? 'Vista global del equipo de ventas'
           : (isAlmacenRole ? 'Vista individual de almacén' : 'Vista individual de vendedor')}
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px', marginBottom: '20px' }}>
-        <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} style={{ padding: '10px 16px', fontSize: '1rem', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '8px' }}>
+        <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))} style={{ padding: '10px 16px', fontSize: '1rem', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '8px' }}>
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('es-BO', { month: 'long' })}</option>)}
         </select>
-        <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} style={{ padding: '10px 16px', fontSize: '1rem', background: '#0f172a', color: 'white', border: '1px solid #334155', borderRadius: '8px' }}>
+        <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))} style={{ padding: '10px 16px', fontSize: '1rem', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '8px' }}>
           {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
@@ -210,33 +210,33 @@ function PerformanceDashboard({ token, user, role, access }) {
             <KpiCard
               label={isAlmacenRole ? 'Pedidos enviados' : 'Ventas del período'}
               value={isAlmacenRole ? String(personal.pedidosEnviados || 0) : formatMoney(personal.totalVentas)}
-              accent="#60a5fa"
+              accent="#3b82f6"
             />
             <KpiCard
               label={isAlmacenRole ? 'Ventas enviadas' : 'Cotizaciones confirmadas'}
               value={isAlmacenRole ? formatMoney(personal.totalVentas) : String(personal.cotizaciones)}
               accent="#f59e0b"
             />
-            <KpiCard label="Comisión" value={formatMoney(personal.comision)} accent="#10b981" />
+            <KpiCard label="Comisión" value={formatMoney(personal.comision)} accent="#047857" />
             <KpiCard
               label={isAlmacenRole ? 'Comisión Almacén' : 'Tasa aplicada'}
               value={`${(personal.rate * 100).toFixed(0)}%`}
               hint={isAlmacenRole
                 ? `Sobre pedidos enviados${personal.localStore ? ` (${personal.localStore})` : ''}`
                 : (personal.isTopSeller ? 'Mejor en ventas actual' : `Tasa asesor de ventas (${Number(commissionSettings?.ventas_regular_percent ?? 8)}%)`)}
-              accent={personal.isTopSeller ? '#facc15' : '#cbd5e1'}
+              accent={personal.isTopSeller ? '#b45309' : '#57534e'}
             />
           </div>
 
-          <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', padding: '16px' }}>
-            <h3 style={{ marginBottom: '8px', color: '#f1f5f9' }}>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: '12px', padding: '16px' }}>
+            <h3 style={{ marginBottom: '8px', color: '#292524' }}>
               {isAlmacenRole ? 'Detalle de comisión de almacén' : 'Detalle de comisión'}
             </h3>
-            <p style={{ color: '#94a3b8', marginBottom: '8px' }}>
+            <p style={{ color: '#78716c', marginBottom: '8px' }}>
               {commissionInfo?.breakdown?.source || personal.source || 'Comisión calculada para el período seleccionado.'}
             </p>
             {!isAlmacenRole && commissionInfo?.isTopSeller && (
-              <div style={{ color: '#facc15', fontWeight: 700 }}>
+              <div style={{ color: '#b45309', fontWeight: 700 }}>
                 Eres quien va mejor en ventas en el período. Se aplica {Number(commissionSettings?.ventas_top_percent ?? 12)}%.
               </div>
             )}
@@ -247,17 +247,17 @@ function PerformanceDashboard({ token, user, role, access }) {
       {viewMode === 'global' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '12px', marginBottom: '16px' }}>
-            <KpiCard label="Ventas equipo" value={formatMoney(totalTeamVentas)} accent="#60a5fa" />
+            <KpiCard label="Ventas equipo" value={formatMoney(totalTeamVentas)} accent="#3b82f6" />
             <KpiCard label="Cotizaciones confirmadas" value={String(totalTeamCotizaciones)} accent="#f59e0b" />
-            <KpiCard label="Comisiones" value={formatMoney(totalTeamCommissions)} accent="#10b981" hint="Suma de reglas por rol" />
-            <KpiCard label="Mejor en ventas" value={topSeller ? topSeller.vendor : 'Sin datos'} hint={topSeller ? formatMoney(topSeller.totalVentas) : ''} accent="#facc15" />
+            <KpiCard label="Comisiones" value={formatMoney(totalTeamCommissions)} accent="#047857" hint="Suma de reglas por rol" />
+            <KpiCard label="Mejor en ventas" value={topSeller ? topSeller.vendor : 'Sin datos'} hint={topSeller ? formatMoney(topSeller.totalVentas) : ''} accent="#b45309" />
             {isVentasLider && <KpiCard label="Comisión líder" value={formatMoney(leaderCommission)} hint={`${Number(commissionSettings?.ventas_lider_percent ?? 5)}% equipo + propias`} accent="#22c55e" />}
           </div>
 
-          <div style={{ overflowX: 'auto', background: '#1e293b', border: '1px solid #334155', borderRadius: '12px' }}>
+          <div style={{ overflowX: 'auto', background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: '12px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
               <thead>
-                <tr style={{ background: '#0f172a' }}>
+                <tr style={{ background: '#ffffff' }}>
                   <th style={{ padding: '12px', textAlign: 'center', width: '60px' }}>#</th>
                   <th style={{ padding: '12px', textAlign: 'left' }}>Vendedor</th>
                   <th style={{ padding: '12px', textAlign: 'left' }}>Rol</th>
@@ -269,20 +269,20 @@ function PerformanceDashboard({ token, user, role, access }) {
               </thead>
               <tbody>
                 {rows.map((row, index) => (
-                  <tr key={`${row.userId}-${index}`} style={{ borderBottom: '1px solid #334155' }}>
-                    <td style={{ padding: '12px', textAlign: 'center', color: row.isTopSeller ? '#facc15' : '#94a3b8' }}>
+                  <tr key={`${row.userId}-${index}`} style={{ borderBottom: '1px solid #e7e0d8' }}>
+                    <td style={{ padding: '12px', textAlign: 'center', color: row.isTopSeller ? '#b45309' : '#78716c' }}>
                       {index + 1}
                     </td>
                     <td style={{ padding: '12px', fontWeight: row.isTopSeller ? 700 : 500 }}>
                       {row.vendor}
                     </td>
-                    <td style={{ padding: '12px', color: '#94a3b8' }}>{row.displayRole || row.role || '—'}</td>
+                    <td style={{ padding: '12px', color: '#78716c' }}>{row.displayRole || row.role || '—'}</td>
                     <td style={{ padding: '12px', textAlign: 'center' }}>{row.cotizaciones}</td>
                     <td style={{ padding: '12px', textAlign: 'right' }}>{formatMoney(row.totalVentas)}</td>
-                    <td style={{ padding: '12px', textAlign: 'right', color: '#10b981', fontWeight: 700 }}>
+                    <td style={{ padding: '12px', textAlign: 'right', color: '#047857', fontWeight: 700 }}>
                       {formatMoney(row.commission)}
                     </td>
-                    <td style={{ padding: '12px', color: '#94a3b8' }}>{row.rule}</td>
+                    <td style={{ padding: '12px', color: '#78716c' }}>{row.rule}</td>
                   </tr>
                 ))}
               </tbody>

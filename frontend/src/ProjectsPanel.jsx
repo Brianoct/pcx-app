@@ -22,7 +22,7 @@ const VERSION_BUMP_LABELS = {
 const STATUS_COLORS = {
   pendiente: '#f59e0b',
   en_progreso: '#2563eb',
-  completada: '#10b981',
+  completada: '#047857',
   bloqueada: '#ef4444'
 };
 const DAY_LABELS = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
@@ -99,9 +99,9 @@ const moneyFormatter = new Intl.NumberFormat('es-BO', {
 const baseFieldStyle = {
   minHeight: '38px',
   borderRadius: '10px',
-  border: '1px solid rgba(71, 85, 105, 0.72)',
-  background: '#0f172a',
-  color: '#f8fafc',
+  border: '1px solid rgba(214, 204, 192, 0.72)',
+  background: '#ffffff',
+  color: '#292524',
   padding: '8px 10px'
 };
 
@@ -738,9 +738,9 @@ export default function ProjectsPanel({ token, user }) {
   const activeTabMeta = workspaceTabs.find((tab) => tab.key === workspaceTab) || workspaceTabs[2];
   const calendarEditingTask = tasks.find((task) => task.id === calendarEditTaskId) || null;
   const calendarBodyStyle = {
-    border: '1px solid rgba(71, 85, 105, 0.62)',
+    border: '1px solid rgba(214, 204, 192, 0.62)',
     borderRadius: '12px',
-    background: '#0f172a',
+    background: '#ffffff',
     padding: '10px'
   };
 
@@ -766,8 +766,8 @@ export default function ProjectsPanel({ token, user }) {
           style={{
             marginBottom: '12px',
             border: `1px solid ${error ? '#ef4444' : '#16a34a'}`,
-            background: error ? 'rgba(127,29,29,0.35)' : 'rgba(16,185,129,0.16)',
-            color: error ? '#fecaca' : '#bbf7d0'
+            background: error ? 'rgba(254,226,226,0.35)' : 'rgba(16,185,129,0.16)',
+            color: error ? '#b91c1c' : '#047857'
           }}
         >
           {error || notice}
@@ -777,16 +777,16 @@ export default function ProjectsPanel({ token, user }) {
       <div style={{ display: 'grid', gap: '12px' }}>
         <section
           style={{
-            border: '1px solid rgba(45, 56, 82, 0.9)',
+            border: '1px solid rgba(214, 204, 192, 0.9)',
             borderRadius: '14px',
-            background: 'rgba(8, 13, 23, 0.9)',
+            background: 'rgba(255, 255, 255, 0.9)',
             padding: '10px',
             display: 'grid',
             gap: '10px'
           }}
         >
           <div style={{ display: 'grid', gap: '8px' }}>
-            <div style={{ display: 'inline-flex', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '999px', overflow: 'hidden', flexWrap: 'wrap' }}>
+            <div style={{ display: 'inline-flex', border: '1px solid rgba(214, 204, 192, 0.72)', borderRadius: '999px', overflow: 'hidden', flexWrap: 'wrap' }}>
               {workspaceTabs.map((tab) => (
                 <button
                   key={tab.key}
@@ -797,7 +797,7 @@ export default function ProjectsPanel({ token, user }) {
                     minHeight: '36px',
                     borderRadius: 0,
                     background: workspaceTab === tab.key ? PRIMARY : 'transparent',
-                    color: workspaceTab === tab.key ? '#fff' : '#9fb2cc',
+                    color: workspaceTab === tab.key ? '#fff' : '#78716c',
                     padding: '8px 14px'
                   }}
                   title={tab.hint}
@@ -806,7 +806,7 @@ export default function ProjectsPanel({ token, user }) {
                 </button>
               ))}
             </div>
-            <div style={{ display: 'inline-flex', border: '1px solid rgba(71, 85, 105, 0.75)', borderRadius: '999px', overflow: 'hidden' }}>
+            <div style={{ display: 'inline-flex', border: '1px solid rgba(214, 204, 192, 0.75)', borderRadius: '999px', overflow: 'hidden' }}>
               <button
                 type="button"
                 className="btn"
@@ -815,7 +815,7 @@ export default function ProjectsPanel({ token, user }) {
                   minHeight: '32px',
                   borderRadius: 0,
                   background: viewScope === 'all' ? ACCENT : 'transparent',
-                  color: viewScope === 'all' ? '#fff' : '#9fb2cc'
+                  color: viewScope === 'all' ? '#fff' : '#78716c'
                 }}
               >
                 Todo el equipo
@@ -828,7 +828,7 @@ export default function ProjectsPanel({ token, user }) {
                   minHeight: '32px',
                   borderRadius: 0,
                   background: viewScope === 'mine' ? ACCENT : 'transparent',
-                  color: viewScope === 'mine' ? '#fff' : '#9fb2cc'
+                  color: viewScope === 'mine' ? '#fff' : '#78716c'
                 }}
               >
                 Mis tareas
@@ -839,10 +839,10 @@ export default function ProjectsPanel({ token, user }) {
 
         <section
           style={{
-            border: '1px solid rgba(45, 56, 82, 0.9)',
+            border: '1px solid rgba(214, 204, 192, 0.9)',
             borderRadius: '16px',
-            background: 'linear-gradient(180deg, rgba(13, 22, 36, 0.96), rgba(9, 15, 25, 0.98))',
-            boxShadow: '0 14px 28px rgba(2, 6, 23, 0.42)',
+            background: 'linear-gradient(180deg, rgba(250, 248, 245, 0.96), rgba(250, 248, 245, 0.98))',
+            boxShadow: '0 14px 28px rgba(120, 100, 80, 0.42)',
             padding: '14px',
             display: 'grid',
             gap: '12px'
@@ -850,7 +850,7 @@ export default function ProjectsPanel({ token, user }) {
         >
           {workspaceTab === 'project' && (
             <>
-              <h3 style={{ margin: 0, color: '#f8fafc' }}>Entrada de proyecto</h3>
+              <h3 style={{ margin: 0, color: '#292524' }}>Entrada de proyecto</h3>
               <form onSubmit={submitProject} style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
                 <input
                   type="text"
@@ -915,20 +915,20 @@ export default function ProjectsPanel({ token, user }) {
                 </button>
               </form>
               <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
-                <h4 style={{ margin: 0, color: '#f8fafc' }}>Mis proyectos ({myProjects.length})</h4>
+                <h4 style={{ margin: 0, color: '#292524' }}>Mis proyectos ({myProjects.length})</h4>
                 <div style={{ display: 'grid', gap: '8px' }}>
                   {myProjects.length === 0 ? (
-                    <div style={{ color: '#9fb2cc' }}>Todavía no participas en proyectos.</div>
+                    <div style={{ color: '#78716c' }}>Todavía no participas en proyectos.</div>
                   ) : myProjects.map((project) => (
-                    <div key={project.id} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
+                    <div key={project.id} style={{ border: '1px solid rgba(214, 204, 192, 0.68)', borderRadius: '10px', background: '#f5f1ec', padding: '8px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                        <strong style={{ color: '#f8fafc' }}>{project.name}</strong>
-                        <span style={{ fontSize: '0.78rem', color: '#9fb2cc' }}>v{project.version}</span>
+                        <strong style={{ color: '#292524' }}>{project.name}</strong>
+                        <span style={{ fontSize: '0.78rem', color: '#78716c' }}>v{project.version}</span>
                       </div>
-                      <div style={{ marginTop: '3px', fontSize: '0.82rem', color: '#93a4bc' }}>
+                      <div style={{ marginTop: '3px', fontSize: '0.82rem', color: '#78716c' }}>
                         {project.area} · {TASK_TYPE_LABELS[project.work_type] || project.work_type}
                       </div>
-                      <div style={{ marginTop: '7px', height: '7px', borderRadius: '999px', background: '#1e293b', overflow: 'hidden' }}>
+                      <div style={{ marginTop: '7px', height: '7px', borderRadius: '999px', background: '#ffffff', overflow: 'hidden' }}>
                         <div style={{ width: `${Math.max(0, Math.min(100, Number(project.progress_percent || 0)))}%`, height: '100%', background: '#2563eb' }} />
                       </div>
                     </div>
@@ -940,9 +940,9 @@ export default function ProjectsPanel({ token, user }) {
 
           {workspaceTab === 'task' && (
             <>
-              <h3 style={{ margin: 0, color: '#f8fafc' }}>Entrada de tarea</h3>
+              <h3 style={{ margin: 0, color: '#292524' }}>Entrada de tarea</h3>
               <form onSubmit={handleTaskFormSubmit} style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
-                <h4 style={{ margin: 0, color: '#e2e8f0' }}>
+                <h4 style={{ margin: 0, color: '#292524' }}>
                   {editingTaskId ? `Editando tarea #${editingTaskId}` : 'Nueva tarea'}
                 </h4>
                 <select
@@ -1051,7 +1051,7 @@ export default function ProjectsPanel({ token, user }) {
                       type="button"
                       className="btn"
                       onClick={cancelEditTask}
-                      style={{ background: '#475569', color: '#fff', minHeight: '36px', padding: '8px 12px' }}
+                      style={{ background: '#d9d0c5', color: '#fff', minHeight: '36px', padding: '8px 12px' }}
                     >
                       Cancelar edición
                     </button>
@@ -1068,26 +1068,26 @@ export default function ProjectsPanel({ token, user }) {
               </form>
 
               <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
-                <h4 style={{ margin: 0, color: '#f8fafc' }}>Lista de tareas ({visibleTasks.length})</h4>
+                <h4 style={{ margin: 0, color: '#292524' }}>Lista de tareas ({visibleTasks.length})</h4>
                 {tasksWithoutDate.length > 0 && (
-                  <span style={{ color: '#fbbf24', fontSize: '0.78rem' }}>
+                  <span style={{ color: '#b45309', fontSize: '0.78rem' }}>
                     {tasksWithoutDate.length} sin fecha (no salen en calendario)
                   </span>
                 )}
                 <div style={{ display: 'grid', gap: '8px', maxHeight: '320px', overflowY: 'auto', paddingRight: '2px' }}>
                   {loading ? (
-                    <div style={{ color: '#9fb2cc' }}>Cargando tareas...</div>
+                    <div style={{ color: '#78716c' }}>Cargando tareas...</div>
                   ) : visibleTasks.length === 0 ? (
-                    <div style={{ color: '#9fb2cc' }}>No hay tareas registradas para esta vista.</div>
+                    <div style={{ color: '#78716c' }}>No hay tareas registradas para esta vista.</div>
                   ) : visibleTasks.map((task) => {
                     const hasDate = Boolean(normalizeTaskDateText(task.start_date) || normalizeTaskDateText(task.due_date));
                     return (
-                      <div key={`task-tab-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.6)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
+                      <div key={`task-tab-${task.id}`} style={{ border: '1px solid rgba(214, 204, 192, 0.6)', borderRadius: '10px', background: '#f5f1ec', padding: '8px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                          <strong style={{ color: '#f8fafc' }}>{task.title}</strong>
-                          <span style={{ color: '#93a5be', fontSize: '0.75rem' }}>{task.project_name}</span>
+                          <strong style={{ color: '#292524' }}>{task.title}</strong>
+                          <span style={{ color: '#78716c', fontSize: '0.75rem' }}>{task.project_name}</span>
                         </div>
-                        <div style={{ marginTop: '4px', color: '#94a9c3', fontSize: '0.76rem' }}>
+                        <div style={{ marginTop: '4px', color: '#78716c', fontSize: '0.76rem' }}>
                           Estado: {STATUS_LABELS[task.status] || task.status} · Inicio: {formatDate(task.start_date)} · Entrega: {formatDate(task.due_date)}
                         </div>
                         <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'flex-end', gap: '6px', flexWrap: 'wrap' }}>
@@ -1096,7 +1096,7 @@ export default function ProjectsPanel({ token, user }) {
                               type="button"
                               className="btn"
                               onClick={() => focusTaskOnCalendar(task)}
-                              style={{ minHeight: '30px', padding: '5px 9px', background: '#1f3b70', color: '#dbeafe', fontSize: '0.76rem' }}
+                              style={{ minHeight: '30px', padding: '5px 9px', background: '#dbeafe', color: '#1d4ed8', fontSize: '0.76rem' }}
                             >
                               Ver calendario
                             </button>
@@ -1105,7 +1105,7 @@ export default function ProjectsPanel({ token, user }) {
                             type="button"
                             className="btn"
                             onClick={() => startEditTask(task)}
-                            style={{ minHeight: '30px', padding: '5px 9px', background: '#1e40af', color: '#dbeafe', fontSize: '0.76rem' }}
+                            style={{ minHeight: '30px', padding: '5px 9px', background: '#1d4ed8', color: '#1d4ed8', fontSize: '0.76rem' }}
                           >
                             Editar
                           </button>
@@ -1114,7 +1114,7 @@ export default function ProjectsPanel({ token, user }) {
                             className="btn"
                             onClick={() => deleteTask(task)}
                             disabled={updatingTaskId === task.id}
-                            style={{ minHeight: '30px', padding: '5px 9px', background: '#7f1d1d', color: '#fecaca', fontSize: '0.76rem' }}
+                            style={{ minHeight: '30px', padding: '5px 9px', background: '#fee2e2', color: '#b91c1c', fontSize: '0.76rem' }}
                           >
                             {updatingTaskId === task.id ? '...' : 'Eliminar'}
                           </button>
@@ -1131,23 +1131,23 @@ export default function ProjectsPanel({ token, user }) {
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div>
-                  <h3 style={{ margin: 0, color: '#f8fafc' }}>Calendario de tareas</h3>
-                  <div style={{ color: '#98acc8', fontSize: '0.84rem', marginTop: '2px' }}>
+                  <h3 style={{ margin: 0, color: '#292524' }}>Calendario de tareas</h3>
+                  <div style={{ color: '#78716c', fontSize: '0.84rem', marginTop: '2px' }}>
                     Haz clic en la barra de una tarea para editarla en vista de pajarito.
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(120px, 1fr))', gap: '8px', minWidth: 'min(420px, 100%)' }}>
-                  <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
-                    <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Tareas visibles</div>
-                    <strong style={{ color: '#f8fafc', fontSize: '1.08rem' }}>{tasksSummary.total}</strong>
+                  <div style={{ background: '#ffffff', border: '1px solid rgba(214, 204, 192, 0.72)', borderRadius: '10px', padding: '8px' }}>
+                    <div style={{ color: '#78716c', fontSize: '0.76rem' }}>Tareas visibles</div>
+                    <strong style={{ color: '#292524', fontSize: '1.08rem' }}>{tasksSummary.total}</strong>
                   </div>
-                  <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
-                    <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Completadas</div>
-                    <strong style={{ color: '#34d399', fontSize: '1.08rem' }}>{tasksSummary.completed}</strong>
+                  <div style={{ background: '#ffffff', border: '1px solid rgba(214, 204, 192, 0.72)', borderRadius: '10px', padding: '8px' }}>
+                    <div style={{ color: '#78716c', fontSize: '0.76rem' }}>Completadas</div>
+                    <strong style={{ color: '#047857', fontSize: '1.08rem' }}>{tasksSummary.completed}</strong>
                   </div>
-                  <div style={{ background: '#0f172a', border: '1px solid rgba(71, 85, 105, 0.72)', borderRadius: '10px', padding: '8px' }}>
-                    <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Progreso medio</div>
-                    <strong style={{ color: '#60a5fa', fontSize: '1.08rem' }}>{tasksSummary.avgProgress}%</strong>
+                  <div style={{ background: '#ffffff', border: '1px solid rgba(214, 204, 192, 0.72)', borderRadius: '10px', padding: '8px' }}>
+                    <div style={{ color: '#78716c', fontSize: '0.76rem' }}>Progreso medio</div>
+                    <strong style={{ color: '#3b82f6', fontSize: '1.08rem' }}>{tasksSummary.avgProgress}%</strong>
                   </div>
                 </div>
               </div>
@@ -1157,18 +1157,18 @@ export default function ProjectsPanel({ token, user }) {
                   type="button"
                   className="btn"
                   onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                  style={{ minHeight: '34px', minWidth: '40px', padding: '0 10px', background: '#1e293b', color: '#f8fafc' }}
+                  style={{ minHeight: '34px', minWidth: '40px', padding: '0 10px', background: '#ffffff', color: '#292524' }}
                 >
                   ◀
                 </button>
-                <strong style={{ color: '#f8fafc', minWidth: '200px', textAlign: 'center', fontSize: '1.05rem' }}>
+                <strong style={{ color: '#292524', minWidth: '200px', textAlign: 'center', fontSize: '1.05rem' }}>
                   {MONTH_LABELS[monthCursor.getMonth()]} {monthCursor.getFullYear()}
                 </strong>
                 <button
                   type="button"
                   className="btn"
                   onClick={() => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                  style={{ minHeight: '34px', minWidth: '40px', padding: '0 10px', background: '#1e293b', color: '#f8fafc' }}
+                  style={{ minHeight: '34px', minWidth: '40px', padding: '0 10px', background: '#ffffff', color: '#292524' }}
                 >
                   ▶
                 </button>
@@ -1176,7 +1176,7 @@ export default function ProjectsPanel({ token, user }) {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '8px' }}>
                 {DAY_LABELS.map((day) => (
-                  <div key={day} style={{ textAlign: 'center', color: '#96aac6', fontWeight: 700, fontSize: '0.78rem' }}>{day}</div>
+                  <div key={day} style={{ textAlign: 'center', color: '#78716c', fontWeight: 700, fontSize: '0.78rem' }}>{day}</div>
                 ))}
                 {calendarCells.map((day, dayIndex) => {
                   const dateText = toDateText(day);
@@ -1197,15 +1197,15 @@ export default function ProjectsPanel({ token, user }) {
                         }
                       }}
                       style={{
-                        border: `1px solid ${isSelected ? 'rgba(255, 127, 48, 0.9)' : 'rgba(71, 85, 105, 0.62)'}`,
+                        border: `1px solid ${isSelected ? 'rgba(255, 127, 48, 0.9)' : 'rgba(214, 204, 192, 0.62)'}`,
                         borderRadius: '11px',
-                        background: isSelected ? 'rgba(255, 127, 48, 0.16)' : '#0f172a',
+                        background: isSelected ? 'rgba(255, 127, 48, 0.16)' : '#ffffff',
                         minHeight: '138px',
                         padding: '8px 7px',
                         display: 'grid',
                         alignContent: 'start',
                         gap: '5px',
-                        color: isCurrentMonth ? '#f8fafc' : '#6f84a3',
+                        color: isCurrentMonth ? '#292524' : '#a8a29e',
                         cursor: 'pointer'
                       }}
                     >
@@ -1246,7 +1246,7 @@ export default function ProjectsPanel({ token, user }) {
                           );
                         })}
                         {dayTasks.length > 5 && (
-                          <div style={{ fontSize: '0.68rem', color: '#9cb0cb' }}>+{dayTasks.length - 5} más</div>
+                          <div style={{ fontSize: '0.68rem', color: '#78716c' }}>+{dayTasks.length - 5} más</div>
                         )}
                       </div>
                     </div>
@@ -1256,17 +1256,17 @@ export default function ProjectsPanel({ token, user }) {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '10px' }}>
                 <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
-                  <h4 style={{ margin: 0, color: '#f8fafc' }}>Tareas del {formatDate(selectedDate)}</h4>
+                  <h4 style={{ margin: 0, color: '#292524' }}>Tareas del {formatDate(selectedDate)}</h4>
                   <div style={{ display: 'grid', gap: '8px', maxHeight: '220px', overflowY: 'auto', paddingRight: '2px' }}>
                     {selectedDateTasks.length === 0 ? (
-                      <div style={{ color: '#9fb2cc' }}>No hay tareas en esta fecha.</div>
+                      <div style={{ color: '#78716c' }}>No hay tareas en esta fecha.</div>
                     ) : selectedDateTasks.map((task) => (
-                      <div key={`selected-date-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
+                      <div key={`selected-date-${task.id}`} style={{ border: '1px solid rgba(214, 204, 192, 0.68)', borderRadius: '10px', background: '#f5f1ec', padding: '8px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                          <strong style={{ color: '#f8fafc' }}>{task.title}</strong>
-                          <span style={{ color: '#93a5be', fontSize: '0.75rem' }}>{task.project_name}</span>
+                          <strong style={{ color: '#292524' }}>{task.title}</strong>
+                          <span style={{ color: '#78716c', fontSize: '0.75rem' }}>{task.project_name}</span>
                         </div>
-                        <div style={{ marginTop: '4px', color: '#94a9c3', fontSize: '0.76rem' }}>
+                        <div style={{ marginTop: '4px', color: '#78716c', fontSize: '0.76rem' }}>
                           {task.assignee_name || 'Sin asignar'} · Estado: {STATUS_LABELS[task.status] || task.status}
                         </div>
                         <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'flex-end', gap: '6px', flexWrap: 'wrap' }}>
@@ -1274,7 +1274,7 @@ export default function ProjectsPanel({ token, user }) {
                             type="button"
                             className="btn"
                             onClick={() => startCalendarEdit(task)}
-                            style={{ minHeight: '30px', padding: '5px 9px', background: '#1e40af', color: '#dbeafe', fontSize: '0.76rem' }}
+                            style={{ minHeight: '30px', padding: '5px 9px', background: '#1d4ed8', color: '#1d4ed8', fontSize: '0.76rem' }}
                           >
                             Editar en calendario
                           </button>
@@ -1283,7 +1283,7 @@ export default function ProjectsPanel({ token, user }) {
                             className="btn"
                             onClick={() => deleteTask(task)}
                             disabled={updatingTaskId === task.id}
-                            style={{ minHeight: '30px', padding: '5px 9px', background: '#7f1d1d', color: '#fecaca', fontSize: '0.76rem' }}
+                            style={{ minHeight: '30px', padding: '5px 9px', background: '#fee2e2', color: '#b91c1c', fontSize: '0.76rem' }}
                           >
                             {updatingTaskId === task.id ? '...' : 'Eliminar'}
                           </button>
@@ -1294,7 +1294,7 @@ export default function ProjectsPanel({ token, user }) {
                 </div>
 
                 <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
-                  <h4 style={{ margin: 0, color: '#f8fafc' }}>
+                  <h4 style={{ margin: 0, color: '#292524' }}>
                     {calendarEditingTask ? `Editando: ${calendarEditingTask.title}` : 'Selecciona una barra para editar'}
                   </h4>
                   {calendarEditingTask ? (
@@ -1356,7 +1356,7 @@ export default function ProjectsPanel({ token, user }) {
                           type="button"
                           className="btn"
                           onClick={cancelCalendarEdit}
-                          style={{ background: '#475569', color: '#fff', minHeight: '36px', padding: '8px 14px' }}
+                          style={{ background: '#d9d0c5', color: '#fff', minHeight: '36px', padding: '8px 14px' }}
                         >
                           Cancelar
                         </button>
@@ -1364,14 +1364,14 @@ export default function ProjectsPanel({ token, user }) {
                           type="button"
                           className="btn"
                           onClick={() => startEditTask(calendarEditingTask)}
-                          style={{ background: '#1f3b70', color: '#dbeafe', minHeight: '36px', padding: '8px 14px' }}
+                          style={{ background: '#dbeafe', color: '#1d4ed8', minHeight: '36px', padding: '8px 14px' }}
                         >
                           Abrir en tab Tarea
                         </button>
                       </div>
                     </>
                   ) : (
-                    <p style={{ margin: 0, color: '#9fb2cc' }}>
+                    <p style={{ margin: 0, color: '#78716c' }}>
                       Consejo: usa esta vista para ajustes rapidos de fechas, estado y progreso sin salir del calendario.
                     </p>
                   )}
@@ -1382,49 +1382,49 @@ export default function ProjectsPanel({ token, user }) {
 
           {workspaceTab === 'dashboard' && (
             <>
-              <h3 style={{ margin: 0, color: '#f8fafc' }}>Dashboard de progreso</h3>
+              <h3 style={{ margin: 0, color: '#292524' }}>Dashboard de progreso</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
                 <div style={calendarBodyStyle}>
-                  <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Tareas visibles</div>
-                  <strong style={{ color: '#f8fafc', fontSize: '1.14rem' }}>{tasksSummary.total}</strong>
+                  <div style={{ color: '#78716c', fontSize: '0.76rem' }}>Tareas visibles</div>
+                  <strong style={{ color: '#292524', fontSize: '1.14rem' }}>{tasksSummary.total}</strong>
                 </div>
                 <div style={calendarBodyStyle}>
-                  <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Completadas</div>
-                  <strong style={{ color: '#34d399', fontSize: '1.14rem' }}>{tasksSummary.completed}</strong>
+                  <div style={{ color: '#78716c', fontSize: '0.76rem' }}>Completadas</div>
+                  <strong style={{ color: '#047857', fontSize: '1.14rem' }}>{tasksSummary.completed}</strong>
                 </div>
                 <div style={calendarBodyStyle}>
-                  <div style={{ color: '#9cb0cb', fontSize: '0.76rem' }}>Progreso medio</div>
-                  <strong style={{ color: '#60a5fa', fontSize: '1.14rem' }}>{tasksSummary.avgProgress}%</strong>
+                  <div style={{ color: '#78716c', fontSize: '0.76rem' }}>Progreso medio</div>
+                  <strong style={{ color: '#3b82f6', fontSize: '1.14rem' }}>{tasksSummary.avgProgress}%</strong>
                 </div>
               </div>
               <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
-                <h4 style={{ margin: 0, color: '#f8fafc' }}>Proyectos activos ({myProjects.length})</h4>
+                <h4 style={{ margin: 0, color: '#292524' }}>Proyectos activos ({myProjects.length})</h4>
                 {myProjects.length === 0 ? (
-                  <div style={{ color: '#9fb2cc' }}>Todavía no participas en proyectos.</div>
+                  <div style={{ color: '#78716c' }}>Todavía no participas en proyectos.</div>
                 ) : myProjects.map((project) => (
-                  <div key={`dash-project-${project.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
+                  <div key={`dash-project-${project.id}`} style={{ border: '1px solid rgba(214, 204, 192, 0.68)', borderRadius: '10px', background: '#f5f1ec', padding: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                      <strong style={{ color: '#f8fafc' }}>{project.name}</strong>
-                      <span style={{ fontSize: '0.78rem', color: '#9fb2cc' }}>v{project.version}</span>
+                      <strong style={{ color: '#292524' }}>{project.name}</strong>
+                      <span style={{ fontSize: '0.78rem', color: '#78716c' }}>v{project.version}</span>
                     </div>
-                    <div style={{ marginTop: '3px', fontSize: '0.82rem', color: '#93a4bc' }}>
+                    <div style={{ marginTop: '3px', fontSize: '0.82rem', color: '#78716c' }}>
                       {project.area} · {TASK_TYPE_LABELS[project.work_type] || project.work_type}
                     </div>
-                    <div style={{ marginTop: '7px', height: '7px', borderRadius: '999px', background: '#1e293b', overflow: 'hidden' }}>
+                    <div style={{ marginTop: '7px', height: '7px', borderRadius: '999px', background: '#ffffff', overflow: 'hidden' }}>
                       <div style={{ width: `${Math.max(0, Math.min(100, Number(project.progress_percent || 0)))}%`, height: '100%', background: '#2563eb' }} />
                     </div>
                   </div>
                 ))}
               </div>
               <div style={{ ...calendarBodyStyle, display: 'grid', gap: '8px' }}>
-                <h4 style={{ margin: 0, color: '#f8fafc' }}>Ultimas tareas ({Math.min(visibleTasks.length, 8)})</h4>
+                <h4 style={{ margin: 0, color: '#292524' }}>Ultimas tareas ({Math.min(visibleTasks.length, 8)})</h4>
                 {visibleTasks.slice(0, 8).map((task) => (
-                  <div key={`dash-task-${task.id}`} style={{ border: '1px solid rgba(71, 85, 105, 0.68)', borderRadius: '10px', background: '#101b2f', padding: '8px' }}>
+                  <div key={`dash-task-${task.id}`} style={{ border: '1px solid rgba(214, 204, 192, 0.68)', borderRadius: '10px', background: '#f5f1ec', padding: '8px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
-                      <strong style={{ color: '#f8fafc' }}>{task.title}</strong>
-                      <span style={{ color: '#93a5be', fontSize: '0.75rem' }}>{STATUS_LABELS[task.status] || task.status}</span>
+                      <strong style={{ color: '#292524' }}>{task.title}</strong>
+                      <span style={{ color: '#78716c', fontSize: '0.75rem' }}>{STATUS_LABELS[task.status] || task.status}</span>
                     </div>
-                    <div style={{ marginTop: '4px', color: '#94a9c3', fontSize: '0.76rem' }}>
+                    <div style={{ marginTop: '4px', color: '#78716c', fontSize: '0.76rem' }}>
                       {task.project_name} · {formatDate(task.start_date)} - {formatDate(task.due_date)} · {Number(task.progress_percent || 0)}%
                     </div>
                     <div style={{ marginTop: '6px', display: 'flex', justifyContent: 'flex-end' }}>
@@ -1432,7 +1432,7 @@ export default function ProjectsPanel({ token, user }) {
                         type="button"
                         className="btn"
                         onClick={() => focusTaskOnCalendar(task)}
-                        style={{ minHeight: '30px', padding: '5px 9px', background: '#1f3b70', color: '#dbeafe', fontSize: '0.76rem' }}
+                        style={{ minHeight: '30px', padding: '5px 9px', background: '#dbeafe', color: '#1d4ed8', fontSize: '0.76rem' }}
                       >
                         Ver en calendario
                       </button>

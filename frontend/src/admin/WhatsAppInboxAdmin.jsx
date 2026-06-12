@@ -135,8 +135,8 @@ function MediaAssetPreview({ messageType, media, token }) {
     };
   }, [media?.id, media?.link, token]);
 
-  if (loading) return <div style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>Cargando vista previa...</div>;
-  if (!resolvedUrl) return error ? <div style={{ color: '#fca5a5', fontSize: '0.78rem' }}>{error}</div> : null;
+  if (loading) return <div style={{ color: '#57534e', fontSize: '0.78rem' }}>Cargando vista previa...</div>;
+  if (!resolvedUrl) return error ? <div style={{ color: '#dc2626', fontSize: '0.78rem' }}>{error}</div> : null;
   if (messageType === 'image') {
     return (
       <a href={resolvedUrl} target="_blank" rel="noreferrer">
@@ -147,7 +147,7 @@ function MediaAssetPreview({ messageType, media, token }) {
             width: '100%',
             maxWidth: 260,
             borderRadius: 10,
-            border: '1px solid rgba(148,163,184,0.4)',
+            border: '1px solid rgba(168,162,158,0.4)',
             marginTop: 4
           }}
         />
@@ -163,7 +163,7 @@ function MediaAssetPreview({ messageType, media, token }) {
           width: '100%',
           maxWidth: 260,
           borderRadius: 10,
-          border: '1px solid rgba(148,163,184,0.4)',
+          border: '1px solid rgba(168,162,158,0.4)',
           marginTop: 4
         }}
       />
@@ -179,7 +179,7 @@ function MediaAssetPreview({ messageType, media, token }) {
       href={resolvedUrl}
       target="_blank"
       rel="noreferrer"
-      style={{ color: '#93c5fd', fontSize: '0.78rem', marginTop: 4, display: 'inline-block' }}
+      style={{ color: '#2563eb', fontSize: '0.78rem', marginTop: 4, display: 'inline-block' }}
     >
       Abrir documento
     </a>
@@ -205,14 +205,14 @@ function MessageBody({ message = {}, token }) {
       <div style={{ display: 'grid', gap: 5 }}>
         <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{textBody || `[${messageType}]`}</div>
         {caption && <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: '0.85rem' }}>{caption}</div>}
-        {filename && <div style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>Archivo: {filename}</div>}
+        {filename && <div style={{ color: '#57534e', fontSize: '0.78rem' }}>Archivo: {filename}</div>}
         {link && (
-          <a href={link} target="_blank" rel="noreferrer" style={{ color: '#93c5fd', fontSize: '0.78rem' }}>
+          <a href={link} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontSize: '0.78rem' }}>
             Abrir archivo
           </a>
         )}
         <MediaAssetPreview messageType={messageType} media={media} token={token} />
-        {mediaId && <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Media ID: {mediaId}</div>}
+        {mediaId && <div style={{ color: '#78716c', fontSize: '0.74rem' }}>Media ID: {mediaId}</div>}
       </div>
     );
   }
@@ -228,9 +228,9 @@ function MessageBody({ message = {}, token }) {
       <div style={{ display: 'grid', gap: 5 }}>
         <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{textBody || '[Ubicación]'}</div>
         {location?.name && <div style={{ fontSize: '0.82rem' }}>{location.name}</div>}
-        {location?.address && <div style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>{location.address}</div>}
+        {location?.address && <div style={{ color: '#57534e', fontSize: '0.8rem' }}>{location.address}</div>}
         {mapsLink && (
-          <a href={mapsLink} target="_blank" rel="noreferrer" style={{ color: '#93c5fd', fontSize: '0.78rem' }}>
+          <a href={mapsLink} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontSize: '0.78rem' }}>
             Ver en mapa
           </a>
         )}
@@ -247,8 +247,8 @@ function MessageBody({ message = {}, token }) {
       <div style={{ display: 'grid', gap: 4 }}>
         <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{textBody || '[Contacto]'}</div>
         {firstName && <div style={{ fontSize: '0.82rem' }}>{firstName}</div>}
-        {firstPhone && <div style={{ color: '#93c5fd', fontSize: '0.8rem' }}>{firstPhone}</div>}
-        <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>
+        {firstPhone && <div style={{ color: '#2563eb', fontSize: '0.8rem' }}>{firstPhone}</div>}
+        <div style={{ color: '#78716c', fontSize: '0.74rem' }}>
           {contacts.length > 1 ? `${contacts.length} contactos enviados` : '1 contacto enviado'}
         </div>
       </div>
@@ -268,13 +268,13 @@ function MessageBody({ message = {}, token }) {
         <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>
           {bodyText || textBody || '[Interactivo]'}
         </div>
-        {interactiveType && <div style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>Tipo: {interactiveType}</div>}
+        {interactiveType && <div style={{ color: '#57534e', fontSize: '0.78rem' }}>Tipo: {interactiveType}</div>}
         {buttonTitles.length > 0 && (
-          <div style={{ color: '#93c5fd', fontSize: '0.78rem' }}>
+          <div style={{ color: '#2563eb', fontSize: '0.78rem' }}>
             Botones: {buttonTitles.join(' | ')}
           </div>
         )}
-        {listButton && <div style={{ color: '#93c5fd', fontSize: '0.78rem' }}>Lista: {listButton}</div>}
+        {listButton && <div style={{ color: '#2563eb', fontSize: '0.78rem' }}>Lista: {listButton}</div>}
       </div>
     );
   }
@@ -288,9 +288,9 @@ function MessageBody({ message = {}, token }) {
       <div style={{ display: 'grid', gap: 5 }}>
         <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>{textBody || '[Plantilla]'}</div>
         {name && <div style={{ fontSize: '0.82rem' }}>Template: {name}</div>}
-        {lang && <div style={{ color: '#cbd5e1', fontSize: '0.78rem' }}>Idioma: {lang}</div>}
+        {lang && <div style={{ color: '#57534e', fontSize: '0.78rem' }}>Idioma: {lang}</div>}
         {componentsCount > 0 && (
-          <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>
+          <div style={{ color: '#78716c', fontSize: '0.74rem' }}>
             Componentes: {componentsCount}
           </div>
         )}
@@ -303,11 +303,11 @@ function MessageBody({ message = {}, token }) {
 
 const getStatusVisual = (statusRaw, isOutbound) => {
   const status = String(statusRaw || '').trim().toLowerCase();
-  if (!isOutbound) return { label: status || 'received', color: '#9ca3af' };
+  if (!isOutbound) return { label: status || 'received', color: '#78716c' };
   if (status === 'read') return { label: 'read', color: '#86efac' };
-  if (status === 'delivered') return { label: 'delivered', color: '#93c5fd' };
-  if (status === 'failed') return { label: 'failed', color: '#fca5a5' };
-  return { label: status || 'sent', color: '#bfdbfe' };
+  if (status === 'delivered') return { label: 'delivered', color: '#2563eb' };
+  if (status === 'failed') return { label: 'failed', color: '#dc2626' };
+  return { label: status || 'sent', color: '#1d4ed8' };
 };
 
 const formatRelativeMinutes = (targetDateValue) => {
@@ -336,16 +336,16 @@ const getSlaBadge = (conversation = {}) => {
   if (elapsedMinutes > threshold) {
     return {
       label: `SLA vencido ${elapsedMinutes}m`,
-      color: '#fecaca',
+      color: '#b91c1c',
       border: 'rgba(248,113,113,0.45)',
-      background: 'rgba(127,29,29,0.35)'
+      background: 'rgba(254,226,226,0.35)'
     };
   }
   return {
     label: `SLA ${elapsedMinutes}/${threshold}m`,
-    color: '#fde68a',
+    color: '#92400e',
     border: 'rgba(251,191,36,0.45)',
-    background: 'rgba(120,53,15,0.35)'
+    background: 'rgba(254,243,199,0.35)'
   };
 };
 
@@ -361,10 +361,10 @@ function ConversationItem({ row, isActive, onClick }) {
         width: '100%',
         textAlign: 'left',
         border: isActive ? '1px solid rgba(59,130,246,0.8)' : '1px solid rgba(51,65,85,0.7)',
-        background: isActive ? 'linear-gradient(180deg, #1e3a5f 0%, #172338 100%)' : 'linear-gradient(180deg, #162132 0%, #111827 100%)',
+        background: isActive ? 'linear-gradient(180deg, #1e3a5f 0%, #172338 100%)' : 'linear-gradient(180deg, #162132 0%, #f5f1ec 100%)',
         borderRadius: 12,
         padding: '10px 12px',
-        color: '#e2e8f0',
+        color: '#292524',
         cursor: 'pointer',
         display: 'grid',
         gap: 6
@@ -374,13 +374,13 @@ function ConversationItem({ row, isActive, onClick }) {
         <strong style={{ fontSize: '0.9rem', lineHeight: 1.2 }}>
           {row.contact_name || normalizePhoneDisplay(row.contact_phone) || 'Sin nombre'}
         </strong>
-        <span style={{ color: '#94a3b8', fontSize: '0.74rem', whiteSpace: 'nowrap' }}>
+        <span style={{ color: '#78716c', fontSize: '0.74rem', whiteSpace: 'nowrap' }}>
           {formatDateTime(row.last_message_at)}
         </span>
       </div>
-      <div style={{ color: '#93c5fd', fontSize: '0.76rem' }}>{normalizePhoneDisplay(row.contact_phone)}</div>
+      <div style={{ color: '#2563eb', fontSize: '0.76rem' }}>{normalizePhoneDisplay(row.contact_phone)}</div>
       <div style={{
-        color: '#cbd5e1',
+        color: '#57534e',
         fontSize: '0.8rem',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
@@ -392,9 +392,9 @@ function ConversationItem({ row, isActive, onClick }) {
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{
             fontSize: '0.72rem',
-            color: row.status === 'closed' ? '#fca5a5' : '#86efac',
+            color: row.status === 'closed' ? '#dc2626' : '#86efac',
             border: row.status === 'closed' ? '1px solid rgba(248,113,113,0.5)' : '1px solid rgba(52,211,153,0.5)',
-            background: row.status === 'closed' ? 'rgba(127,29,29,0.35)' : 'rgba(6,78,59,0.35)',
+            background: row.status === 'closed' ? 'rgba(254,226,226,0.35)' : 'rgba(6,78,59,0.35)',
             borderRadius: 999,
             padding: '2px 8px'
           }}>
@@ -402,7 +402,7 @@ function ConversationItem({ row, isActive, onClick }) {
           </span>
           <span style={{
             fontSize: '0.72rem',
-            color: '#bfdbfe',
+            color: '#1d4ed8',
             border: '1px solid rgba(59,130,246,0.45)',
             background: 'rgba(30,58,138,0.32)',
             borderRadius: 999,
@@ -425,9 +425,9 @@ function ConversationItem({ row, isActive, onClick }) {
           {hasOverdueFollowup && (
             <span style={{
               fontSize: '0.7rem',
-              color: '#fca5a5',
+              color: '#dc2626',
               border: '1px solid rgba(248,113,113,0.45)',
-              background: 'rgba(127,29,29,0.35)',
+              background: 'rgba(254,226,226,0.35)',
               borderRadius: 999,
               padding: '2px 8px'
             }}>
@@ -461,9 +461,9 @@ function ConversationItem({ row, isActive, onClick }) {
 function CollapsibleSection({ title, isOpen, onToggle, badge, children }) {
   return (
     <div style={{
-      border: '1px solid #334155',
+      border: '1px solid #e7e0d8',
       borderRadius: 10,
-      background: '#0b1220',
+      background: '#faf8f5',
       padding: '10px 10px',
       display: 'grid',
       gap: 8
@@ -479,7 +479,7 @@ function CollapsibleSection({ title, isOpen, onToggle, badge, children }) {
           width: '100%',
           border: 'none',
           background: 'transparent',
-          color: '#e2e8f0',
+          color: '#292524',
           cursor: 'pointer',
           padding: 0
         }}
@@ -487,7 +487,7 @@ function CollapsibleSection({ title, isOpen, onToggle, badge, children }) {
         <span style={{ fontSize: '0.92rem', fontWeight: 700, textAlign: 'left' }}>{title}</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {badge}
-          <span style={{ color: '#94a3b8', fontSize: '0.84rem' }}>{isOpen ? 'Ocultar' : 'Ver'}</span>
+          <span style={{ color: '#78716c', fontSize: '0.84rem' }}>{isOpen ? 'Ocultar' : 'Ver'}</span>
         </span>
       </button>
       {isOpen && <div style={{ display: 'grid', gap: 8 }}>{children}</div>}
@@ -1202,12 +1202,12 @@ export default function WhatsAppInboxAdmin({ token }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
             <h3 style={{ marginBottom: 4 }}>WhatsApp Inbox</h3>
-            <div style={{ marginTop: 6, fontSize: '0.76rem', color: wsConnected ? '#86efac' : '#fbbf24' }}>
+            <div style={{ marginTop: 6, fontSize: '0.76rem', color: wsConnected ? '#86efac' : '#b45309' }}>
               WebSocket: {wsConnected ? 'conectado (tiempo real)' : 'desconectado (usa Actualizar manual)'}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <label style={{ color: '#94a3b8', fontSize: '0.78rem' }}>
+            <label style={{ color: '#78716c', fontSize: '0.78rem' }}>
               Ventana KPI
               <select
                 value={kpiWindowDays}
@@ -1216,9 +1216,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                   marginLeft: 6,
                   minHeight: 34,
                   borderRadius: 8,
-                  border: '1px solid #334155',
-                  background: '#0f172a',
-                  color: '#f8fafc',
+                  border: '1px solid #e7e0d8',
+                  background: '#ffffff',
+                  color: '#292524',
                   padding: '4px 8px'
                 }}
               >
@@ -1260,8 +1260,8 @@ export default function WhatsAppInboxAdmin({ token }) {
         <div style={{
           padding: '10px 12px',
           borderRadius: 8,
-          color: '#fecaca',
-          background: 'rgba(127,29,29,0.35)',
+          color: '#b91c1c',
+          background: 'rgba(254,226,226,0.35)',
           border: '1px solid rgba(248,113,113,0.45)'
         }}>
           {error}
@@ -1271,36 +1271,36 @@ export default function WhatsAppInboxAdmin({ token }) {
       <div className="card" style={{ marginBottom: 0, padding: 14, display: 'grid', gap: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <h4 style={{ margin: 0 }}>KPI WhatsApp ({kpiWindowDays} días)</h4>
-          {kpiLoading && <span style={{ color: '#93c5fd', fontSize: '0.78rem' }}>Actualizando KPI...</span>}
+          {kpiLoading && <span style={{ color: '#2563eb', fontSize: '0.78rem' }}>Actualizando KPI...</span>}
         </div>
         <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Conversaciones</div>
-            <div style={{ color: '#f8fafc', fontWeight: 700 }}>{Number(kpiTotals.total_conversations || 0)}</div>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#78716c', fontSize: '0.74rem' }}>Conversaciones</div>
+            <div style={{ color: '#292524', fontWeight: 700 }}>{Number(kpiTotals.total_conversations || 0)}</div>
           </div>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Primer respuesta</div>
-            <div style={{ color: '#f8fafc', fontWeight: 700 }}>{formatMinutes(kpiTotals.avg_first_response_minutes)}</div>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#78716c', fontSize: '0.74rem' }}>Primer respuesta</div>
+            <div style={{ color: '#292524', fontWeight: 700 }}>{formatMinutes(kpiTotals.avg_first_response_minutes)}</div>
           </div>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Read rate</div>
-            <div style={{ color: '#f8fafc', fontWeight: 700 }}>{formatPercent(kpiTotals.read_rate_percent)}</div>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#78716c', fontSize: '0.74rem' }}>Read rate</div>
+            <div style={{ color: '#292524', fontWeight: 700 }}>{formatPercent(kpiTotals.read_rate_percent)}</div>
           </div>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Enviados / leídos</div>
-            <div style={{ color: '#f8fafc', fontWeight: 700 }}>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#78716c', fontSize: '0.74rem' }}>Enviados / leídos</div>
+            <div style={{ color: '#292524', fontWeight: 700 }}>
               {Number(kpiTotals.outbound_total || 0)} / {Number(kpiTotals.outbound_read || 0)}
             </div>
           </div>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>Abiertas</div>
-            <div style={{ color: '#f8fafc', fontWeight: 700 }}>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#78716c', fontSize: '0.74rem' }}>Abiertas</div>
+            <div style={{ color: '#292524', fontWeight: 700 }}>
               {Number(kpiTotals.open_conversations || 0)}
             </div>
           </div>
-          <div style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, padding: '8px 10px' }}>
-            <div style={{ color: '#94a3b8', fontSize: '0.74rem' }}>No leídas</div>
-            <div style={{ color: '#f8fafc', fontWeight: 700 }}>
+          <div style={{ background: '#ffffff', border: '1px solid #e7e0d8', borderRadius: 10, padding: '8px 10px' }}>
+            <div style={{ color: '#78716c', fontSize: '0.74rem' }}>No leídas</div>
+            <div style={{ color: '#292524', fontWeight: 700 }}>
               {Number(kpiTotals.unread_messages || 0)}
             </div>
           </div>
@@ -1309,7 +1309,7 @@ export default function WhatsAppInboxAdmin({ token }) {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
               <thead>
-                <tr style={{ color: '#94a3b8', textAlign: 'left' }}>
+                <tr style={{ color: '#78716c', textAlign: 'left' }}>
                   <th style={{ padding: '6px 4px' }}>Agente</th>
                   <th style={{ padding: '6px 4px' }}>Convs</th>
                   <th style={{ padding: '6px 4px' }}>Abiertas</th>
@@ -1319,7 +1319,7 @@ export default function WhatsAppInboxAdmin({ token }) {
               </thead>
               <tbody>
                 {kpiAgents.slice(0, 6).map((row) => (
-                  <tr key={`${row.user_id ?? 'none'}-${row.user_name}`} style={{ borderTop: '1px solid #1e293b', color: '#e2e8f0' }}>
+                  <tr key={`${row.user_id ?? 'none'}-${row.user_name}`} style={{ borderTop: '1px solid #ffffff', color: '#292524' }}>
                     <td style={{ padding: '6px 4px' }}>{row.user_name}</td>
                     <td style={{ padding: '6px 4px' }}>{Number(row.conversations_total || 0)}</td>
                     <td style={{ padding: '6px 4px' }}>{Number(row.open_conversations || 0)}</td>
@@ -1350,18 +1350,18 @@ export default function WhatsAppInboxAdmin({ token }) {
               width: '100%',
               minHeight: 40,
               borderRadius: 10,
-              border: '1px solid #334155',
-              background: '#0f172a',
-              color: '#f8fafc',
+              border: '1px solid #e7e0d8',
+              background: '#ffffff',
+              color: '#292524',
               padding: '8px 10px',
               marginBottom: 10
             }}
           />
           <div style={{ display: 'grid', gap: 8, maxHeight: 550, overflowY: 'auto', paddingRight: 2 }}>
             {loadingConversations ? (
-              <div style={{ color: '#94a3b8', textAlign: 'center', padding: '20px 0' }}>Cargando conversaciones...</div>
+              <div style={{ color: '#78716c', textAlign: 'center', padding: '20px 0' }}>Cargando conversaciones...</div>
             ) : conversations.length === 0 ? (
-              <div style={{ color: '#94a3b8', textAlign: 'center', padding: '20px 0' }}>Sin conversaciones</div>
+              <div style={{ color: '#78716c', textAlign: 'center', padding: '20px 0' }}>Sin conversaciones</div>
             ) : conversations.map((row) => (
               <ConversationItem
                 key={row.id}
@@ -1374,36 +1374,36 @@ export default function WhatsAppInboxAdmin({ token }) {
         </section>
 
         <section className="card" style={{ marginBottom: 0, padding: 0, minHeight: 620, display: 'grid', gridTemplateRows: 'auto 1fr auto' }}>
-          <div style={{ borderBottom: '1px solid #334155', padding: '12px 14px', minHeight: 68 }}>
+          <div style={{ borderBottom: '1px solid #e7e0d8', padding: '12px 14px', minHeight: 68 }}>
             {selectedConversation ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontWeight: 700, color: '#f1f5f9' }}>
+                  <div style={{ fontWeight: 700, color: '#292524' }}>
                     {selectedConversation.contact_name || normalizePhoneDisplay(selectedConversation.contact_phone)}
                   </div>
-                  <div style={{ color: '#93c5fd', fontSize: '0.84rem' }}>
+                  <div style={{ color: '#2563eb', fontSize: '0.84rem' }}>
                     {normalizePhoneDisplay(selectedConversation.contact_phone)}
                   </div>
                 </div>
-                <div style={{ color: '#94a3b8', fontSize: '0.78rem', textAlign: 'right' }}>
+                <div style={{ color: '#78716c', fontSize: '0.78rem', textAlign: 'right' }}>
                   Última actividad<br />
                   {formatDateTime(selectedConversation.last_message_at)}
                 </div>
               </div>
             ) : (
-              <div style={{ color: '#94a3b8' }}>Selecciona una conversación</div>
+              <div style={{ color: '#78716c' }}>Selecciona una conversación</div>
             )}
           </div>
 
-          <div style={{ padding: 14, overflowY: 'auto', maxHeight: 470, background: 'linear-gradient(180deg, #0f172a 0%, #0b1220 100%)' }}>
+          <div style={{ padding: 14, overflowY: 'auto', maxHeight: 470, background: 'linear-gradient(180deg, #ffffff 0%, #faf8f5 100%)' }}>
             {loadingMessages ? (
-              <div style={{ color: '#94a3b8', textAlign: 'center', paddingTop: 24 }}>Cargando mensajes...</div>
+              <div style={{ color: '#78716c', textAlign: 'center', paddingTop: 24 }}>Cargando mensajes...</div>
             ) : !selectedConversation ? (
-              <div style={{ color: '#64748b', textAlign: 'center', paddingTop: 24 }}>
+              <div style={{ color: '#a8a29e', textAlign: 'center', paddingTop: 24 }}>
                 No hay conversación seleccionada.
               </div>
             ) : messages.length === 0 ? (
-              <div style={{ color: '#64748b', textAlign: 'center', paddingTop: 24 }}>
+              <div style={{ color: '#a8a29e', textAlign: 'center', paddingTop: 24 }}>
                 Sin mensajes todavía.
               </div>
             ) : (
@@ -1420,9 +1420,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                         maxWidth: '78%',
                         borderRadius: 12,
                         padding: '8px 10px',
-                        border: isOutbound ? '1px solid rgba(59,130,246,0.55)' : '1px solid rgba(71,85,105,0.65)',
-                        background: isOutbound ? 'linear-gradient(180deg, #1d4ed8 0%, #1e40af 100%)' : '#1f2937',
-                        color: '#f8fafc'
+                        border: isOutbound ? '1px solid rgba(59,130,246,0.55)' : '1px solid rgba(214,204,192,0.65)',
+                        background: isOutbound ? 'linear-gradient(180deg, #1d4ed8 0%, #1d4ed8 100%)' : '#f5f1ec',
+                        color: '#292524'
                       }}>
                         <MessageBody message={message} token={token} />
                         <div style={{
@@ -1431,7 +1431,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                           justifyContent: 'space-between',
                           gap: 10,
                           fontSize: '0.72rem',
-                          color: isOutbound ? '#bfdbfe' : '#9ca3af'
+                          color: isOutbound ? '#1d4ed8' : '#78716c'
                         }}>
                           <span>{formatDateTime(message.created_at)}</span>
                           <span style={{ color: statusVisual.color }}>{statusVisual.label}</span>
@@ -1444,7 +1444,7 @@ export default function WhatsAppInboxAdmin({ token }) {
             )}
           </div>
 
-          <div style={{ borderTop: '1px solid #334155', padding: 12, display: 'grid', gap: 8 }}>
+          <div style={{ borderTop: '1px solid #e7e0d8', padding: 12, display: 'grid', gap: 8 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '180px minmax(0, 1fr)', gap: 8 }}>
               <select
                 value={composerType}
@@ -1452,9 +1452,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                 style={{
                   minHeight: 40,
                   borderRadius: 10,
-                  border: '1px solid #334155',
-                  background: '#0f172a',
-                  color: '#f8fafc',
+                  border: '1px solid #e7e0d8',
+                  background: '#ffffff',
+                  color: '#292524',
                   padding: '8px 10px'
                 }}
               >
@@ -1464,21 +1464,21 @@ export default function WhatsAppInboxAdmin({ token }) {
                   </option>
                 ))}
               </select>
-              <div style={{ color: '#94a3b8', fontSize: '0.78rem', display: 'flex', alignItems: 'center' }}>
+              <div style={{ color: '#78716c', fontSize: '0.78rem', display: 'flex', alignItems: 'center' }}>
                 Envia texto, media, ubicacion, contactos, botones/lista y plantillas desde este panel.
               </div>
             </div>
 
             <div style={{
-              border: '1px solid #334155',
+              border: '1px solid #e7e0d8',
               borderRadius: 10,
               padding: '8px 10px',
-              background: '#0b1220',
+              background: '#faf8f5',
               display: 'grid',
               gap: 8
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <div style={{ color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}>
+                <div style={{ color: '#57534e', fontSize: '0.8rem', fontWeight: 600 }}>
                   Respuestas rápidas y plantillas
                 </div>
                 <button
@@ -1492,9 +1492,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                 </button>
               </div>
               {shortcutsLoading ? (
-                <div style={{ color: '#93c5fd', fontSize: '0.76rem' }}>Cargando respuestas...</div>
+                <div style={{ color: '#2563eb', fontSize: '0.76rem' }}>Cargando respuestas...</div>
               ) : activeShortcuts.length === 0 ? (
-                <div style={{ color: '#94a3b8', fontSize: '0.76rem' }}>
+                <div style={{ color: '#78716c', fontSize: '0.76rem' }}>
                   Aún no hay respuestas guardadas.
                 </div>
               ) : (
@@ -1506,9 +1506,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                       onClick={() => applyShortcut(shortcut)}
                       style={{
                         borderRadius: 999,
-                        border: shortcut.reply_type === 'template' ? '1px solid rgba(59,130,246,0.55)' : '1px solid rgba(71,85,105,0.8)',
-                        background: shortcut.reply_type === 'template' ? 'rgba(30,64,175,0.38)' : '#111827',
-                        color: '#e2e8f0',
+                        border: shortcut.reply_type === 'template' ? '1px solid rgba(59,130,246,0.55)' : '1px solid rgba(214,204,192,0.8)',
+                        background: shortcut.reply_type === 'template' ? 'rgba(219,234,254,0.38)' : '#f5f1ec',
+                        color: '#292524',
                         fontSize: '0.72rem',
                         padding: '5px 10px',
                         cursor: 'pointer'
@@ -1531,9 +1531,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                 style={{
                   width: '100%',
                   borderRadius: 10,
-                  border: '1px solid #334155',
-                  background: '#111827',
-                  color: '#f8fafc',
+                  border: '1px solid #e7e0d8',
+                  background: '#f5f1ec',
+                  color: '#292524',
                   padding: '9px 10px',
                   resize: 'vertical'
                 }}
@@ -1550,9 +1550,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                       gap: 6,
                       padding: '7px 10px',
                       borderRadius: 8,
-                      border: '1px solid #334155',
-                      background: '#0f172a',
-                      color: '#f8fafc',
+                      border: '1px solid #e7e0d8',
+                      background: '#ffffff',
+                      color: '#292524',
                       cursor: uploadingMedia ? 'default' : 'pointer',
                       opacity: uploadingMedia ? 0.75 : 1
                     }}
@@ -1593,9 +1593,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                     width: '100%',
                     minHeight: 38,
                     borderRadius: 8,
-                    border: '1px solid #334155',
-                    background: '#111827',
-                    color: '#f8fafc',
+                    border: '1px solid #e7e0d8',
+                    background: '#f5f1ec',
+                    color: '#292524',
                     padding: '8px 10px'
                   }}
                 />
@@ -1608,9 +1608,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                     width: '100%',
                     minHeight: 38,
                     borderRadius: 8,
-                    border: '1px solid #334155',
-                    background: '#111827',
-                    color: '#f8fafc',
+                    border: '1px solid #e7e0d8',
+                    background: '#f5f1ec',
+                    color: '#292524',
                     padding: '8px 10px'
                   }}
                 />
@@ -1624,9 +1624,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                       width: '100%',
                       minHeight: 38,
                       borderRadius: 8,
-                      border: '1px solid #334155',
-                      background: '#111827',
-                      color: '#f8fafc',
+                      border: '1px solid #e7e0d8',
+                      background: '#f5f1ec',
+                      color: '#292524',
                       padding: '8px 10px'
                     }}
                   />
@@ -1641,21 +1641,21 @@ export default function WhatsAppInboxAdmin({ token }) {
                       width: '100%',
                       minHeight: 38,
                       borderRadius: 8,
-                      border: '1px solid #334155',
-                      background: '#111827',
-                      color: '#f8fafc',
+                      border: '1px solid #e7e0d8',
+                      background: '#f5f1ec',
+                      color: '#292524',
                       padding: '8px 10px'
                     }}
                   />
                 )}
                 {(mediaUrl.trim() || mediaId.trim()) && (
                   <div style={{
-                    border: '1px dashed #334155',
+                    border: '1px dashed #e7e0d8',
                     borderRadius: 10,
                     padding: '8px 10px',
-                    background: '#0b1220'
+                    background: '#faf8f5'
                   }}>
-                    <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginBottom: 4 }}>
+                    <div style={{ color: '#78716c', fontSize: '0.74rem', marginBottom: 4 }}>
                       Vista previa del archivo
                     </div>
                     <MediaAssetPreview
@@ -1679,9 +1679,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                     width: '100%',
                     minHeight: 38,
                     borderRadius: 8,
-                    border: '1px solid #334155',
-                    background: '#111827',
-                    color: '#f8fafc',
+                    border: '1px solid #e7e0d8',
+                    background: '#f5f1ec',
+                    color: '#292524',
                     padding: '8px 10px'
                   }}
                 />
@@ -1694,9 +1694,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                     width: '100%',
                     minHeight: 38,
                     borderRadius: 8,
-                    border: '1px solid #334155',
-                    background: '#111827',
-                    color: '#f8fafc',
+                    border: '1px solid #e7e0d8',
+                    background: '#f5f1ec',
+                    color: '#292524',
                     padding: '8px 10px'
                   }}
                 />
@@ -1709,9 +1709,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                     width: '100%',
                     minHeight: 38,
                     borderRadius: 8,
-                    border: '1px solid #334155',
-                    background: '#111827',
-                    color: '#f8fafc',
+                    border: '1px solid #e7e0d8',
+                    background: '#f5f1ec',
+                    color: '#292524',
                     padding: '8px 10px'
                   }}
                 />
@@ -1724,9 +1724,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                     width: '100%',
                     minHeight: 38,
                     borderRadius: 8,
-                    border: '1px solid #334155',
-                    background: '#111827',
-                    color: '#f8fafc',
+                    border: '1px solid #e7e0d8',
+                    background: '#f5f1ec',
+                    color: '#292524',
                     padding: '8px 10px'
                   }}
                 />
@@ -1742,9 +1742,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                 style={{
                   width: '100%',
                   borderRadius: 10,
-                  border: '1px solid #334155',
-                  background: '#111827',
-                  color: '#f8fafc',
+                  border: '1px solid #e7e0d8',
+                  background: '#f5f1ec',
+                  color: '#292524',
                   padding: '9px 10px',
                   resize: 'vertical',
                   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -1762,9 +1762,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                 style={{
                   width: '100%',
                   borderRadius: 10,
-                  border: '1px solid #334155',
-                  background: '#111827',
-                  color: '#f8fafc',
+                  border: '1px solid #e7e0d8',
+                  background: '#f5f1ec',
+                  color: '#292524',
                   padding: '9px 10px',
                   resize: 'vertical',
                   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -1785,9 +1785,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                       width: '100%',
                       minHeight: 38,
                       borderRadius: 8,
-                      border: '1px solid #334155',
-                      background: '#111827',
-                      color: '#f8fafc',
+                      border: '1px solid #e7e0d8',
+                      background: '#f5f1ec',
+                      color: '#292524',
                       padding: '8px 10px'
                     }}
                   />
@@ -1800,9 +1800,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                       width: '100%',
                       minHeight: 38,
                       borderRadius: 8,
-                      border: '1px solid #334155',
-                      background: '#111827',
-                      color: '#f8fafc',
+                      border: '1px solid #e7e0d8',
+                      background: '#f5f1ec',
+                      color: '#292524',
                       padding: '8px 10px'
                     }}
                   />
@@ -1815,9 +1815,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                   style={{
                     width: '100%',
                     borderRadius: 10,
-                    border: '1px solid #334155',
-                    background: '#111827',
-                    color: '#f8fafc',
+                    border: '1px solid #e7e0d8',
+                    background: '#f5f1ec',
+                    color: '#292524',
                     padding: '9px 10px',
                     resize: 'vertical',
                     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -1843,7 +1843,7 @@ export default function WhatsAppInboxAdmin({ token }) {
         {sidebarVisible && (
           <aside className="card" style={{ marginBottom: 0, padding: 14, minHeight: 620 }}>
             {!conversationMeta ? (
-              <div style={{ color: '#94a3b8' }}>Selecciona una conversación para ver detalles.</div>
+              <div style={{ color: '#78716c' }}>Selecciona una conversación para ver detalles.</div>
             ) : (
               <div style={{ display: 'grid', gap: 12, maxHeight: 592, overflowY: 'auto', paddingRight: 4 }}>
                 <CollapsibleSection
@@ -1863,7 +1863,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                     </span>
                   ) : null}
                 >
-                  <div style={{ color: '#cbd5e1', fontSize: '0.84rem', display: 'grid', gap: 4 }}>
+                  <div style={{ color: '#57534e', fontSize: '0.84rem', display: 'grid', gap: 4 }}>
                     <div><strong>Contacto:</strong> {conversationMeta.contact_name || 'Sin nombre'}</div>
                     <div><strong>Número:</strong> {normalizePhoneDisplay(conversationMeta.contact_phone)}</div>
                     <div><strong>Estado:</strong> {conversationMeta.status === 'closed' ? 'Cerrado' : 'Abierto'}</div>
@@ -1872,16 +1872,16 @@ export default function WhatsAppInboxAdmin({ token }) {
                   </div>
 
                   <label style={{ display: 'grid', gap: 6 }}>
-                    <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Asignado a</span>
+                    <span style={{ color: '#78716c', fontSize: '0.8rem' }}>Asignado a</span>
                     <select
                       value={conversationMeta.assigned_user_id ?? ''}
                       onChange={(event) => changeAssignment(conversationMeta.id, event.target.value)}
                       style={{
                         minHeight: 38,
                         borderRadius: 8,
-                        border: '1px solid #334155',
-                        background: '#0f172a',
-                        color: '#f1f5f9',
+                        border: '1px solid #e7e0d8',
+                        background: '#ffffff',
+                        color: '#292524',
                         padding: '6px 8px'
                       }}
                     >
@@ -1895,7 +1895,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                   </label>
 
                   <label style={{ display: 'grid', gap: 6 }}>
-                    <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Pipeline</span>
+                    <span style={{ color: '#78716c', fontSize: '0.8rem' }}>Pipeline</span>
                     <select
                       value={String(conversationMeta.pipeline_stage || 'new')}
                       onChange={(event) => changePipelineStage(conversationMeta.id, event.target.value)}
@@ -1903,9 +1903,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                       style={{
                         minHeight: 38,
                         borderRadius: 8,
-                        border: '1px solid #334155',
-                        background: '#0f172a',
-                        color: '#f1f5f9',
+                        border: '1px solid #e7e0d8',
+                        background: '#ffffff',
+                        color: '#292524',
                         padding: '6px 8px'
                       }}
                     >
@@ -1948,7 +1948,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                   title="Seguimientos"
                   isOpen={showSidebarFollowups}
                   onToggle={() => setShowSidebarFollowups((prev) => !prev)}
-                  badge={followupsLoading ? <span style={{ color: '#93c5fd', fontSize: '0.72rem' }}>Actualizando...</span> : null}
+                  badge={followupsLoading ? <span style={{ color: '#2563eb', fontSize: '0.72rem' }}>Actualizando...</span> : null}
                 >
                   <div style={{ display: 'grid', gap: 6 }}>
                     <textarea
@@ -1959,9 +1959,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                       style={{
                         width: '100%',
                         borderRadius: 8,
-                        border: '1px solid #334155',
-                        background: '#111827',
-                        color: '#f8fafc',
+                        border: '1px solid #e7e0d8',
+                        background: '#f5f1ec',
+                        color: '#292524',
                         padding: '8px 9px',
                         resize: 'vertical',
                         fontSize: '0.8rem'
@@ -1976,9 +1976,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                           width: '100%',
                           minHeight: 36,
                           borderRadius: 8,
-                          border: '1px solid #334155',
-                          background: '#111827',
-                          color: '#f8fafc',
+                          border: '1px solid #e7e0d8',
+                          background: '#f5f1ec',
+                          color: '#292524',
                           padding: '6px 8px'
                         }}
                       />
@@ -1989,9 +1989,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                           width: '100%',
                           minHeight: 36,
                           borderRadius: 8,
-                          border: '1px solid #334155',
-                          background: '#111827',
-                          color: '#f8fafc',
+                          border: '1px solid #e7e0d8',
+                          background: '#f5f1ec',
+                          color: '#292524',
                           padding: '6px 8px'
                         }}
                       >
@@ -2011,7 +2011,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                     </button>
                   </div>
                   {followups.length === 0 ? (
-                    <div style={{ color: '#94a3b8', fontSize: '0.76rem' }}>No hay seguimientos.</div>
+                    <div style={{ color: '#78716c', fontSize: '0.76rem' }}>No hay seguimientos.</div>
                   ) : (
                     <div style={{ display: 'grid', gap: 6 }}>
                       {followups.slice(0, 10).map((item) => {
@@ -2021,16 +2021,16 @@ export default function WhatsAppInboxAdmin({ token }) {
                           <div
                             key={item.id}
                             style={{
-                              border: overdue ? '1px solid rgba(248,113,113,0.45)' : '1px solid #334155',
-                              background: overdue ? 'rgba(127,29,29,0.28)' : '#111827',
+                              border: overdue ? '1px solid rgba(248,113,113,0.45)' : '1px solid #e7e0d8',
+                              background: overdue ? 'rgba(254,226,226,0.28)' : '#f5f1ec',
                               borderRadius: 8,
                               padding: '7px 8px',
                               display: 'grid',
                               gap: 4
                             }}
                           >
-                            <div style={{ color: '#e2e8f0', fontSize: '0.8rem' }}>{item.note}</div>
-                            <div style={{ color: overdue ? '#fecaca' : '#94a3b8', fontSize: '0.72rem' }}>
+                            <div style={{ color: '#292524', fontSize: '0.8rem' }}>{item.note}</div>
+                            <div style={{ color: overdue ? '#b91c1c' : '#78716c', fontSize: '0.72rem' }}>
                               {formatDateTime(item.due_at)} ({formatRelativeMinutes(item.due_at)})
                             </div>
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -2053,7 +2053,7 @@ export default function WhatsAppInboxAdmin({ token }) {
                               <button
                                 type="button"
                                 className="btn"
-                                style={{ minHeight: 28, padding: '4px 8px', fontSize: '0.72rem', background: '#7f1d1d', color: '#fff' }}
+                                style={{ minHeight: 28, padding: '4px 8px', fontSize: '0.72rem', background: '#fee2e2', color: '#fff' }}
                                 onClick={() => updateFollowup(item.id, { status: 'cancelled' })}
                               >
                                 Cancelar
@@ -2070,18 +2070,18 @@ export default function WhatsAppInboxAdmin({ token }) {
                   title="Customer 360"
                   isOpen={showSidebarCustomer360}
                   onToggle={() => setShowSidebarCustomer360((prev) => !prev)}
-                  badge={customer360Loading ? <span style={{ color: '#93c5fd', fontSize: '0.72rem' }}>Cargando...</span> : null}
+                  badge={customer360Loading ? <span style={{ color: '#2563eb', fontSize: '0.72rem' }}>Cargando...</span> : null}
                 >
-                  <div style={{ display: 'grid', gap: 4, color: '#cbd5e1', fontSize: '0.78rem' }}>
+                  <div style={{ display: 'grid', gap: 4, color: '#57534e', fontSize: '0.78rem' }}>
                     <div><strong>Cotizaciones:</strong> {Number(customerSummary.quotes_total || 0)}</div>
                     <div><strong>Cerradas:</strong> {Number(customerSummary.closed_quotes || 0)}</div>
                     <div><strong>Monto cerrado:</strong> Bs {Number(customerSummary.closed_amount_bs || 0).toFixed(2)}</div>
                     <div><strong>Última cotización:</strong> {formatDateTime(customerSummary.last_quote_at)}</div>
                   </div>
                   <div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginBottom: 4 }}>Top productos</div>
+                    <div style={{ color: '#78716c', fontSize: '0.74rem', marginBottom: 4 }}>Top productos</div>
                     {customerTopProducts.length === 0 ? (
-                      <div style={{ color: '#64748b', fontSize: '0.74rem' }}>Sin historial de productos.</div>
+                      <div style={{ color: '#a8a29e', fontSize: '0.74rem' }}>Sin historial de productos.</div>
                     ) : (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {customerTopProducts.slice(0, 6).map((item, idx) => (
@@ -2089,9 +2089,9 @@ export default function WhatsAppInboxAdmin({ token }) {
                             key={`${item.sku || item.name}-${idx}`}
                             style={{
                               borderRadius: 999,
-                              border: '1px solid rgba(71,85,105,0.8)',
-                              background: '#111827',
-                              color: '#cbd5e1',
+                              border: '1px solid rgba(214,204,192,0.8)',
+                              background: '#f5f1ec',
+                              color: '#57534e',
                               fontSize: '0.7rem',
                               padding: '4px 8px'
                             }}
@@ -2103,28 +2103,28 @@ export default function WhatsAppInboxAdmin({ token }) {
                     )}
                   </div>
                   <div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.74rem', marginBottom: 4 }}>Últimas cotizaciones</div>
+                    <div style={{ color: '#78716c', fontSize: '0.74rem', marginBottom: 4 }}>Últimas cotizaciones</div>
                     {customerRecentQuotes.length === 0 ? (
-                      <div style={{ color: '#64748b', fontSize: '0.74rem' }}>Sin cotizaciones vinculadas.</div>
+                      <div style={{ color: '#a8a29e', fontSize: '0.74rem' }}>Sin cotizaciones vinculadas.</div>
                     ) : (
                       <div style={{ display: 'grid', gap: 5 }}>
                         {customerRecentQuotes.slice(0, 5).map((quote) => (
                           <div key={quote.id} style={{
-                            border: '1px solid #334155',
+                            border: '1px solid #e7e0d8',
                             borderRadius: 8,
-                            background: '#111827',
+                            background: '#f5f1ec',
                             padding: '6px 8px',
                             display: 'grid',
                             gap: 2
                           }}>
-                            <div style={{ color: '#e2e8f0', fontSize: '0.76rem', fontWeight: 600 }}>
+                            <div style={{ color: '#292524', fontSize: '0.76rem', fontWeight: 600 }}>
                               #{quote.id} · {quote.status || 'sin estado'}
                             </div>
-                            <div style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
+                            <div style={{ color: '#78716c', fontSize: '0.72rem' }}>
                               Bs {Number(quote.total || 0).toFixed(2)} · {formatDateTime(quote.created_at)}
                             </div>
                             {(quote.store_location || quote.department) && (
-                              <div style={{ color: '#64748b', fontSize: '0.7rem' }}>
+                              <div style={{ color: '#a8a29e', fontSize: '0.7rem' }}>
                                 {[quote.store_location, quote.department].filter(Boolean).join(' · ')}
                               </div>
                             )}
