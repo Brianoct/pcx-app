@@ -80,90 +80,7 @@ const mapProductionKanbanCardRow = (row = {}) => {
   };
 };
 
-let productionKanbanInitPromise = null;
-
-const ensureProductionKanbanTables = async () => {
-  if (!productionKanbanInitPromise) {
-    productionKanbanInitPromise = (async () => {
-      await ensureProductCatalogReady();
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS production_process_routes (
-          sku TEXT PRIMARY KEY REFERENCES products(sku) ON DELETE CASCADE,
-          start_process TEXT NOT NULL CHECK (start_process IN ('comprar', 'corte_laser', 'punzonado')),
-          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS production_kanban_cards (
-          id SERIAL PRIMARY KEY,
-          sku TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
-          product_name TEXT NOT NULL,
-          store_location TEXT NOT NULL,
-          current_stock INTEGER NOT NULL DEFAULT 0,
-          min_stock INTEGER NOT NULL DEFAULT 0,
-          required_qty INTEGER NOT NULL DEFAULT 0,
-          start_process TEXT NOT NULL CHECK (start_process IN ('comprar', 'corte_laser', 'punzonado')),
-          stage TEXT NOT NULL CHECK (stage IN ('comprar', 'corte_laser', 'punzonado', 'plegado', 'lavado', 'pintado', 'embalado')),
-          source TEXT NOT NULL DEFAULT 'min_stock',
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          last_moved_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          UNIQUE (sku, store_location, source)
-        )`
-      );
-      await pool.query(
-        `CREATE INDEX IF NOT EXISTS idx_production_kanban_cards_active_stage
-         ON production_kanban_cards (is_active, stage, updated_at DESC)`
-      );
-      await pool.query(
-        `ALTER TABLE production_process_routes
-         DROP CONSTRAINT IF EXISTS production_process_routes_start_process_check`
-      );
-      await pool.query(
-        `ALTER TABLE production_process_routes
-         DROP CONSTRAINT IF EXISTS production_process_routes_start_process_allowed`
-      );
-      await pool.query(
-        `ALTER TABLE production_process_routes
-         ADD CONSTRAINT production_process_routes_start_process_allowed
-         CHECK (start_process IN ('comprar', 'corte_laser', 'punzonado'))`
-      );
-      await pool.query(
-        `ALTER TABLE production_kanban_cards
-         DROP CONSTRAINT IF EXISTS production_kanban_cards_start_process_check`
-      );
-      await pool.query(
-        `ALTER TABLE production_kanban_cards
-         DROP CONSTRAINT IF EXISTS production_kanban_cards_start_process_allowed`
-      );
-      await pool.query(
-        `ALTER TABLE production_kanban_cards
-         ADD CONSTRAINT production_kanban_cards_start_process_allowed
-         CHECK (start_process IN ('comprar', 'corte_laser', 'punzonado'))`
-      );
-      await pool.query(
-        `ALTER TABLE production_kanban_cards
-         DROP CONSTRAINT IF EXISTS production_kanban_cards_stage_check`
-      );
-      await pool.query(
-        `ALTER TABLE production_kanban_cards
-         DROP CONSTRAINT IF EXISTS production_kanban_cards_stage_allowed`
-      );
-      await pool.query(
-        `ALTER TABLE production_kanban_cards
-         ADD CONSTRAINT production_kanban_cards_stage_allowed
-         CHECK (stage IN ('comprar', 'corte_laser', 'punzonado', 'plegado', 'lavado', 'pintado', 'embalado'))`
-      );
-    })();
-  }
-  await productionKanbanInitPromise;
-};
-
 const syncProductionKanbanFromInventory = async () => {
-  await ensureProductionKanbanTables();
   const productsRes = await pool.query(
     `SELECT sku, name, menu_category,
             stock_cochabamba, stock_santacruz, stock_lima,
@@ -269,12 +186,10 @@ module.exports = {
   PRODUCTION_KANBAN_ROUTE_BY_START,
   PRODUCTION_KANBAN_STAGES,
   PRODUCTION_KANBAN_START_STAGES,
-  ensureProductionKanbanTables,
   getProductionRouteStages,
   inferDefaultProductionStartProcess,
   mapProductionKanbanCardRow,
   normalizeProductionKanbanStage,
   normalizeProductionStartProcess,
-  productionKanbanInitPromise,
   syncProductionKanbanFromInventory
 };

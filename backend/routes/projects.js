@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
-const { PROJECT_AREA_VALUES, PROJECT_TASK_STATUS_VALUES, PROJECT_TASK_TYPE_VALUES, PROJECT_VERSION_BUMP_VALUES, ensureProjectsTables, getProjectsAccessScope, mapProjectRow, mapProjectTaskRow, maybeApplyTaskVersionBump, normalizeProjectPayload, normalizeProjectTaskPayload, normalizeProjectTaskStatus, normalizeProjectTaskType, normalizeProjectVersionBump } = require('../lib/projects');
+const { PROJECT_AREA_VALUES, PROJECT_TASK_STATUS_VALUES, PROJECT_TASK_TYPE_VALUES, PROJECT_VERSION_BUMP_VALUES, getProjectsAccessScope, mapProjectRow, mapProjectTaskRow, maybeApplyTaskVersionBump, normalizeProjectPayload, normalizeProjectTaskPayload, normalizeProjectTaskStatus, normalizeProjectTaskType, normalizeProjectVersionBump } = require('../lib/projects');
 const { sanitizePanelAccess } = require('../lib/rbac');
 const { loadUserContext, resolveUserDisplayName } = require('../lib/users');
 const { createHttpError } = require('../lib/util');
@@ -17,7 +17,6 @@ router.get('/api/projects/users', authenticateToken, async (req, res) => {
     const scope = getProjectsAccessScope(userContext, access);
     if (scope.error) return res.status(403).json({ error: scope.error });
 
-    await ensureProjectsTables();
     const result = await pool.query(
       `SELECT id, email, display_name, role
        FROM users
@@ -44,7 +43,6 @@ router.get('/api/projects/dashboard', authenticateToken, async (req, res) => {
     const scope = getProjectsAccessScope(userContext, access);
     if (scope.error) return res.status(403).json({ error: scope.error });
 
-    await ensureProjectsTables();
     const [projectsRes, tasksRes] = await Promise.all([
       pool.query(
         `SELECT
@@ -158,7 +156,6 @@ router.post('/api/projects', authenticateToken, async (req, res) => {
     const scope = getProjectsAccessScope(userContext, access);
     if (scope.error) return res.status(403).json({ error: scope.error });
 
-    await ensureProjectsTables();
     const normalized = normalizeProjectPayload(req.body || {}, { partial: false });
     const result = await pool.query(
       `INSERT INTO projects (
@@ -201,7 +198,6 @@ router.post('/api/projects/:projectId/tasks', authenticateToken, async (req, res
     const scope = getProjectsAccessScope(userContext, access);
     if (scope.error) return res.status(403).json({ error: scope.error });
 
-    await ensureProjectsTables();
     const normalized = normalizeProjectTaskPayload(req.body || {}, { partial: false });
     await client.query('BEGIN');
     const projectRes = await client.query(
@@ -299,7 +295,6 @@ router.delete('/api/projects/tasks/:taskId', authenticateToken, async (req, res)
     const scope = getProjectsAccessScope(userContext, access);
     if (scope.error) return res.status(403).json({ error: scope.error });
 
-    await ensureProjectsTables();
     await client.query('BEGIN');
     const currentRes = await client.query(
       `SELECT t.id, t.title, t.project_id, p.is_active
@@ -350,7 +345,6 @@ router.patch('/api/projects/tasks/:taskId', authenticateToken, async (req, res) 
     const scope = getProjectsAccessScope(userContext, access);
     if (scope.error) return res.status(403).json({ error: scope.error });
 
-    await ensureProjectsTables();
     const normalized = normalizeProjectTaskPayload(req.body || {}, { partial: true });
     if (Object.keys(normalized).length === 0) {
       throw createHttpError(400, 'No se enviaron cambios para la tarea');

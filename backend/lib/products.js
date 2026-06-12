@@ -55,13 +55,8 @@ const syncProductCatalogBySkuFromRows = (rows = []) => {
 const ensureProductCatalogReady = async () => {
   if (!productCatalogInitPromise) {
     productCatalogInitPromise = (async () => {
-      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS sf_price NUMERIC(12,2) NOT NULL DEFAULT 0`);
-      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cf_price NUMERIC(12,2) NOT NULL DEFAULT 0`);
-      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
-      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_gift_eligible BOOLEAN NOT NULL DEFAULT FALSE`);
-      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS menu_category TEXT`);
-      await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT`);
-
+      // Schema lives in migrations; this only seeds defaults and warms the
+      // in-memory catalog cache.
       for (const item of DEFAULT_PRODUCT_CATALOG) {
         await pool.query(
           `INSERT INTO products (sku, name, sf_price, cf_price, is_active)

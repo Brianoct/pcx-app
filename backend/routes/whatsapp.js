@@ -3,7 +3,7 @@ const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { resolveUserDisplayName } = require('../lib/users');
 const { createHttpError, parseJsonInput, parseOptionalBoolean } = require('../lib/util');
-const { WHATSAPP_MEDIA_UPLOAD_MAX_BYTES, WHATSAPP_PIPELINE_STAGES, WHATSAPP_VERIFY_TOKEN, assignConversationRoundRobin, buildOutboundWhatsAppPayload, ensureWhatsAppInboxTables, fetchWhatsAppMediaBinary, fetchWhatsAppMediaMeta, guessWhatsAppMessageTypeFromMime, loadEligibleWhatsAppSalesUsers, normalizeWhatsAppFollowupStatus, normalizeWhatsAppPhone, normalizeWhatsAppPipelineStage, notifyWhatsAppInboxRealtime, processInboundWhatsAppMessage, processWhatsAppStatusUpdates, sendWhatsAppMessage, uploadMediaToWhatsApp, verifyWhatsAppWebhookSignature, whatsappMediaUpload } = require('../lib/whatsapp');
+const { WHATSAPP_MEDIA_UPLOAD_MAX_BYTES, WHATSAPP_PIPELINE_STAGES, WHATSAPP_VERIFY_TOKEN, assignConversationRoundRobin, buildOutboundWhatsAppPayload, fetchWhatsAppMediaBinary, fetchWhatsAppMediaMeta, guessWhatsAppMessageTypeFromMime, loadEligibleWhatsAppSalesUsers, normalizeWhatsAppFollowupStatus, normalizeWhatsAppPhone, normalizeWhatsAppPipelineStage, notifyWhatsAppInboxRealtime, processInboundWhatsAppMessage, processWhatsAppStatusUpdates, sendWhatsAppMessage, uploadMediaToWhatsApp, verifyWhatsAppWebhookSignature, whatsappMediaUpload } = require('../lib/whatsapp');
 
 const router = express.Router();
 
@@ -69,7 +69,6 @@ router.post(
   },
   async (req, res) => {
     try {
-      await ensureWhatsAppInboxTables();
       if (!req.file || !Buffer.isBuffer(req.file.buffer) || req.file.size <= 0) {
         return res.status(400).json({ error: 'Debes adjuntar un archivo en el campo file' });
       }
@@ -102,7 +101,6 @@ router.post(
 
 router.get('/api/whatsapp/inbox/media/:id/meta', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const mediaId = String(req.params.id || '').trim();
     if (!mediaId) return res.status(400).json({ error: 'media_id inválido' });
     const meta = await fetchWhatsAppMediaMeta(mediaId);
@@ -122,7 +120,6 @@ router.get('/api/whatsapp/inbox/media/:id/meta', authenticateToken, requireRole(
 
 router.get('/api/whatsapp/inbox/media/:id/content', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const mediaId = String(req.params.id || '').trim();
     if (!mediaId) return res.status(400).json({ error: 'media_id inválido' });
     const meta = await fetchWhatsAppMediaMeta(mediaId);
@@ -148,7 +145,6 @@ router.get('/api/whatsapp/inbox/media/:id/content', authenticateToken, requireRo
 
 router.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const searchRaw = String(req.query.search || '').trim();
     const searchLike = `%${searchRaw}%`;
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
@@ -248,7 +244,6 @@ router.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole([
 
 router.patch('/api/whatsapp/inbox/conversations/:id/pipeline', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });
@@ -290,7 +285,6 @@ router.patch('/api/whatsapp/inbox/conversations/:id/pipeline', authenticateToken
 
 router.get('/api/whatsapp/inbox/shortcuts', authenticateToken, requireRole(['admin']), async (_req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const shortcutsRes = await pool.query(
       `SELECT id, title, reply_type, body_text, template_name, template_language_code, template_components,
               is_active, created_by, updated_by, created_at, updated_at
@@ -322,7 +316,6 @@ router.get('/api/whatsapp/inbox/shortcuts', authenticateToken, requireRole(['adm
 
 router.post('/api/whatsapp/inbox/shortcuts', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const title = String(req.body?.title || '').trim();
     const replyType = String(req.body?.reply_type || 'text').trim().toLowerCase();
     if (!title) return res.status(400).json({ error: 'title es requerido' });
@@ -387,7 +380,6 @@ router.post('/api/whatsapp/inbox/shortcuts', authenticateToken, requireRole(['ad
 
 router.patch('/api/whatsapp/inbox/shortcuts/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const shortcutId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(shortcutId) || shortcutId <= 0) return res.status(400).json({ error: 'ID inválido' });
     const currentRes = await pool.query(
@@ -471,7 +463,6 @@ router.patch('/api/whatsapp/inbox/shortcuts/:id', authenticateToken, requireRole
 
 router.get('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });
@@ -539,7 +530,6 @@ router.get('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken,
 
 router.post('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });
@@ -615,7 +605,6 @@ router.post('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken
 
 router.patch('/api/whatsapp/inbox/followups/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const followupId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(followupId) || followupId <= 0) {
       return res.status(400).json({ error: 'ID de seguimiento inválido' });
@@ -707,7 +696,6 @@ router.patch('/api/whatsapp/inbox/followups/:id', authenticateToken, requireRole
 
 router.get('/api/whatsapp/inbox/conversations/:id/customer-360', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });
@@ -845,7 +833,6 @@ router.get('/api/whatsapp/inbox/conversations/:id/customer-360', authenticateTok
 
 router.get('/api/whatsapp/inbox/kpis', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const daysRaw = Number.parseInt(req.query.days, 10);
     const days = Math.min(90, Math.max(1, Number.isInteger(daysRaw) ? daysRaw : 7));
     const sinceParam = `${days} days`;
@@ -1002,7 +989,6 @@ router.get('/api/whatsapp/inbox/kpis', authenticateToken, requireRole(['admin'])
 
 router.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });
@@ -1119,7 +1105,6 @@ router.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, 
 
 router.patch('/api/whatsapp/inbox/conversations/:id/read', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });
@@ -1152,7 +1137,6 @@ router.patch('/api/whatsapp/inbox/conversations/:id/read', authenticateToken, re
 
 router.patch('/api/whatsapp/inbox/conversations/:id/status', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureWhatsAppInboxTables();
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });
@@ -1191,7 +1175,6 @@ router.patch('/api/whatsapp/inbox/conversations/:id/status', authenticateToken, 
 router.patch('/api/whatsapp/inbox/conversations/:id/assign', authenticateToken, requireRole(['admin']), async (req, res) => {
   let client;
   try {
-    await ensureWhatsAppInboxTables();
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });
@@ -1294,7 +1277,6 @@ router.patch('/api/whatsapp/inbox/conversations/:id/assign', authenticateToken, 
 router.post('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, requireRole(['admin']), async (req, res) => {
   let client;
   try {
-    await ensureWhatsAppInboxTables();
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });

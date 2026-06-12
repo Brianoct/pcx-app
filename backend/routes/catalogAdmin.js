@@ -1,8 +1,8 @@
 const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
-const { PRODUCT_COST_COMPONENT_KEYS, buildProductCostingResponseRow, ensureProductCostingTable, parseProductCostingPayload } = require('../lib/costing');
-const { PRODUCT_PROCESS_KEYS, buildEquipmentResponseRow, buildMaterialResponseRow, ensureProductProductionMappingReady, ensureProductionResourceCatalogReady, getProductProductionConfig, normalizeEquipmentPayload, normalizeMaterialPayload, normalizeProductProductionConfigPayload, saveProductProductionConfig } = require('../lib/productionResources');
+const { PRODUCT_COST_COMPONENT_KEYS, buildProductCostingResponseRow, parseProductCostingPayload } = require('../lib/costing');
+const { PRODUCT_PROCESS_KEYS, buildEquipmentResponseRow, buildMaterialResponseRow, getProductProductionConfig, normalizeEquipmentPayload, normalizeMaterialPayload, normalizeProductProductionConfigPayload, saveProductProductionConfig } = require('../lib/productionResources');
 const { ensureProductCatalogReady, loadProductCatalogRows, normalizeProductPayload, validateProductSku } = require('../lib/products');
 const { normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { loadUserContext } = require('../lib/users');
@@ -32,7 +32,6 @@ router.get('/api/product-catalog', authenticateToken, async (req, res) => {
 router.post('/api/product-catalog', authenticateToken, requireRole(['admin']), async (req, res) => {
   let client;
   try {
-    await ensureProductProductionMappingReady();
     const sku = validateProductSku(req.body?.sku);
     const normalized = normalizeProductPayload(req.body, { partial: false });
     const productionConfig = normalizeProductProductionConfigPayload(req.body || {});
@@ -189,7 +188,6 @@ router.delete('/api/product-catalog/:sku', authenticateToken, requireRole(['admi
 
 router.get('/api/admin/product-production/options', authenticateToken, requireRole(['admin']), async (_req, res) => {
   try {
-    await ensureProductProductionMappingReady();
     const [equipmentRes, materialRes] = await Promise.all([
       pool.query(
         `SELECT id, code, name
@@ -230,7 +228,6 @@ router.get('/api/admin/product-production/options', authenticateToken, requireRo
 
 router.get('/api/admin/product-production/:sku', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureProductProductionMappingReady();
     const sku = validateProductSku(req.params.sku);
     const productRes = await pool.query(
       `SELECT sku
@@ -252,7 +249,6 @@ router.get('/api/admin/product-production/:sku', authenticateToken, requireRole(
 router.put('/api/admin/product-production/:sku', authenticateToken, requireRole(['admin']), async (req, res) => {
   let client;
   try {
-    await ensureProductProductionMappingReady();
     const sku = validateProductSku(req.params.sku);
     const payload = normalizeProductProductionConfigPayload(req.body || {});
 
@@ -295,7 +291,6 @@ router.put('/api/admin/product-production/:sku', authenticateToken, requireRole(
 
 router.get('/api/admin/equipos', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureProductionResourceCatalogReady();
     const includeInactive = parseOptionalBoolean(req.query.include_inactive, false);
     const whereSql = includeInactive ? '' : 'WHERE is_active = TRUE';
     const rowsRes = await pool.query(
@@ -316,7 +311,6 @@ router.get('/api/admin/equipos', authenticateToken, requireRole(['admin']), asyn
 
 router.post('/api/admin/equipos', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureProductionResourceCatalogReady();
     const payload = normalizeEquipmentPayload(req.body || {}, { partial: false });
     const insertRes = await pool.query(
       `INSERT INTO production_equipment_catalog (
@@ -351,7 +345,6 @@ router.post('/api/admin/equipos', authenticateToken, requireRole(['admin']), asy
 
 router.patch('/api/admin/equipos/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureProductionResourceCatalogReady();
     const equipmentId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(equipmentId) || equipmentId <= 0) {
       return res.status(400).json({ error: 'ID de equipo inválido' });
@@ -398,7 +391,6 @@ router.patch('/api/admin/equipos/:id', authenticateToken, requireRole(['admin'])
 
 router.delete('/api/admin/equipos/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureProductionResourceCatalogReady();
     const equipmentId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(equipmentId) || equipmentId <= 0) {
       return res.status(400).json({ error: 'ID de equipo inválido' });
@@ -425,7 +417,6 @@ router.delete('/api/admin/equipos/:id', authenticateToken, requireRole(['admin']
 
 router.get('/api/admin/materiales', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureProductionResourceCatalogReady();
     const includeInactive = parseOptionalBoolean(req.query.include_inactive, false);
     const whereSql = includeInactive ? '' : 'WHERE is_active = TRUE';
     const rowsRes = await pool.query(
@@ -446,7 +437,6 @@ router.get('/api/admin/materiales', authenticateToken, requireRole(['admin']), a
 
 router.post('/api/admin/materiales', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureProductionResourceCatalogReady();
     const payload = normalizeMaterialPayload(req.body || {}, { partial: false });
     const insertRes = await pool.query(
       `INSERT INTO production_material_catalog (
@@ -477,7 +467,6 @@ router.post('/api/admin/materiales', authenticateToken, requireRole(['admin']), 
 
 router.patch('/api/admin/materiales/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureProductionResourceCatalogReady();
     const materialId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(materialId) || materialId <= 0) {
       return res.status(400).json({ error: 'ID de material inválido' });
@@ -521,7 +510,6 @@ router.patch('/api/admin/materiales/:id', authenticateToken, requireRole(['admin
 
 router.delete('/api/admin/materiales/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
-    await ensureProductionResourceCatalogReady();
     const materialId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(materialId) || materialId <= 0) {
       return res.status(400).json({ error: 'ID de material inválido' });
@@ -548,7 +536,6 @@ router.delete('/api/admin/materiales/:id', authenticateToken, requireRole(['admi
 
 router.get('/api/product-costing', authenticateToken, requireRole(['admin']), async (_req, res) => {
   try {
-    await ensureProductCostingTable();
     const result = await pool.query(
       `SELECT
          p.sku,
@@ -583,7 +570,6 @@ router.get('/api/product-costing', authenticateToken, requireRole(['admin']), as
 router.patch('/api/product-costing/:sku', authenticateToken, requireRole(['admin']), async (req, res) => {
   let client;
   try {
-    await ensureProductCostingTable();
     const sku = validateProductSku(req.params.sku);
     const payload = parseProductCostingPayload(req.body || {});
     const computedPrice = PRODUCT_COST_COMPONENT_KEYS

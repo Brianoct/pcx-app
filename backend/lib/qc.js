@@ -19,54 +19,7 @@ const normalizeQcResult = (value = '') => {
   return map[normalized] || null;
 };
 
-const ensureQcTables = async () => {
-  await pool.query(
-    `CREATE TABLE IF NOT EXISTS quality_control_settings (
-       sku TEXT PRIMARY KEY,
-       base_price NUMERIC(12,2) NOT NULL DEFAULT 0,
-       commission_rate NUMERIC(10,4) NOT NULL DEFAULT 0,
-       updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
-     )`
-  );
-  await pool.query(
-    `ALTER TABLE quality_control_settings
-     ADD COLUMN IF NOT EXISTS base_price NUMERIC(12,2) NOT NULL DEFAULT 0`
-  );
-  await pool.query(
-    `ALTER TABLE quality_control_settings
-     ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(10,4) NOT NULL DEFAULT 0`
-  );
-  await pool.query(
-    `ALTER TABLE quality_control_settings
-     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()`
-  );
-  await pool.query(
-    `CREATE TABLE IF NOT EXISTS quality_control_records (
-       id BIGSERIAL PRIMARY KEY,
-       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-       sku TEXT NOT NULL,
-       product_name TEXT NOT NULL,
-       quantity INTEGER NOT NULL CHECK (quantity > 0),
-       result TEXT NOT NULL CHECK (result IN ('passed', 'rejected')),
-       created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
-     )`
-  );
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS idx_quality_control_records_created_at
-     ON quality_control_records (created_at)`
-  );
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS idx_quality_control_records_user_id
-     ON quality_control_records (user_id)`
-  );
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS idx_quality_control_records_sku
-     ON quality_control_records (sku)`
-  );
-};
-
 const loadQcSettingsMap = async () => {
-  await ensureQcTables();
   const settingsRes = await pool.query(
     `SELECT sku, base_price, commission_rate
      FROM quality_control_settings`
@@ -82,7 +35,6 @@ const loadQcSettingsMap = async () => {
 };
 
 const ensureQcProductSettingsSeeded = async () => {
-  await ensureQcTables();
   const catalogRows = await loadProductCatalogRows();
   for (const item of catalogRows) {
     await pool.query(
@@ -101,7 +53,6 @@ const ensureQcProductSettingsSeeded = async () => {
 
 module.exports = {
   ensureQcProductSettingsSeeded,
-  ensureQcTables,
   loadQcSettingsMap,
   normalizeQcResult
 };
