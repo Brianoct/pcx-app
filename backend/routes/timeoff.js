@@ -160,7 +160,9 @@ router.post('/api/time-off', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/api/timeoff/requests', authenticateToken, requireRole(['admin']), async (req, res) => {
+// Canonical admin paths use /api/time-off; the legacy /api/timeoff spellings
+// stay registered as aliases for older clients.
+router.get(['/api/time-off/requests', '/api/timeoff/requests'], authenticateToken, requireRole(['admin']), async (req, res) => {
   const year = parseYearOrCurrent(req.query.year);
   if (year === null) return res.status(400).json({ error: 'Año inválido' });
   const { start, end } = makeYearWindow(year);
@@ -216,7 +218,7 @@ router.get('/api/timeoff/requests', authenticateToken, requireRole(['admin']), a
   }
 });
 
-router.get('/api/timeoff/summary', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get(['/api/time-off/summary', '/api/timeoff/summary'], authenticateToken, requireRole(['admin']), async (req, res) => {
   const year = parseYearOrCurrent(req.query.year);
   if (year === null) return res.status(400).json({ error: 'Año inválido' });
   try {
@@ -241,7 +243,7 @@ router.get('/api/timeoff/summary', authenticateToken, requireRole(['admin']), as
   }
 });
 
-router.patch('/api/timeoff/requests/:id/status', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.patch(['/api/time-off/requests/:id/status', '/api/timeoff/requests/:id/status'], authenticateToken, requireRole(['admin']), async (req, res) => {
   const status = normalizeTimeOffStatus(req.body?.status);
   if (!status) return res.status(400).json({ error: 'Estado inválido' });
   const legacyStatusMap = {

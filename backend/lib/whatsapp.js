@@ -507,151 +507,6 @@ const fetchWhatsAppMediaBinary = async (mediaUrl) => {
   };
 };
 
-let whatsappInboxInitPromise = null;
-
-const ensureWhatsAppInboxTables = async () => {
-  if (!whatsappInboxInitPromise) {
-    whatsappInboxInitPromise = (async () => {
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS whatsapp_contacts (
-          id BIGSERIAL PRIMARY KEY,
-          wa_phone TEXT NOT NULL UNIQUE,
-          profile_name TEXT,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
-        )`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS whatsapp_conversations (
-          id BIGSERIAL PRIMARY KEY,
-          contact_id BIGINT NOT NULL UNIQUE REFERENCES whatsapp_contacts(id) ON DELETE CASCADE,
-          status TEXT NOT NULL DEFAULT 'open',
-          assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          unread_count INTEGER NOT NULL DEFAULT 0,
-          last_message_preview TEXT,
-          last_message_at TIMESTAMP WITHOUT TIME ZONE,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          CONSTRAINT whatsapp_conversations_status_chk CHECK (status IN ('open', 'closed'))
-        )`
-      );
-      await pool.query(
-        `CREATE INDEX IF NOT EXISTS idx_whatsapp_conversations_last_message_at
-         ON whatsapp_conversations (last_message_at DESC NULLS LAST)`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS whatsapp_messages (
-          id BIGSERIAL PRIMARY KEY,
-          conversation_id BIGINT NOT NULL REFERENCES whatsapp_conversations(id) ON DELETE CASCADE,
-          wa_message_id TEXT,
-          direction TEXT NOT NULL,
-          message_type TEXT NOT NULL DEFAULT 'text',
-          text_body TEXT,
-          status TEXT,
-          from_phone TEXT,
-          to_phone TEXT,
-          raw_payload JSONB,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          CONSTRAINT whatsapp_messages_direction_chk CHECK (direction IN ('inbound', 'outbound'))
-        )`
-      );
-      await pool.query(
-        `CREATE UNIQUE INDEX IF NOT EXISTS uq_whatsapp_messages_wa_message_id
-         ON whatsapp_messages (wa_message_id)
-         WHERE wa_message_id IS NOT NULL`
-      );
-      await pool.query(
-        `CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_conversation_created
-         ON whatsapp_messages (conversation_id, created_at ASC, id ASC)`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS whatsapp_assignment_logs (
-          id BIGSERIAL PRIMARY KEY,
-          conversation_id BIGINT NOT NULL REFERENCES whatsapp_conversations(id) ON DELETE CASCADE,
-          previous_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          reason TEXT NOT NULL DEFAULT 'auto_round_robin',
-          changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
-        )`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS whatsapp_round_robin_state (
-          singleton_id SMALLINT PRIMARY KEY DEFAULT 1,
-          last_assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          CONSTRAINT whatsapp_round_robin_singleton_chk CHECK (singleton_id = 1)
-        )`
-      );
-      await pool.query(
-        `INSERT INTO whatsapp_round_robin_state (singleton_id, last_assigned_user_id, updated_at)
-         VALUES (1, NULL, NOW())
-         ON CONFLICT (singleton_id) DO NOTHING`
-      );
-      await pool.query(
-        `ALTER TABLE whatsapp_conversations
-         ADD COLUMN IF NOT EXISTS pipeline_stage TEXT NOT NULL DEFAULT 'new'`
-      );
-      await pool.query(
-        `ALTER TABLE whatsapp_conversations
-         DROP CONSTRAINT IF EXISTS whatsapp_conversations_pipeline_stage_chk`
-      );
-      await pool.query(
-        `ALTER TABLE whatsapp_conversations
-         ADD CONSTRAINT whatsapp_conversations_pipeline_stage_chk
-         CHECK (pipeline_stage IN ('new', 'qualified', 'quoted', 'negotiation', 'won', 'lost'))`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS whatsapp_followup_tasks (
-          id BIGSERIAL PRIMARY KEY,
-          conversation_id BIGINT NOT NULL REFERENCES whatsapp_conversations(id) ON DELETE CASCADE,
-          assigned_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          note TEXT,
-          due_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-          status TEXT NOT NULL DEFAULT 'pending',
-          completed_at TIMESTAMP WITHOUT TIME ZONE,
-          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          CONSTRAINT whatsapp_followup_tasks_status_chk CHECK (status IN ('pending', 'done', 'cancelled'))
-        )`
-      );
-      await pool.query(
-        `CREATE INDEX IF NOT EXISTS idx_whatsapp_followup_tasks_conversation
-         ON whatsapp_followup_tasks (conversation_id, status, due_at ASC)`
-      );
-      await pool.query(
-        `CREATE INDEX IF NOT EXISTS idx_whatsapp_followup_tasks_due_pending
-         ON whatsapp_followup_tasks (due_at ASC)
-         WHERE status = 'pending'`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS whatsapp_quick_replies (
-          id BIGSERIAL PRIMARY KEY,
-          title TEXT NOT NULL,
-          reply_type TEXT NOT NULL DEFAULT 'text',
-          body_text TEXT,
-          template_name TEXT,
-          template_language_code TEXT NOT NULL DEFAULT 'es',
-          template_components JSONB NOT NULL DEFAULT '[]'::jsonb,
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          CONSTRAINT whatsapp_quick_replies_type_chk CHECK (reply_type IN ('text', 'template'))
-        )`
-      );
-      await pool.query(
-        `CREATE INDEX IF NOT EXISTS idx_whatsapp_quick_replies_active
-         ON whatsapp_quick_replies (is_active, reply_type, title ASC)`
-      );
-    })();
-  }
-  await whatsappInboxInitPromise;
-};
-
 const verifyWhatsAppWebhookSignature = (req) => {
   if (!WHATSAPP_APP_SECRET) return true;
   const signatureHeader = String(req.headers['x-hub-signature-256'] || '').trim();
@@ -951,7 +806,6 @@ module.exports = {
   assignConversationRoundRobin,
   authenticateWhatsAppWsClient,
   buildOutboundWhatsAppPayload,
-  ensureWhatsAppInboxTables,
   extractWhatsAppTextBody,
   fetchWhatsAppMediaBinary,
   fetchWhatsAppMediaMeta,
@@ -969,7 +823,6 @@ module.exports = {
   sendWhatsAppMessage,
   uploadMediaToWhatsApp,
   verifyWhatsAppWebhookSignature,
-  whatsappInboxInitPromise,
   whatsappMediaUpload,
   whatsappWsClients,
   whatsappWsGatewayReady,

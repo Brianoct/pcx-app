@@ -5,8 +5,6 @@ const { createHttpError } = require('./util');
 
 const PRODUCT_PROCESS_KEYS = ['laser', 'punzonado'];
 
-let productProductionMappingInitPromise = null;
-
 const normalizeProductProcessKey = (value = '') => {
   const processKey = String(value || '').trim().toLowerCase();
   if (!processKey) return '';
@@ -56,41 +54,6 @@ const normalizeProductProductionConfigPayload = (payload = {}) => {
     material_ids: parseIntegerIdArray(src.material_ids, 'material_ids'),
     processes: parseProcessArray(src.processes, 'processes')
   };
-};
-
-const ensureProductProductionMappingReady = async () => {
-  if (!productProductionMappingInitPromise) {
-    productProductionMappingInitPromise = (async () => {
-      await ensureProductCatalogReady();
-      await ensureProductionResourceCatalogReady();
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS product_equipment_map (
-          sku TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
-          equipment_id BIGINT NOT NULL REFERENCES production_equipment_catalog(id) ON DELETE RESTRICT,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (sku, equipment_id)
-        )`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS product_material_map (
-          sku TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
-          material_id BIGINT NOT NULL REFERENCES production_material_catalog(id) ON DELETE RESTRICT,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (sku, material_id)
-        )`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS product_process_map (
-          sku TEXT NOT NULL REFERENCES products(sku) ON DELETE CASCADE,
-          process_key TEXT NOT NULL,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          PRIMARY KEY (sku, process_key),
-          CONSTRAINT product_process_map_process_chk CHECK (process_key IN ('laser', 'punzonado'))
-        )`
-      );
-    })();
-  }
-  await productProductionMappingInitPromise;
 };
 
 const assertProductProductionReferencesExist = async (db, { equipment_ids = [], material_ids = [] } = {}) => {
@@ -183,8 +146,6 @@ const getProductProductionConfig = async (db, sku) => {
     processes: (processRes.rows || []).map((row) => String(row.process_key || '').trim().toLowerCase()).filter(Boolean)
   };
 };
-
-let productionResourceCatalogInitPromise = null;
 
 const PRODUCTION_RESOURCE_CODE_REGEX = /^[A-Z0-9_-]{2,40}$/;
 
@@ -345,60 +306,12 @@ const buildMaterialResponseRow = (row = {}) => ({
   updated_at: row.updated_at || null
 });
 
-const ensureProductionResourceCatalogReady = async () => {
-  if (!productionResourceCatalogInitPromise) {
-    productionResourceCatalogInitPromise = (async () => {
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS production_equipment_catalog (
-          id BIGSERIAL PRIMARY KEY,
-          code TEXT NOT NULL UNIQUE,
-          name TEXT NOT NULL,
-          replacement_cost_bs NUMERIC(12,2) NOT NULL DEFAULT 0,
-          useful_life_months INTEGER,
-          monthly_extra_cost_bs NUMERIC(12,2) NOT NULL DEFAULT 0,
-          monthly_capacity_units NUMERIC(12,2),
-          usage_unit TEXT,
-          notes TEXT,
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          CONSTRAINT production_equipment_replacement_cost_chk CHECK (replacement_cost_bs >= 0),
-          CONSTRAINT production_equipment_monthly_extra_cost_chk CHECK (monthly_extra_cost_bs >= 0),
-          CONSTRAINT production_equipment_useful_life_chk CHECK (useful_life_months IS NULL OR useful_life_months > 0),
-          CONSTRAINT production_equipment_monthly_capacity_chk CHECK (monthly_capacity_units IS NULL OR monthly_capacity_units > 0)
-        )`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS production_material_catalog (
-          id BIGSERIAL PRIMARY KEY,
-          code TEXT NOT NULL UNIQUE,
-          name TEXT NOT NULL,
-          unit_measure TEXT NOT NULL,
-          unit_cost_bs NUMERIC(12,2) NOT NULL DEFAULT 0,
-          waste_pct NUMERIC(6,2) NOT NULL DEFAULT 0,
-          notes TEXT,
-          is_active BOOLEAN NOT NULL DEFAULT TRUE,
-          updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-          created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-          CONSTRAINT production_material_unit_cost_chk CHECK (unit_cost_bs >= 0),
-          CONSTRAINT production_material_waste_chk CHECK (waste_pct >= 0 AND waste_pct <= 100)
-        )`
-      );
-    })();
-  }
-  await productionResourceCatalogInitPromise;
-};
-
 module.exports = {
   PRODUCTION_RESOURCE_CODE_REGEX,
   PRODUCT_PROCESS_KEYS,
   assertProductProductionReferencesExist,
   buildEquipmentResponseRow,
   buildMaterialResponseRow,
-  ensureProductProductionMappingReady,
-  ensureProductionResourceCatalogReady,
   getProductProductionConfig,
   normalizeEquipmentPayload,
   normalizeMaterialPayload,
@@ -412,7 +325,5 @@ module.exports = {
   parseOptionalPositiveAmount,
   parseOptionalPositiveInteger,
   parseProcessArray,
-  productProductionMappingInitPromise,
-  productionResourceCatalogInitPromise,
   saveProductProductionConfig
 };

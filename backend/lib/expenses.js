@@ -51,122 +51,6 @@ const normalizeExpenseCurrency = (value = 'BS') => {
   return raw;
 };
 
-const ensureExpensesTable = async () => {
-  await pool.query(
-    `CREATE TABLE IF NOT EXISTS department_expenses (
-       id BIGSERIAL PRIMARY KEY,
-       department TEXT NOT NULL,
-       category TEXT NOT NULL DEFAULT 'Operativo',
-      concept TEXT NOT NULL,
-      quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
-       vendor TEXT,
-       amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
-       currency TEXT NOT NULL DEFAULT 'BS',
-       is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
-       recurrence_period TEXT,
-       expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
-       notes TEXT,
-       created_by INTEGER NOT NULL REFERENCES users(id),
-       created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-       updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-       CONSTRAINT department_expenses_recurrence_chk CHECK (
-         (is_recurring = FALSE AND recurrence_period IS NULL)
-         OR (is_recurring = TRUE AND recurrence_period IN ('weekly', 'monthly', 'quarterly', 'yearly'))
-       )
-     )`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS department TEXT NOT NULL DEFAULT 'General'`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT 'Operativo'`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS concept TEXT NOT NULL DEFAULT 'Gasto'`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS quantity INTEGER`
-  );
-  await pool.query(
-    `UPDATE department_expenses
-     SET quantity = 1
-     WHERE quantity IS NULL OR quantity <= 0`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ALTER COLUMN quantity TYPE INTEGER
-     USING GREATEST(1, ROUND(COALESCE(quantity, 1))::INTEGER)`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ALTER COLUMN quantity SET NOT NULL`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ALTER COLUMN quantity SET DEFAULT 1`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS vendor TEXT`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS amount NUMERIC(12,2) NOT NULL DEFAULT 0`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'BS'`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ALTER COLUMN currency SET DEFAULT 'BS'`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS is_recurring BOOLEAN NOT NULL DEFAULT FALSE`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS recurrence_period TEXT`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS expense_date DATE NOT NULL DEFAULT CURRENT_DATE`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS notes TEXT`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()`
-  );
-  await pool.query(
-    `ALTER TABLE department_expenses
-     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()`
-  );
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS idx_department_expenses_department_date
-     ON department_expenses (department, expense_date DESC, id DESC)`
-  );
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS idx_department_expenses_recurring
-     ON department_expenses (is_recurring, recurrence_period)`
-  );
-  await pool.query(
-    `CREATE INDEX IF NOT EXISTS idx_department_expenses_concept
-     ON department_expenses (LOWER(concept))`
-  );
-};
-
 const mapExpenseRow = (row = {}) => ({
   id: Number(row.id),
   department: String(row.department || '').trim(),
@@ -336,7 +220,6 @@ module.exports = {
   EXPENSE_CURRENCY_DEFAULT,
   EXPENSE_DEPARTMENT_BY_ROLE,
   EXPENSE_RECURRENCE_VALUES,
-  ensureExpensesTable,
   getExpensesAccessScope,
   mapExpenseRow,
   normalizeExpenseCurrency,

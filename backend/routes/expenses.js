@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
-const { ensureExpensesTable, getExpensesAccessScope, mapExpenseRow, normalizeExpensePayload } = require('../lib/expenses');
+const { getExpensesAccessScope, mapExpenseRow, normalizeExpensePayload } = require('../lib/expenses');
 const { normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { loadUserContext } = require('../lib/users');
 const { normalizeDepartmentLabel, parseBooleanLike } = require('../lib/util');
@@ -32,7 +32,6 @@ router.get('/api/expenses', authenticateToken, async (req, res) => {
   const search = String(req.query?.q || '').trim();
 
   try {
-    await ensureExpensesTable();
     const where = [];
     const params = [];
 
@@ -104,7 +103,6 @@ router.get('/api/expenses/variance', authenticateToken, async (req, res) => {
   const startDateText = startDate.toISOString().slice(0, 10);
 
   try {
-    await ensureExpensesTable();
     const where = ['e.is_recurring = TRUE', `e.expense_date >= $1::date`];
     const params = [startDateText];
 
@@ -198,7 +196,6 @@ router.post('/api/expenses', authenticateToken, async (req, res) => {
   if (scope.error) return res.status(403).json({ error: scope.error });
 
   try {
-    await ensureExpensesTable();
     const body = scope.isAdmin
       ? req.body
       : { ...(req.body || {}), department: scope.department };
@@ -255,7 +252,6 @@ router.patch('/api/expenses/:id', authenticateToken, async (req, res) => {
   }
 
   try {
-    await ensureExpensesTable();
     const existingRes = await pool.query(
       `SELECT id, department, category, concept, vendor, quantity, amount, currency, is_recurring, recurrence_period, expense_date, notes, created_by
        FROM department_expenses
@@ -370,7 +366,6 @@ router.delete('/api/expenses/:id', authenticateToken, async (req, res) => {
   }
 
   try {
-    await ensureExpensesTable();
     const rowRes = await pool.query(
       'SELECT id, department FROM department_expenses WHERE id = $1',
       [expenseId]

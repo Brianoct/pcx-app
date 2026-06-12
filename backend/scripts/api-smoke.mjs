@@ -48,9 +48,11 @@ const battery = [
   // quotes
   ['GET', '/api/quotes', admin],
   ['GET', '/api/quotes', ventas],
-  // time off
+  // time off (canonical paths + legacy aliases)
   ['GET', '/api/time-off/mine', ventas],
   ['GET', '/api/time-off/mine/summary', ventas],
+  ['GET', '/api/time-off/requests', admin],
+  ['GET', '/api/time-off/summary', admin],
   ['GET', '/api/timeoff/requests', admin],
   ['GET', '/api/timeoff/summary', admin],
   // projects / expenses

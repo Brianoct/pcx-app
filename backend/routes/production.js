@@ -2,7 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { getProductionKanbanAccessScope } = require('../lib/inventory');
-const { PRODUCTION_KANBAN_STAGES, ensureProductionKanbanTables, getProductionRouteStages, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, syncProductionKanbanFromInventory } = require('../lib/kanban');
+const { PRODUCTION_KANBAN_STAGES, getProductionRouteStages, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, syncProductionKanbanFromInventory } = require('../lib/kanban');
 const { validateProductSku } = require('../lib/products');
 const { sanitizePanelAccess } = require('../lib/rbac');
 const { loadUserContext } = require('../lib/users');
@@ -47,7 +47,6 @@ router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requir
     const kanbanScope = getProductionKanbanAccessScope(userContext, access);
     if (kanbanScope.error) return res.status(403).json({ error: kanbanScope.error });
 
-    await ensureProductionKanbanTables();
     const cardId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(cardId) || cardId <= 0) {
       return res.status(400).json({ error: 'ID de tarjeta inválido' });
@@ -102,7 +101,6 @@ router.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRol
     const kanbanScope = getProductionKanbanAccessScope(userContext, access);
     if (kanbanScope.error) return res.status(403).json({ error: kanbanScope.error });
 
-    await ensureProductionKanbanTables();
     const sku = validateProductSku(req.params.sku);
     const startProcess = normalizeProductionStartProcess(req.body?.start_process || '');
     if (!startProcess) {

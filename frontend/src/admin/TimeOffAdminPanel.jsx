@@ -17,8 +17,8 @@ function TimeOffAdminPanel({ token }) {
     setError('');
     try {
       const [requestsRes, summaryRes] = await Promise.all([
-        apiRequest(`/api/timeoff/requests?year=${year}`, { token }),
-        apiRequest(`/api/timeoff/summary?year=${year}`, { token })
+        apiRequest(`/api/time-off/requests?year=${year}`, { token }),
+        apiRequest(`/api/time-off/summary?year=${year}`, { token })
       ]);
       setRows(Array.isArray(requestsRes) ? requestsRes : []);
       setSummary(Array.isArray(summaryRes) ? summaryRes : []);
@@ -39,7 +39,7 @@ function TimeOffAdminPanel({ token }) {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         enqueueWrite({
           label: `Permiso #${id} -> ${status}`,
-          path: `/api/timeoff/requests/${id}/status`,
+          path: `/api/time-off/requests/${id}/status`,
           options: {
             method: 'PATCH',
             body: { status },
@@ -52,7 +52,7 @@ function TimeOffAdminPanel({ token }) {
         )));
         toast.info('Sin conexión: cambio de estado en cola para sincronizar.');
       } else {
-        await apiRequest(`/api/timeoff/requests/${id}/status`, {
+        await apiRequest(`/api/time-off/requests/${id}/status`, {
           method: 'PATCH',
           token,
           body: { status }
