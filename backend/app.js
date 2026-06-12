@@ -7,7 +7,18 @@ const fsSync = require('fs');
 const app = express();
 const httpServer = http.createServer(app);
 
-app.use(cors());
+// Behind Render's proxy; needed so rate limiting sees real client IPs.
+app.set('trust proxy', 1);
+
+// Restrict browser origins in production by setting FRONTEND_ORIGIN to a
+// comma-separated list (e.g. https://pcx-frontend.onrender.com). When unset
+// (local dev), all origins are allowed as before.
+const allowedOrigins = String(process.env.FRONTEND_ORIGIN || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+app.use(cors(allowedOrigins.length > 0 ? { origin: allowedOrigins } : {}));
 app.use(express.json({
   limit: '20mb',
   verify: (req, _res, buf) => {
