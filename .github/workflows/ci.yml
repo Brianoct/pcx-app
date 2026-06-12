@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # Lint is informational until the pre-existing errors are burned down.
+      - run: npm run lint
+        continue-on-error: true
+      - run: npm test
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pcx
+          POSTGRES_PASSWORD: pcx123
+          POSTGRES_DB: pcxdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pcx"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_NAME: pcxdb
+      DB_USER: pcx
+      DB_PASS: pcx123
+      JWT_SECRET: ci-test-secret
+      PORT: '4000'
+      PGPASSWORD: pcx123
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Unit tests
+        run: npm test
+      - name: Load base schema and seed
+        run: |
+          psql -h localhost -U pcx -d pcxdb -v ON_ERROR_STOP=0 -q -f ../schema.sql
+          psql -h localhost -U pcx -d pcxdb -v ON_ERROR_STOP=0 -q -f ../products_seed.sql
+      - name: Run migrations
+        run: npm run migrate
+      - name: Seed test users
+        run: node scripts/seed-dev-users.js
+      - name: Boot server
+        run: |
+          nohup node index.js > server.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null http://localhost:4000/api/cupones && break
+            sleep 1
+          done
+      - name: API smoke battery vs committed baseline
+        run: node scripts/api-smoke.mjs /tmp/ci-smoke.json test/api-baseline.json
+      - name: Quote lifecycle (stock deduct/restore)
+        run: node scripts/quote-lifecycle.mjs
+      - name: Server log on failure
+        if: failure()
+        run: cat server.log || true
