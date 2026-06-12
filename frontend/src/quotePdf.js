@@ -277,4 +277,5 @@ export function generateModernQuotePdf({
   doc.text('Gracias por confiar en PCX', right, footerY, { align: 'right' });
 
   doc.save(filename);
+  return doc;
 }

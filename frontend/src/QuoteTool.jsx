@@ -53,6 +53,9 @@ export default function QuoteTool({ token, user }) {
   const [salesUsers, setSalesUsers] = useState([]);
   const [assignedSellerId, setAssignedSellerId] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // When set, the quote came from a WhatsApp conversation and the PDF is
+  // sent back into that thread after saving.
+  const [whatsappConversationId, setWhatsappConversationId] = useState(null);
   const isSavingRef = useRef(false);
   const restoredDraftKeyRef = useRef('');
   const [draftNotice, setDraftNotice] = useState('');
@@ -479,6 +482,28 @@ export default function QuoteTool({ token, user }) {
     clearDraftState(legacyDraftStorageKey);
   }, []);
 
+  // Prefill handoff from the WhatsApp inbox ("Cotizar" on a conversation).
+  // Runs after the draft restore so the conversation contact wins.
+  useEffect(() => {
+    let raw = null;
+    try {
+      raw = sessionStorage.getItem('pcx.quotePrefill');
+      if (raw) sessionStorage.removeItem('pcx.quotePrefill');
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    try {
+      const prefill = JSON.parse(raw);
+      if (prefill?.customerName) setCustomerName(String(prefill.customerName).slice(0, 26));
+      if (prefill?.customerPhone) setCustomerPhone(String(prefill.customerPhone).slice(0, 26));
+      if (prefill?.conversationId) setWhatsappConversationId(Number(prefill.conversationId));
+      setStep(1);
+    } catch {
+      // malformed prefill; start the quote empty
+    }
+  }, []);
+
   useEffect(() => {
     const hasContent =
       Boolean(customerName || customerPhone || department || provincia || shippingNotes || alternativeName || alternativePhone)
@@ -719,7 +744,7 @@ export default function QuoteTool({ token, user }) {
         ? `cotizacion_${quoteNumber}_${safeCustomerName}.pdf`
         : `cotizacion_${safeCustomerName}.pdf`;
 
-      generateModernQuotePdf({
+      const pdfDoc = generateModernQuotePdf({
         logo,
         filename: pdfFilename,
         quoteNumber,
@@ -740,8 +765,40 @@ export default function QuoteTool({ token, user }) {
         total
       });
 
+      if (whatsappConversationId && pdfDoc) {
+        try {
+          const pdfBlob = pdfDoc.output('blob');
+          const formData = new FormData();
+          formData.append('file', new File([pdfBlob], pdfFilename, { type: 'application/pdf' }));
+          const uploadRes = await apiRequest('/api/whatsapp/inbox/media/upload', {
+            method: 'POST',
+            token,
+            body: formData,
+            timeoutMs: 120000
+          });
+          const mediaId = String(uploadRes?.media_id || '').trim();
+          if (!mediaId) throw new Error('No se obtuvo media_id del archivo');
+          await apiRequest(`/api/whatsapp/inbox/conversations/${whatsappConversationId}/messages`, {
+            method: 'POST',
+            token,
+            body: {
+              type: 'document',
+              media_id: mediaId,
+              filename: pdfFilename,
+              caption: quoteNumber ? `Cotización PCX #${quoteNumber}` : 'Cotización PCX'
+            }
+          });
+          toast.success('Cotización guardada y PDF enviado al chat de WhatsApp');
+        } catch (waErr) {
+          console.error('No se pudo enviar el PDF al chat de WhatsApp:', waErr);
+          toast.error('Cotización guardada, pero el PDF no se pudo enviar al chat de WhatsApp');
+        }
+      } else {
+        toast.success('Cotización guardada y PDF generado');
+      }
+
+      setWhatsappConversationId(null);
       resetQuoteForm();
-      toast.success('Cotización guardada y PDF generado');
     } catch (err) {
       console.error('Error completo al guardar:', err);
       toast.error('Error al guardar: ' + (err.message || 'Error desconocido'));
@@ -781,6 +838,31 @@ export default function QuoteTool({ token, user }) {
 
   return (
     <div className="container">
+      {whatsappConversationId && (
+        <div style={{
+          marginBottom: '12px',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          border: '1px solid rgba(37, 211, 102, 0.5)',
+          background: 'rgba(209, 250, 229, 0.55)',
+          color: '#047857',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 10
+        }}>
+          <span>Cotizando desde WhatsApp: al guardar, el PDF se enviará al chat del cliente.</span>
+          <button
+            type="button"
+            onClick={() => setWhatsappConversationId(null)}
+            style={{ background: 'transparent', border: 'none', color: '#047857', fontWeight: 800, cursor: 'pointer' }}
+            aria-label="No enviar al chat"
+            title="No enviar al chat"
+          >
+            ✕
+          </button>
+        </div>
+      )}
       {draftNotice && (
         <div style={{
           marginBottom: '12px',

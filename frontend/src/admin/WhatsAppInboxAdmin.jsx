@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { API_BASE, apiRequest } from '../apiClient';
 
 const formatDateTime = (value) => {
@@ -987,6 +988,57 @@ export default function WhatsAppInboxAdmin({ token }) {
     setTemplateComponentsJson('[]');
   };
 
+  const navigate = useNavigate();
+  const [sharingCatalog, setSharingCatalog] = useState(false);
+
+  // Sends the seller catalog link directly into the conversation.
+  const shareCatalogToConversation = async () => {
+    if (!selectedConversationId || sharingCatalog) return;
+    setSharingCatalog(true);
+    setError('');
+    try {
+      const linkData = await apiRequest('/api/customer-menu/share-link', {
+        method: 'POST',
+        token,
+        body: {}
+      });
+      const url = String(linkData?.share_url || '').trim();
+      if (!url) throw new Error('No se pudo generar el enlace de catálogo');
+      const text = `¡Hola! Te comparto el catálogo PCX para que elijas tus productos y hagas tu pedido aquí: ${url}`;
+      await apiRequest(`/api/whatsapp/inbox/conversations/${selectedConversationId}/messages`, {
+        method: 'POST',
+        token,
+        body: { type: 'text', text }
+      });
+      await Promise.all([
+        loadMessages(selectedConversationId),
+        loadConversations()
+      ]);
+    } catch (err) {
+      setError(err.message || 'No se pudo compartir el catálogo');
+    } finally {
+      setSharingCatalog(false);
+    }
+  };
+
+  // Opens the quoting page prefilled with this conversation's contact; the
+  // saved quote's PDF is sent back into the thread (see QuoteTool).
+  const startQuoteFromConversation = () => {
+    if (!selectedConversation) return;
+    const rawPhone = String(selectedConversation.contact_phone || '').replace(/\D/g, '');
+    const localPhone = rawPhone.startsWith('591') && rawPhone.length === 11 ? rawPhone.slice(3) : rawPhone;
+    try {
+      sessionStorage.setItem('pcx.quotePrefill', JSON.stringify({
+        customerName: selectedConversation.contact_name || '',
+        customerPhone: localPhone,
+        conversationId: selectedConversation.id
+      }));
+    } catch {
+      // storage unavailable; quote opens without prefill
+    }
+    navigate('/');
+  };
+
   const sendMessage = async () => {
     if (!selectedConversationId) return;
     setSending(true);
@@ -1385,9 +1437,28 @@ export default function WhatsAppInboxAdmin({ token }) {
                     {normalizePhoneDisplay(selectedConversation.contact_phone)}
                   </div>
                 </div>
-                <div style={{ color: '#78716c', fontSize: '0.78rem', textAlign: 'right' }}>
-                  Última actividad<br />
-                  {formatDateTime(selectedConversation.last_message_at)}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ minHeight: 34, padding: '6px 12px', fontSize: '0.8rem' }}
+                    onClick={shareCatalogToConversation}
+                    disabled={sharingCatalog}
+                  >
+                    {sharingCatalog ? 'Enviando…' : 'Compartir catálogo'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ minHeight: 34, padding: '6px 12px', fontSize: '0.8rem' }}
+                    onClick={startQuoteFromConversation}
+                  >
+                    Cotizar
+                  </button>
+                  <div style={{ color: '#78716c', fontSize: '0.78rem', textAlign: 'right' }}>
+                    Última actividad<br />
+                    {formatDateTime(selectedConversation.last_message_at)}
+                  </div>
                 </div>
               </div>
             ) : (
