@@ -2,24 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
 
 const STAGES = [
-  { key: 'comprar', label: 'Comprar', isPurchase: true },
   { key: 'corte_laser', label: 'Corte Laser' },
+  { key: 'impresion_3d', label: 'Impresión 3D' },
   { key: 'punzonado', label: 'Punzonado' },
-  { key: 'plegado', label: 'Plegado' },
   { key: 'lavado', label: 'Lavado' },
-  { key: 'pintado', label: 'Pintado' },
+  { key: 'plegado', label: 'Plegado' },
   { key: 'embalado', label: 'Embalado' }
 ];
+
+const STAGE_LABEL = Object.fromEntries(STAGES.map((stage) => [stage.key, stage.label]));
+
 const ROUTE_BY_START = {
-  comprar: ['comprar'],
-  corte_laser: ['corte_laser', 'plegado', 'lavado', 'pintado', 'embalado'],
-  punzonado: ['punzonado', 'plegado', 'lavado', 'pintado', 'embalado']
+  corte_laser: ['corte_laser', 'lavado', 'plegado', 'embalado'],
+  impresion_3d: ['impresion_3d', 'embalado'],
+  punzonado: ['punzonado', 'lavado', 'plegado', 'embalado']
 };
-const START_PROCESS_OPTIONS = [
-  { value: 'comprar', label: 'Comprar (Reventa)' },
-  { value: 'corte_laser', label: 'CNC Laser' },
-  { value: 'punzonado', label: 'CNC Punzonadora' }
-];
 
 const getRouteByStart = (startProcess = 'corte_laser') =>
   ROUTE_BY_START[startProcess] || ROUTE_BY_START.corte_laser;
@@ -31,11 +28,11 @@ function KpiTile({ label, value, accent = '#0284c7' }) {
         background: 'linear-gradient(180deg, #ffffff 0%, #f5f1ec 100%)',
         border: '1px solid rgba(214, 204, 192, 0.55)',
         borderRadius: 12,
-        padding: 14
+        padding: 12
       }}
     >
-      <div style={{ color: '#78716c', fontSize: '0.82rem', marginBottom: 6 }}>{label}</div>
-      <div style={{ color: accent, fontSize: '1.35rem', fontWeight: 800, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ color: '#78716c', fontSize: '0.78rem', marginBottom: 4 }}>{label}</div>
+      <div style={{ color: accent, fontSize: '1.25rem', fontWeight: 800, lineHeight: 1.1 }}>{value}</div>
     </div>
   );
 }
@@ -101,7 +98,7 @@ export default function ProductionKanban({ token }) {
     if (!card || !nextStage || card.stage === nextStage) return;
     const route = getRouteByStart(card.start_process);
     if (!route.includes(nextStage)) {
-      setError(`La etapa "${nextStage}" no aplica para ${card.product_name || card.sku}.`);
+      setError(`La etapa "${STAGE_LABEL[nextStage] || nextStage}" no aplica para ${card.product_name || card.sku}.`);
       return;
     }
     const saveKey = `stage:${card.id}`;
@@ -127,39 +124,14 @@ export default function ProductionKanban({ token }) {
     }
   };
 
-  const updateStartProcess = async (card, startProcess) => {
-    if (!card || !startProcess || card.start_process === startProcess) return;
-    const saveKey = `route:${card.sku}`;
-    setSaving(saveKey, true);
-    setError('');
-    try {
-      const response = await apiRequest(`/api/production/kanban/routes/${encodeURIComponent(card.sku)}`, {
-        method: 'PATCH',
-        token,
-        body: { start_process: startProcess }
-      });
-      const affectedCards = Array.isArray(response?.cards) ? response.cards : [];
-      if (affectedCards.length === 0) {
-        await loadBoard();
-        return;
-      }
-      const mapById = new Map(affectedCards.map((item) => [item.id, item]));
-      setCards((prev) => prev.map((item) => mapById.get(item.id) || item));
-    } catch (err) {
-      setError(err.message || 'No se pudo actualizar proceso inicial');
-    } finally {
-      setSaving(saveKey, false);
-    }
-  };
-
   return (
     <div className="container">
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <h2 style={{ marginBottom: 6, color: '#dc2626' }}>Kanban de Produccion</h2>
+            <h2 style={{ marginBottom: 6, color: '#dc2626' }}>Kanban de Producción</h2>
             <p style={{ color: '#78716c' }}>
-              Tarjetas generadas automaticamente cuando el stock baja del minimo.
+              Las tarjetas aparecen cuando el stock baja del mínimo y desaparecen al reponerlo en inventario.
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -185,16 +157,14 @@ export default function ProductionKanban({ token }) {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
           gap: 12,
           marginBottom: 16
         }}
       >
         <KpiTile label="Tarjetas activas" value={String(visibleCards.length)} accent="#0284c7" />
         <KpiTile label="Piezas requeridas" value={String(totalRequiredQty)} accent="#f59e0b" />
-        <KpiTile label="En Comprar" value={String(cardsByStage.comprar?.length || 0)} accent="#c2410c" />
-        <KpiTile label="En Corte Laser" value={String(cardsByStage.corte_laser?.length || 0)} accent="#22d3ee" />
-        <KpiTile label="En Punzonado" value={String(cardsByStage.punzonado?.length || 0)} accent="#a78bfa" />
+        <KpiTile label="Listas para embalar" value={String(cardsByStage.embalado?.length || 0)} accent="#16a34a" />
       </div>
 
       {error && (
@@ -209,8 +179,8 @@ export default function ProductionKanban({ token }) {
         <div
           style={{
             display: 'grid',
-            gap: 12,
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 10,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             alignItems: 'start'
           }}
         >
@@ -226,110 +196,71 @@ export default function ProductionKanban({ token }) {
                 moveCardToStage(card, stage.key);
               }}
               style={{
-                background: stage.isPurchase
-                  ? 'linear-gradient(180deg, #fff3e8 0%, #ffe9d6 100%)'
-                  : '#f5f1ec',
-                border: stage.isPurchase
-                  ? '1px solid rgba(251, 146, 60, 0.52)'
-                  : '1px solid rgba(214, 204, 192, 0.6)',
-                borderRadius: 14,
-                minHeight: 280,
+                background: '#f5f1ec',
+                border: '1px solid rgba(214, 204, 192, 0.6)',
+                borderRadius: 12,
+                minHeight: 200,
                 display: 'grid',
                 gridTemplateRows: 'auto 1fr'
               }}
             >
               <div
                 style={{
-                  padding: '12px 12px 10px',
-                  borderBottom: stage.isPurchase
-                    ? '1px solid rgba(251, 146, 60, 0.42)'
-                    : '1px solid rgba(214, 204, 192, 0.6)'
+                  padding: '9px 10px 8px',
+                  borderBottom: '1px solid rgba(214, 204, 192, 0.6)'
                 }}
               >
-                <div style={{ color: stage.isPurchase ? '#c2410c' : '#292524', fontWeight: 700 }}>{stage.label}</div>
-                <div style={{ color: '#a8a29e', fontSize: '0.8rem' }}>
+                <div style={{ color: '#292524', fontWeight: 700, fontSize: '0.88rem' }}>{stage.label}</div>
+                <div style={{ color: '#a8a29e', fontSize: '0.72rem' }}>
                   {cardsByStage[stage.key]?.length || 0} tarjeta(s)
                 </div>
               </div>
-              <div style={{ padding: 10, display: 'grid', gap: 10 }}>
+              <div style={{ padding: 8, display: 'grid', gap: 8 }}>
                 {(cardsByStage[stage.key] || []).map((card) => {
                   const saveKeyStage = `stage:${card.id}`;
-                  const saveKeyRoute = `route:${card.sku}`;
                   const route = getRouteByStart(card.start_process);
-                  const isSaving = Boolean(savingMap[saveKeyStage] || savingMap[saveKeyRoute]);
+                  const isSaving = Boolean(savingMap[saveKeyStage]);
                   return (
                     <article
                       key={card.id}
                       draggable={!isSaving}
                       onDragStart={() => setDragCardId(card.id)}
                       style={{
-                        background: card.start_process === 'comprar'
-                          ? 'linear-gradient(180deg, #ffedd5 0%, #fff3e8 100%)'
-                          : 'linear-gradient(180deg, #f5f1ec 0%, #f5f1ec 100%)',
-                        border: card.start_process === 'comprar'
-                          ? '1px solid rgba(251, 146, 60, 0.55)'
-                          : '1px solid rgba(214, 204, 192, 0.62)',
-                        borderRadius: 12,
-                        padding: 10,
-                        opacity: isSaving ? 0.75 : 1,
+                        background: '#ffffff',
+                        border: '1px solid rgba(214, 204, 192, 0.62)',
+                        borderRadius: 9,
+                        padding: 8,
+                        opacity: isSaving ? 0.7 : 1,
                         cursor: isSaving ? 'wait' : 'grab'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ color: '#292524', fontWeight: 700, lineHeight: 1.2 }}>{card.product_name}</div>
-                          <div style={{ color: '#78716c', fontSize: '0.78rem' }}>{card.sku}</div>
+                          <div style={{ color: '#292524', fontWeight: 700, fontSize: '0.82rem', lineHeight: 1.2 }}>
+                            {card.product_name}
+                          </div>
+                          <div style={{ color: '#a8a29e', fontSize: '0.7rem' }}>{card.sku}</div>
                         </div>
                         <span
                           style={{
-                            background: 'rgba(14, 165, 233, 0.2)',
-                            border: '1px solid rgba(56, 189, 248, 0.45)',
+                            background: 'rgba(14, 165, 233, 0.16)',
+                            border: '1px solid rgba(56, 189, 248, 0.42)',
                             color: '#0369a1',
                             borderRadius: 999,
-                            minHeight: 24,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            alignSelf: 'flex-start',
-                            padding: '2px 10px',
-                            lineHeight: 1,
-                            fontSize: '0.74rem',
-                            whiteSpace: 'nowrap'
+                            padding: '1px 8px',
+                            fontSize: '0.68rem',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0
                           }}
                         >
                           {card.store_location}
                         </span>
                       </div>
-                      <div style={{ color: card.start_process === 'comprar' ? '#fdba74' : '#b45309', fontWeight: 700, marginBottom: 8 }}>
-                        Piezas requeridas: {Number(card.required_qty || 0)}
+                      <div style={{ color: '#b45309', fontWeight: 700, fontSize: '0.8rem', margin: '6px 0' }}>
+                        Reponer: {Number(card.required_qty || 0)} pzas
                       </div>
-                      <div style={{ color: '#78716c', fontSize: '0.8rem', marginBottom: 8 }}>
-                        Stock actual: {Number(card.current_stock || 0)} / Minimo: {Number(card.min_stock || 0)}
-                      </div>
-                      <label style={{ display: 'grid', gap: 4, color: '#78716c', fontSize: '0.76rem', marginBottom: 8 }}>
-                        Proceso inicial
-                        <select
-                          value={card.start_process}
-                          disabled={isSaving}
-                          onChange={(event) => updateStartProcess(card, event.target.value)}
-                          style={{
-                            minHeight: 36,
-                            borderRadius: 8,
-                            border: '1px solid #e7e0d8',
-                            background: '#ffffff',
-                            color: '#292524',
-                            padding: '6px 8px',
-                            fontSize: '0.85rem'
-                          }}
-                        >
-                          {START_PROCESS_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                         {route.map((step) => {
-                          const stepLabel = STAGES.find((item) => item.key === step)?.label || step;
                           const isCurrent = card.stage === step;
                           return (
                             <button
@@ -337,18 +268,18 @@ export default function ProductionKanban({ token }) {
                               type="button"
                               onClick={() => moveCardToStage(card, step)}
                               disabled={isSaving || isCurrent}
+                              title={isCurrent ? 'Etapa actual' : `Mover a ${STAGE_LABEL[step] || step}`}
                               style={{
-                                minHeight: 28,
-                                padding: '4px 8px',
+                                padding: '2px 7px',
                                 borderRadius: 999,
                                 border: isCurrent ? '1px solid rgba(16,185,129,0.65)' : '1px solid rgba(214,204,192,0.6)',
-                                background: isCurrent ? 'rgba(16,185,129,0.2)' : '#f5f1ec',
+                                background: isCurrent ? 'rgba(16,185,129,0.18)' : '#f5f1ec',
                                 color: isCurrent ? '#047857' : '#57534e',
-                                fontSize: '0.72rem',
+                                fontSize: '0.66rem',
                                 cursor: isCurrent ? 'default' : 'pointer'
                               }}
                             >
-                              {stepLabel}
+                              {STAGE_LABEL[step] || step}
                             </button>
                           );
                         })}
@@ -359,15 +290,15 @@ export default function ProductionKanban({ token }) {
                 {(cardsByStage[stage.key] || []).length === 0 && (
                   <div
                     style={{
-                      border: '1px dashed rgba(100, 116, 139, 0.5)',
-                      borderRadius: 10,
-                      padding: 14,
+                      border: '1px dashed rgba(100, 116, 139, 0.45)',
+                      borderRadius: 9,
+                      padding: 10,
                       color: '#a8a29e',
-                      fontSize: '0.82rem',
+                      fontSize: '0.74rem',
                       textAlign: 'center'
                     }}
                   >
-                    Sin tarjetas en esta etapa
+                    Sin tarjetas
                   </div>
                 )}
               </div>
