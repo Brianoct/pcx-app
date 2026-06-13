@@ -78,7 +78,7 @@ function TopBar({ currentCommission, isTopSeller, onToggleSidebar }) {
         <button
           type="button"
           className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}
-          onClick={() => navigate('/performance')}
+          onClick={() => navigate('/')}
           title={isTopSeller ? 'Vendedor top del mes — ver rendimiento' : 'Tu comisión del mes — ver rendimiento'}
         >
           {isTopSeller && <span className="commission-chip-star" aria-hidden="true">★</span>}
