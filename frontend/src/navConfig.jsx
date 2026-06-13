@@ -3,16 +3,16 @@ import { canAccessPanel } from './roleAccess';
 
 // Route-level code splitting: each panel loads on first visit, keeping the
 // initial bundle small for mobile connections.
+const Dashboard = lazy(() => import('./Dashboard'));
 const QuoteTool = lazy(() => import('./QuoteTool'));
 const QuoteHistory = lazy(() => import('./QuoteHistory'));
-const PerformanceDashboard = lazy(() => import('./PerformanceDashboard'));
 const AdminDashboard = lazy(() => import('./AdminDashboard'));
 const AdminPanel = lazy(() => import('./admin/AdminPanel'));
 const InventoryPanel = lazy(() => import('./InventoryPanel'));
 const PedidosPanel = lazy(() => import('./PedidosPanel'));
 const Combos = lazy(() => import('./Combos'));
 const Cupones = lazy(() => import('./Cupones'));
-const TimeOffCalendar = lazy(() => import('./TimeOffCalendar'));
+const Calendar = lazy(() => import('./Calendar'));
 const QualityControlPanel = lazy(() => import('./QualityControlPanel'));
 const MicrofabricaPanel = lazy(() => import('./MicrofabricaPanel'));
 const ProductionKanban = lazy(() => import('./ProductionKanban'));
@@ -35,6 +35,14 @@ const ProfilePanel = lazy(() => import('./ProfilePanel'));
 export const NAV_ITEMS = [
   {
     path: '/',
+    label: 'Inicio',
+    routeAccess: null,
+    render: (ctx) => (
+      <Dashboard token={ctx.token} user={ctx.user} role={ctx.role} access={ctx.access} />
+    )
+  },
+  {
+    path: '/cotizar',
     label: 'Cotizar',
     routeAccess: ['cotizar'],
     render: (ctx) => <QuoteTool token={ctx.token} user={ctx.user} />
@@ -60,14 +68,6 @@ export const NAV_ITEMS = [
     label: 'Inventario',
     routeAccess: ['inventario_global', 'inventario_individual'],
     render: (ctx) => <InventoryPanel token={ctx.token} role={ctx.role} access={ctx.access} />
-  },
-  {
-    path: '/performance',
-    label: 'Rendimiento',
-    routeAccess: ['rendimiento_global', 'rendimiento_individual'],
-    render: (ctx) => (
-      <PerformanceDashboard token={ctx.token} user={ctx.user} role={ctx.role} access={ctx.access} />
-    )
   },
   {
     path: '/gastos',
@@ -118,7 +118,7 @@ export const NAV_ITEMS = [
     path: '/calendario',
     label: 'Calendario',
     routeAccess: ['calendario', 'admin'],
-    render: (ctx) => <TimeOffCalendar token={ctx.token} user={ctx.user} />
+    render: (ctx) => <Calendar token={ctx.token} user={ctx.user} />
   },
   {
     path: '/perfil',
@@ -143,26 +143,14 @@ export const NAV_ITEMS = [
 // Sidebar groups, shown to every user. A section renders only when the user
 // can see at least one of its items, so most roles get a short sidebar.
 const SIDEBAR_SECTIONS = [
-  { key: 'ventas', label: 'Ventas', paths: ['/', '/history', '/performance'] },
+  { key: 'principal', label: 'Principal', paths: ['/', '/calendario'] },
+  { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/history'] },
   { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory'] },
   { key: 'produccion', label: 'Producción', paths: ['/microfabrica', '/produccion-kanban', '/control-calidad'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/proyectos'] },
   { key: 'marketing', label: 'Marketing', paths: ['/combos', '/cupones'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
-  { key: 'general', label: 'General', paths: ['/calendario'] },
   { key: 'administracion', label: 'Administración', paths: ['/admin', '/dashboard'] }
-];
-
-// First matching access wins; used when a user lands on a route they cannot see.
-const DEFAULT_PATH_PRIORITY = [
-  [['admin'], '/admin'],
-  [['pedidos_global', 'pedidos_individual'], '/pedidos'],
-  [['microfabrica_panel'], '/microfabrica'],
-  [['produccion_kanban'], '/produccion-kanban'],
-  [['gastos_panel'], '/gastos'],
-  [['marketing_combos'], '/combos'],
-  [['proyectos_panel'], '/proyectos'],
-  [['calendario'], '/calendario']
 ];
 
 export const allowsAny = (access, keys) =>
@@ -187,7 +175,8 @@ export function getNavLabel(pathname) {
   return item ? item.label : 'PCX';
 }
 
-export function getDefaultPath(access) {
-  const hit = DEFAULT_PATH_PRIORITY.find(([keys]) => allowsAny(access, keys));
-  return hit ? hit[1] : '/';
+// The command center at "/" is available to every authenticated user, so it is
+// the universal landing page and the safe redirect target for blocked routes.
+export function getDefaultPath() {
+  return '/';
 }
