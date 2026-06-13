@@ -3,23 +3,28 @@ const { INVENTORY_CITY_SCOPE } = require('./inventory');
 const { ensureProductCatalogReady } = require('./products');
 const { normalizeText } = require('./rbac');
 
+// Manufacturing-only stages, in board order. "comprar" (purchasing) and
+// "pintado" were removed; "impresion_3d" was added.
 const PRODUCTION_KANBAN_STAGES = [
-  'comprar',
   'corte_laser',
+  'impresion_3d',
   'punzonado',
-  'plegado',
   'lavado',
-  'pintado',
+  'plegado',
   'embalado'
 ];
 
-const PRODUCTION_KANBAN_START_STAGES = new Set(['comprar', 'corte_laser', 'punzonado']);
+const PRODUCTION_KANBAN_START_STAGES = new Set(['corte_laser', 'impresion_3d', 'punzonado']);
 
 const PRODUCTION_KANBAN_ROUTE_BY_START = {
-  comprar: ['comprar'],
-  corte_laser: ['corte_laser', 'plegado', 'lavado', 'pintado', 'embalado'],
-  punzonado: ['punzonado', 'plegado', 'lavado', 'pintado', 'embalado']
+  corte_laser: ['corte_laser', 'lavado', 'plegado', 'embalado'],
+  impresion_3d: ['impresion_3d', 'embalado'],
+  punzonado: ['punzonado', 'lavado', 'plegado', 'embalado']
 };
+
+// Products configured as resale ("comprar") are excluded from the production
+// board; purchasing will be handled by a dedicated board in a later step.
+const RESALE_START_PROCESS = 'comprar';
 
 const PRODUCTION_KANBAN_LOCATION_FIELDS = Object.values(INVENTORY_CITY_SCOPE).map((scope) => ({
   label: scope.canonical,
@@ -30,15 +35,16 @@ const PRODUCTION_KANBAN_LOCATION_FIELDS = Object.values(INVENTORY_CITY_SCOPE).ma
 const normalizeProductionKanbanStage = (value = '', { allowNull = false } = {}) => {
   if ((value === null || value === undefined || value === '') && allowNull) return null;
   const normalized = normalizeText(value).replace(/\s+/g, '_');
-  if (normalized === 'comprar' || normalized === 'compra' || normalized === 'buy' || normalized === 'resell') return 'comprar';
   if (normalized === 'corte_laser' || normalized === 'laser' || normalized === 'corte') return 'corte_laser';
+  if (normalized === 'impresion_3d' || normalized === 'impresion3d' || normalized === 'impresion' || normalized === '3d' || normalized === 'print_3d' || normalized === 'print3d') return 'impresion_3d';
   if (normalized === 'punzonado' || normalized === 'punzonadora' || normalized === 'punch') return 'punzonado';
-  if (normalized === 'plegado' || normalized === 'doblado' || normalized === 'folding') return 'plegado';
   if (normalized === 'lavado' || normalized === 'wash') return 'lavado';
-  if (normalized === 'pintado' || normalized === 'pintura' || normalized === 'paint') return 'pintado';
+  if (normalized === 'plegado' || normalized === 'doblado' || normalized === 'folding') return 'plegado';
   if (normalized === 'embalado' || normalized === 'empaque' || normalized === 'pack') return 'embalado';
   return null;
 };
+
+const isResaleStartProcess = (value = '') => normalizeText(value).replace(/\s+/g, '_') === RESALE_START_PROCESS;
 
 const normalizeProductionStartProcess = (value = '') => {
   const stage = normalizeProductionKanbanStage(value, { allowNull: true });
@@ -94,15 +100,17 @@ const syncProductionKanbanFromInventory = async () => {
      FROM production_process_routes`
   );
   const routeBySku = new Map(
-    (routesRes.rows || []).map((row) => [String(row.sku || '').toUpperCase(), normalizeProductionStartProcess(row.start_process || '') || 'corte_laser'])
+    (routesRes.rows || []).map((row) => [String(row.sku || '').toUpperCase(), String(row.start_process || '')])
   );
 
   const activeKeys = [];
   for (const product of productsRes.rows || []) {
     const sku = String(product.sku || '').toUpperCase();
     const productName = String(product.name || sku).trim() || sku;
-    const configuredStart = routeBySku.get(sku);
-    const startProcess = configuredStart || inferDefaultProductionStartProcess(product);
+    const configuredStartRaw = routeBySku.get(sku);
+    // Resale items are not produced; they will live on the purchasing board.
+    if (isResaleStartProcess(configuredStartRaw)) continue;
+    const startProcess = normalizeProductionStartProcess(configuredStartRaw || '') || inferDefaultProductionStartProcess(product);
     const validRouteStages = getProductionRouteStages(startProcess);
     for (const location of PRODUCTION_KANBAN_LOCATION_FIELDS) {
       const stock = Math.max(0, Number.parseInt(product[location.stockField], 10) || 0);
@@ -125,7 +133,7 @@ const syncProductionKanbanFromInventory = async () => {
              is_active = TRUE,
              stage = CASE
                WHEN production_kanban_cards.stage IS NULL THEN EXCLUDED.stage
-              WHEN production_kanban_cards.stage IN ('comprar', 'corte_laser', 'punzonado')
+              WHEN production_kanban_cards.stage IN ('corte_laser', 'impresion_3d', 'punzonado')
                  AND production_kanban_cards.stage <> EXCLUDED.start_process
                  THEN EXCLUDED.stage
                WHEN NOT (production_kanban_cards.stage = ANY($8::text[]))
@@ -165,13 +173,12 @@ const syncProductionKanbanFromInventory = async () => {
      WHERE is_active = TRUE
        AND source = 'min_stock'
      ORDER BY CASE stage
-        WHEN 'comprar' THEN 1
-        WHEN 'corte_laser' THEN 2
+        WHEN 'corte_laser' THEN 1
+        WHEN 'impresion_3d' THEN 2
         WHEN 'punzonado' THEN 3
-        WHEN 'plegado' THEN 4
-        WHEN 'lavado' THEN 5
-        WHEN 'pintado' THEN 6
-        WHEN 'embalado' THEN 7
+        WHEN 'lavado' THEN 4
+        WHEN 'plegado' THEN 5
+        WHEN 'embalado' THEN 6
          ELSE 99
        END,
        required_qty DESC,
