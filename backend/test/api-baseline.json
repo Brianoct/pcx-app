@@ -304,5 +304,17 @@
     "path": "/api/quotes",
     "status": 400,
     "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/procurement/requests",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/procurement/materials",
+    "status": 200,
+    "shape": "array"
   }
 ]

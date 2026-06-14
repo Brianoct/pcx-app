@@ -103,6 +103,9 @@ const battery = [
     customer_name: 'Smoke Test', customer_phone: '70000001', department: 'Santa Cruz',
     almacen: 'Santa Cruz', venta_type: 'sf', items: [], total: 0, subtotal: 0
   }],
+  // procurement (compras)
+  ['GET', '/api/procurement/requests', admin],
+  ['GET', '/api/procurement/materials', admin],
 ];
 
 const results = [];

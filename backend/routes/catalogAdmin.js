@@ -422,6 +422,7 @@ router.get('/api/admin/materiales', authenticateToken, requireRole(['admin']), a
     const rowsRes = await pool.query(
       `SELECT
          id, code, name, unit_measure, unit_cost_bs, waste_pct,
+         reorder_qty, supplier, qr_token,
          notes, is_active, updated_by, created_at, updated_at
        FROM production_material_catalog
        ${whereSql}
@@ -440,17 +441,19 @@ router.post('/api/admin/materiales', authenticateToken, requireRole(['admin']), 
     const payload = normalizeMaterialPayload(req.body || {}, { partial: false });
     const insertRes = await pool.query(
       `INSERT INTO production_material_catalog (
-         code, name, unit_measure, unit_cost_bs, waste_pct, notes, is_active, updated_by, created_at, updated_at
+         code, name, unit_measure, unit_cost_bs, waste_pct, reorder_qty, supplier, notes, is_active, updated_by, created_at, updated_at
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
        )
-       RETURNING id, code, name, unit_measure, unit_cost_bs, waste_pct, notes, is_active, updated_by, created_at, updated_at`,
+       RETURNING id, code, name, unit_measure, unit_cost_bs, waste_pct, reorder_qty, supplier, qr_token, notes, is_active, updated_by, created_at, updated_at`,
       [
         payload.code,
         payload.name,
         payload.unit_measure,
         payload.unit_cost_bs,
         payload.waste_pct,
+        payload.reorder_qty || 0,
+        payload.supplier || null,
         payload.notes || null,
         Boolean(payload.is_active),
         req.user.id
@@ -483,6 +486,8 @@ router.patch('/api/admin/materiales/:id', authenticateToken, requireRole(['admin
     if (Object.prototype.hasOwnProperty.call(payload, 'unit_measure')) assignField('unit_measure', payload.unit_measure);
     if (Object.prototype.hasOwnProperty.call(payload, 'unit_cost_bs')) assignField('unit_cost_bs', payload.unit_cost_bs);
     if (Object.prototype.hasOwnProperty.call(payload, 'waste_pct')) assignField('waste_pct', payload.waste_pct);
+    if (Object.prototype.hasOwnProperty.call(payload, 'reorder_qty')) assignField('reorder_qty', payload.reorder_qty);
+    if (Object.prototype.hasOwnProperty.call(payload, 'supplier')) assignField('supplier', payload.supplier || null);
     if (Object.prototype.hasOwnProperty.call(payload, 'notes')) assignField('notes', payload.notes || null);
     if (Object.prototype.hasOwnProperty.call(payload, 'is_active')) assignField('is_active', Boolean(payload.is_active));
     assignField('updated_by', req.user.id);
@@ -493,7 +498,7 @@ router.patch('/api/admin/materiales/:id', authenticateToken, requireRole(['admin
       `UPDATE production_material_catalog
        SET ${sets.join(', ')}
        WHERE id = $${values.length}
-       RETURNING id, code, name, unit_measure, unit_cost_bs, waste_pct, notes, is_active, updated_by, created_at, updated_at`,
+       RETURNING id, code, name, unit_measure, unit_cost_bs, waste_pct, reorder_qty, supplier, qr_token, notes, is_active, updated_by, created_at, updated_at`,
       values
     );
     if (updateRes.rowCount === 0) {
