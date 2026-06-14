@@ -54,13 +54,19 @@ export function AuthProvider({ children }) {
       .then((me) => {
         if (!cancelled) applyUser(me);
       })
-      .catch(() => {
-        // Keep cached session when offline or the request fails.
+      .catch((err) => {
+        // A clearly rejected session (expired/invalid token) should clear the
+        // stale login so the user is sent back to the login screen instead of
+        // hitting "Token inválido" on every request. Network/offline errors
+        // (no HTTP status) keep the cached session so offline use still works.
+        if (!cancelled && (err?.status === 401 || err?.status === 403)) {
+          logout();
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [token, applyUser]);
+  }, [token, applyUser, logout]);
 
   const effectiveAccess = useMemo(() => buildAccessForUser(role, access), [role, access]);
 
