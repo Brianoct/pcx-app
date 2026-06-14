@@ -18,6 +18,7 @@ const ACCESS_TEMPLATE = {
   microfabrica_panel: false,
   produccion_kanban: false,
   gastos_panel: false,
+  compras_panel: false,
   marketing_combos: false,
   marketing_cupones: false,
   admin: false
@@ -47,6 +48,7 @@ const ROLE_DEFAULTS = {
     pedidos_global: true,
     inventario_global: true,
     gastos_panel: true,
+    compras_panel: true,
     marketing_combos: true,
     marketing_cupones: true,
     admin: true
@@ -64,7 +66,8 @@ const ROLE_DEFAULTS = {
     pedidos_global: true,
     inventario_global: true,
     control_calidad: true,
-    produccion_kanban: true
+    produccion_kanban: true,
+    compras_panel: true
   },
   marketing: {
     calendario: true,
@@ -196,6 +199,13 @@ const PANEL_KEY_ALIASES = {
   expensespanel: 'gastos_panel',
   gastosPanel: 'gastos_panel',
   expensesPanel: 'gastos_panel',
+  compras_panel: 'compras_panel',
+  compraspanel: 'compras_panel',
+  compras: 'compras_panel',
+  comprar: 'compras_panel',
+  procurement: 'compras_panel',
+  purchasing: 'compras_panel',
+  comprasPanel: 'compras_panel',
   marketing_combos: 'marketing_combos',
   marketingcombos: 'marketing_combos',
   combos: 'marketing_combos',
@@ -274,6 +284,7 @@ export const ACCESS_LABELS = [
   { key: 'microfabrica_panel', label: 'Panel Microfábrica' },
   { key: 'produccion_kanban', label: 'Kanban Producción' },
   { key: 'gastos_panel', label: 'Panel Gastos' },
+  { key: 'compras_panel', label: 'Compras (procurement)' },
   { key: 'marketing_combos', label: 'Combos (Marketing)' },
   { key: 'marketing_cupones', label: 'Cupones (Marketing)' },
   { key: 'admin', label: 'Panel Admin' }

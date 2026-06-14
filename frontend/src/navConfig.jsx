@@ -19,6 +19,7 @@ const ProductionKanban = lazy(() => import('./ProductionKanban'));
 const ExpensesPanel = lazy(() => import('./ExpensesPanel'));
 const ProjectsPanel = lazy(() => import('./ProjectsPanel'));
 const ProfilePanel = lazy(() => import('./ProfilePanel'));
+const ComprasBoard = lazy(() => import('./ComprasBoard'));
 
 /**
  * Single source of truth for every internal destination.
@@ -60,6 +61,12 @@ export const NAV_ITEMS = [
     label: 'Inventario',
     routeAccess: ['inventario_global', 'inventario_individual'],
     render: (ctx) => <InventoryPanel token={ctx.token} role={ctx.role} access={ctx.access} />
+  },
+  {
+    path: '/comprar',
+    label: 'Compras',
+    routeAccess: ['compras_panel'],
+    render: (ctx) => <ComprasBoard token={ctx.token} />
   },
   {
     path: '/performance',
@@ -144,7 +151,7 @@ export const NAV_ITEMS = [
 // can see at least one of its items, so most roles get a short sidebar.
 const SIDEBAR_SECTIONS = [
   { key: 'ventas', label: 'Ventas', paths: ['/', '/history', '/performance'] },
-  { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory'] },
+  { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/comprar'] },
   { key: 'produccion', label: 'Producción', paths: ['/microfabrica', '/produccion-kanban', '/control-calidad'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/proyectos'] },
   { key: 'marketing', label: 'Marketing', paths: ['/combos', '/cupones'] },

@@ -9,6 +9,7 @@ import { useCommission } from './useCommission';
 import './index.css';
 
 const PublicCustomerMenu = lazy(() => import('./PublicCustomerMenu'));
+const ComprasScan = lazy(() => import('./ComprasScan'));
 
 const routeFallback = <div className="route-loading" aria-label="Cargando">Cargando…</div>;
 
@@ -86,6 +87,7 @@ function App() {
                   }
                 />
               ))}
+              <Route path="/comprar/scan/:token" element={<ComprasScan token={token} />} />
               <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
               <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
               <Route path="*" element={<Navigate to={defaultPath} replace />} />
