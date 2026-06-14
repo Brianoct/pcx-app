@@ -13,6 +13,7 @@ const routers = [
   require('./routes/customerMenu'),
   require('./routes/quotes'),
   require('./routes/timeoff'),
+  require('./routes/calendar'),
   require('./routes/projects'),
   require('./routes/expenses'),
   require('./routes/stock'),

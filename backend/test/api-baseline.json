@@ -307,6 +307,24 @@
   },
   {
     "method": "GET",
+    "path": "/api/calendar/types",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/calendar/events",
+    "status": 200,
+    "shape": "array"
+  },
+  {
+    "method": "GET",
+    "path": "/api/calendar/summary",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
     "path": "/api/procurement/requests",
     "status": 200,
     "shape": "array"
