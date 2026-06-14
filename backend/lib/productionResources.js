@@ -247,11 +247,13 @@ const normalizeMaterialPayload = (payload = {}, { partial = false } = {}) => {
   const hasWastePct = Object.prototype.hasOwnProperty.call(src, 'waste_pct');
   const hasNotes = Object.prototype.hasOwnProperty.call(src, 'notes');
   const hasIsActive = Object.prototype.hasOwnProperty.call(src, 'is_active');
+  const hasReorderQty = Object.prototype.hasOwnProperty.call(src, 'reorder_qty');
+  const hasSupplier = Object.prototype.hasOwnProperty.call(src, 'supplier');
 
   if (!partial && (!hasCode || !hasName || !hasUnitMeasure)) {
     throw createHttpError(400, 'Debes enviar code, name y unit_measure');
   }
-  if (partial && !hasCode && !hasName && !hasUnitMeasure && !hasUnitCost && !hasWastePct && !hasNotes && !hasIsActive) {
+  if (partial && !hasCode && !hasName && !hasUnitMeasure && !hasUnitCost && !hasWastePct && !hasNotes && !hasIsActive && !hasReorderQty && !hasSupplier) {
     throw createHttpError(400, 'No se enviaron cambios para actualizar material');
   }
 
@@ -267,11 +269,14 @@ const normalizeMaterialPayload = (payload = {}, { partial = false } = {}) => {
   }
   if (hasNotes) normalized.notes = normalizeOptionalShortText(src.notes, 'notes', { maxLength: 1000 });
   if (hasIsActive) normalized.is_active = normalizeOptionalBooleanField(src.is_active, 'is_active');
+  if (hasReorderQty) normalized.reorder_qty = parseNonNegativeAmount(src.reorder_qty, 'reorder_qty');
+  if (hasSupplier) normalized.supplier = normalizeOptionalShortText(src.supplier, 'supplier', { maxLength: 120 });
 
   if (!partial) {
     if (!Object.prototype.hasOwnProperty.call(normalized, 'unit_cost_bs')) normalized.unit_cost_bs = 0;
     if (!Object.prototype.hasOwnProperty.call(normalized, 'waste_pct')) normalized.waste_pct = 0;
     if (!Object.prototype.hasOwnProperty.call(normalized, 'is_active')) normalized.is_active = true;
+    if (!Object.prototype.hasOwnProperty.call(normalized, 'reorder_qty')) normalized.reorder_qty = 0;
   }
   return normalized;
 };
@@ -299,6 +304,9 @@ const buildMaterialResponseRow = (row = {}) => ({
   unit_measure: String(row.unit_measure || '').trim(),
   unit_cost_bs: Number(row.unit_cost_bs || 0),
   waste_pct: Number(row.waste_pct || 0),
+  reorder_qty: Number(row.reorder_qty || 0),
+  supplier: String(row.supplier || '').trim() || null,
+  qr_token: row.qr_token ? String(row.qr_token) : null,
   notes: String(row.notes || '').trim() || null,
   is_active: Boolean(row.is_active),
   updated_by: row.updated_by !== null ? Number(row.updated_by) : null,
