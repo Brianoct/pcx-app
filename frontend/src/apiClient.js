@@ -1,4 +1,9 @@
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+if (!configuredApiUrl && import.meta.env.PROD) {
+  // Fail loudly instead of silently pointing a production build at localhost.
+  throw new Error('VITE_API_URL is not set. A production build must define the backend API base URL.');
+}
+export const API_BASE = configuredApiUrl || 'http://localhost:4000';
 
 const DEFAULT_TIMEOUT_MS = 12000;
 const DEFAULT_GET_RETRIES = 2;
