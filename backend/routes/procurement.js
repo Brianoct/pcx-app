@@ -118,38 +118,33 @@ router.post('/api/procurement/scan', authenticateToken, async (req, res) => {
     const noteText = note ? String(note).slice(0, 1000) : null;
     const location = store_location ? String(store_location).slice(0, 120) : null;
 
-    const open = await findOpenRequest(material.id);
-    let row;
-    if (open) {
-      // Two-bin: another empty bin for the same material accumulates on the card.
-      const updated = await pool.query(
-        `UPDATE material_purchase_requests
-         SET quantity = quantity + $2,
-             scan_count = scan_count + 1,
-             priority = CASE WHEN $3 = 'urgent' THEN 'urgent' ELSE priority END,
-             note = COALESCE($4, note),
-             store_location = COALESCE($5, store_location),
-             updated_at = NOW()
-         WHERE id = $1
-         RETURNING ${'id, material_id, material_code, material_name, unit_measure, quantity, scan_count, status, priority, note, store_location, requested_by, purchased_by, purchased_at, received_by, received_at, created_at, updated_at'}`,
-        [open.id, addQty, normalizedPriority, noteText, location]
-      );
-      row = updated.rows[0];
-    } else {
-      const inserted = await pool.query(
-        `INSERT INTO material_purchase_requests
-           (material_id, material_code, material_name, unit_measure, quantity, scan_count,
-            status, priority, note, store_location, requested_by)
-         VALUES ($1, $2, $3, $4, $5, 1, 'pending', $6, $7, $8, $9)
-         RETURNING id, material_id, material_code, material_name, unit_measure, quantity, scan_count, status, priority, note, store_location, requested_by, purchased_by, purchased_at, received_by, received_at, created_at, updated_at`,
-        [material.id, String(material.code || '').toUpperCase(), material.name, material.unit_measure, addQty, normalizedPriority, noteText, location, req.user.id]
-      );
-      row = inserted.rows[0];
-    }
+    // Atomic two-bin upsert: at most one open card per material (enforced by the
+    // partial unique index idx_material_purchase_requests_open). Concurrent scans
+    // of the same empty bin accumulate onto the same card instead of racing into a
+    // duplicate-key 500. `(xmax = 0)` is true only for a fresh INSERT, false when
+    // the ON CONFLICT path updated an existing row.
+    const upserted = await pool.query(
+      `INSERT INTO material_purchase_requests
+         (material_id, material_code, material_name, unit_measure, quantity, scan_count,
+          status, priority, note, store_location, requested_by)
+       VALUES ($1, $2, $3, $4, $5, 1, 'pending', $6, $7, $8, $9)
+       ON CONFLICT (material_id) WHERE status IN ('pending', 'purchased')
+       DO UPDATE SET
+         quantity = material_purchase_requests.quantity + EXCLUDED.quantity,
+         scan_count = material_purchase_requests.scan_count + 1,
+         priority = CASE WHEN EXCLUDED.priority = 'urgent' THEN 'urgent' ELSE material_purchase_requests.priority END,
+         note = COALESCE(EXCLUDED.note, material_purchase_requests.note),
+         store_location = COALESCE(EXCLUDED.store_location, material_purchase_requests.store_location),
+         updated_at = NOW()
+       RETURNING id, material_id, material_code, material_name, unit_measure, quantity, scan_count, status, priority, note, store_location, requested_by, purchased_by, purchased_at, received_by, received_at, created_at, updated_at, (xmax = 0) AS was_inserted`,
+      [material.id, String(material.code || '').toUpperCase(), material.name, material.unit_measure, addQty, normalizedPriority, noteText, location, req.user.id]
+    );
+    const row = upserted.rows[0];
+    const wasExisting = row.was_inserted === false;
     res.status(201).json({
-      message: open ? 'Material actualizado en la lista de compras' : 'Material agregado a la lista de compras',
+      message: wasExisting ? 'Material actualizado en la lista de compras' : 'Material agregado a la lista de compras',
       request: buildPurchaseRequestRow({ ...row, supplier: material.supplier || null }),
-      was_existing: Boolean(open)
+      was_existing: wasExisting
     });
   } catch (err) {
     if (isPgUndefinedTableError(err)) return res.status(503).json({ error: 'Compras no inicializado. Falta aplicar migración.' });

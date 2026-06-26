@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const fs = require('fs/promises');
 const jwt = require('jsonwebtoken');
 const path = require('path');
@@ -339,7 +340,16 @@ router.get('/api/public/menu-image/:sku', async (req, res) => {
   }
 });
 
-router.post('/api/public/menu/:shareToken/order', async (req, res) => {
+// Public, unauthenticated order endpoint — throttle by IP to limit spam/abuse.
+const publicOrderLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados pedidos. Intenta de nuevo en unos minutos.' }
+});
+
+router.post('/api/public/menu/:shareToken/order', publicOrderLimiter, async (req, res) => {
   const shareToken = String(req.params.shareToken || '').trim();
   if (!shareToken) return res.status(400).json({ error: 'Token de catálogo inválido' });
   try {
