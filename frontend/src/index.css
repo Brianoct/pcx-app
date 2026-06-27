@@ -3775,3 +3775,246 @@ button, .btn {
     padding: 2px 4px;
   }
 }
+
+/* ─── Compras (procurement) ───────────────────────────────────────────── */
+.compras-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.compras-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.compras-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.compras-column {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 160px;
+}
+
+.compras-column-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--border);
+}
+
+.compras-count {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.compras-column-body {
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.compras-empty {
+  border: 1px dashed rgba(100, 116, 139, 0.4);
+  border-radius: 9px;
+  padding: 14px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.compras-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.compras-card.is-urgent {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.18);
+}
+
+.compras-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.compras-card-name {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+
+.compras-card-code {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.compras-qty {
+  background: var(--brand-tint);
+  border: 1px solid rgba(255, 127, 48, 0.4);
+  color: var(--warning);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.compras-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 8px 0 4px;
+}
+
+.compras-pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+}
+
+.compras-note {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin-bottom: 6px;
+}
+
+.compras-card-foot {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  margin-bottom: 8px;
+}
+
+.compras-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.compras-card-actions .btn {
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 0.76rem;
+}
+
+.compras-btn-primary { background: var(--accent-secondary); color: #fff; }
+.compras-btn-success { background: var(--success); color: #fff; }
+.compras-btn-danger { background: var(--danger); color: #fff; }
+
+/* Scan landing */
+.compras-scan {
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.compras-scan-card {
+  margin-top: 24px;
+}
+
+.compras-scan-material {
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.compras-scan-existing {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  color: var(--warning);
+}
+
+.compras-scan-done {
+  text-align: center;
+}
+
+.compras-scan-check {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background: var(--success);
+  color: #fff;
+  font-size: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* QR modal + image */
+.compras-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(41, 37, 36, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1000;
+}
+
+.compras-modal {
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  margin: 0;
+}
+
+.compras-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.compras-modal-close {
+  border: none;
+  background: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.qr-image {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.qr-placeholder {
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.qr-error {
+  color: var(--danger);
+  font-size: 0.82rem;
+}

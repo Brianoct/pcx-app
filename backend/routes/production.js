@@ -104,7 +104,7 @@ router.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRol
     const sku = validateProductSku(req.params.sku);
     const startProcess = normalizeProductionStartProcess(req.body?.start_process || '');
     if (!startProcess) {
-      return res.status(400).json({ error: 'Proceso inicial inválido. Usa comprar, corte_laser o punzonado' });
+      return res.status(400).json({ error: 'Proceso inicial inválido. Usa corte_laser, impresion_3d o punzonado' });
     }
     const existsRes = await pool.query(
       `SELECT sku
@@ -129,7 +129,7 @@ router.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRol
       `UPDATE production_kanban_cards
        SET start_process = $2,
            stage = CASE
-             WHEN stage IN ('comprar', 'corte_laser', 'punzonado') THEN $2
+             WHEN stage IN ('corte_laser', 'impresion_3d', 'punzonado') THEN $2
              ELSE stage
            END,
            updated_at = NOW()

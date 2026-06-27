@@ -456,7 +456,7 @@ function InventoryPanel({ token, role, access }) {
                 borderRadius: '6px',
                 border: changed ? '1px solid #f59e0b' : '1px solid #e7e0d8',
                 background: '#ffffff',
-                color: 'white'
+                color: '#047857'
               };
               const minInputStyle = {
                 width: '110px',
@@ -500,7 +500,7 @@ function InventoryPanel({ token, role, access }) {
                             style={{
                               ...inputStyle,
                               borderColor: getStockLevel(product, store.field, store.minField) === 'ok' ? inputStyle.border : '#ef4444',
-                              color: getStockLevel(product, store.field, store.minField) === 'ok' ? 'white' : '#b91c1c'
+                              color: getStockLevel(product, store.field, store.minField) === 'ok' ? '#047857' : '#b91c1c'
                             }}
                           />
                           <input
@@ -579,7 +579,7 @@ function InventoryPanel({ token, role, access }) {
                               ? (changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #e7e0d8')
                               : '1px solid #ef4444',
                             background: '#ffffff',
-                            color: getStockLevel(product, store.field, store.minField) === 'ok' ? 'white' : '#b91c1c'
+                            color: getStockLevel(product, store.field, store.minField) === 'ok' ? '#047857' : '#b91c1c'
                           }}
                         />
                       </td>

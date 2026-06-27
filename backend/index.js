@@ -17,6 +17,7 @@ const routers = [
   require('./routes/projects'),
   require('./routes/expenses'),
   require('./routes/stock'),
+  require('./routes/procurement'),
   require('./routes/marketing'),
   require('./routes/adminUsers'),
   require('./routes/performance'),

@@ -26,6 +26,7 @@ const PANEL_KEYS = [
   'microfabrica_panel',
   'produccion_kanban',
   'gastos_panel',
+  'compras_panel',
   'marketing_combos',
   'marketing_cupones',
   'admin'
@@ -50,6 +51,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     microfabrica_panel: false,
     produccion_kanban: false,
     gastos_panel: false,
+    compras_panel: false,
     marketing_combos: false,
     marketing_cupones: false,
     admin: false
@@ -100,7 +102,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       pedidos_global: true,
       inventario_global: true,
       control_calidad: true,
-      produccion_kanban: true
+      produccion_kanban: true,
+      compras_panel: true
     };
   }
 

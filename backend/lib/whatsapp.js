@@ -21,6 +21,11 @@ const WHATSAPP_GRAPH_VERSION = String(process.env.WHATSAPP_GRAPH_VERSION || 'v20
 const WHATSAPP_API_BASE = String(process.env.WHATSAPP_API_BASE || 'https://graph.facebook.com').trim();
 
 const WHATSAPP_APP_SECRET = String(process.env.WHATSAPP_APP_SECRET || '').trim();
+// Opt-out escape hatch for local dev only. Without a configured app secret the
+// inbound webhook cannot verify signatures, so it fails closed unless this is set.
+const WHATSAPP_WEBHOOK_ALLOW_UNSIGNED =
+  String(process.env.WHATSAPP_WEBHOOK_ALLOW_UNSIGNED || '').trim().toLowerCase() === 'true';
+let warnedUnsignedWebhook = false;
 
 const WHATSAPP_OUTBOUND_TYPES = new Set(['text', 'image', 'video', 'audio', 'document', 'location', 'contacts', 'interactive', 'template']);
 
@@ -508,7 +513,21 @@ const fetchWhatsAppMediaBinary = async (mediaUrl) => {
 };
 
 const verifyWhatsAppWebhookSignature = (req) => {
-  if (!WHATSAPP_APP_SECRET) return true;
+  if (!WHATSAPP_APP_SECRET) {
+    // Fail closed: never trust an unsigned webhook in the absence of a secret.
+    if (WHATSAPP_WEBHOOK_ALLOW_UNSIGNED) {
+      if (!warnedUnsignedWebhook) {
+        console.warn('[whatsapp] WHATSAPP_APP_SECRET unset and WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=true: accepting UNSIGNED webhooks (dev only).');
+        warnedUnsignedWebhook = true;
+      }
+      return true;
+    }
+    if (!warnedUnsignedWebhook) {
+      console.warn('[whatsapp] WHATSAPP_APP_SECRET unset: rejecting inbound webhooks. Set the secret (or WHATSAPP_WEBHOOK_ALLOW_UNSIGNED=true for local dev).');
+      warnedUnsignedWebhook = true;
+    }
+    return false;
+  }
   const signatureHeader = String(req.headers['x-hub-signature-256'] || '').trim();
   if (!signatureHeader || !signatureHeader.startsWith('sha256=')) return false;
   if (!req.rawBody) return false;

@@ -107,6 +107,9 @@ const battery = [
   ['GET', '/api/calendar/types', ventas],
   ['GET', '/api/calendar/events', ventas],
   ['GET', '/api/calendar/summary?year=2026', ventas],
+  // procurement (compras)
+  ['GET', '/api/procurement/requests', admin],
+  ['GET', '/api/procurement/materials', admin],
 ];
 
 const results = [];
