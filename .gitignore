@@ -19,6 +19,12 @@ dist-ssr/
 .env.development.local
 .env.test.local
 .env.production.local
+# Ignore env files in any subdirectory (e.g. backend/.env, frontend/.env)
+**/.env
+**/.env.local
+# ...but always allow the committed templates
+!.env.example
+!**/.env.example
 
 # Editor / OS files
 .vscode/
