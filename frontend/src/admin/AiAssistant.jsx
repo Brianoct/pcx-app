@@ -247,8 +247,9 @@ function AiAssistant({ token, aiInfo }) {
 
           {result.provider === 'fallback' && (
             <div className="admin-ai-error" style={{ color: '#92400e', background: 'rgba(251, 191, 36, 0.14)', borderColor: 'rgba(251, 191, 36, 0.5)' }}>
-              Modo sin IA generativa: se muestran resúmenes de datos predefinidos. Para responder
-              preguntas libres, configura <strong>GROK_API_KEY</strong> en el backend.
+              {aiInfo?.configured
+                ? <>La IA ({aiInfo.provider}{aiInfo.model ? ` · ${aiInfo.model}` : ''}) está configurada, pero esta respuesta usó el modo básico. La llamada al proveedor falló — revisa los <strong>Logs</strong> del backend (clave/modelo).</>
+                : <>Modo sin IA generativa: se muestran resúmenes predefinidos. Para responder preguntas libres, configura una clave de IA (<strong>AI_API_KEY</strong> o la del proveedor) en el backend.</>}
             </div>
           )}
 
