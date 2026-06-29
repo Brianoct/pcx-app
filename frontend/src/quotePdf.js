@@ -48,7 +48,8 @@ export function generateModernQuotePdf({
   subtotal = 0,
   discountPercent = 0,
   discountAmount,
-  total = 0
+  total = 0,
+  autoSave = true
 }) {
   const doc = new jsPDF();
 
@@ -276,6 +277,8 @@ export function generateModernQuotePdf({
   doc.text('Cotizacion valida por 7 dias', left, footerY);
   doc.text('Gracias por confiar en PCX', right, footerY, { align: 'right' });
 
-  doc.save(filename);
+  if (autoSave) {
+    doc.save(filename);
+  }
   return doc;
 }
