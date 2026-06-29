@@ -30,6 +30,16 @@ test('scoreCatalogCandidates ranks by keyword overlap', () => {
   assert.ok(ranked.some((r) => r.sku === 'T6195A'));
 });
 
+test('scoreCatalogCandidates matches plurals to singular product names', () => {
+  // customer writes plurals; products are singular
+  const ranked = scoreCatalogCandidates('me da dos tableros rojos y unas cajas', CATALOG, 10);
+  const skus = ranked.map((r) => r.sku);
+  assert.ok(skus.includes('T6195R'), 'should surface the red tablero');
+  assert.ok(skus.includes('T6195A'), 'should surface the other tablero');
+  // the unrelated escalera/mesa should rank below the tableros
+  assert.equal(ranked[0].sku.startsWith('T6195'), true);
+});
+
 test('scoreCatalogCandidates boosts exact sku mention', () => {
   const ranked = scoreCatalogCandidates('me interesa el ESC120 por favor', CATALOG, 10);
   assert.equal(ranked[0].sku, 'ESC120');
@@ -62,6 +72,18 @@ test('attachCatalogToSuggestion uses authoritative prices and drops unknown skus
   assert.equal(result.quote_draft.rows[0].unitPrice, 330);
   assert.equal(result.quote_draft.rows[0].qty, 2);
   assert.equal(result.quote_draft.rows[0].lineTotal, 660);
+});
+
+test('attachCatalogToSuggestion extracts customer_name and destination', () => {
+  const bySku = new Map(CATALOG.map((c) => [c.sku, c]));
+  const result = attachCatalogToSuggestion({
+    reply_draft: 'Hola',
+    customer_name: 'Pedro Rojas',
+    destination: 'Sucre',
+    quote_rows: [{ sku: 'T6195R', qty: 1 }]
+  }, bySku);
+  assert.equal(result.quote_draft.customer_name, 'Pedro Rojas');
+  assert.equal(result.quote_draft.destination, 'Sucre');
 });
 
 test('attachCatalogToSuggestion defaults invalid qty to 1', () => {

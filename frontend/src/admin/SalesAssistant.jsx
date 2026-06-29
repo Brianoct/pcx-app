@@ -1,6 +1,69 @@
 import { useState, useEffect, useCallback } from 'react';
-import { apiRequest } from '../apiClient';
+import { apiRequest, API_BASE } from '../apiClient';
 import { generateModernQuotePdf } from '../quotePdf';
+
+const MEDIA_TYPES = ['image', 'video', 'audio', 'document'];
+
+// Outbound messages store raw_payload as { request, response }; inbound store
+// the webhook object directly.
+const normalizeMessagePayload = (message = {}) => {
+  const rawPayload = message?.raw_payload;
+  if (!rawPayload || typeof rawPayload !== 'object') return null;
+  if (message.direction === 'outbound' && rawPayload.request && typeof rawPayload.request === 'object') {
+    return rawPayload.request;
+  }
+  return rawPayload;
+};
+
+// Renders a clickable link (or image) for a media/document message. The media
+// content endpoint needs the bearer token, so we fetch it and build a blob URL.
+function MediaAttachment({ message, token }) {
+  const payload = normalizeMessagePayload(message);
+  const messageType = String(message?.message_type || payload?.type || 'text').trim().toLowerCase();
+  const media = MEDIA_TYPES.includes(messageType) ? (payload?.[messageType] || {}) : null;
+  const directLink = String(media?.link || '').trim();
+  const mediaId = String(media?.id || '').trim();
+  const filename = String(media?.filename || '').trim();
+
+  const [url, setUrl] = useState(directLink);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    // directLink (if present) is already the initial state; only fetch when we
+    // must resolve a media id through the authenticated content endpoint.
+    // Depend on primitives (not the recreated `media` object) to avoid refetch loops.
+    if (!MEDIA_TYPES.includes(messageType) || directLink) return undefined;
+    if (!mediaId || !token) return undefined;
+    let active = true;
+    let objectUrl = null;
+    fetch(`${API_BASE}/api/whatsapp/inbox/media/${encodeURIComponent(mediaId)}/content`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`No se pudo abrir el archivo (${res.status})`);
+        return res.blob();
+      })
+      .then((blob) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch((e) => { if (active) setErr(e?.message || 'No se pudo abrir el archivo'); });
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [messageType, directLink, mediaId, token]);
+
+  if (!media) return null;
+  if (err) return <span className="sales-ia-media-err">{err}</span>;
+  if (!url) return <span className="sales-ia-media-link">Cargando archivo…</span>;
+  if (messageType === 'image') {
+    return <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={filename || 'imagen'} className="sales-ia-media-img" /></a>;
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer" download={filename || undefined} className="sales-ia-media-link">
+      {messageType === 'document' ? `Abrir ${filename || 'documento'}` : 'Abrir archivo'}
+    </a>
+  );
+}
 
 const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
 const VENTA_TYPE_OPTIONS = [
@@ -10,7 +73,7 @@ const VENTA_TYPE_OPTIONS = [
 
 const money = (n) => `Bs ${Number(n || 0).toFixed(2)}`;
 
-function SalesAssistant({ token, user, aiInfo }) {
+function SalesAssistant({ token, user }) {
   const [conversations, setConversations] = useState([]);
   const [salesUsers, setSalesUsers] = useState([]);
   const [search, setSearch] = useState('');
@@ -31,6 +94,8 @@ function SalesAssistant({ token, user, aiInfo }) {
 
   // Quote draft
   const [quoteRows, setQuoteRows] = useState([]);
+  const [customerNameInput, setCustomerNameInput] = useState('');
+  const [destinationInput, setDestinationInput] = useState('');
   const [storeLocation, setStoreLocation] = useState(STORE_OPTIONS[0]);
   const [ventaType, setVentaType] = useState('SF');
   const [sellerUserId, setSellerUserId] = useState('');
@@ -71,12 +136,16 @@ function SalesAssistant({ token, user, aiInfo }) {
     setQuoteRows([]);
     setQuoteResult(null);
     setPdfSent(false);
+    setCustomerNameInput('');
+    setDestinationInput('');
     setLoadingThread(true);
     setError('');
     try {
       const res = await reloadMessages(id);
       const assigned = res?.conversation?.assigned_user_id;
       setSellerUserId(assigned ? String(assigned) : '');
+      // default the quote name to the WhatsApp contact until the AI extracts one
+      setCustomerNameInput(String(res?.conversation?.contact_name || '').trim());
     } catch (err) {
       setError(err?.message || 'No se pudo abrir la conversación.');
     } finally {
@@ -99,6 +168,12 @@ function SalesAssistant({ token, user, aiInfo }) {
       setSuggestion(res);
       setReply(res?.reply_draft || '');
       setQuoteRows(Array.isArray(res?.quote_draft?.rows) ? res.quote_draft.rows : []);
+      // prioritize info the customer stated in the conversation; fall back to WhatsApp contact
+      const extractedName = String(res?.quote_draft?.customer_name || '').trim();
+      const extractedDestination = String(res?.quote_draft?.destination || '').trim();
+      if (extractedName) setCustomerNameInput(extractedName);
+      else if (!customerNameInput) setCustomerNameInput(String(conversation?.contact_name || '').trim());
+      if (extractedDestination) setDestinationInput(extractedDestination);
     } catch (err) {
       setError(err?.message || 'No se pudo generar la sugerencia.');
     } finally {
@@ -168,8 +243,10 @@ function SalesAssistant({ token, user, aiInfo }) {
     }
     const seller = salesUsers.find((u) => String(u.id) === String(sellerUserId));
     const vendor = seller?.name || seller?.email || user?.display_name || 'Asesor';
-    const customerName = (conversation.contact_name || '').trim() || 'Cliente WhatsApp';
+    // prioritize the name the customer stated (editable field) over the WhatsApp contact
+    const customerName = customerNameInput.trim() || (conversation.contact_name || '').trim() || 'Cliente WhatsApp';
     const customerPhone = (conversation.contact_phone || '').trim();
+    const destination = destinationInput.trim();
     if (!window.confirm(`¿Crear cotización para ${customerName} por ${money(subtotal)}?`)) return;
 
     setCreatingQuote(true);
@@ -183,6 +260,7 @@ function SalesAssistant({ token, user, aiInfo }) {
         body: {
           customer_name: customerName,
           customer_phone: customerPhone,
+          ...(destination ? { department: destination.slice(0, 50) } : {}),
           store_location: storeLocation,
           venta_type: ventaType,
           vendor,
@@ -206,6 +284,7 @@ function SalesAssistant({ token, user, aiInfo }) {
         customerPhone,
         vendor,
         storeLocation,
+        department: destination,
         rows: quoteRows,
         subtotal: Number(subtotal.toFixed(2))
       });
@@ -231,6 +310,7 @@ function SalesAssistant({ token, user, aiInfo }) {
         customerPhone: quoteResult.customerPhone,
         vendorName: quoteResult.vendor,
         storeLocation: quoteResult.storeLocation,
+        department: quoteResult.department,
         dateText: new Date().toLocaleDateString('es-BO'),
         rows: quoteResult.rows,
         subtotal: quoteResult.subtotal,
@@ -270,12 +350,7 @@ function SalesAssistant({ token, user, aiInfo }) {
     <div className="sales-ia">
       <div className="admin-ai-result-head">
         <h3 style={{ margin: 0 }}>Ventas IA (beta privada)</h3>
-        <span>
-          Atiende el inbox de WhatsApp con borradores de IA. Tú confirmas antes de enviar o cotizar.
-          {aiInfo?.provider && (
-            <> {' · '}IA: {aiInfo.provider}{aiInfo.model ? ` (${aiInfo.model})` : ''}{aiInfo.configured ? '' : ' — sin clave'}</>
-          )}
-        </span>
+        <span>Atiende el inbox de WhatsApp con borradores de IA.</span>
       </div>
 
       {error && <div className="admin-ai-error">{error}</div>}
@@ -323,16 +398,14 @@ function SalesAssistant({ token, user, aiInfo }) {
             <>
               <div className="sales-ia-thread-head">
                 <strong>{conversation?.contact_name || conversation?.contact_phone || `Conversación ${selectedId}`}</strong>
-                <button type="button" className="admin-ai-pill" onClick={generateSuggestion} disabled={suggesting || loadingThread}>
-                  {suggesting ? 'Generando…' : 'Generar sugerencias IA'}
-                </button>
               </div>
               <div className="sales-ia-messages">
                 {loadingThread && <p className="sales-ia-muted">Cargando…</p>}
                 {!loadingThread && messages.length === 0 && <p className="sales-ia-muted">Sin mensajes.</p>}
                 {messages.map((m) => (
                   <div key={m.id} className={`sales-ia-bubble ${m.direction === 'inbound' ? 'in' : 'out'}`}>
-                    {m.text_body || `[${m.message_type || 'mensaje'}]`}
+                    <div>{m.text_body || `[${m.message_type || 'mensaje'}]`}</div>
+                    <MediaAttachment message={m} token={token} />
                   </div>
                 ))}
               </div>
@@ -343,9 +416,14 @@ function SalesAssistant({ token, user, aiInfo }) {
                   placeholder="Escribe o usa el borrador de IA…"
                   disabled={sending}
                 />
-                <button type="button" className="btn" onClick={sendReply} disabled={sending || !reply.trim()}>
-                  {sending ? 'Enviando…' : 'Enviar respuesta'}
-                </button>
+                <div className="sales-ia-composer-actions">
+                  <button type="button" className="admin-ai-pill" onClick={generateSuggestion} disabled={suggesting || loadingThread}>
+                    {suggesting ? 'Generando…' : 'Generar sugerencias IA'}
+                  </button>
+                  <button type="button" className="btn" onClick={sendReply} disabled={sending || !reply.trim()}>
+                    {sending ? 'Enviando…' : 'Enviar respuesta'}
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -358,9 +436,7 @@ function SalesAssistant({ token, user, aiInfo }) {
             <>
               {suggestion.provider === 'fallback' && (
                 <div className="admin-ai-error" style={{ color: '#92400e', background: 'rgba(251, 191, 36, 0.14)', borderColor: 'rgba(251, 191, 36, 0.5)' }}>
-                  {aiInfo?.configured
-                    ? <>La IA ({aiInfo.provider}{aiInfo.model ? ` · ${aiInfo.model}` : ''}) está configurada, pero esta respuesta usó el modo básico. {suggestion.ai_error ? <>Error del proveedor: <code>{suggestion.ai_error}</code></> : <>La llamada al proveedor falló — revisa los <strong>Logs</strong> del backend.</>}</>
-                    : <>Sin IA generativa: sugerencias por palabras clave. Configura una clave de IA (<strong>AI_API_KEY</strong> o la del proveedor) en el backend.</>}
+                  Mostrando sugerencias básicas por ahora. Puedes editar la respuesta y la cotización manualmente.
                 </div>
               )}
 
@@ -420,6 +496,22 @@ function SalesAssistant({ token, user, aiInfo }) {
                 )}
 
                 <div className="sales-ia-quote-meta">
+                  <label className="sales-ia-quote-field">Cliente (cotización)
+                    <input
+                      type="text"
+                      value={customerNameInput}
+                      placeholder="Nombre para la cotización"
+                      onChange={(e) => setCustomerNameInput(e.target.value)}
+                    />
+                  </label>
+                  <label className="sales-ia-quote-field">Destino
+                    <input
+                      type="text"
+                      value={destinationInput}
+                      placeholder="Ciudad / departamento"
+                      onChange={(e) => setDestinationInput(e.target.value)}
+                    />
+                  </label>
                   <label>Almacén
                     <select value={storeLocation} onChange={(e) => setStoreLocation(e.target.value)}>
                       {STORE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
