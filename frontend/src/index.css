@@ -2081,7 +2081,7 @@ button, .btn {
 /* Medium screens: list + thread side by side, AI panel full width below. */
 @media (min-width: 860px) {
   .sales-ia-grid {
-    grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
     grid-template-areas:
       "list thread"
       "panel panel";
@@ -2091,7 +2091,7 @@ button, .btn {
 /* Wide screens: full three-column workspace. */
 @media (min-width: 1300px) {
   .sales-ia-grid {
-    grid-template-columns: minmax(0, 240px) minmax(0, 1fr) minmax(0, 340px);
+    grid-template-columns: minmax(0, 300px) minmax(0, 1fr) minmax(0, 360px);
     grid-template-areas: "list thread panel";
   }
 }
