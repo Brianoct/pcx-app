@@ -52,6 +52,17 @@ const resolveAiProvider = () => {
   };
 };
 
+// Best-effort read of a provider's error body so failures are actionable
+// (e.g. invalid model, auth error) instead of a bare status code.
+const safeErrorText = async (response) => {
+  try {
+    const text = (await response.text()) || '';
+    return text.replace(/\s+/g, ' ').trim().slice(0, 300);
+  } catch {
+    return '';
+  }
+};
+
 const isAiConfigured = () => Boolean(resolveAiProvider().apiKey);
 
 const getActiveAiProviderInfo = () => {
@@ -86,7 +97,7 @@ const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, max
       })
     });
     if (!response.ok) {
-      throw new Error(`${cfg.kind} HTTP ${response.status}`);
+      throw new Error(`${cfg.kind} HTTP ${response.status}: ${await safeErrorText(response)}`);
     }
     const payload = await response.json();
     const content = Array.isArray(payload?.content)
@@ -113,7 +124,7 @@ const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, max
     })
   });
   if (!response.ok) {
-    throw new Error(`${cfg.kind} HTTP ${response.status}`);
+    throw new Error(`${cfg.kind} HTTP ${response.status}: ${await safeErrorText(response)}`);
   }
   const payload = await response.json();
   const content = String(payload?.choices?.[0]?.message?.content || '').trim();

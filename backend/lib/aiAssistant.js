@@ -40,6 +40,7 @@ const answerAdminAiQuestion = async ({ question, month, year }) => {
     },
     summary: summaryPayload.summary,
     provider: summaryPayload.provider,
+    ai_error: summaryPayload.error || null,
     excluded_sensitive_fields: ADMIN_AI_SENSITIVE_FIELDS,
     data: {
       title: dataset.title,

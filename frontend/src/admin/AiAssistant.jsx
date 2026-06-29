@@ -248,7 +248,7 @@ function AiAssistant({ token, aiInfo }) {
           {result.provider === 'fallback' && (
             <div className="admin-ai-error" style={{ color: '#92400e', background: 'rgba(251, 191, 36, 0.14)', borderColor: 'rgba(251, 191, 36, 0.5)' }}>
               {aiInfo?.configured
-                ? <>La IA ({aiInfo.provider}{aiInfo.model ? ` · ${aiInfo.model}` : ''}) está configurada, pero esta respuesta usó el modo básico. La llamada al proveedor falló — revisa los <strong>Logs</strong> del backend (clave/modelo).</>
+                ? <>La IA ({aiInfo.provider}{aiInfo.model ? ` · ${aiInfo.model}` : ''}) está configurada, pero esta respuesta usó el modo básico. {result.ai_error ? <>Error del proveedor: <code>{result.ai_error}</code></> : <>La llamada al proveedor falló — revisa los <strong>Logs</strong> del backend.</>}</>
                 : <>Modo sin IA generativa: se muestran resúmenes predefinidos. Para responder preguntas libres, configura una clave de IA (<strong>AI_API_KEY</strong> o la del proveedor) en el backend.</>}
             </div>
           )}

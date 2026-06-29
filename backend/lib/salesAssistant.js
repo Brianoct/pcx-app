@@ -255,6 +255,7 @@ const buildSalesSuggestion = async ({ conversationId }) => {
 
   let suggestion;
   let provider = 'fallback';
+  let aiError = null;
   if (isAiConfigured()) {
     try {
       const aiResult = await callAiForSales({
@@ -274,6 +275,7 @@ const buildSalesSuggestion = async ({ conversationId }) => {
       console.error('Sales assistant AI fallback:', err.message || err);
       suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates });
       provider = 'fallback';
+      aiError = String(err?.message || err || 'Error desconocido');
     }
   } else {
     suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates });
@@ -281,6 +283,7 @@ const buildSalesSuggestion = async ({ conversationId }) => {
 
   return {
     provider,
+    ai_error: aiError,
     conversation: {
       id: convo.id,
       contact_name: convo.contactName,

@@ -611,7 +611,8 @@ const generateAdminAiSummary = async ({
     console.error('AI analytics fallback:', err.message || err);
     return {
       summary: buildFallbackAdminAiSummary({ intentLabel, periodLabel, datasetTitle, rows }),
-      provider: 'fallback'
+      provider: 'fallback',
+      error: String(err?.message || err || 'Error desconocido')
     };
   }
 };
