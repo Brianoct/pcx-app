@@ -10,16 +10,28 @@ import CommissionConfig from './CommissionConfig';
 import RoleConfiguration from './RoleConfiguration';
 import ProductCostingAdmin from './ProductCostingAdmin';
 import WhatsAppInboxAdmin from './WhatsAppInboxAdmin';
+import AiAssistant from './AiAssistant';
+import { apiRequest } from '../apiClient';
 
 function AdminPanel({ token }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const tabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'calendario'];
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'calendario'];
+  const tabKeys = aiEnabled ? [...baseTabKeys, 'asistente_ia'] : baseTabKeys;
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
     return tabKeys.includes(tab) ? tab : 'usuarios';
   };
   const [activeTab, setActiveTab] = useState(() => resolveTab(location.search));
+
+  useEffect(() => {
+    let active = true;
+    apiRequest('/api/ai/assistant/access', { token })
+      .then((res) => { if (active) setAiEnabled(Boolean(res?.enabled)); })
+      .catch(() => { if (active) setAiEnabled(false); });
+    return () => { active = false; };
+  }, [token]);
   const tabs = [
     {
       key: 'usuarios',
@@ -75,6 +87,12 @@ function AdminPanel({ token }) {
       icon: 'K',
       hint: 'Permisos y ausencias del equipo'
     },
+    ...(aiEnabled ? [{
+      key: 'asistente_ia',
+      label: 'Asistente IA',
+      icon: 'IA',
+      hint: 'Pregunta sobre el negocio (beta privada)'
+    }] : [])
   ];
   const activeTabMeta = tabs.find((tab) => tab.key === activeTab) || tabs[0];
 
@@ -154,6 +172,7 @@ function AdminPanel({ token }) {
           </div>
         )}
         {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}
+        {activeTab === 'asistente_ia' && aiEnabled && <AiAssistant token={token} />}
       </div>
     </div>
   );
