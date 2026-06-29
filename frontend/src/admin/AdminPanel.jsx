@@ -18,6 +18,7 @@ function AdminPanel({ token, user }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiInfo, setAiInfo] = useState(null);
   const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'calendario'];
   const tabKeys = aiEnabled ? [...baseTabKeys, 'asistente_ia', 'ventas_ia'] : baseTabKeys;
   const resolveTab = (searchText = '') => {
@@ -29,8 +30,12 @@ function AdminPanel({ token, user }) {
   useEffect(() => {
     let active = true;
     apiRequest('/api/ai/assistant/access', { token })
-      .then((res) => { if (active) setAiEnabled(Boolean(res?.enabled)); })
-      .catch(() => { if (active) setAiEnabled(false); });
+      .then((res) => {
+        if (!active) return;
+        setAiEnabled(Boolean(res?.enabled));
+        setAiInfo(res || null);
+      })
+      .catch(() => { if (active) { setAiEnabled(false); setAiInfo(null); } });
     return () => { active = false; };
   }, [token]);
   const tabs = [
@@ -178,8 +183,8 @@ function AdminPanel({ token, user }) {
           </div>
         )}
         {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}
-        {activeTab === 'asistente_ia' && aiEnabled && <AiAssistant token={token} />}
-        {activeTab === 'ventas_ia' && aiEnabled && <SalesAssistant token={token} user={user} />}
+        {activeTab === 'asistente_ia' && aiEnabled && <AiAssistant token={token} aiInfo={aiInfo} />}
+        {activeTab === 'ventas_ia' && aiEnabled && <SalesAssistant token={token} user={user} aiInfo={aiInfo} />}
       </div>
     </div>
   );

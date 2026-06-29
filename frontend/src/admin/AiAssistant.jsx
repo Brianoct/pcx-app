@@ -129,7 +129,7 @@ const renderMarkdown = (markdown) => {
   return blocks;
 };
 
-function AiAssistant({ token }) {
+function AiAssistant({ token, aiInfo }) {
   const now = new Date();
   const [question, setQuestion] = useState('');
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -186,7 +186,12 @@ function AiAssistant({ token }) {
     <div className="admin-ai-card">
       <div className="admin-ai-result-head">
         <h3 style={{ margin: 0 }}>Asistente IA (beta privada)</h3>
-        <span>Solo visible para tu cuenta. Pregunta en español sobre el negocio.</span>
+        <span>
+          Solo visible para tu cuenta. Pregunta en español sobre el negocio.
+          {aiInfo?.provider && (
+            <> {' · '}IA: {aiInfo.provider}{aiInfo.model ? ` (${aiInfo.model})` : ''}{aiInfo.configured ? '' : ' — sin clave'}</>
+          )}
+        </span>
       </div>
 
       <div className="admin-ai-toolbar">

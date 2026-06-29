@@ -10,7 +10,7 @@ const VENTA_TYPE_OPTIONS = [
 
 const money = (n) => `Bs ${Number(n || 0).toFixed(2)}`;
 
-function SalesAssistant({ token, user }) {
+function SalesAssistant({ token, user, aiInfo }) {
   const [conversations, setConversations] = useState([]);
   const [salesUsers, setSalesUsers] = useState([]);
   const [search, setSearch] = useState('');
@@ -270,7 +270,12 @@ function SalesAssistant({ token, user }) {
     <div className="sales-ia">
       <div className="admin-ai-result-head">
         <h3 style={{ margin: 0 }}>Ventas IA (beta privada)</h3>
-        <span>Atiende el inbox de WhatsApp con borradores de IA. Tú confirmas antes de enviar o cotizar.</span>
+        <span>
+          Atiende el inbox de WhatsApp con borradores de IA. Tú confirmas antes de enviar o cotizar.
+          {aiInfo?.provider && (
+            <> {' · '}IA: {aiInfo.provider}{aiInfo.model ? ` (${aiInfo.model})` : ''}{aiInfo.configured ? '' : ' — sin clave'}</>
+          )}
+        </span>
       </div>
 
       {error && <div className="admin-ai-error">{error}</div>}

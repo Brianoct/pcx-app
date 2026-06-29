@@ -1,7 +1,7 @@
 const { pool } = require('../db');
 const { loadProductCatalogRows } = require('./products');
 const { normalizeText } = require('./rbac');
-const { GROK_API_URL, GROK_MODEL } = require('./adminAi');
+const { aiChatCompletion, isAiConfigured } = require('./aiProvider');
 const { createHttpError } = require('./util');
 
 const MAX_CONTEXT_MESSAGES = 20;
@@ -183,37 +183,19 @@ const buildSalesPrompt = ({ contactName, transcript, candidates }) => {
   ].join('\n');
 };
 
-const callGrokForSales = async ({ apiKey, contactName, transcript, candidates }) => {
+const callAiForSales = async ({ contactName, transcript, candidates }) => {
   const prompt = buildSalesPrompt({ contactName, transcript, candidates });
-  const response = await fetch(GROK_API_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: GROK_MODEL,
-      temperature: 0.3,
-      max_tokens: 700,
-      messages: [
-        {
-          role: 'system',
-          content: 'Eres un asistente de ventas senior. Usa solo los productos provistos y responde solo con JSON válido.'
-        },
-        { role: 'user', content: prompt }
-      ]
-    })
+  const { content, provider } = await aiChatCompletion({
+    system: 'Eres un asistente de ventas senior. Usa solo los productos provistos y responde solo con JSON válido.',
+    user: prompt,
+    temperature: 0.3,
+    maxTokens: 700
   });
-  if (!response.ok) {
-    throw new Error(`Grok HTTP ${response.status}`);
-  }
-  const payload = await response.json();
-  const content = String(payload?.choices?.[0]?.message?.content || '').trim();
   const parsed = safeParseJsonObject(content);
   if (!parsed) {
-    throw new Error('Grok respuesta no es JSON válido');
+    throw new Error('Respuesta de IA no es JSON válido');
   }
-  return parsed;
+  return { data: parsed, provider };
 };
 
 // ── DB-backed orchestration ──────────────────────────────────────────────────
@@ -271,19 +253,17 @@ const buildSalesSuggestion = async ({ conversationId }) => {
   const catalogBySku = new Map(catalog.map((item) => [item.sku, item]));
   const candidates = scoreCatalogCandidates(inboundText || transcript, catalog, MAX_CANDIDATES);
 
-  const apiKey = String(process.env.GROK_API_KEY || '').trim();
   let suggestion;
   let provider = 'fallback';
-  if (apiKey) {
+  if (isAiConfigured()) {
     try {
-      const aiJson = await callGrokForSales({
-        apiKey,
+      const aiResult = await callAiForSales({
         contactName: convo.contactName,
         transcript,
         candidates
       });
-      suggestion = attachCatalogToSuggestion(aiJson, catalogBySku);
-      provider = 'grok';
+      suggestion = attachCatalogToSuggestion(aiResult.data, catalogBySku);
+      provider = aiResult.provider || 'ai';
       // If the model produced no usable products, fall back so the rep still
       // gets keyword-matched suggestions.
       if (suggestion.suggested_products.length === 0 && suggestion.quote_draft.rows.length === 0) {
