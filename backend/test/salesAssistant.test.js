@@ -5,8 +5,17 @@ const {
   scoreCatalogCandidates,
   safeParseJsonObject,
   attachCatalogToSuggestion,
-  buildFallbackSuggestion
+  buildFallbackSuggestion,
+  audioFilenameForMime
 } = require('../lib/salesAssistant');
+
+test('audioFilenameForMime picks an extension Whisper accepts', () => {
+  assert.equal(audioFilenameForMime('audio/ogg; codecs=opus'), 'audio.ogg');
+  assert.equal(audioFilenameForMime('audio/mpeg'), 'audio.mp3');
+  assert.equal(audioFilenameForMime('audio/wav'), 'audio.wav');
+  assert.equal(audioFilenameForMime('audio/mp4'), 'audio.m4a');
+  assert.equal(audioFilenameForMime(''), 'audio.ogg');
+});
 
 const CATALOG = [
   { sku: 'T6195R', name: 'Tablero 61x95 Rojo', sf: 330, cf: 383, menu_category: 'tableros' },
