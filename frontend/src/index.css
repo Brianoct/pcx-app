@@ -2066,18 +2066,39 @@ button, .btn {
   gap: 12px;
 }
 
+/* Mobile-first: single column stack. Widens to 2 then 3 columns. */
 .sales-ia-grid {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) minmax(0, 360px);
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "list"
+    "thread"
+    "panel";
   gap: 12px;
   align-items: start;
 }
 
-@media (max-width: 1100px) {
+/* Medium screens: list + thread side by side, AI panel full width below. */
+@media (min-width: 860px) {
   .sales-ia-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+    grid-template-areas:
+      "list thread"
+      "panel panel";
   }
 }
+
+/* Wide screens: full three-column workspace. */
+@media (min-width: 1300px) {
+  .sales-ia-grid {
+    grid-template-columns: minmax(0, 240px) minmax(0, 1fr) minmax(0, 340px);
+    grid-template-areas: "list thread panel";
+  }
+}
+
+.sales-ia-list { grid-area: list; }
+.sales-ia-thread { grid-area: thread; }
+.sales-ia-panel { grid-area: panel; }
 
 .sales-ia-col {
   border: 1px solid rgba(214, 204, 192, 0.9);
@@ -2087,6 +2108,8 @@ button, .btn {
   display: grid;
   gap: 8px;
   min-height: 120px;
+  /* allow columns to shrink below content so long strings don't blow out the grid */
+  min-width: 0;
 }
 
 .sales-ia-muted {
@@ -2168,6 +2191,7 @@ button, .btn {
   line-height: 1.35;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .sales-ia-bubble.in {
   justify-self: start;
