@@ -271,7 +271,7 @@ const buildSalesSuggestion = async ({ conversationId }) => {
         provider = 'fallback';
       }
     } catch (err) {
-      console.error('Sales assistant Grok fallback:', err.message || err);
+      console.error('Sales assistant AI fallback:', err.message || err);
       suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates });
       provider = 'fallback';
     }
