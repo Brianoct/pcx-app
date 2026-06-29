@@ -137,7 +137,7 @@ export const NAV_ITEMS = [
     path: '/admin',
     label: 'Admin',
     routeAccess: ['admin'],
-    render: (ctx) => <AdminPanel token={ctx.token} />
+    render: (ctx) => <AdminPanel token={ctx.token} user={ctx.user} />
   },
   {
     path: '/dashboard',
