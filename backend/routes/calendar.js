@@ -80,12 +80,20 @@ router.get('/api/calendar/events', authenticateToken, async (req, res) => {
   const isAdmin = String(userContext.role || '').trim().toLowerCase() === 'admin';
 
   // Non-admins see their own events plus anything shared with the team.
-  // Admins see everything for coordination.
-  let scopeSql = '(e.visibility = \'team\' OR e.user_id = $3)';
+  // Admins see everything for coordination. Build params dynamically so we only
+  // bind $3 (user id) when the scope clause actually references it — otherwise
+  // Postgres rejects the query ("bind message supplies 3 parameters, but
+  // prepared statement requires 2").
+  const params = [start, end];
+  let scopeSql;
   if (onlyMine) {
-    scopeSql = 'e.user_id = $3';
+    params.push(req.user.id);
+    scopeSql = `e.user_id = $${params.length}`;
   } else if (isAdmin) {
     scopeSql = 'TRUE';
+  } else {
+    params.push(req.user.id);
+    scopeSql = `(e.visibility = 'team' OR e.user_id = $${params.length})`;
   }
 
   try {
@@ -97,7 +105,7 @@ router.get('/api/calendar/events', authenticateToken, async (req, res) => {
          AND e.end_date >= $1::date
          AND ${scopeSql}
        ORDER BY e.start_date ASC, e.all_day DESC, e.start_time ASC NULLS FIRST, e.id ASC`,
-      [start, end, req.user.id]
+      params
     );
     res.json(result.rows.map((row) => decorateEvent(row, req.user.id)));
   } catch (err) {
