@@ -73,7 +73,7 @@ const VENTA_TYPE_OPTIONS = [
 
 const money = (n) => `Bs ${Number(n || 0).toFixed(2)}`;
 
-function SalesAssistant({ token, user, aiInfo }) {
+function SalesAssistant({ token, user }) {
   const [conversations, setConversations] = useState([]);
   const [salesUsers, setSalesUsers] = useState([]);
   const [search, setSearch] = useState('');
@@ -350,12 +350,7 @@ function SalesAssistant({ token, user, aiInfo }) {
     <div className="sales-ia">
       <div className="admin-ai-result-head">
         <h3 style={{ margin: 0 }}>Ventas IA (beta privada)</h3>
-        <span>
-          Atiende el inbox de WhatsApp con borradores de IA. Tú confirmas antes de enviar o cotizar.
-          {aiInfo?.provider && (
-            <> {' · '}IA: {aiInfo.provider}{aiInfo.model ? ` (${aiInfo.model})` : ''}{aiInfo.configured ? '' : ' — sin clave'}</>
-          )}
-        </span>
+        <span>Atiende el inbox de WhatsApp con borradores de IA.</span>
       </div>
 
       {error && <div className="admin-ai-error">{error}</div>}
@@ -441,9 +436,7 @@ function SalesAssistant({ token, user, aiInfo }) {
             <>
               {suggestion.provider === 'fallback' && (
                 <div className="admin-ai-error" style={{ color: '#92400e', background: 'rgba(251, 191, 36, 0.14)', borderColor: 'rgba(251, 191, 36, 0.5)' }}>
-                  {aiInfo?.configured
-                    ? <>La IA ({aiInfo.provider}{aiInfo.model ? ` · ${aiInfo.model}` : ''}) está configurada, pero esta respuesta usó el modo básico. La llamada al proveedor falló — revisa los <strong>Logs</strong> del backend (clave/modelo).</>
-                    : <>Sin IA generativa: sugerencias por palabras clave. Configura una clave de IA (<strong>AI_API_KEY</strong> o la del proveedor) en el backend.</>}
+                  Mostrando sugerencias básicas por ahora. Puedes editar la respuesta y la cotización manualmente.
                 </div>
               )}
 
