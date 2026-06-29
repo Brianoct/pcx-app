@@ -1809,13 +1809,15 @@ button, .btn {
 
 .admin-tabs-nav {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
 
 .admin-tab-btn {
   min-height: 86px;
+  display: flex;
+  min-width: 0;
   border: 1px solid rgba(214, 204, 192, 0.92);
   background: linear-gradient(180deg, #ffffff 0%, #faf8f5 100%);
   border-radius: 14px;
@@ -1873,6 +1875,7 @@ button, .btn {
   color: #78716c;
   font-size: 0.76rem;
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .admin-mobile-tab-select {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiRequest } from '../apiClient';
+import { generateModernQuotePdf } from '../quotePdf';
 
 const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
 const VENTA_TYPE_OPTIONS = [
@@ -35,6 +36,8 @@ function SalesAssistant({ token, user }) {
   const [sellerUserId, setSellerUserId] = useState('');
   const [creatingQuote, setCreatingQuote] = useState(false);
   const [quoteResult, setQuoteResult] = useState(null);
+  const [sendingPdf, setSendingPdf] = useState(false);
+  const [pdfSent, setPdfSent] = useState(false);
 
   const loadConversations = useCallback(async () => {
     setLoadingList(true);
@@ -54,18 +57,24 @@ function SalesAssistant({ token, user }) {
     loadConversations();
   }, [loadConversations]);
 
+  const reloadMessages = useCallback(async (id) => {
+    const res = await apiRequest(`/api/whatsapp/inbox/conversations/${id}/messages`, { token });
+    setConversation(res?.conversation || null);
+    setMessages(Array.isArray(res?.messages) ? res.messages : []);
+    return res;
+  }, [token]);
+
   const openConversation = async (id) => {
     setSelectedId(id);
     setSuggestion(null);
     setReply('');
     setQuoteRows([]);
     setQuoteResult(null);
+    setPdfSent(false);
     setLoadingThread(true);
     setError('');
     try {
-      const res = await apiRequest(`/api/whatsapp/inbox/conversations/${id}/messages`, { token });
-      setConversation(res?.conversation || null);
-      setMessages(Array.isArray(res?.messages) ? res.messages : []);
+      const res = await reloadMessages(id);
       const assigned = res?.conversation?.assigned_user_id;
       setSellerUserId(assigned ? String(assigned) : '');
     } catch (err) {
@@ -110,7 +119,7 @@ function SalesAssistant({ token, user }) {
         body: { type: 'text', text }
       });
       setReply('');
-      await openConversation(selectedId);
+      await reloadMessages(selectedId);
     } catch (err) {
       setError(err?.message || 'No se pudo enviar el mensaje.');
     } finally {
@@ -166,6 +175,7 @@ function SalesAssistant({ token, user }) {
     setCreatingQuote(true);
     setError('');
     setQuoteResult(null);
+    setPdfSent(false);
     try {
       const res = await apiRequest('/api/quotes', {
         method: 'POST',
@@ -190,11 +200,69 @@ function SalesAssistant({ token, user }) {
           status: 'Cotizado'
         }
       });
-      setQuoteResult({ id: res?.id });
+      setQuoteResult({
+        id: res?.id,
+        customerName,
+        customerPhone,
+        vendor,
+        storeLocation,
+        rows: quoteRows,
+        subtotal: Number(subtotal.toFixed(2))
+      });
     } catch (err) {
       setError(err?.message || 'No se pudo crear la cotización.');
     } finally {
       setCreatingQuote(false);
+    }
+  };
+
+  const sendQuotePdfToThread = async () => {
+    if (!quoteResult?.id || !selectedId) return;
+    if (!window.confirm('¿Enviar el PDF de la cotización al cliente por WhatsApp?')) return;
+    setSendingPdf(true);
+    setError('');
+    try {
+      const filename = `cotizacion-${quoteResult.id}.pdf`;
+      const doc = generateModernQuotePdf({
+        filename,
+        autoSave: false,
+        quoteNumber: quoteResult.id,
+        customerName: quoteResult.customerName,
+        customerPhone: quoteResult.customerPhone,
+        vendorName: quoteResult.vendor,
+        storeLocation: quoteResult.storeLocation,
+        dateText: new Date().toLocaleDateString('es-BO'),
+        rows: quoteResult.rows,
+        subtotal: quoteResult.subtotal,
+        total: quoteResult.subtotal
+      });
+      const blob = doc.output('blob');
+      const file = new File([blob], filename, { type: 'application/pdf' });
+      const formData = new FormData();
+      formData.append('file', file);
+      const upload = await apiRequest('/api/whatsapp/inbox/media/upload', {
+        method: 'POST',
+        token,
+        body: formData,
+        timeoutMs: 45000
+      });
+      if (!upload?.media_id) throw new Error('No se obtuvo media_id de WhatsApp.');
+      await apiRequest(`/api/whatsapp/inbox/conversations/${selectedId}/messages`, {
+        method: 'POST',
+        token,
+        body: {
+          type: 'document',
+          media_id: upload.media_id,
+          filename,
+          caption: `Cotización #${quoteResult.id}`
+        }
+      });
+      setPdfSent(true);
+      await reloadMessages(selectedId);
+    } catch (err) {
+      setError(err?.message || 'No se pudo enviar el PDF al chat.');
+    } finally {
+      setSendingPdf(false);
     }
   };
 
@@ -371,7 +439,15 @@ function SalesAssistant({ token, user }) {
                 </div>
 
                 {quoteResult?.id && (
-                  <div className="sales-ia-ok">Cotización #{quoteResult.id} creada correctamente.</div>
+                  <div className="sales-ia-ok">
+                    <span>Cotización #{quoteResult.id} creada correctamente.</span>
+                    <div className="sales-ia-quote-foot" style={{ marginTop: '6px' }}>
+                      <small>{pdfSent ? 'PDF enviado al chat.' : 'Envía el PDF al cliente por WhatsApp.'}</small>
+                      <button type="button" className="btn" onClick={sendQuotePdfToThread} disabled={sendingPdf || pdfSent}>
+                        {sendingPdf ? 'Enviando PDF…' : (pdfSent ? 'PDF enviado' : 'Enviar PDF al chat')}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </>
