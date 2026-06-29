@@ -46,8 +46,11 @@ router.post('/api/ai/sales/suggest', authenticateToken, requireAiAssistant, asyn
   if (conversationId === undefined || conversationId === null || conversationId === '') {
     return res.status(400).json({ error: 'conversation_id requerido' });
   }
+  const messageIds = Array.isArray(req.body?.message_ids)
+    ? req.body.message_ids.map((value) => Number(value)).filter(Number.isInteger)
+    : [];
   try {
-    const payload = await buildSalesSuggestion({ conversationId });
+    const payload = await buildSalesSuggestion({ conversationId, messageIds });
     return res.json(payload);
   } catch (err) {
     if (err?.statusCode) {

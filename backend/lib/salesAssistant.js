@@ -276,7 +276,7 @@ const loadConversationContext = async (conversationId) => {
   }
   const convo = convoRes.rows[0];
   const msgRes = await pool.query(
-    `SELECT direction, message_type, text_body, raw_payload, created_at
+    `SELECT id, direction, message_type, text_body, raw_payload, created_at
      FROM whatsapp_messages
      WHERE conversation_id = $1
      ORDER BY created_at DESC
@@ -290,6 +290,7 @@ const loadConversationContext = async (conversationId) => {
     contactPhone: String(convo.wa_phone || '').trim(),
     pipelineStage: convo.pipeline_stage || 'new',
     messages: messages.map((m) => ({
+      id: Number(m.id),
       type: String(m.message_type || 'text').trim().toLowerCase(),
       rawPayload: m.raw_payload && typeof m.raw_payload === 'object' ? m.raw_payload : null,
       direction: m.direction,
@@ -349,14 +350,30 @@ const enrichMessagesWithMedia = async (messages = []) => {
   }));
 };
 
-const buildSalesSuggestion = async ({ conversationId }) => {
+const buildSalesSuggestion = async ({ conversationId, messageIds }) => {
   const convo = await loadConversationContext(conversationId);
-  await enrichMessagesWithMedia(convo.messages);
-  const inboundText = convo.messages
+
+  // Optionally narrow the context to messages the rep selected, so the AI
+  // focuses only on the relevant parts of a long conversation.
+  let focusMessages = convo.messages;
+  let focused = false;
+  if (Array.isArray(messageIds) && messageIds.length > 0) {
+    const wantedIds = new Set(messageIds.map((value) => Number(value)).filter(Number.isInteger));
+    const selected = convo.messages.filter((m) => wantedIds.has(m.id));
+    if (selected.length > 0) {
+      focusMessages = selected;
+      focused = true;
+    }
+  }
+
+  await enrichMessagesWithMedia(focusMessages);
+  const inboundText = focusMessages
     .filter((m) => m.direction === 'inbound' && m.text)
     .map((m) => m.text)
     .join(' \n');
-  const transcript = convo.messages
+  // When focusing on a selection, use all selected messages (regardless of who
+  // sent them); otherwise keep the existing whole-conversation behavior.
+  const transcript = focusMessages
     .filter((m) => m.text)
     .map((m) => `${m.direction === 'inbound' ? 'Cliente' : 'Vendedor'}: ${m.text}`)
     .join('\n');
@@ -393,6 +410,8 @@ const buildSalesSuggestion = async ({ conversationId }) => {
 
   return {
     provider,
+    focused,
+    focused_count: focused ? focusMessages.length : 0,
     conversation: {
       id: convo.id,
       contact_name: convo.contactName,

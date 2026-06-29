@@ -87,6 +87,8 @@ function SalesAssistant({ token, user }) {
   // AI suggestion state
   const [suggesting, setSuggesting] = useState(false);
   const [suggestion, setSuggestion] = useState(null);
+  // Optional: messages the rep selected so the AI focuses only on those
+  const [selectedMsgIds, setSelectedMsgIds] = useState(() => new Set());
 
   // Reply composer
   const [reply, setReply] = useState('');
@@ -129,6 +131,15 @@ function SalesAssistant({ token, user }) {
     return res;
   }, [token]);
 
+  const toggleMsgSelect = (id) => {
+    setSelectedMsgIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const clearMsgSelection = () => setSelectedMsgIds(new Set());
+
   const openConversation = async (id) => {
     setSelectedId(id);
     setSuggestion(null);
@@ -138,6 +149,7 @@ function SalesAssistant({ token, user }) {
     setPdfSent(false);
     setCustomerNameInput('');
     setDestinationInput('');
+    setSelectedMsgIds(new Set());
     setLoadingThread(true);
     setError('');
     try {
@@ -161,7 +173,10 @@ function SalesAssistant({ token, user }) {
       const res = await apiRequest('/api/ai/sales/suggest', {
         method: 'POST',
         token,
-        body: { conversation_id: selectedId },
+        body: {
+          conversation_id: selectedId,
+          ...(selectedMsgIds.size > 0 ? { message_ids: Array.from(selectedMsgIds) } : {})
+        },
         timeoutMs: 45000,
         retries: 0
       });
@@ -398,17 +413,34 @@ function SalesAssistant({ token, user }) {
             <>
               <div className="sales-ia-thread-head">
                 <strong>{conversation?.contact_name || conversation?.contact_phone || `Conversación ${selectedId}`}</strong>
+                <small className="sales-ia-muted">Marca mensajes para enfocar la IA (opcional)</small>
               </div>
               <div className="sales-ia-messages">
                 {loadingThread && <p className="sales-ia-muted">Cargando…</p>}
                 {!loadingThread && messages.length === 0 && <p className="sales-ia-muted">Sin mensajes.</p>}
                 {messages.map((m) => (
-                  <div key={m.id} className={`sales-ia-bubble ${m.direction === 'inbound' ? 'in' : 'out'}`}>
+                  <div
+                    key={m.id}
+                    className={`sales-ia-bubble ${m.direction === 'inbound' ? 'in' : 'out'} ${selectedMsgIds.has(m.id) ? 'selected' : ''}`}
+                  >
+                    <label className="sales-ia-bubble-select" title="Enfocar la IA en este mensaje">
+                      <input
+                        type="checkbox"
+                        checked={selectedMsgIds.has(m.id)}
+                        onChange={() => toggleMsgSelect(m.id)}
+                      />
+                    </label>
                     <div>{m.text_body || `[${m.message_type || 'mensaje'}]`}</div>
                     <MediaAttachment message={m} token={token} />
                   </div>
                 ))}
               </div>
+              {selectedMsgIds.size > 0 && (
+                <div className="sales-ia-selection-bar">
+                  <span>{selectedMsgIds.size} mensaje(s) seleccionado(s) — la IA usará solo estos.</span>
+                  <button type="button" className="admin-ai-pill" onClick={clearMsgSelection}>Limpiar</button>
+                </div>
+              )}
               <div className="sales-ia-composer">
                 <textarea
                   value={reply}
@@ -418,7 +450,9 @@ function SalesAssistant({ token, user }) {
                 />
                 <div className="sales-ia-composer-actions">
                   <button type="button" className="admin-ai-pill" onClick={generateSuggestion} disabled={suggesting || loadingThread}>
-                    {suggesting ? 'Generando…' : 'Generar sugerencias IA'}
+                    {suggesting
+                      ? 'Generando…'
+                      : (selectedMsgIds.size > 0 ? `Generar IA (${selectedMsgIds.size} sel.)` : 'Generar sugerencias IA')}
                   </button>
                   <button type="button" className="btn" onClick={sendReply} disabled={sending || !reply.trim()}>
                     {sending ? 'Enviando…' : 'Enviar respuesta'}
@@ -434,6 +468,11 @@ function SalesAssistant({ token, user }) {
           {!suggestion && <p className="sales-ia-muted">Genera sugerencias para ver borrador, productos y cotización.</p>}
           {suggestion && (
             <>
+              {suggestion.focused && (
+                <p className="sales-ia-muted" style={{ margin: 0 }}>
+                  Enfocado en {suggestion.focused_count} mensaje(s) seleccionado(s).
+                </p>
+              )}
               {suggestion.provider === 'fallback' && (
                 <div className="admin-ai-error" style={{ color: '#92400e', background: 'rgba(251, 191, 36, 0.14)', borderColor: 'rgba(251, 191, 36, 0.5)' }}>
                   Mostrando sugerencias básicas por ahora. Puedes editar la respuesta y la cotización manualmente.

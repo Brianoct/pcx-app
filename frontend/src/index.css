@@ -2214,6 +2214,36 @@ button, .btn {
   word-break: break-word;
   overflow-wrap: anywhere;
 }
+.sales-ia-bubble {
+  position: relative;
+}
+.sales-ia-bubble-select {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  cursor: pointer;
+  opacity: 0.5;
+}
+.sales-ia-bubble-select:hover { opacity: 1; }
+.sales-ia-bubble-select input { cursor: pointer; }
+.sales-ia-bubble.selected {
+  outline: 2px solid #ff7f30;
+  outline-offset: 1px;
+}
+.sales-ia-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: rgba(255, 127, 48, 0.1);
+  border: 1px solid rgba(255, 127, 48, 0.4);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  color: #9a3412;
+}
+
 .sales-ia-bubble.in {
   justify-self: start;
   background: #f5f5f4;
