@@ -7,7 +7,10 @@ import { useToast } from './ui/toastContext';
 const BOLIVIA_DEPARTMENT_MAP = {
   'la paz': 'La Paz',
   'santa cruz': 'Santa Cruz',
+  'santa cruz de la sierra': 'Santa Cruz',
+  scz: 'Santa Cruz',
   cochabamba: 'Cochabamba',
+  cbba: 'Cochabamba',
   potosi: 'Potosí',
   potosí: 'Potosí',
   tarija: 'Tarija',
@@ -15,7 +18,12 @@ const BOLIVIA_DEPARTMENT_MAP = {
   beni: 'Beni',
   'el beni': 'Beni',
   pando: 'Pando',
-  chuquisaca: 'Chuquisaca'
+  chuquisaca: 'Chuquisaca',
+  // capital cities / common aliases that should roll up to their department
+  sucre: 'Chuquisaca',
+  trinidad: 'Beni',
+  cobija: 'Pando',
+  'el alto': 'La Paz'
 };
 
 const BOLIVIA_MAP_CODE_TO_DEPARTMENT = {
@@ -264,7 +272,8 @@ function AdminDashboard({ token }) {
     const sourceDepartment = String(row.department || '').trim();
     const normalizedDepartment = normalizeText(sourceDepartment);
     const canonicalDepartment = BOLIVIA_DEPARTMENT_MAP[normalizedDepartment] || sourceDepartment;
-    acc[canonicalDepartment] = Number(row.total_sales || 0);
+    // accumulate so a city alias (e.g. "Sucre") sums into its department ("Chuquisaca")
+    acc[canonicalDepartment] = (acc[canonicalDepartment] || 0) + Number(row.total_sales || 0);
     return acc;
   }, {});
   const maxDepartmentSales = Math.max(...Object.values(departmentSalesMap), 1);
