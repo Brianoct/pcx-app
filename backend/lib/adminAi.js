@@ -3,6 +3,7 @@ const { loadCommissionSettings } = require('./commission');
 const { normalizeText } = require('./rbac');
 const { COMPLETED_STATUSES, buildDateFilter } = require('./reporting');
 const { createHttpError } = require('./util');
+const { aiChatCompletion, isAiConfigured } = require('./aiProvider');
 
 const GROK_API_URL = process.env.GROK_API_URL || 'https://api.x.ai/v1/chat/completions';
 
@@ -571,8 +572,7 @@ const generateAdminAiSummary = async ({
   expandedContextTitle,
   expandedContextRows
 }) => {
-  const apiKey = String(process.env.GROK_API_KEY || '').trim();
-  if (!apiKey) {
+  if (!isAiConfigured()) {
     return {
       summary: buildFallbackAdminAiSummary({ intentLabel, periodLabel, datasetTitle, rows }),
       provider: 'fallback'
@@ -597,45 +597,18 @@ const generateAdminAiSummary = async ({
   ].join('\n');
 
   try {
-    const response = await fetch(GROK_API_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: GROK_MODEL,
-        temperature: 0.2,
-        max_tokens: 650,
-        messages: [
-          {
-            role: 'system',
-            content: 'Eres un analista senior de negocio. Usa solo los datos proporcionados y no inventes cifras.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
-      })
+    const { content, provider } = await aiChatCompletion({
+      system: 'Eres un analista senior de negocio. Usa solo los datos proporcionados y no inventes cifras.',
+      user: prompt,
+      temperature: 0.2,
+      maxTokens: 650
     });
-
-    if (!response.ok) {
-      throw new Error(`Grok HTTP ${response.status}`);
-    }
-
-    const payload = await response.json();
-    const content = String(payload?.choices?.[0]?.message?.content || '').trim();
     if (!content) {
-      throw new Error('Grok sin contenido');
+      throw new Error('Respuesta de IA vacía');
     }
-
-    return {
-      summary: content,
-      provider: 'grok'
-    };
+    return { summary: content, provider };
   } catch (err) {
-    console.error('Grok analytics fallback:', err.message || err);
+    console.error('AI analytics fallback:', err.message || err);
     return {
       summary: buildFallbackAdminAiSummary({ intentLabel, periodLabel, datasetTitle, rows }),
       provider: 'fallback'

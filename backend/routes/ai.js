@@ -3,13 +3,18 @@ const { authenticateToken } = require('../lib/authMiddleware');
 const { isAiAssistantEnabledFor, requireAiAssistant } = require('../lib/aiAccess');
 const { answerAdminAiQuestion } = require('../lib/aiAssistant');
 const { buildSalesSuggestion } = require('../lib/salesAssistant');
+const { getActiveAiProviderInfo } = require('../lib/aiProvider');
 
 const router = express.Router();
 
 // Lightweight capability check so the frontend can decide whether to show the
-// "Asistente IA" tab without exposing the allowlist itself.
+// "Asistente IA" tab without exposing the allowlist itself. Also reports the
+// active AI provider so the UI can show which model is in use (and whether a
+// key is configured for real generative answers).
 router.get('/api/ai/assistant/access', authenticateToken, (req, res) => {
-  res.json({ enabled: isAiAssistantEnabledFor(req.user) });
+  const enabled = isAiAssistantEnabledFor(req.user);
+  const providerInfo = enabled ? getActiveAiProviderInfo() : {};
+  res.json({ enabled, ...providerInfo });
 });
 
 // Gated "ask your business a question" endpoint (private beta).
