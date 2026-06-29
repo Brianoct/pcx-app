@@ -171,6 +171,14 @@ function AiAssistant({ token }) {
     ask();
   };
 
+  const handleTextareaKeyDown = (e) => {
+    // Enter sends; Shift+Enter inserts a newline.
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!loading) ask();
+    }
+  };
+
   const dataRows = Array.isArray(result?.data?.rows) ? result.data.rows : [];
   const dataColumns = dataRows.length > 0 ? Object.keys(dataRows[0]) : [];
 
@@ -199,9 +207,13 @@ function AiAssistant({ token }) {
         <textarea
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={handleTextareaKeyDown}
           placeholder="Ej.: ¿Cómo van las ventas este mes y qué productos lideran?"
           disabled={loading}
         />
+        <p style={{ margin: 0, fontSize: '0.74rem', color: '#78716c' }}>
+          Enter para enviar · Shift+Enter para nueva línea
+        </p>
         <div className="admin-ai-controls">
           <label htmlFor="ai-month" style={{ fontSize: '0.82rem', color: '#57534e' }}>Periodo</label>
           <select id="ai-month" value={month} onChange={(e) => setMonth(Number(e.target.value))} disabled={loading}>
@@ -227,6 +239,13 @@ function AiAssistant({ token }) {
               {result.provider === 'fallback' ? ' · resumen base (sin IA generativa)' : ' · IA'}
             </span>
           </div>
+
+          {result.provider === 'fallback' && (
+            <div className="admin-ai-error" style={{ color: '#92400e', background: 'rgba(251, 191, 36, 0.14)', borderColor: 'rgba(251, 191, 36, 0.5)' }}>
+              Modo sin IA generativa: se muestran resúmenes de datos predefinidos. Para responder
+              preguntas libres, configura <strong>GROK_API_KEY</strong> en el backend.
+            </div>
+          )}
 
           <div className="ai-md-body">{renderMarkdown(result.summary)}</div>
 
