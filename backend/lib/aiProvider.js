@@ -59,6 +59,126 @@ const getActiveAiProviderInfo = () => {
   return { provider: cfg.kind, model: cfg.model, configured: Boolean(cfg.apiKey) };
 };
 
+// ── Audio transcription (speech-to-text) ─────────────────────────────────────
+// Uses an OpenAI-compatible transcription endpoint (Whisper). Anthropic/Grok do
+// not transcribe audio, so this resolves its own key (AI_TRANSCRIBE_API_KEY,
+// else OPENAI_API_KEY, else AI_API_KEY when the active provider is openai).
+const resolveTranscriptionProvider = () => {
+  const providerKind = String(process.env.AI_PROVIDER || 'grok').trim().toLowerCase();
+  const apiKey = firstNonEmpty(
+    process.env.AI_TRANSCRIBE_API_KEY,
+    process.env.OPENAI_API_KEY,
+    providerKind === 'openai' ? process.env.AI_API_KEY : ''
+  );
+  return {
+    apiKey,
+    url: firstNonEmpty(process.env.AI_TRANSCRIBE_URL, 'https://api.openai.com/v1/audio/transcriptions'),
+    model: firstNonEmpty(process.env.AI_TRANSCRIBE_MODEL, 'whisper-1')
+  };
+};
+
+const isTranscriptionConfigured = () => Boolean(resolveTranscriptionProvider().apiKey);
+
+const transcribeAudio = async ({ buffer, filename = 'audio.ogg', mimeType = 'audio/ogg' }) => {
+  const cfg = resolveTranscriptionProvider();
+  if (!cfg.apiKey) {
+    const err = new Error('Transcripción de audio no configurada');
+    err.code = 'AI_NOT_CONFIGURED';
+    throw err;
+  }
+  const form = new FormData();
+  form.append('model', cfg.model);
+  form.append('file', new Blob([buffer], { type: mimeType }), filename);
+  const response = await fetch(cfg.url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${cfg.apiKey}` },
+    body: form
+  });
+  if (!response.ok) {
+    throw new Error(`transcription HTTP ${response.status}: ${await safeErrorText(response)}`);
+  }
+  const payload = await response.json().catch(() => null);
+  return String(payload?.text || '').trim();
+};
+
+// ── Image understanding (vision) ─────────────────────────────────────────────
+// Reuses the active chat provider but allows a vision-capable model override
+// (AI_VISION_MODEL). Defaults: openai gpt-4o-mini and anthropic claude-3-5-sonnet
+// are vision-capable out of the box; grok needs a vision model override.
+const resolveVisionProvider = () => {
+  const base = resolveAiProvider();
+  return {
+    ...base,
+    apiKey: firstNonEmpty(process.env.AI_VISION_API_KEY, base.apiKey),
+    model: firstNonEmpty(process.env.AI_VISION_MODEL, base.model)
+  };
+};
+
+const isVisionConfigured = () => Boolean(resolveVisionProvider().apiKey);
+
+const aiVisionDescribe = async ({ base64, mimeType = 'image/jpeg', prompt = '', maxTokens = 400 }) => {
+  const cfg = resolveVisionProvider();
+  if (!cfg.apiKey) {
+    const err = new Error('Visión de imágenes no configurada');
+    err.code = 'AI_NOT_CONFIGURED';
+    throw err;
+  }
+
+  if (cfg.api === 'anthropic') {
+    const response = await fetch(cfg.url, {
+      method: 'POST',
+      headers: {
+        'x-api-key': cfg.apiKey,
+        'anthropic-version': cfg.anthropicVersion,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        max_tokens: maxTokens,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } }
+          ]
+        }]
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`${cfg.kind} vision HTTP ${response.status}: ${await safeErrorText(response)}`);
+    }
+    const payload = await response.json();
+    return Array.isArray(payload?.content)
+      ? payload.content.map((block) => String(block?.text || '')).join('').trim()
+      : '';
+  }
+
+  // OpenAI-compatible (openai, grok-vision)
+  const response = await fetch(cfg.url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${cfg.apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      max_tokens: maxTokens,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }
+        ]
+      }]
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`${cfg.kind} vision HTTP ${response.status}: ${await safeErrorText(response)}`);
+  }
+  const payload = await response.json();
+  return String(payload?.choices?.[0]?.message?.content || '').trim();
+};
+
 // Single chat-completion entry point used across the app.
 // Returns { content, provider, model }. Throws on missing key or HTTP error.
 const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, maxTokens = 700 }) => {
@@ -124,5 +244,11 @@ module.exports = {
   resolveAiProvider,
   isAiConfigured,
   getActiveAiProviderInfo,
-  aiChatCompletion
+  aiChatCompletion,
+  resolveTranscriptionProvider,
+  isTranscriptionConfigured,
+  transcribeAudio,
+  resolveVisionProvider,
+  isVisionConfigured,
+  aiVisionDescribe
 };

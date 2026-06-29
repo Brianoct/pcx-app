@@ -1,12 +1,41 @@
 const { pool } = require('../db');
 const { loadProductCatalogRows } = require('./products');
 const { normalizeText } = require('./rbac');
-const { aiChatCompletion, isAiConfigured } = require('./aiProvider');
+const {
+  aiChatCompletion,
+  isAiConfigured,
+  isTranscriptionConfigured,
+  transcribeAudio,
+  isVisionConfigured,
+  aiVisionDescribe
+} = require('./aiProvider');
+const { fetchWhatsAppMediaMeta, fetchWhatsAppMediaBinary } = require('./whatsapp');
 const { createHttpError } = require('./util');
 
 const MAX_CONTEXT_MESSAGES = 20;
 const MAX_CANDIDATES = 60;
 const MAX_SUGGESTED = 8;
+// Cap how many media items we transcribe/describe per request (bounds latency/cost).
+const MAX_MEDIA_ENRICH = 4;
+
+const VISION_PROMPT = [
+  'Esta es una imagen enviada por un cliente por WhatsApp.',
+  'Puede ser una foto de nuestro catálogo con uno o más productos marcados/encerrados,',
+  'o una foto de un producto que busca.',
+  'Describe brevemente, en español, qué producto(s) parece querer el cliente.',
+  'Si ves nombres de productos o códigos/SKU impresos (por ejemplo G10N, G05C, M08N),',
+  'transcríbelos EXACTAMENTE. Si algún producto está encerrado o señalado, indícalo.'
+].join(' ');
+
+const audioFilenameForMime = (mimeType = '') => {
+  const m = String(mimeType || '').toLowerCase();
+  if (m.includes('ogg') || m.includes('opus')) return 'audio.ogg';
+  if (m.includes('mpeg') || m.includes('mp3')) return 'audio.mp3';
+  if (m.includes('wav')) return 'audio.wav';
+  if (m.includes('m4a') || m.includes('mp4')) return 'audio.m4a';
+  if (m.includes('webm')) return 'audio.webm';
+  return 'audio.ogg';
+};
 
 // ── Pure helpers (unit-testable, no DB/network) ──────────────────────────────
 
@@ -247,7 +276,7 @@ const loadConversationContext = async (conversationId) => {
   }
   const convo = convoRes.rows[0];
   const msgRes = await pool.query(
-    `SELECT direction, text_body, created_at
+    `SELECT direction, message_type, text_body, raw_payload, created_at
      FROM whatsapp_messages
      WHERE conversation_id = $1
      ORDER BY created_at DESC
@@ -261,6 +290,8 @@ const loadConversationContext = async (conversationId) => {
     contactPhone: String(convo.wa_phone || '').trim(),
     pipelineStage: convo.pipeline_stage || 'new',
     messages: messages.map((m) => ({
+      type: String(m.message_type || 'text').trim().toLowerCase(),
+      rawPayload: m.raw_payload && typeof m.raw_payload === 'object' ? m.raw_payload : null,
       direction: m.direction,
       text: String(m.text_body || '').trim(),
       at: m.created_at
@@ -268,8 +299,59 @@ const loadConversationContext = async (conversationId) => {
   };
 };
 
+// Turn inbound voice notes and images into text so the rest of the pipeline
+// (catalog matching, draft reply, quote) can use them. Mutates message.text.
+// Each item is best-effort: failures leave the original placeholder in place.
+const enrichMessagesWithMedia = async (messages = []) => {
+  const transcriptionOn = isTranscriptionConfigured();
+  const visionOn = isVisionConfigured();
+  if (!transcriptionOn && !visionOn) return;
+
+  const mediaMessages = messages.filter((m) => (
+    m.direction === 'inbound'
+    && ((m.type === 'audio' && transcriptionOn) || (m.type === 'image' && visionOn))
+    && m.rawPayload
+  ));
+  // most recent few only
+  const toProcess = mediaMessages.slice(-MAX_MEDIA_ENRICH);
+
+  await Promise.all(toProcess.map(async (m) => {
+    try {
+      const media = m.rawPayload?.[m.type] || {};
+      const mediaId = String(media?.id || '').trim();
+      if (!mediaId) return;
+      const meta = await fetchWhatsAppMediaMeta(mediaId);
+      const mediaUrl = String(meta?.url || '').trim();
+      if (!mediaUrl) return;
+      const binary = await fetchWhatsAppMediaBinary(mediaUrl);
+      const mimeType = String(binary.contentType || meta?.mime_type || media?.mime_type || '').trim();
+
+      if (m.type === 'audio') {
+        const text = await transcribeAudio({
+          buffer: binary.buffer,
+          filename: audioFilenameForMime(mimeType),
+          mimeType: mimeType || 'audio/ogg'
+        });
+        if (text) m.text = `(nota de voz) ${text}`;
+      } else if (m.type === 'image') {
+        const base64 = binary.buffer.toString('base64');
+        const description = await aiVisionDescribe({
+          base64,
+          mimeType: mimeType || 'image/jpeg',
+          prompt: VISION_PROMPT
+        });
+        const caption = String(media?.caption || '').trim();
+        if (description) m.text = `(imagen) ${description}${caption ? ` Leyenda: ${caption}` : ''}`;
+      }
+    } catch (err) {
+      console.error('Media enrich failed:', err.message || err);
+    }
+  }));
+};
+
 const buildSalesSuggestion = async ({ conversationId }) => {
   const convo = await loadConversationContext(conversationId);
+  await enrichMessagesWithMedia(convo.messages);
   const inboundText = convo.messages
     .filter((m) => m.direction === 'inbound' && m.text)
     .map((m) => m.text)
@@ -328,6 +410,8 @@ module.exports = {
   attachCatalogToSuggestion,
   buildFallbackSuggestion,
   buildSalesPrompt,
+  audioFilenameForMime,
+  enrichMessagesWithMedia,
   loadConversationContext,
   buildSalesSuggestion
 };
