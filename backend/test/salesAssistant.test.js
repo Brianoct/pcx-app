@@ -30,6 +30,16 @@ test('scoreCatalogCandidates ranks by keyword overlap', () => {
   assert.ok(ranked.some((r) => r.sku === 'T6195A'));
 });
 
+test('scoreCatalogCandidates matches plurals to singular product names', () => {
+  // customer writes plurals; products are singular
+  const ranked = scoreCatalogCandidates('me da dos tableros rojos y unas cajas', CATALOG, 10);
+  const skus = ranked.map((r) => r.sku);
+  assert.ok(skus.includes('T6195R'), 'should surface the red tablero');
+  assert.ok(skus.includes('T6195A'), 'should surface the other tablero');
+  // the unrelated escalera/mesa should rank below the tableros
+  assert.equal(ranked[0].sku.startsWith('T6195'), true);
+});
+
 test('scoreCatalogCandidates boosts exact sku mention', () => {
   const ranked = scoreCatalogCandidates('me interesa el ESC120 por favor', CATALOG, 10);
   assert.equal(ranked[0].sku, 'ESC120');

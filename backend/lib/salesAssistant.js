@@ -5,7 +5,7 @@ const { aiChatCompletion, isAiConfigured } = require('./aiProvider');
 const { createHttpError } = require('./util');
 
 const MAX_CONTEXT_MESSAGES = 20;
-const MAX_CANDIDATES = 40;
+const MAX_CANDIDATES = 60;
 const MAX_SUGGESTED = 8;
 
 // ── Pure helpers (unit-testable, no DB/network) ──────────────────────────────
@@ -23,23 +23,39 @@ const tokenize = (text = '') =>
     .split(/\s+/)
     .filter((token) => token.length >= 3 && !STOPWORDS.has(token));
 
+// Light Spanish stemming so plurals match singulars (the dominant case is a
+// vowel-ending word + 's': tableros->tablero, grandes->grande, rojos->rojo,
+// cajas->caja). Only strips a trailing 's' on words longer than 3 chars.
+const stemToken = (token = '') => (token.length > 3 && token.endsWith('s') ? token.slice(0, -1) : token);
+
 // Rank catalog rows by how well their name/sku/category overlap with the
-// customer's words. Returns the top `limit` rows with a positive score, or a
-// shallow slice of the catalog when nothing matched (so the rep still has
-// something to start from).
+// customer's words. Uses stemming (plural/singular) plus partial/substring
+// matching so "tableros rojos" surfaces "Tablero ... Rojo" products. Returns
+// the top `limit` rows with a positive score, or a shallow slice of the
+// catalog when nothing matched (so the rep still has something to start from).
 const scoreCatalogCandidates = (conversationText, catalog = [], limit = MAX_CANDIDATES) => {
-  const wanted = new Set(tokenize(conversationText));
+  const wanted = new Set(tokenize(conversationText).map(stemToken));
   if (wanted.size === 0) {
     return catalog.slice(0, limit);
   }
   const scored = catalog.map((item) => {
-    const haystack = tokenize(`${item.name} ${item.sku} ${item.menu_category || ''}`);
+    const haystack = tokenize(`${item.name} ${item.sku} ${item.menu_category || ''}`).map(stemToken);
     let score = 0;
     for (const token of haystack) {
-      if (wanted.has(token)) score += 1;
+      if (wanted.has(token)) {
+        score += 2;
+      } else {
+        // partial/substring match for compound or near words
+        for (const w of wanted) {
+          if (w.length >= 4 && token.length >= 4 && (token.includes(w) || w.includes(token))) {
+            score += 1;
+            break;
+          }
+        }
+      }
     }
-    // light boost for exact sku mention
-    if (wanted.has(normalizeText(item.sku))) score += 3;
+    // strong boost for an exact sku mention
+    if (wanted.has(stemToken(normalizeText(item.sku)))) score += 4;
     return { item, score };
   });
   const positive = scored.filter((entry) => entry.score > 0);
