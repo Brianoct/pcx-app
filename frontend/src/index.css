@@ -2123,10 +2123,12 @@ button, .btn {
 .sales-ia-search {
   display: flex;
   gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .sales-ia-search input {
-  flex: 1;
+  flex: 1 1 90px;
   min-width: 0;
   border-radius: 8px;
   border: 1px solid #e7e0d8;
@@ -2135,8 +2137,14 @@ button, .btn {
   color: #292524;
 }
 
+.sales-ia-search .admin-ai-pill {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .sales-ia-conv-scroll {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   max-height: 460px;
   overflow-y: auto;
