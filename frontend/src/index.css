@@ -2110,6 +2110,8 @@ button, .btn {
   min-height: 120px;
   /* allow columns to shrink below content so long strings don't blow out the grid */
   min-width: 0;
+  /* clip any child overflow so it can never paint over a neighboring column */
+  overflow: hidden;
 }
 
 .sales-ia-muted {
@@ -2137,7 +2139,9 @@ button, .btn {
   display: grid;
   gap: 6px;
   max-height: 460px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 .sales-ia-conv {
@@ -2149,6 +2153,8 @@ button, .btn {
   background: #fff;
   padding: 8px;
   cursor: pointer;
+  /* let the card shrink so its text can ellipsize instead of widening the column */
+  min-width: 0;
 }
 
 .sales-ia-conv.active {
@@ -2156,15 +2162,22 @@ button, .btn {
   background: rgba(255, 127, 48, 0.08);
 }
 
-.sales-ia-conv strong { color: #292524; font-size: 0.86rem; }
+.sales-ia-conv strong {
+  color: #292524;
+  font-size: 0.86rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .sales-ia-conv small {
   color: #78716c;
   font-size: 0.76rem;
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sales-ia-conv-meta { color: #a8a29e; font-size: 0.72rem; }
+.sales-ia-conv-meta { color: #a8a29e; font-size: 0.72rem; min-width: 0; }
 
 .sales-ia-thread-head {
   display: flex;
