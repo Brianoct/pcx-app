@@ -64,6 +64,18 @@ test('attachCatalogToSuggestion uses authoritative prices and drops unknown skus
   assert.equal(result.quote_draft.rows[0].lineTotal, 660);
 });
 
+test('attachCatalogToSuggestion extracts customer_name and destination', () => {
+  const bySku = new Map(CATALOG.map((c) => [c.sku, c]));
+  const result = attachCatalogToSuggestion({
+    reply_draft: 'Hola',
+    customer_name: 'Pedro Rojas',
+    destination: 'Sucre',
+    quote_rows: [{ sku: 'T6195R', qty: 1 }]
+  }, bySku);
+  assert.equal(result.quote_draft.customer_name, 'Pedro Rojas');
+  assert.equal(result.quote_draft.destination, 'Sucre');
+});
+
 test('attachCatalogToSuggestion defaults invalid qty to 1', () => {
   const bySku = new Map(CATALOG.map((c) => [c.sku, c]));
   const result = attachCatalogToSuggestion({

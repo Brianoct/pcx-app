@@ -2231,6 +2231,39 @@ button, .btn {
   display: grid;
   gap: 6px;
 }
+.sales-ia-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sales-ia-media-link {
+  color: #2563eb;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: inline-block;
+  margin-top: 4px;
+  word-break: break-word;
+}
+.sales-ia-media-err {
+  color: #b91c1c;
+  font-size: 0.76rem;
+  display: inline-block;
+  margin-top: 4px;
+}
+.sales-ia-media-img {
+  max-width: 180px;
+  max-height: 180px;
+  border-radius: 8px;
+  margin-top: 4px;
+  display: block;
+}
+.sales-ia-quote-field {
+  flex: 1 1 100%;
+}
+.sales-ia-quote-field input {
+  width: 100%;
+}
 .sales-ia-composer textarea {
   width: 100%;
   min-height: 70px;

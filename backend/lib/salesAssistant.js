@@ -120,7 +120,9 @@ const attachCatalogToSuggestion = (aiJson, catalogBySku) => {
     suggested_products,
     quote_draft: {
       rows,
-      note: String(aiJson?.notes || '').trim()
+      note: String(aiJson?.notes || '').trim(),
+      customer_name: String(aiJson?.customer_name || '').trim(),
+      destination: String(aiJson?.destination || '').trim()
     }
   };
 };
@@ -152,7 +154,12 @@ const buildFallbackSuggestion = ({ contactName, candidates = [] }) => {
   return {
     reply_draft,
     suggested_products,
-    quote_draft: { rows, note: 'Borrador generado sin IA (coincidencia por palabras clave).' }
+    quote_draft: {
+      rows,
+      note: 'Borrador generado sin IA (coincidencia por palabras clave).',
+      customer_name: '',
+      destination: ''
+    }
   };
 };
 
@@ -173,9 +180,16 @@ const buildSalesPrompt = ({ contactName, transcript, candidates }) => {
     'en español para el cliente, sugiere productos relevantes (solo SKUs de la lista)',
     'y propone filas de cotización con cantidades. NO inventes SKUs ni precios.',
     '',
+    'Si el cliente indica explícitamente a nombre de quién debe ir la cotización,',
+    'extrae ese nombre en "customer_name". Si indica una ciudad o departamento de',
+    'destino, extrae ese texto en "destination" (tal como lo dijo, p. ej. "Sucre").',
+    'Si no lo indica, deja esos campos como cadena vacía.',
+    '',
     'Responde SOLO con JSON válido con esta forma exacta:',
     '{',
     '  "reply_draft": "texto de respuesta en español",',
+    '  "customer_name": "nombre para la cotización o vacío",',
+    '  "destination": "ciudad/departamento de destino o vacío",',
     '  "suggested_skus": [{"sku": "SKU", "reason": "por qué"}],',
     '  "quote_rows": [{"sku": "SKU", "qty": 1}],',
     '  "notes": "notas internas opcionales"',
