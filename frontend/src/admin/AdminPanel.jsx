@@ -11,14 +11,15 @@ import RoleConfiguration from './RoleConfiguration';
 import ProductCostingAdmin from './ProductCostingAdmin';
 import WhatsAppInboxAdmin from './WhatsAppInboxAdmin';
 import AiAssistant from './AiAssistant';
+import SalesAssistant from './SalesAssistant';
 import { apiRequest } from '../apiClient';
 
-function AdminPanel({ token }) {
+function AdminPanel({ token, user }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [aiEnabled, setAiEnabled] = useState(false);
   const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'calendario'];
-  const tabKeys = aiEnabled ? [...baseTabKeys, 'asistente_ia'] : baseTabKeys;
+  const tabKeys = aiEnabled ? [...baseTabKeys, 'asistente_ia', 'ventas_ia'] : baseTabKeys;
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
     return tabKeys.includes(tab) ? tab : 'usuarios';
@@ -92,6 +93,11 @@ function AdminPanel({ token }) {
       label: 'Asistente IA',
       icon: 'IA',
       hint: 'Pregunta sobre el negocio (beta privada)'
+    }, {
+      key: 'ventas_ia',
+      label: 'Ventas IA',
+      icon: 'VA',
+      hint: 'Vende desde el inbox con ayuda de IA (beta)'
     }] : [])
   ];
   const activeTabMeta = tabs.find((tab) => tab.key === activeTab) || tabs[0];
@@ -173,6 +179,7 @@ function AdminPanel({ token }) {
         )}
         {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}
         {activeTab === 'asistente_ia' && aiEnabled && <AiAssistant token={token} />}
+        {activeTab === 'ventas_ia' && aiEnabled && <SalesAssistant token={token} user={user} />}
       </div>
     </div>
   );

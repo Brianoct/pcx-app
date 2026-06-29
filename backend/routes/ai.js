@@ -2,6 +2,7 @@ const express = require('express');
 const { authenticateToken } = require('../lib/authMiddleware');
 const { isAiAssistantEnabledFor, requireAiAssistant } = require('../lib/aiAccess');
 const { answerAdminAiQuestion } = require('../lib/aiAssistant');
+const { buildSalesSuggestion } = require('../lib/salesAssistant');
 
 const router = express.Router();
 
@@ -29,6 +30,26 @@ router.post('/api/ai/assistant', authenticateToken, requireAiAssistant, async (r
     }
     console.error('AI assistant error:', err);
     return res.status(500).json({ error: 'No se pudo ejecutar el asistente IA' });
+  }
+});
+
+// Gated sales workspace helper: given a WhatsApp conversation id, return an
+// AI-drafted reply, suggested catalog products, and a draft quote. Nothing is
+// sent or saved here — the rep confirms via the existing send/quote endpoints.
+router.post('/api/ai/sales/suggest', authenticateToken, requireAiAssistant, async (req, res) => {
+  const conversationId = req.body?.conversation_id ?? req.body?.conversationId;
+  if (conversationId === undefined || conversationId === null || conversationId === '') {
+    return res.status(400).json({ error: 'conversation_id requerido' });
+  }
+  try {
+    const payload = await buildSalesSuggestion({ conversationId });
+    return res.json(payload);
+  } catch (err) {
+    if (err?.statusCode) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+    console.error('Sales assistant error:', err);
+    return res.status(500).json({ error: 'No se pudo generar la sugerencia de ventas' });
   }
 });
 
