@@ -48,7 +48,7 @@ const resolveAiProvider = () => {
       api: 'anthropic',
       apiKey: firstNonEmpty(genericKey, process.env.ANTHROPIC_API_KEY),
       url: firstNonEmpty(process.env.AI_API_URL, process.env.ANTHROPIC_API_URL, 'https://api.anthropic.com/v1/messages'),
-      model: firstNonEmpty(process.env.AI_MODEL, process.env.ANTHROPIC_MODEL, 'claude-3-5-sonnet-latest'),
+      model: firstNonEmpty(process.env.AI_MODEL, process.env.ANTHROPIC_MODEL, 'claude-sonnet-4-6'),
       anthropicVersion: firstNonEmpty(process.env.ANTHROPIC_VERSION, '2023-06-01')
     };
   }
@@ -114,7 +114,7 @@ const transcribeAudio = async ({ buffer, filename = 'audio.ogg', mimeType = 'aud
 
 // ── Image understanding (vision) ─────────────────────────────────────────────
 // Reuses the active chat provider but allows a vision-capable model override
-// (AI_VISION_MODEL). Defaults: openai gpt-4o-mini and anthropic claude-3-5-sonnet
+// (AI_VISION_MODEL). Defaults: openai gpt-4o-mini and anthropic claude-sonnet-4-6
 // are vision-capable out of the box; grok needs a vision model override.
 const resolveVisionProvider = () => {
   const base = resolveAiProvider();
@@ -203,10 +203,12 @@ const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, max
   if (cfg.api === 'anthropic') {
     // Force valid JSON via tool-use (works across Claude models; assistant
     // message prefill is rejected by some models, e.g. claude-sonnet-4-6).
+    // NOTE: temperature/top_p/top_k are intentionally omitted — current Claude
+    // models (Opus 4.7+, Fable 5) reject sampling params with a 400. Older
+    // models simply default; steer behaviour via the prompt instead.
     const body = {
       model: cfg.model,
       max_tokens: maxTokens,
-      temperature,
       ...(system ? { system } : {}),
       messages: [{ role: 'user', content: user }]
     };

@@ -49,7 +49,10 @@ const runAdminAnalyticsQuery = async ({ queryKey, month, year }) => {
         `SELECT
            li->>'sku' AS sku,
            li->>'displayName' AS product_name,
-           SUM(CAST(li->>'qty' AS INTEGER)) AS total_qty
+           -- Guard the cast: a malformed/empty qty in any line-item JSON would
+           -- otherwise raise a query-level error and fail the whole report.
+           SUM(CASE WHEN li->>'qty' ~ '^-?[0-9]+(\.[0-9]+)?$'
+                    THEN (li->>'qty')::numeric ELSE 0 END) AS total_qty
          FROM quotes q,
          LATERAL jsonb_array_elements(q.line_items) li
          WHERE q.status = ANY($1::text[])${dateFilter.sql}

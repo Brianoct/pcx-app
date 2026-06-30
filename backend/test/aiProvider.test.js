@@ -7,7 +7,8 @@ const {
   resolveTranscriptionProvider,
   isTranscriptionConfigured,
   resolveVisionProvider,
-  isVisionConfigured
+  isVisionConfigured,
+  aiChatCompletion
 } = require('../lib/aiProvider');
 
 const AI_ENV_KEYS = [
@@ -132,5 +133,129 @@ test('vision reuses the active provider with optional model override', () => {
     const cfg = resolveVisionProvider();
     assert.equal(cfg.model, 'grok-2-vision');
     assert.equal(cfg.api, 'openai');
+  });
+});
+
+// ── aiChatCompletion network path (fetch is mocked) ──────────────────────────
+
+const withEnvAsync = async (overrides, fn) => {
+  const snapshot = {};
+  for (const key of AI_ENV_KEYS) {
+    snapshot[key] = process.env[key];
+    delete process.env[key];
+  }
+  for (const [key, value] of Object.entries(overrides)) {
+    process.env[key] = value;
+  }
+  try {
+    await fn();
+  } finally {
+    for (const key of AI_ENV_KEYS) {
+      if (snapshot[key] === undefined) delete process.env[key];
+      else process.env[key] = snapshot[key];
+    }
+  }
+};
+
+const withFetch = async (impl, fn) => {
+  const original = global.fetch;
+  global.fetch = impl;
+  try {
+    return await fn();
+  } finally {
+    global.fetch = original;
+  }
+};
+
+const fakeResponse = (status, body) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: async () => body,
+  text: async () => JSON.stringify(body)
+});
+
+test('aiChatCompletion (anthropic) omits sampling params and parses text blocks', async () => {
+  let captured = null;
+  await withEnvAsync({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k-ant' }, async () => {
+    await withFetch(
+      async (url, init) => {
+        captured = { url, init, body: JSON.parse(init.body) };
+        return fakeResponse(200, { content: [{ type: 'text', text: 'hola mundo' }] });
+      },
+      async () => {
+        const res = await aiChatCompletion({ system: 'sys', user: 'hi', temperature: 0.9 });
+        assert.equal(res.content, 'hola mundo');
+        assert.equal(res.provider, 'anthropic');
+      }
+    );
+  });
+  // Current Claude models reject sampling params with a 400 — must not be sent.
+  assert.equal(captured.body.temperature, undefined);
+  assert.equal(captured.body.top_p, undefined);
+  assert.equal(captured.body.top_k, undefined);
+  assert.equal(captured.init.headers['x-api-key'], 'k-ant');
+  assert.equal(captured.body.system, 'sys');
+  assert.ok(captured.url.includes('anthropic.com'));
+});
+
+test('aiChatCompletion (anthropic, json) forces tool-use and parses tool_use input', async () => {
+  let captured = null;
+  await withEnvAsync({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k-ant' }, async () => {
+    await withFetch(
+      async (url, init) => {
+        captured = JSON.parse(init.body);
+        return fakeResponse(200, { content: [{ type: 'tool_use', input: { ok: true, n: 2 } }] });
+      },
+      async () => {
+        const res = await aiChatCompletion({ user: 'give json', json: true });
+        assert.deepEqual(JSON.parse(res.content), { ok: true, n: 2 });
+      }
+    );
+  });
+  assert.ok(Array.isArray(captured.tools) && captured.tools.length === 1);
+  assert.equal(captured.tool_choice.type, 'tool');
+});
+
+test('aiChatCompletion (openai/grok, json) sends response_format and parses choices', async () => {
+  let captured = null;
+  await withEnvAsync({ AI_PROVIDER: 'openai', OPENAI_API_KEY: 'k-oai' }, async () => {
+    await withFetch(
+      async (url, init) => {
+        captured = { init, body: JSON.parse(init.body) };
+        return fakeResponse(200, { choices: [{ message: { content: '{"x":1}' } }] });
+      },
+      async () => {
+        const res = await aiChatCompletion({ user: 'hi', json: true, temperature: 0.4 });
+        assert.equal(res.content, '{"x":1}');
+        assert.equal(res.provider, 'openai');
+      }
+    );
+  });
+  assert.equal(captured.body.response_format.type, 'json_object');
+  // temperature is valid on the OpenAI-compatible path and should be forwarded.
+  assert.equal(captured.body.temperature, 0.4);
+  assert.equal(captured.init.headers.Authorization, 'Bearer k-oai');
+});
+
+test('aiChatCompletion throws on a non-2xx provider response', async () => {
+  await withEnvAsync({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'k-ant' }, async () => {
+    await withFetch(
+      async () => fakeResponse(400, { error: { message: 'bad model' } }),
+      async () => {
+        await assert.rejects(
+          () => aiChatCompletion({ user: 'hi' }),
+          /HTTP 400/
+        );
+      }
+    );
+  });
+});
+
+test('aiChatCompletion throws AI_NOT_CONFIGURED when no key is set', async () => {
+  await withEnvAsync({}, async () => {
+    await assert.rejects(
+      () => aiChatCompletion({ user: 'hi' }),
+      (err) => err.code === 'AI_NOT_CONFIGURED'
+    );
   });
 });

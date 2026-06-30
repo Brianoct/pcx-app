@@ -33,11 +33,23 @@ const isAiAssistantEnabledFor = (user) => {
   return allowlist.has(normalizeEmail(user.email || ''));
 };
 
-const requireAiAssistant = (req, res, next) => {
-  if (!isAiAssistantEnabledFor(req.user)) {
-    return res.status(403).json({ error: 'Asistente IA no disponible para esta cuenta' });
+const requireAiAssistant = async (req, res, next) => {
+  // Re-validate against the live DB record instead of trusting the role/email
+  // baked into the JWT at login: a demoted admin or changed/removed email loses
+  // access immediately rather than at token expiry. `loadUserContext` is
+  // lazy-required so this module (and isAiAssistantEnabledFor's unit tests) stay
+  // free of a `pg` import at load time.
+  try {
+    const { loadUserContext } = require('./users');
+    const freshUser = req.user?.id ? await loadUserContext(req.user.id) : null;
+    if (!isAiAssistantEnabledFor(freshUser)) {
+      return res.status(403).json({ error: 'Asistente IA no disponible para esta cuenta' });
+    }
+    return next();
+  } catch (err) {
+    console.error('AI access check error:', err);
+    return res.status(500).json({ error: 'No se pudo verificar el acceso al asistente IA' });
   }
-  next();
 };
 
 module.exports = {

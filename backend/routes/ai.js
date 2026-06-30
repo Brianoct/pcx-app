@@ -25,6 +25,11 @@ router.post('/api/ai/assistant', authenticateToken, requireAiAssistant, async (r
   if (!question) {
     return res.status(400).json({ error: 'Pregunta requerida para el asistente IA' });
   }
+  // Cap input size: unbounded text is forwarded to a paid LLM (cost/abuse guard).
+  const MAX_QUESTION_CHARS = 4000;
+  if (question.length > MAX_QUESTION_CHARS) {
+    return res.status(400).json({ error: `La pregunta es demasiado larga (máx ${MAX_QUESTION_CHARS} caracteres)` });
+  }
 
   try {
     const payload = await answerAdminAiQuestion({ question, month, year });
@@ -46,8 +51,11 @@ router.post('/api/ai/sales/suggest', authenticateToken, requireAiAssistant, asyn
   if (conversationId === undefined || conversationId === null || conversationId === '') {
     return res.status(400).json({ error: 'conversation_id requerido' });
   }
+  // Cap the number of message ids to bound how much conversation text is sent
+  // to the paid LLM in a single request.
+  const MAX_MESSAGE_IDS = 200;
   const messageIds = Array.isArray(req.body?.message_ids)
-    ? req.body.message_ids.map((value) => Number(value)).filter(Number.isInteger)
+    ? req.body.message_ids.map((value) => Number(value)).filter(Number.isInteger).slice(0, MAX_MESSAGE_IDS)
     : [];
   try {
     const payload = await buildSalesSuggestion({ conversationId, messageIds });
