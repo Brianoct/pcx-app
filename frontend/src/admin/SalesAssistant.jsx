@@ -94,6 +94,10 @@ function SalesAssistant({ token, user }) {
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
 
+  // Catalog (for manually searching/adding products the AI didn't suggest)
+  const [catalog, setCatalog] = useState([]);
+  const [productQuery, setProductQuery] = useState('');
+
   // Quote draft
   const [quoteRows, setQuoteRows] = useState([]);
   const [customerNameInput, setCustomerNameInput] = useState('');
@@ -131,6 +135,14 @@ function SalesAssistant({ token, user }) {
     return res;
   }, [token]);
 
+  useEffect(() => {
+    let active = true;
+    apiRequest('/api/product-catalog', { token })
+      .then((rows) => { if (active) setCatalog(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (active) setCatalog([]); });
+    return () => { active = false; };
+  }, [token]);
+
   const toggleMsgSelect = (id) => {
     setSelectedMsgIds((prev) => {
       const next = new Set(prev);
@@ -150,6 +162,7 @@ function SalesAssistant({ token, user }) {
     setCustomerNameInput('');
     setDestinationInput('');
     setSelectedMsgIds(new Set());
+    setProductQuery('');
     setLoadingThread(true);
     setError('');
     try {
@@ -245,6 +258,17 @@ function SalesAssistant({ token, user }) {
   const removeRow = (index) => setQuoteRows((prev) => prev.filter((_, i) => i !== index));
 
   const subtotal = quoteRows.reduce((sum, r) => sum + Number(r.lineTotal || 0), 0);
+
+  const normalizedProductQuery = productQuery.trim().toLowerCase();
+  const productSearchResults = normalizedProductQuery
+    ? catalog
+        .filter((p) => {
+          const haystack = `${p.sku || ''} ${p.name || ''} ${p.description || ''}`.toLowerCase();
+          return normalizedProductQuery.split(/\s+/).every((term) => haystack.includes(term));
+        })
+        .filter((p) => !quoteRows.some((r) => r.sku === p.sku))
+        .slice(0, 8)
+    : [];
 
   const createQuote = async () => {
     if (!conversation) return;
@@ -508,6 +532,38 @@ function SalesAssistant({ token, user }) {
 
               <div className="sales-ia-section">
                 <h4>Borrador de cotización</h4>
+
+                <div className="sales-ia-product-search">
+                  <input
+                    type="text"
+                    value={productQuery}
+                    placeholder="Buscar producto por nombre o código para agregar…"
+                    onChange={(e) => setProductQuery(e.target.value)}
+                  />
+                  {normalizedProductQuery && (
+                    <div className="sales-ia-search-results">
+                      {productSearchResults.length === 0 && (
+                        <p className="sales-ia-muted">Sin resultados en el catálogo.</p>
+                      )}
+                      {productSearchResults.map((p) => (
+                        <div key={p.sku} className="sales-ia-product">
+                          <div>
+                            <strong>{p.name}</strong>
+                            <small>{p.sku} · SF {money(p.sf)}{p.cf ? ` · CF ${money(p.cf)}` : ''}</small>
+                          </div>
+                          <button
+                            type="button"
+                            className="admin-ai-pill"
+                            onClick={() => { addSuggestedToQuote(p); setProductQuery(''); }}
+                          >
+                            Agregar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {quoteRows.length === 0 && <p className="sales-ia-muted">Agrega productos para cotizar.</p>}
                 {quoteRows.length > 0 && (
                   <div className="admin-ai-table-wrap">

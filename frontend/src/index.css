@@ -2349,6 +2349,30 @@ button, .btn {
 .sales-ia-product small { display: block; color: #78716c; font-size: 0.74rem; }
 .sales-ia-product em { display: block; color: #57534e; font-size: 0.74rem; font-style: italic; }
 
+.sales-ia-product-search {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.sales-ia-product-search input {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #e7e0d8;
+  padding: 6px 8px;
+  background: #fff;
+  color: #292524;
+}
+.sales-ia-search-results {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid rgba(214, 204, 192, 0.6);
+  border-radius: 8px;
+  padding: 6px;
+  background: #faf9f7;
+}
+
 .sales-ia-quote-meta {
   display: flex;
   flex-wrap: wrap;
