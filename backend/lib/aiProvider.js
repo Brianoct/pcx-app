@@ -17,6 +17,17 @@ const firstNonEmpty = (...values) => {
   return '';
 };
 
+// Best-effort read of a provider's error body so failures are actionable
+// (e.g. invalid model, auth error) instead of a bare status code.
+const safeErrorText = async (response) => {
+  try {
+    const text = (await response.text()) || '';
+    return text.replace(/\s+/g, ' ').trim().slice(0, 300);
+  } catch {
+    return '';
+  }
+};
+
 const resolveAiProvider = () => {
   const kind = String(process.env.AI_PROVIDER || 'grok').trim().toLowerCase();
   const genericKey = String(process.env.AI_API_KEY || '').trim();
