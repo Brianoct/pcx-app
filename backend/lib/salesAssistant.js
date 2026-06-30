@@ -220,7 +220,10 @@ const buildFallbackSuggestion = ({ contactName, candidates = [], hasUsableText =
 
 const buildSalesPrompt = ({ contactName, transcript, candidates }) => {
   const candidateLines = candidates
-    .map((item) => `- ${item.sku} | ${item.name} | SF ${item.sf} Bs`)
+    .map((item) => {
+      const desc = String(item.description || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+      return `- ${item.sku} | ${item.name} | SF ${item.sf} Bs | CF ${item.cf} Bs${desc ? ` | ${desc}` : ''}`;
+    })
     .join('\n');
   return [
     `Cliente: ${contactName || 'Sin nombre'}`,
