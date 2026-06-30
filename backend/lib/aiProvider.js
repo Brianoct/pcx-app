@@ -201,11 +201,23 @@ const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, max
   }
 
   if (cfg.api === 'anthropic') {
-    // Force valid JSON by pre-filling the assistant turn with "{" so Claude must
-    // continue a JSON object (it otherwise tends to add prose around the JSON).
-    const messages = json
-      ? [{ role: 'user', content: user }, { role: 'assistant', content: '{' }]
-      : [{ role: 'user', content: user }];
+    // Force valid JSON via tool-use (works across Claude models; assistant
+    // message prefill is rejected by some models, e.g. claude-sonnet-4-6).
+    const body = {
+      model: cfg.model,
+      max_tokens: maxTokens,
+      temperature,
+      ...(system ? { system } : {}),
+      messages: [{ role: 'user', content: user }]
+    };
+    if (json) {
+      body.tools = [{
+        name: 'emitir_json',
+        description: 'Devuelve la respuesta solicitada como un único objeto JSON.',
+        input_schema: { type: 'object', additionalProperties: true }
+      }];
+      body.tool_choice = { type: 'tool', name: 'emitir_json' };
+    }
     const response = await fetch(cfg.url, {
       method: 'POST',
       headers: {
@@ -213,23 +225,20 @@ const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, max
         'anthropic-version': cfg.anthropicVersion,
         'content-type': 'application/json'
       },
-      body: JSON.stringify({
-        model: cfg.model,
-        max_tokens: maxTokens,
-        temperature,
-        ...(system ? { system } : {}),
-        messages
-      })
+      body: JSON.stringify(body)
     });
     if (!response.ok) {
       throw new Error(`${cfg.kind} HTTP ${response.status}: ${await safeErrorText(response)}`);
     }
     const payload = await response.json();
-    let content = Array.isArray(payload?.content)
-      ? payload.content.map((block) => String(block?.text || '')).join('').trim()
-      : '';
-    // Re-attach the leading "{" we used to prime the response.
-    if (json && content && !content.startsWith('{')) content = `{${content}`;
+    const blocks = Array.isArray(payload?.content) ? payload.content : [];
+    let content;
+    if (json) {
+      const toolBlock = blocks.find((block) => block?.type === 'tool_use');
+      content = toolBlock && toolBlock.input ? JSON.stringify(toolBlock.input) : '';
+    } else {
+      content = blocks.map((block) => String(block?.text || '')).join('').trim();
+    }
     return { content, provider: cfg.kind, model: cfg.model };
   }
 
