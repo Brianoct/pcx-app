@@ -6,6 +6,7 @@ const {
   safeParseJsonObject,
   attachCatalogToSuggestion,
   buildFallbackSuggestion,
+  stripMediaPlaceholders,
   audioFilenameForMime
 } = require('../lib/salesAssistant');
 
@@ -104,18 +105,28 @@ test('attachCatalogToSuggestion defaults invalid qty to 1', () => {
   assert.equal(result.quote_draft.rows[1].qty, 1);
 });
 
-test('buildFallbackSuggestion produces reply, products and quote rows', () => {
+test('buildFallbackSuggestion offers keyword matches but never a guessed reply or pre-filled quote', () => {
   const candidates = scoreCatalogCandidates('quiero un tablero', CATALOG, 10);
-  const fb = buildFallbackSuggestion({ contactName: 'Ana', candidates });
+  const fb = buildFallbackSuggestion({ contactName: 'Ana', candidates, hasUsableText: true });
   assert.ok(fb.reply_draft.includes('Ana'));
-  assert.ok(fb.suggested_products.length > 0);
-  assert.ok(fb.quote_draft.rows.length > 0);
-  assert.equal(fb.quote_draft.rows[0].qty, 1);
+  // the reply must NOT enumerate specific guessed products
+  assert.ok(!fb.reply_draft.toLowerCase().includes('tablero'));
+  assert.ok(fb.suggested_products.length > 0); // shown as manual "possible matches"
+  assert.equal(fb.quote_draft.rows.length, 0); // quote is never auto-filled in fallback
 });
 
-test('buildFallbackSuggestion handles empty candidates gracefully', () => {
-  const fb = buildFallbackSuggestion({ contactName: '', candidates: [] });
+test('buildFallbackSuggestion stays silent on products when content is uninterpretable', () => {
+  const candidates = scoreCatalogCandidates('quiero un tablero', CATALOG, 10);
+  const fb = buildFallbackSuggestion({ contactName: 'Ana', candidates, hasUsableText: false });
   assert.equal(fb.suggested_products.length, 0);
   assert.equal(fb.quote_draft.rows.length, 0);
   assert.ok(fb.reply_draft.length > 0);
+});
+
+test('stripMediaPlaceholders empties un-interpreted media but keeps real text', () => {
+  assert.equal(stripMediaPlaceholders('[Audio]'), '');
+  assert.equal(stripMediaPlaceholders('[Imagen]'), '');
+  assert.equal(stripMediaPlaceholders('(nota de voz) quiero dos tableros'), 'quiero dos tableros');
+  assert.equal(stripMediaPlaceholders('(imagen) tablero 61x95 azul'), 'tablero 61x95 azul');
+  assert.equal(stripMediaPlaceholders('hola precio'), 'hola precio');
 });
