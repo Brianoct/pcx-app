@@ -40,12 +40,13 @@ router.post('/api/product-catalog', authenticateToken, requireRole(['admin']), a
     await client.query('BEGIN');
 
     const result = await client.query(
-      `INSERT INTO products (sku, name, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, last_updated)
-       VALUES ($1, $2, $3, $4, TRUE, $5, $6, $7, NOW())
-       RETURNING sku, name, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url`,
+      `INSERT INTO products (sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, last_updated)
+       VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, NOW())
+       RETURNING sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url`,
       [
         sku,
         normalized.name,
+        normalized.description || null,
         normalized.sf_price,
         normalized.cf_price,
         Boolean(normalized.is_gift_eligible),
@@ -62,6 +63,7 @@ router.post('/api/product-catalog', authenticateToken, requireRole(['admin']), a
     res.status(201).json({
       sku: String(result.rows[0].sku || '').toUpperCase(),
       name: result.rows[0].name,
+      description: String(result.rows[0].description || '').trim() || null,
       sf: Number(result.rows[0].sf_price || 0),
       cf: Number(result.rows[0].cf_price || 0),
       is_active: Boolean(result.rows[0].is_active),
@@ -99,6 +101,10 @@ router.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin
       values.push(normalized.name);
       sets.push(`name = $${values.length}`);
     }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'description')) {
+      values.push(normalized.description || null);
+      sets.push(`description = $${values.length}`);
+    }
     if (Object.prototype.hasOwnProperty.call(normalized, 'sf_price')) {
       values.push(normalized.sf_price);
       sets.push(`sf_price = $${values.length}`);
@@ -128,7 +134,7 @@ router.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin
       `UPDATE products
        SET ${sets.join(', ')}, last_updated = NOW()
        WHERE sku = $${values.length}
-       RETURNING sku, name, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url`,
+       RETURNING sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url`,
       values
     );
     if (result.rowCount === 0) {
@@ -138,6 +144,7 @@ router.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin
     res.json({
       sku: String(result.rows[0].sku || '').toUpperCase(),
       name: result.rows[0].name,
+      description: String(result.rows[0].description || '').trim() || null,
       sf: Number(result.rows[0].sf_price || 0),
       cf: Number(result.rows[0].cf_price || 0),
       is_active: Boolean(result.rows[0].is_active),

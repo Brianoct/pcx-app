@@ -10,6 +10,7 @@ function ProductCatalogAdmin({ token }) {
   const [newProduct, setNewProduct] = useState({
     sku: '',
     name: '',
+    description: '',
     sf: '',
     cf: '',
     equipment_ids: [],
@@ -102,6 +103,7 @@ function ProductCatalogAdmin({ token }) {
       const payload = {
         sku: String(newProduct.sku || '').toUpperCase().trim(),
         name: String(newProduct.name || '').trim(),
+        description: String(newProduct.description || '').trim(),
         sf: Number(newProduct.sf || 0),
         cf: Number(newProduct.cf || 0),
         equipment_ids: Array.isArray(newProduct.equipment_ids) ? newProduct.equipment_ids : [],
@@ -145,6 +147,7 @@ function ProductCatalogAdmin({ token }) {
       setNewProduct({
         sku: '',
         name: '',
+        description: '',
         sf: '',
         cf: '',
         equipment_ids: [],
@@ -167,6 +170,7 @@ function ProductCatalogAdmin({ token }) {
     try {
       const payload = {
         name: String(row.name || '').trim(),
+        description: String(row.description || '').trim(),
         sf: Number(row.sf ?? row.sf_price ?? 0),
         cf: Number(row.cf ?? row.cf_price ?? 0),
         is_active: Boolean(row.is_active)
@@ -332,6 +336,14 @@ function ProductCatalogAdmin({ token }) {
             onChange={(e) => setNewProduct((prev) => ({ ...prev, name: e.target.value }))}
             className="form-input form-input--inline"
           />
+          <textarea
+            placeholder="Descripción (uso / para qué sirve — ayuda a la IA)"
+            value={newProduct.description}
+            onChange={(e) => setNewProduct((prev) => ({ ...prev, description: e.target.value }))}
+            className="form-input form-input--inline"
+            rows={2}
+            style={{ gridColumn: '1 / -1', resize: 'vertical' }}
+          />
           <input
             type="number"
             min="0"
@@ -442,6 +454,7 @@ function ProductCatalogAdmin({ token }) {
                 <tr>
                   <th>SKU</th>
                   <th>Nombre</th>
+                  <th>Descripción</th>
                   <th style={{ textAlign: 'right' }}>SF</th>
                   <th style={{ textAlign: 'right' }}>CF</th>
                   <th>Activo</th>
@@ -450,7 +463,7 @@ function ProductCatalogAdmin({ token }) {
               </thead>
               <tbody>
                 {products.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center', color: '#78716c' }}>Sin productos</td></tr>
+                  <tr><td colSpan={7} style={{ textAlign: 'center', color: '#78716c' }}>Sin productos</td></tr>
                 ) : products.map((row) => (
                   <tr key={row.sku}>
                     <td>{row.sku}</td>
@@ -459,6 +472,16 @@ function ProductCatalogAdmin({ token }) {
                         value={row.name || ''}
                         onChange={(e) => onRowField(row.sku, 'name', e.target.value)}
                         className="form-input"
+                      />
+                    </td>
+                    <td>
+                      <textarea
+                        value={row.description || ''}
+                        onChange={(e) => onRowField(row.sku, 'description', e.target.value)}
+                        className="form-input"
+                        rows={2}
+                        placeholder="Uso / para qué sirve"
+                        style={{ minWidth: 220, resize: 'vertical' }}
                       />
                     </td>
                     <td style={{ textAlign: 'right' }}>

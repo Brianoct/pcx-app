@@ -97,7 +97,7 @@ const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
   await ensureProductCatalogReady();
   const whereClause = includeInactive ? '' : 'WHERE is_active = TRUE';
   const result = await pool.query(
-    `SELECT sku, name, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url
+    `SELECT sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url
      FROM products
      ${whereClause}
      ORDER BY UPPER(name) ASC, UPPER(sku) ASC`
@@ -105,6 +105,7 @@ const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
   const rows = (result.rows || []).map((row) => ({
     sku: String(row.sku || '').toUpperCase(),
     name: String(row.name || '').trim(),
+    description: String(row.description || '').trim() || null,
     sf: Number(row.sf_price || 0),
     cf: Number(row.cf_price || 0),
     is_active: Boolean(row.is_active),
@@ -148,11 +149,12 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
   const hasIsGiftEligible = Object.prototype.hasOwnProperty.call(src, 'is_gift_eligible');
   const hasMenuCategory = Object.prototype.hasOwnProperty.call(src, 'menu_category');
   const hasImageUrl = Object.prototype.hasOwnProperty.call(src, 'image_url');
+  const hasDescription = Object.prototype.hasOwnProperty.call(src, 'description');
 
   if (!partial && (!hasName || !hasSf || !hasCf)) {
     throw createHttpError(400, 'Debes enviar name, sf y cf');
   }
-  if (partial && !hasName && !hasSf && !hasCf && !hasIsActive && !hasIsGiftEligible && !hasMenuCategory && !hasImageUrl) {
+  if (partial && !hasName && !hasSf && !hasCf && !hasIsActive && !hasIsGiftEligible && !hasMenuCategory && !hasImageUrl && !hasDescription) {
     throw createHttpError(400, 'No se enviaron cambios para actualizar');
   }
 
@@ -162,6 +164,11 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
     if (!name) throw createHttpError(400, 'Nombre de producto requerido');
     if (name.length > 120) throw createHttpError(400, 'Nombre de producto demasiado largo (máx 120)');
     normalized.name = name;
+  }
+  if (hasDescription) {
+    const description = String(src.description || '').trim();
+    if (description.length > 1000) throw createHttpError(400, 'Descripción demasiado larga (máx 1000)');
+    normalized.description = description || null;
   }
   if (hasSf) normalized.sf_price = parseProductPrice(src.sf ?? src.sf_price, 'Precio SF');
   if (hasCf) normalized.cf_price = parseProductPrice(src.cf ?? src.cf_price, 'Precio CF');
