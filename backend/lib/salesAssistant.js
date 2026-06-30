@@ -242,19 +242,32 @@ const buildSalesPrompt = ({ contactName, transcript, candidates }) => {
   ].join('\n');
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const callAiForSales = async ({ contactName, transcript, candidates }) => {
   const prompt = buildSalesPrompt({ contactName, transcript, candidates });
-  const { content, provider } = await aiChatCompletion({
-    system: 'Eres un asistente de ventas senior. Usa solo los productos provistos y responde solo con JSON válido.',
-    user: prompt,
-    temperature: 0.3,
-    maxTokens: 700
-  });
-  const parsed = safeParseJsonObject(content);
-  if (!parsed) {
-    throw new Error('Respuesta de IA no es JSON válido');
+  // Retry once on a transient provider hiccup (rate limit / overloaded / a
+  // non-JSON reply) before giving up and falling back to keyword suggestions.
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const { content, provider } = await aiChatCompletion({
+        system: 'Eres un asistente de ventas senior. Usa solo los productos provistos y responde solo con JSON válido, sin texto adicional.',
+        user: prompt,
+        temperature: 0.2,
+        maxTokens: 700
+      });
+      const parsed = safeParseJsonObject(content);
+      if (!parsed) {
+        throw new Error('Respuesta de IA no es JSON válido');
+      }
+      return { data: parsed, provider };
+    } catch (err) {
+      lastError = err;
+      if (attempt === 0) await sleep(700);
+    }
   }
-  return { data: parsed, provider };
+  throw lastError;
 };
 
 // ── DB-backed orchestration ──────────────────────────────────────────────────
