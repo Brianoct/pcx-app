@@ -262,10 +262,11 @@ const callAiForSales = async ({ contactName, transcript, candidates }) => {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const { content, provider } = await aiChatCompletion({
-        system: 'Eres un asistente de ventas senior. Usa solo los productos provistos y responde solo con JSON válido, sin texto adicional.',
+        system: 'Eres un asistente de ventas senior. Usa solo los productos provistos y responde SOLO con un objeto JSON válido, sin texto adicional ni markdown.',
         user: prompt,
         temperature: 0.2,
-        maxTokens: 700
+        maxTokens: 1200,
+        json: true
       });
       const parsed = safeParseJsonObject(content);
       if (!parsed) {
