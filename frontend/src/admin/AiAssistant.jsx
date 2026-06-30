@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { apiRequest } from '../apiClient';
 
 // Sales-focused starter questions. The assistant understands free text too;
@@ -137,6 +137,9 @@ function AiAssistant({ token, aiInfo }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+  // Sequences concurrent requests so a slow earlier answer can't overwrite a
+  // newer one (rapid submits via Enter / suggestion pills).
+  const requestSeq = useRef(0);
 
   const yearOptions = [];
   for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y -= 1) yearOptions.push(y);
@@ -147,6 +150,7 @@ function AiAssistant({ token, aiInfo }) {
       setError('Escribe una pregunta para el asistente.');
       return;
     }
+    const seq = (requestSeq.current += 1);
     setLoading(true);
     setError('');
     try {
@@ -157,12 +161,14 @@ function AiAssistant({ token, aiInfo }) {
         timeoutMs: 45000,
         retries: 0
       });
+      if (seq !== requestSeq.current) return; // a newer request superseded this one
       setResult(payload);
     } catch (err) {
+      if (seq !== requestSeq.current) return;
       setError(err?.message || 'No se pudo ejecutar el asistente IA.');
       setResult(null);
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) setLoading(false);
     }
   };
 

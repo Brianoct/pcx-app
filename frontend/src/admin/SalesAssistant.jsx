@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiRequest, API_BASE } from '../apiClient';
 import { generateModernQuotePdf } from '../quotePdf';
 
@@ -128,8 +128,14 @@ function SalesAssistant({ token, user }) {
     loadConversations();
   }, [loadConversations]);
 
+  // Tracks the conversation the user most recently opened. Async loads/suggests
+  // compare against this so a slow earlier response can't overwrite the thread
+  // after the user has switched to a different conversation.
+  const activeConvRef = useRef(null);
+
   const reloadMessages = useCallback(async (id) => {
     const res = await apiRequest(`/api/whatsapp/inbox/conversations/${id}/messages`, { token });
+    if (activeConvRef.current !== id) return res; // a newer conversation was opened
     setConversation(res?.conversation || null);
     setMessages(Array.isArray(res?.messages) ? res.messages : []);
     return res;
@@ -153,6 +159,7 @@ function SalesAssistant({ token, user }) {
   const clearMsgSelection = () => setSelectedMsgIds(new Set());
 
   const openConversation = async (id) => {
+    activeConvRef.current = id;
     setSelectedId(id);
     setSuggestion(null);
     setReply('');
@@ -180,6 +187,7 @@ function SalesAssistant({ token, user }) {
 
   const generateSuggestion = async () => {
     if (!selectedId) return;
+    const convId = selectedId;
     setSuggesting(true);
     setError('');
     try {
@@ -187,12 +195,13 @@ function SalesAssistant({ token, user }) {
         method: 'POST',
         token,
         body: {
-          conversation_id: selectedId,
+          conversation_id: convId,
           ...(selectedMsgIds.size > 0 ? { message_ids: Array.from(selectedMsgIds) } : {})
         },
         timeoutMs: 45000,
         retries: 0
       });
+      if (activeConvRef.current !== convId) return; // user switched conversations mid-request
       setSuggestion(res);
       setReply(res?.reply_draft || '');
       setQuoteRows(Array.isArray(res?.quote_draft?.rows) ? res.quote_draft.rows : []);
@@ -203,7 +212,7 @@ function SalesAssistant({ token, user }) {
       else if (!customerNameInput) setCustomerNameInput(String(conversation?.contact_name || '').trim());
       if (extractedDestination) setDestinationInput(extractedDestination);
     } catch (err) {
-      setError(err?.message || 'No se pudo generar la sugerencia.');
+      if (activeConvRef.current === convId) setError(err?.message || 'No se pudo generar la sugerencia.');
     } finally {
       setSuggesting(false);
     }

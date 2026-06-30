@@ -17,6 +17,18 @@ const MAX_CANDIDATES = 60;
 const MAX_SUGGESTED = 8;
 // Cap how many media items we transcribe/describe per request (bounds latency/cost).
 const MAX_MEDIA_ENRICH = 4;
+// Hard ceiling per media item so a hung transcription/vision/media fetch can't
+// hold the whole /sales/suggest request open indefinitely.
+const MEDIA_ENRICH_TIMEOUT_MS = 20000;
+
+const withTimeout = (promise, ms, label) => {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    if (timer.unref) timer.unref();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+};
 // If the catalog is at or below this size, send the WHOLE catalog to the model
 // (so it can pick the exact product) instead of a keyword-filtered shortlist.
 const MAX_FULL_CATALOG = 400;
@@ -363,32 +375,34 @@ const enrichMessagesWithMedia = async (messages = []) => {
 
   await Promise.all(toProcess.map(async (m) => {
     try {
-      const media = m.rawPayload?.[m.type] || {};
-      const mediaId = String(media?.id || '').trim();
-      if (!mediaId) return;
-      const meta = await fetchWhatsAppMediaMeta(mediaId);
-      const mediaUrl = String(meta?.url || '').trim();
-      if (!mediaUrl) return;
-      const binary = await fetchWhatsAppMediaBinary(mediaUrl);
-      const mimeType = String(binary.contentType || meta?.mime_type || media?.mime_type || '').trim();
+      await withTimeout((async () => {
+        const media = m.rawPayload?.[m.type] || {};
+        const mediaId = String(media?.id || '').trim();
+        if (!mediaId) return;
+        const meta = await fetchWhatsAppMediaMeta(mediaId);
+        const mediaUrl = String(meta?.url || '').trim();
+        if (!mediaUrl) return;
+        const binary = await fetchWhatsAppMediaBinary(mediaUrl);
+        const mimeType = String(binary.contentType || meta?.mime_type || media?.mime_type || '').trim();
 
-      if (m.type === 'audio') {
-        const text = await transcribeAudio({
-          buffer: binary.buffer,
-          filename: audioFilenameForMime(mimeType),
-          mimeType: mimeType || 'audio/ogg'
-        });
-        if (text) m.text = `(nota de voz) ${text}`;
-      } else if (m.type === 'image') {
-        const base64 = binary.buffer.toString('base64');
-        const description = await aiVisionDescribe({
-          base64,
-          mimeType: mimeType || 'image/jpeg',
-          prompt: VISION_PROMPT
-        });
-        const caption = String(media?.caption || '').trim();
-        if (description) m.text = `(imagen) ${description}${caption ? ` Leyenda: ${caption}` : ''}`;
-      }
+        if (m.type === 'audio') {
+          const text = await transcribeAudio({
+            buffer: binary.buffer,
+            filename: audioFilenameForMime(mimeType),
+            mimeType: mimeType || 'audio/ogg'
+          });
+          if (text) m.text = `(nota de voz) ${text}`;
+        } else if (m.type === 'image') {
+          const base64 = binary.buffer.toString('base64');
+          const description = await aiVisionDescribe({
+            base64,
+            mimeType: mimeType || 'image/jpeg',
+            prompt: VISION_PROMPT
+          });
+          const caption = String(media?.caption || '').trim();
+          if (description) m.text = `(imagen) ${description}${caption ? ` Leyenda: ${caption}` : ''}`;
+        }
+      })(), MEDIA_ENRICH_TIMEOUT_MS, `media enrich (${m.type})`);
     } catch (err) {
       console.error('Media enrich failed:', err.message || err);
     }
