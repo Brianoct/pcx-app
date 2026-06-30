@@ -52,6 +52,16 @@ const tokenize = (text = '') =>
     .split(/\s+/)
     .filter((token) => token.length >= 3 && !STOPWORDS.has(token));
 
+// Remove media/system placeholders so we can tell whether a message carries
+// real, interpretable text. Enriched media keeps its content (e.g. the prefix
+// "(nota de voz)"/"(imagen)" is stripped but the transcript/description stays);
+// un-interpreted media collapses to an empty string.
+const stripMediaPlaceholders = (text = '') =>
+  String(text || '')
+    .replace(/\[(imagen|image|audio|video|documento|document|sticker|ubicaci[oó]n|location|contacto|contact|reacci[oó]n|reaction|mensaje)\]/gi, '')
+    .replace(/\((nota de voz|imagen)\)/gi, '')
+    .trim();
+
 // Light Spanish stemming so plurals match singulars (the dominant case is a
 // vowel-ending word + 's': tableros->tablero, grandes->grande, rojos->rojo,
 // cajas->caja). Only strips a trailing 's' on words longer than 3 chars.
@@ -172,36 +182,36 @@ const attachCatalogToSuggestion = (aiJson, catalogBySku) => {
   };
 };
 
-// Deterministic suggestion used when no AI key is configured (or the model
-// call fails): keyword-matched products + a simple acknowledgement reply.
-const buildFallbackSuggestion = ({ contactName, candidates = [] }) => {
-  const top = candidates.slice(0, 5);
+// Conservative suggestion used when the AI can't produce a real answer (no key,
+// the model call failed, or the content couldn't be interpreted).
+//
+// Important: we do NOT guess a confident product list in the customer-facing
+// reply, and we do NOT pre-fill the quote — a wrong guess is worse than none.
+// When there's usable text we still offer keyword "possible matches" as an
+// internal aid the rep can add manually. When the content couldn't be
+// interpreted at all (e.g. an image/audio we couldn't read), we say so plainly.
+const buildFallbackSuggestion = ({ contactName, candidates = [], hasUsableText = true }) => {
+  const greeting = contactName ? `Hola ${contactName}, ` : 'Hola, ';
+  const reply_draft = `${greeting}gracias por tu mensaje. En un momento revisamos tu solicitud y te enviamos la cotización. 🙌`;
+
+  const top = hasUsableText ? candidates.slice(0, 5) : [];
   const suggested_products = top.map((item) => ({
     sku: item.sku,
     name: item.name,
     sf: item.sf,
     cf: item.cf,
-    reason: 'Coincidencia por palabras clave del mensaje del cliente.'
+    reason: 'Posible coincidencia por palabras clave (revisar).'
   }));
-  const rows = top.map((item) => ({
-    sku: item.sku,
-    displayName: item.name,
-    qty: 1,
-    unitPrice: Number(item.sf || 0),
-    lineTotal: Number(item.sf || 0),
-    isCombo: false
-  }));
-  const greeting = contactName ? `Hola ${contactName}, ` : 'Hola, ';
-  const reply_draft = top.length > 0
-    ? `${greeting}gracias por tu mensaje. Según lo que mencionas, te recomiendo: `
-      + `${top.map((item) => item.name).join(', ')}. ¿Te preparo una cotización con estos productos?`
-    : `${greeting}gracias por tu mensaje. ¿Podrías darme más detalles del producto que buscas para ayudarte mejor?`;
+  // Never auto-fill the quote in fallback; the rep adds products manually.
+  const rows = [];
   return {
     reply_draft,
     suggested_products,
     quote_draft: {
       rows,
-      note: 'Borrador generado sin IA (coincidencia por palabras clave).',
+      note: hasUsableText
+        ? 'Posibles coincidencias por palabras clave (revisar).'
+        : 'No se pudo interpretar el contenido automáticamente.',
       customer_name: '',
       destination: ''
     }
@@ -391,13 +401,29 @@ const buildSalesSuggestion = async ({ conversationId, messageIds }) => {
     .map((m) => `${m.direction === 'inbound' ? 'Cliente' : 'Vendedor'}: ${m.text}`)
     .join('\n');
 
+  // Did we end up with real content to reason about? If the inbound messages are
+  // only un-interpreted media placeholders (e.g. an image/audio we couldn't read),
+  // we must NOT guess — that produces confident-but-wrong suggestions.
+  const usableInboundText = focusMessages
+    .filter((m) => m.direction === 'inbound')
+    .map((m) => stripMediaPlaceholders(m.text))
+    .join(' ')
+    .trim();
+  const hasUsableText = usableInboundText.length >= 3;
+
   const catalog = await loadProductCatalogRows({ includeInactive: false });
   const catalogBySku = new Map(catalog.map((item) => [item.sku, item]));
   const candidates = scoreCatalogCandidates(inboundText || transcript, catalog, MAX_CANDIDATES);
 
   let suggestion;
   let provider = 'fallback';
-  if (isAiConfigured()) {
+  let uninterpreted = false;
+
+  if (!hasUsableText) {
+    // Nothing we could interpret — be honest instead of guessing.
+    suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates: [], hasUsableText: false });
+    uninterpreted = true;
+  } else if (isAiConfigured()) {
     try {
       const aiResult = await callAiForSales({
         contactName: convo.contactName,
@@ -406,23 +432,23 @@ const buildSalesSuggestion = async ({ conversationId, messageIds }) => {
       });
       suggestion = attachCatalogToSuggestion(aiResult.data, catalogBySku);
       provider = aiResult.provider || 'ai';
-      // If the model produced no usable products, fall back so the rep still
-      // gets keyword-matched suggestions.
+      // If the model produced no usable products, fall back to keyword matches.
       if (suggestion.suggested_products.length === 0 && suggestion.quote_draft.rows.length === 0) {
-        suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates });
+        suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates, hasUsableText: true });
         provider = 'fallback';
       }
     } catch (err) {
       console.error('Sales assistant AI fallback:', err.message || err);
-      suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates });
+      suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates, hasUsableText: true });
       provider = 'fallback';
     }
   } else {
-    suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates });
+    suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates, hasUsableText: true });
   }
 
   return {
     provider,
+    uninterpreted,
     focused,
     focused_count: focused ? focusMessages.length : 0,
     conversation: {
@@ -442,6 +468,7 @@ module.exports = {
   attachCatalogToSuggestion,
   buildFallbackSuggestion,
   buildSalesPrompt,
+  stripMediaPlaceholders,
   audioFilenameForMime,
   enrichMessagesWithMedia,
   loadConversationContext,

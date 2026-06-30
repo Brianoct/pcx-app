@@ -475,7 +475,9 @@ function SalesAssistant({ token, user }) {
               )}
               {suggestion.provider === 'fallback' && (
                 <div className="admin-ai-error" style={{ color: '#92400e', background: 'rgba(251, 191, 36, 0.14)', borderColor: 'rgba(251, 191, 36, 0.5)' }}>
-                  Mostrando sugerencias básicas por ahora. Puedes editar la respuesta y la cotización manualmente.
+                  {suggestion.uninterpreted
+                    ? 'No pude interpretar este mensaje automáticamente (puede ser un audio o imagen que no se pudo leer). Escribe la respuesta y arma la cotización manualmente.'
+                    : 'No pude generar una sugerencia completa. Abajo hay posibles coincidencias por palabras clave para revisar — la respuesta y la cotización quedan a tu criterio.'}
                 </div>
               )}
 
