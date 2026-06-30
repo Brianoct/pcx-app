@@ -17,15 +17,26 @@ const MAX_CANDIDATES = 60;
 const MAX_SUGGESTED = 8;
 // Cap how many media items we transcribe/describe per request (bounds latency/cost).
 const MAX_MEDIA_ENRICH = 4;
+// If the catalog is at or below this size, send the WHOLE catalog to the model
+// (so it can pick the exact product) instead of a keyword-filtered shortlist.
+const MAX_FULL_CATALOG = 400;
 
 const VISION_PROMPT = [
-  'Esta es una imagen enviada por un cliente por WhatsApp.',
-  'Puede ser una foto de nuestro catálogo con uno o más productos marcados/encerrados,',
-  'o una foto de un producto que busca.',
-  'Describe brevemente, en español, qué producto(s) parece querer el cliente.',
-  'Si ves nombres de productos o códigos/SKU impresos (por ejemplo G10N, G05C, M08N),',
-  'transcríbelos EXACTAMENTE. Si algún producto está encerrado o señalado, indícalo.'
-].join(' ');
+  'Esta es una imagen enviada por un cliente por WhatsApp. Analízala con cuidado.',
+  '',
+  'CASO A — Foto de NUESTRO catálogo con uno o más productos marcados/encerrados',
+  '(círculos, flechas o resaltados): para CADA producto marcado, lee y transcribe',
+  'EXACTAMENTE su nombre y su código/SKU impreso (por ejemplo G10N, G05C, M08N, A15N).',
+  'Distingue variantes parecidas (p. ej. "Repisa/Rollo" vs "Repisa Grande") usando el',
+  'nombre y código impresos. Indica claramente cuáles están encerrados.',
+  '',
+  'CASO B — Foto de herramientas o un espacio de trabajo (sin catálogo): nombra las',
+  'herramientas u objetos visibles (martillo, llave, taladro, alicate, amoladora, etc.)',
+  'para poder sugerir accesorios o soportes compatibles.',
+  '',
+  'Responde en español, breve y concreto. No inventes códigos: si no puedes leer un',
+  'código con seguridad, transcribe solo el nombre tal como aparece.'
+].join('\n');
 
 const audioFilenameForMime = (mimeType = '') => {
   const m = String(mimeType || '').toLowerCase();
@@ -238,6 +249,13 @@ const buildSalesPrompt = ({ contactName, transcript, candidates }) => {
     'en español para el cliente, sugiere productos relevantes (solo SKUs de la lista)',
     'y propone filas de cotización con cantidades. NO inventes SKUs ni precios.',
     '',
+    'Identifica el producto EXACTO que coincide con lo que el cliente pide o señaló;',
+    'distingue variantes similares por su nombre/código (p. ej. "Repisa/Rollo" no es',
+    '"Repisa Grande"). Usa el código/SKU impreso cuando esté disponible. Si el cliente',
+    'muestra herramientas en una foto, sugiere los accesorios o soportes compatibles de',
+    'la lista. Si no encuentras una coincidencia exacta, dilo en "notes" en lugar de',
+    'forzar un producto parecido.',
+    '',
     'Si el cliente indica explícitamente a nombre de quién debe ir la cotización,',
     'extrae ese nombre en "customer_name". Si indica una ciudad o departamento de',
     'destino, extrae ese texto en "destination" (tal como lo dijo, p. ej. "Sucre").',
@@ -417,7 +435,12 @@ const buildSalesSuggestion = async ({ conversationId, messageIds }) => {
 
   const catalog = await loadProductCatalogRows({ includeInactive: false });
   const catalogBySku = new Map(catalog.map((item) => [item.sku, item]));
-  const candidates = scoreCatalogCandidates(inboundText || transcript, catalog, MAX_CANDIDATES);
+  // Ranked subset is used for keyword fallback. For the model itself, send the
+  // FULL catalog when it's small enough so it can pick the exact product (e.g.
+  // distinguish "Repisa/Rollo" from "Repisa Grande"); only fall back to the
+  // keyword shortlist for very large catalogs.
+  const rankedCandidates = scoreCatalogCandidates(inboundText || transcript, catalog, MAX_CANDIDATES);
+  const promptCandidates = catalog.length <= MAX_FULL_CATALOG ? catalog : rankedCandidates;
 
   let suggestion;
   let provider = 'fallback';
@@ -432,22 +455,22 @@ const buildSalesSuggestion = async ({ conversationId, messageIds }) => {
       const aiResult = await callAiForSales({
         contactName: convo.contactName,
         transcript,
-        candidates
+        candidates: promptCandidates
       });
       suggestion = attachCatalogToSuggestion(aiResult.data, catalogBySku);
       provider = aiResult.provider || 'ai';
       // If the model produced no usable products, fall back to keyword matches.
       if (suggestion.suggested_products.length === 0 && suggestion.quote_draft.rows.length === 0) {
-        suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates, hasUsableText: true });
+        suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates: rankedCandidates, hasUsableText: true });
         provider = 'fallback';
       }
     } catch (err) {
       console.error('Sales assistant AI fallback:', err.message || err);
-      suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates, hasUsableText: true });
+      suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates: rankedCandidates, hasUsableText: true });
       provider = 'fallback';
     }
   } else {
-    suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates, hasUsableText: true });
+    suggestion = buildFallbackSuggestion({ contactName: convo.contactName, candidates: rankedCandidates, hasUsableText: true });
   }
 
   return {
