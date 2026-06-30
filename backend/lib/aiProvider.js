@@ -181,7 +181,7 @@ const aiVisionDescribe = async ({ base64, mimeType = 'image/jpeg', prompt = '', 
 
 // Single chat-completion entry point used across the app.
 // Returns { content, provider, model }. Throws on missing key or HTTP error.
-const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, maxTokens = 700 }) => {
+const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, maxTokens = 700, json = false }) => {
   const cfg = resolveAiProvider();
   if (!cfg.apiKey) {
     const err = new Error('Proveedor de IA no configurado');
@@ -190,6 +190,11 @@ const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, max
   }
 
   if (cfg.api === 'anthropic') {
+    // Force valid JSON by pre-filling the assistant turn with "{" so Claude must
+    // continue a JSON object (it otherwise tends to add prose around the JSON).
+    const messages = json
+      ? [{ role: 'user', content: user }, { role: 'assistant', content: '{' }]
+      : [{ role: 'user', content: user }];
     const response = await fetch(cfg.url, {
       method: 'POST',
       headers: {
@@ -202,16 +207,18 @@ const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, max
         max_tokens: maxTokens,
         temperature,
         ...(system ? { system } : {}),
-        messages: [{ role: 'user', content: user }]
+        messages
       })
     });
     if (!response.ok) {
-      throw new Error(`${cfg.kind} HTTP ${response.status}`);
+      throw new Error(`${cfg.kind} HTTP ${response.status}: ${await safeErrorText(response)}`);
     }
     const payload = await response.json();
-    const content = Array.isArray(payload?.content)
+    let content = Array.isArray(payload?.content)
       ? payload.content.map((block) => String(block?.text || '')).join('').trim()
       : '';
+    // Re-attach the leading "{" we used to prime the response.
+    if (json && content && !content.startsWith('{')) content = `{${content}`;
     return { content, provider: cfg.kind, model: cfg.model };
   }
 
@@ -226,6 +233,7 @@ const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, max
       model: cfg.model,
       temperature,
       max_tokens: maxTokens,
+      ...(json ? { response_format: { type: 'json_object' } } : {}),
       messages: [
         ...(system ? [{ role: 'system', content: system }] : []),
         { role: 'user', content: user }
@@ -233,7 +241,7 @@ const aiChatCompletion = async ({ system = '', user = '', temperature = 0.3, max
     })
   });
   if (!response.ok) {
-    throw new Error(`${cfg.kind} HTTP ${response.status}`);
+    throw new Error(`${cfg.kind} HTTP ${response.status}: ${await safeErrorText(response)}`);
   }
   const payload = await response.json();
   const content = String(payload?.choices?.[0]?.message?.content || '').trim();
