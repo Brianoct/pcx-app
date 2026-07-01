@@ -54,11 +54,24 @@ const parseCsv = (text) => {
   return rows.filter((r) => r.some((c) => String(c).trim() !== ''));
 };
 
+// Normalize the two known product lines so casing/accents/typos land consistently.
+// Unknown values pass through unchanged (with a warning) to allow future lines.
+const normalizeProductLine = (value) => {
+  const key = String(value || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (key === 'acero') return 'Acero';
+  if (key === 'armonia') return 'Armonia';
+  console.warn(`  product_line "${value}" is not Acero/Armonia — kept as-is`);
+  return String(value).trim();
+};
+
 const buildAttributes = (record) => {
   const attrs = {};
   for (const key of SCALAR_ATTRS) {
     const v = String(record[key] ?? '').trim();
-    if (v) attrs[key] = key === 'long_description' ? v.slice(0, MAX_LONG_DESCRIPTION) : v;
+    if (!v) continue;
+    if (key === 'long_description') attrs[key] = v.slice(0, MAX_LONG_DESCRIPTION);
+    else if (key === 'product_line') attrs[key] = normalizeProductLine(v);
+    else attrs[key] = v;
   }
   for (const key of ARRAY_ATTRS) {
     const v = String(record[key] ?? '').trim();

@@ -40,6 +40,7 @@ active status are always managed in the admin UI, not this CSV.
 | `sku` | match key | Identifies the product. Don't change it. |
 | `name` | context / opt-in | Shown for orientation. Edits are ignored unless you pass `--update-names` on import (the SKU always stays the key). |
 | `menu_category`, `is_active`, `sf_price`, `cf_price` | context only | Shown for orientation; **import ignores edits** to these — manage in the admin UI. |
+| `product_line` | yes | Which line the product belongs to: `Acero` or `Armonia`. Import normalizes casing/accents; other values pass through with a warning. |
 | `color` | yes | Colour (e.g. Negro, Rojo, Cromo). |
 | `size` | yes | Size token (e.g. `61x95`, `Grande`, `5cm`). |
 | `dimensions` | yes | Physical size (e.g. `61 x 95 cm`). |

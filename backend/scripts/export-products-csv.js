@@ -17,9 +17,9 @@ const { pool } = require('../db');
 // Column order of the CSV. Keep in sync with import-products-csv.js.
 const CONTEXT_COLUMNS = ['sku', 'name', 'menu_category', 'is_active', 'sf_price', 'cf_price'];
 const ARRAY_ATTRS = ['works_with', 'compatible_boards'];
-const SCALAR_ATTRS = ['color', 'size', 'dimensions', 'material', 'weight', 'load_capacity', 'variant_group', 'long_description'];
+const SCALAR_ATTRS = ['product_line', 'color', 'size', 'dimensions', 'material', 'weight', 'load_capacity', 'variant_group', 'long_description'];
 // works_with / compatible_boards are arrays serialized as "a; b; c".
-const ATTR_COLUMNS = ['color', 'size', 'dimensions', 'material', 'weight', 'load_capacity', 'works_with', 'compatible_boards', 'variant_group', 'long_description'];
+const ATTR_COLUMNS = ['product_line', 'color', 'size', 'dimensions', 'material', 'weight', 'load_capacity', 'works_with', 'compatible_boards', 'variant_group', 'long_description'];
 const META_COLUMNS = ['status', 'notes'];
 const COLUMNS = [...CONTEXT_COLUMNS, ...ATTR_COLUMNS, ...META_COLUMNS];
 
