@@ -9,10 +9,25 @@ Details live in `products.attributes` (a JSONB column added by
 `migrations/20260701_add_product_attributes.sql`). Nothing here changes prices,
 names, categories, or stock — those stay in the admin UI.
 
-## The loop
+## Easiest: in the admin panel (no terminal)
+
+Admins get **Descargar CSV** and **Elegir CSV para importar** buttons on the
+Product Catalog admin page (once this branch is deployed — the migration runs
+automatically on startup):
+
+1. Click **Descargar CSV** → the full catalog downloads as `products-enrichment.csv`.
+2. Fill it in (Excel / Google Sheets), optionally with help from colleagues.
+3. Click **Elegir CSV para importar** → a **preview** shows what will change
+   (updates / skipped / unknown SKUs) without writing anything.
+4. Tick "Actualizar nombres" / "Copiar descripción larga al menú" if wanted,
+   then click **Aplicar cambios**.
+
+The command-line scripts below do the same thing for local/server use.
+
+## The loop (command line)
 
 ```
-1. Apply the migration            node scripts/migrate.js
+1. Apply the migration            node scripts/migrate.js   (auto-runs on deploy)
 2. Export the live catalog         node scripts/export-products-csv.js
 3. Draft with AI                   (see "AI draft" below) — fills the derivable columns
 4. Verify & fill by hand           open the CSV, correct AI guesses, add real specs
