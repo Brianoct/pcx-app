@@ -3,13 +3,16 @@
 //   node scripts/import-products-csv.js products-enrichment.csv            (DRY RUN — shows changes, writes nothing)
 //   node scripts/import-products-csv.js products-enrichment.csv --commit   (apply)
 //   node scripts/import-products-csv.js products-enrichment.csv --commit --sync-description
+//   node scripts/import-products-csv.js products-enrichment.csv --commit --update-names
 //
 // Safety:
 //   * Dry run by default; nothing is written without --commit.
 //   * Matches rows by SKU. Unknown SKUs are reported and skipped — never created.
 //   * Only the attribute columns are written (merged into the JSONB attributes,
-//     so keys you left blank are preserved). Context columns (name, price,
-//     category, is_active) are IGNORED — manage those in the admin UI.
+//     so keys you left blank are preserved). Price, category, and is_active are
+//     IGNORED — manage those in the admin UI.
+//   * The product NAME is only changed with --update-names (SKU stays the key);
+//     without that flag the name column is context-only.
 //   * --sync-description also copies long_description into the products.description
 //     column (what the customer-facing menu shows). Off by default.
 
@@ -76,8 +79,9 @@ const run = async () => {
   const file = args.find((a) => !a.startsWith('--'));
   const commit = args.includes('--commit');
   const syncDescription = args.includes('--sync-description');
+  const updateNames = args.includes('--update-names');
   if (!file) {
-    console.error('Usage: node scripts/import-products-csv.js <file.csv> [--commit] [--sync-description]');
+    console.error('Usage: node scripts/import-products-csv.js <file.csv> [--commit] [--sync-description] [--update-names]');
     process.exit(1);
   }
 
@@ -107,16 +111,25 @@ const run = async () => {
     if (!sku) continue;
     if (!knownSkus.has(sku)) { unknown.push(sku); continue; }
     const attrs = buildAttributes(record);
-    if (Object.keys(attrs).length === 0) { skipped.push(sku); continue; }
-    updates.push({ sku, attrs });
+    // Renaming is opt-in (--update-names). SKU always stays the key; only the
+    // display name changes. Empty name = leave unchanged.
+    let name = null;
+    if (updateNames) {
+      const raw = String(record.name || '').trim();
+      if (raw && raw.length <= 120) name = raw;
+      else if (raw.length > 120) console.warn(`  ${sku}: name too long (max 120) — skipping rename`);
+    }
+    if (Object.keys(attrs).length === 0 && !name) { skipped.push(sku); continue; }
+    updates.push({ sku, attrs, name });
   }
 
   console.log(`Parsed ${rows.length - 1} data rows: ${updates.length} to update, ${skipped.length} with no attribute values, ${unknown.length} unknown SKUs.`);
   if (unknown.length) console.log(`  Unknown (skipped): ${unknown.join(', ')}`);
 
   for (const u of updates) {
-    const keys = Object.keys(u.attrs);
-    console.log(`  ${u.sku}: ${keys.map((k) => `${k}=${JSON.stringify(u.attrs[k])}`).join(', ')}`);
+    const parts = Object.keys(u.attrs).map((k) => `${k}=${JSON.stringify(u.attrs[k])}`);
+    if (u.name) parts.unshift(`name→${JSON.stringify(u.name)}`);
+    console.log(`  ${u.sku}: ${parts.join(', ')}`);
   }
 
   if (!commit) {
@@ -133,6 +146,12 @@ const run = async () => {
         'UPDATE products SET attributes = attributes || $2::jsonb, last_updated = NOW() WHERE UPPER(sku) = $1',
         [u.sku, JSON.stringify(u.attrs)]
       );
+      if (u.name) {
+        await client.query(
+          'UPDATE products SET name = $2, last_updated = NOW() WHERE UPPER(sku) = $1',
+          [u.sku, u.name]
+        );
+      }
       if (syncDescription && u.attrs.long_description) {
         await client.query(
           'UPDATE products SET description = $2 WHERE UPPER(sku) = $1',

@@ -29,12 +29,17 @@ Add `--sync-description` on import to also copy `long_description` into the
 `description` column (what the public menu shows). Otherwise it stays only in
 `attributes.long_description`.
 
+Add `--update-names` to also rename products from the `name` column (the SKU
+stays the key). Without it, `name` edits are ignored. Prices, category, and
+active status are always managed in the admin UI, not this CSV.
+
 ## Column dictionary
 
 | Column | Editable? | Meaning |
 |---|---|---|
 | `sku` | match key | Identifies the product. Don't change it. |
-| `name`, `menu_category`, `is_active`, `sf_price`, `cf_price` | context only | Shown for orientation; **import ignores edits** to these. |
+| `name` | context / opt-in | Shown for orientation. Edits are ignored unless you pass `--update-names` on import (the SKU always stays the key). |
+| `menu_category`, `is_active`, `sf_price`, `cf_price` | context only | Shown for orientation; **import ignores edits** to these — manage in the admin UI. |
 | `color` | yes | Colour (e.g. Negro, Rojo, Cromo). |
 | `size` | yes | Size token (e.g. `61x95`, `Grande`, `5cm`). |
 | `dimensions` | yes | Physical size (e.g. `61 x 95 cm`). |
