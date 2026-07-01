@@ -4,6 +4,7 @@ const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { PRODUCT_COST_COMPONENT_KEYS, buildProductCostingResponseRow, parseProductCostingPayload } = require('../lib/costing');
 const { PRODUCT_PROCESS_KEYS, buildEquipmentResponseRow, buildMaterialResponseRow, getProductProductionConfig, normalizeEquipmentPayload, normalizeMaterialPayload, normalizeProductProductionConfigPayload, saveProductProductionConfig } = require('../lib/productionResources');
 const { ensureProductCatalogReady, loadProductCatalogRows, normalizeProductPayload, validateProductSku } = require('../lib/products');
+const { exportProductsCsv, importProductsCsv } = require('../lib/productEnrichment');
 const { normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { loadUserContext } = require('../lib/users');
 const { createHttpError, parseOptionalBoolean } = require('../lib/util');
@@ -26,6 +27,54 @@ router.get('/api/product-catalog', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo cargar catálogo de productos' });
+  }
+});
+
+// ─── Product enrichment CSV round-trip (admin) ──────────────────────────────
+// Download the full catalog as an enrichment CSV.
+router.get('/api/product-catalog/export', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await ensureProductCatalogReady();
+    const activeOnly = ['1', 'true', 'si', 'yes'].includes(normalizeText(req.query?.active_only || ''));
+    const { csv } = await exportProductsCsv(pool, { activeOnly });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="products-enrichment.csv"');
+    res.send(csv);
+  } catch (err) {
+    console.error('Product export error:', err);
+    res.status(500).json({ error: 'No se pudo exportar el catálogo' });
+  }
+});
+
+// Import an enriched CSV. Defaults to a dry-run preview; pass commit=true to apply.
+router.post('/api/product-catalog/import', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const csv = typeof req.body?.csv === 'string' ? req.body.csv : '';
+  if (!csv.trim()) {
+    return res.status(400).json({ error: 'Debes enviar el contenido CSV en el campo "csv"' });
+  }
+  if (csv.length > 5 * 1024 * 1024) {
+    return res.status(413).json({ error: 'El CSV es demasiado grande (máx 5MB)' });
+  }
+  const commit = parseOptionalBoolean(req.body?.commit, false);
+  const updateNames = parseOptionalBoolean(req.body?.update_names, false);
+  const syncDescription = parseOptionalBoolean(req.body?.sync_description, false);
+  try {
+    await ensureProductCatalogReady();
+    const result = await importProductsCsv(pool, { text: csv, commit, updateNames, syncDescription });
+    res.json({
+      applied: result.applied,
+      counts: {
+        to_update: result.updates.length,
+        unknown: result.unknown.length,
+        skipped: result.skipped.length
+      },
+      updates: result.updates.map((u) => ({ sku: u.sku, name: u.name, fields: Object.keys(u.attrs) })),
+      unknown: result.unknown,
+      warnings: result.warnings
+    });
+  } catch (err) {
+    console.error('Product import error:', err);
+    res.status(500).json({ error: 'No se pudo importar el CSV' });
   }
 });
 

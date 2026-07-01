@@ -25,6 +25,14 @@ function ProductCatalogAdmin({ token }) {
   const [configModal, setConfigModal] = useState(null);
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
+  // Product enrichment CSV round-trip
+  const [importCsvText, setImportCsvText] = useState('');
+  const [importFileName, setImportFileName] = useState('');
+  const [importPreview, setImportPreview] = useState(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [updateNames, setUpdateNames] = useState(false);
+  const [syncDescription, setSyncDescription] = useState(false);
+  const [enrichMsg, setEnrichMsg] = useState('');
   const visibleProducts = products.filter((row) => Boolean(row.is_active));
   const inactiveProducts = products.filter((row) => !row.is_active);
 
@@ -319,8 +327,136 @@ function ProductCatalogAdmin({ token }) {
     }
   };
 
+  const downloadEnrichmentCsv = async () => {
+    setEnrichMsg('');
+    try {
+      const csv = await apiRequest('/api/product-catalog/export', { token, timeoutMs: 30000 });
+      const blob = new Blob([typeof csv === 'string' ? csv : ''], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'products-enrichment.csv';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setEnrichMsg(`Error al descargar: ${err.message}`);
+    }
+  };
+
+  const previewImport = async (text, useUpdateNames = updateNames) => {
+    setImportBusy(true);
+    setEnrichMsg('');
+    setImportPreview(null);
+    try {
+      const res = await apiRequest('/api/product-catalog/import', {
+        method: 'POST',
+        token,
+        body: { csv: text, commit: false, update_names: useUpdateNames, sync_description: syncDescription },
+        timeoutMs: 30000,
+        retries: 0
+      });
+      setImportPreview(res);
+    } catch (err) {
+      setEnrichMsg(`Error al analizar el CSV: ${err.message}`);
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const onEnrichmentFile = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImportFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '');
+      setImportCsvText(text);
+      previewImport(text);
+    };
+    reader.onerror = () => setEnrichMsg('No se pudo leer el archivo.');
+    reader.readAsText(file);
+  };
+
+  const applyImport = async () => {
+    if (!importCsvText) return;
+    setImportBusy(true);
+    setEnrichMsg('');
+    try {
+      const res = await apiRequest('/api/product-catalog/import', {
+        method: 'POST',
+        token,
+        body: { csv: importCsvText, commit: true, update_names: updateNames, sync_description: syncDescription },
+        timeoutMs: 60000,
+        retries: 0
+      });
+      setImportPreview(res);
+      setEnrichMsg(`Aplicado: ${res.counts.to_update} producto(s) actualizado(s).`);
+      await loadProducts();
+    } catch (err) {
+      setEnrichMsg(`Error al aplicar: ${err.message}`);
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
+      <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px' }}>
+        <h3 style={{ marginBottom: '8px' }}>Detalles de productos (CSV)</h3>
+        <p style={{ color: '#555', fontSize: '0.9em', marginBottom: '12px' }}>
+          Descarga el catálogo completo, completa los detalles (línea, color, medidas, materiales,
+          compatibilidad, etc.) en Excel o Google Sheets, y vuelve a subir el archivo. La vista previa
+          muestra los cambios antes de aplicarlos.
+        </p>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="button" onClick={downloadEnrichmentCsv} disabled={importBusy}>Descargar CSV</button>
+          <label style={{ padding: '8px 12px', background: '#eef2ff', borderRadius: '8px', cursor: 'pointer' }}>
+            Elegir CSV para importar
+            <input type="file" accept=".csv,text/csv" onChange={onEnrichmentFile} style={{ display: 'none' }} />
+          </label>
+          {importFileName && <span style={{ color: '#555', fontSize: '0.85em' }}>{importFileName}</span>}
+        </div>
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '10px', fontSize: '0.9em' }}>
+          <label style={{ cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={updateNames}
+              onChange={(e) => { setUpdateNames(e.target.checked); if (importCsvText) previewImport(importCsvText, e.target.checked); }}
+            />{' '}Actualizar nombres desde el CSV
+          </label>
+          <label style={{ cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={syncDescription}
+              onChange={(e) => setSyncDescription(e.target.checked)}
+            />{' '}Copiar descripción larga al menú
+          </label>
+        </div>
+        {importBusy && <p style={{ color: '#555', marginTop: '10px' }}>Procesando…</p>}
+        {enrichMsg && <p style={{ marginTop: '10px' }}>{enrichMsg}</p>}
+        {importPreview && (
+          <div style={{ marginTop: '10px', fontSize: '0.9em' }}>
+            <p>
+              {importPreview.applied ? '✅ Aplicado. ' : 'Vista previa (sin aplicar). '}
+              {importPreview.counts.to_update} a actualizar · {importPreview.counts.skipped} sin cambios · {importPreview.counts.unknown} SKU desconocidos.
+            </p>
+            {importPreview.unknown?.length > 0 && (
+              <p style={{ color: '#b45309' }}>Desconocidos (omitidos): {importPreview.unknown.join(', ')}</p>
+            )}
+            {(importPreview.warnings || []).map((w, i) => (
+              <p key={`w-${i}`} style={{ color: '#b45309' }}>⚠ {w}</p>
+            ))}
+            {!importPreview.applied && importPreview.counts.to_update > 0 && (
+              <button type="button" onClick={applyImport} disabled={importBusy} style={{ marginTop: '6px' }}>
+                Aplicar {importPreview.counts.to_update} cambio(s)
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px' }}>
         <h3 style={{ marginBottom: '12px' }}>Agregar producto al cotizador</h3>
         <form onSubmit={createProduct} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
