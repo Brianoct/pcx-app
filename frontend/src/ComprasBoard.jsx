@@ -26,21 +26,47 @@ export default function ComprasBoard({ token }) {
   const [addMaterialId, setAddMaterialId] = useState('');
   const [addQty, setAddQty] = useState('');
   const [adding, setAdding] = useState(false);
+  const [productData, setProductData] = useState(null);
+  const [resaleSku, setResaleSku] = useState('');
+  const [resaleBusy, setResaleBusy] = useState(false);
 
   const load = async () => {
     setLoading(true);
     setError('');
     try {
-      const [reqData, matData] = await Promise.all([
+      const [reqData, matData, prodData] = await Promise.all([
         apiRequest('/api/procurement/requests', { token }),
-        apiRequest('/api/procurement/materials', { token }).catch(() => [])
+        apiRequest('/api/procurement/materials', { token }).catch(() => []),
+        apiRequest('/api/procurement/product-suggestions', { token }).catch(() => null)
       ]);
       setRequests(Array.isArray(reqData) ? reqData : []);
       setMaterials(Array.isArray(matData) ? matData : []);
+      setProductData(prodData);
     } catch (err) {
       setError(err.message || 'No se pudo cargar la lista de compras');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const toggleResale = async () => {
+    if (!resaleSku || !productData?.all_products) return;
+    const selected = productData.all_products.find((p) => p.sku === resaleSku);
+    if (!selected) return;
+    setResaleBusy(true);
+    try {
+      const res = await apiRequest(`/api/procurement/resale/${encodeURIComponent(resaleSku)}`, {
+        method: 'POST',
+        token,
+        body: { resale: !selected.is_resale }
+      });
+      toast.success(res?.message || 'Actualizado');
+      setResaleSku('');
+      await load();
+    } catch (err) {
+      toast.error(err.message || 'No se pudo actualizar');
+    } finally {
+      setResaleBusy(false);
     }
   };
 
@@ -178,6 +204,71 @@ export default function ComprasBoard({ token }) {
       </div>
 
       {error && <div className="card" style={{ borderColor: '#ef4444', color: '#b91c1c', marginBottom: 16 }}>{error}</div>}
+
+      {/* Resale products: bought (not produced); suggested when a sede drops below min */}
+      {productData && (productData.suggestions?.length > 0 || productData.all_products) && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+            <div>
+              <h3 style={{ margin: 0 }}>Productos de reventa</h3>
+              <p style={{ color: '#78716c', margin: '4px 0 0', fontSize: '0.84rem' }}>
+                Productos que se compran (no se fabrican). Aparecen cuando una sede baja del mínimo; compra hasta el máximo.
+              </p>
+            </div>
+            {productData.all_products && (
+              <div className="compras-resale-admin">
+                <select
+                  className="filter-select"
+                  value={resaleSku}
+                  onChange={(e) => setResaleSku(e.target.value)}
+                >
+                  <option value="">Marcar producto…</option>
+                  {productData.all_products.map((p) => (
+                    <option key={p.sku} value={p.sku}>
+                      {p.is_resale ? '✓ ' : ''}{p.name} ({p.sku})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={!resaleSku || resaleBusy}
+                  onClick={toggleResale}
+                >
+                  {resaleBusy
+                    ? 'Guardando…'
+                    : productData.all_products.find((p) => p.sku === resaleSku)?.is_resale
+                      ? 'Quitar de reventa'
+                      : 'Marcar como reventa'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {productData.suggestions?.length > 0 ? (
+            <div className="compras-suggestions">
+              {productData.suggestions.map((s) => (
+                <div key={`${s.sku}-${s.store_location}`} className="compras-suggestion">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="compras-card-name">{s.name}</div>
+                    <div className="compras-card-code">{s.sku} · {s.store_location}</div>
+                    <div className="compras-suggestion-levels">
+                      Stock {s.stock} · Mín {s.min_stock}{s.max_stock > 0 ? ` · Máx ${s.max_stock}` : ''}
+                    </div>
+                  </div>
+                  <span className="compras-suggestion-qty">Comprar {s.suggested_qty}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: '#78716c', fontSize: '0.84rem', margin: '12px 0 0' }}>
+              {productData.resale_products?.length > 0
+                ? 'Todos los productos de reventa están sobre su mínimo. ✓'
+                : 'Aún no hay productos marcados como reventa.'}
+            </p>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className="card" style={{ color: '#78716c' }}>Cargando…</div>
