@@ -158,7 +158,14 @@ export default function ProductionKanban({ token }) {
         body: { passed, rejected }
       });
       setQcForm({ passed: '', rejected: '' });
-      setQcMsg(`Registrado: ${res?.passed || passed} aprobadas, ${res?.rejected || rejected} rechazadas.`);
+      const added = Number(res?.stock_added || 0);
+      setQcMsg(
+        added > 0
+          ? `Registrado: ${res?.passed || passed} aprobadas (sumadas al stock de ${res?.store_location || card.store_location}), ${res?.rejected || rejected} rechazadas.`
+          : `Registrado: ${res?.passed || passed} aprobadas, ${res?.rejected || rejected} rechazadas.`
+      );
+      // Stock changed → the card may shrink or clear itself on resync.
+      if (added > 0) await loadBoard();
     } catch (err) {
       setQcMsg(err.message || 'No se pudo registrar el control de calidad.');
     } finally {
@@ -418,6 +425,7 @@ export default function ProductionKanban({ token }) {
             {detailCard.stage === 'embalado' && (
               <div className="prod-qc">
                 <div className="prod-sheet-section-label">Control de calidad</div>
+                <p className="prod-qc-note">Las piezas aprobadas se suman al inventario de {detailCard.store_location}.</p>
                 <div className="prod-qc-fields">
                   <label className="prod-qc-field">
                     <span className="prod-qc-field-label">Aprobadas</span>

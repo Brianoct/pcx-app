@@ -2,7 +2,10 @@ const express = require('express');
 const { pool } = require('../db');
 const { isPgUndefinedTableError } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
-const { canAccessPanel } = require('../lib/rbac');
+const { INVENTORY_CITY_SCOPE } = require('../lib/inventory');
+const { replaceProductProcessSteps } = require('../lib/kanban');
+const { ROLE_KEYS, canAccessPanel, normalizeRole } = require('../lib/rbac');
+const { validateProductSku } = require('../lib/products');
 const { loadUserContext } = require('../lib/users');
 const {
   OPEN_STATUSES,
@@ -280,6 +283,145 @@ router.delete('/api/procurement/requests/:id', authenticateToken, async (req, re
   } catch (err) {
     console.error('Procurement delete error:', err);
     res.status(500).json({ error: 'No se pudo eliminar la solicitud' });
+  }
+});
+
+// ─── Resale products (start_process = 'comprar') ─────────────────────────────
+// These are bought, not produced: when a sede's stock falls below min the
+// product appears here as a purchase suggestion up to the max level, mirroring
+// the production board's (s,S) logic.
+
+router.get('/api/procurement/product-suggestions', authenticateToken, async (req, res) => {
+  const userContext = await ensureComprasAccess(req, res);
+  if (!userContext) return;
+  try {
+    const rowsRes = await pool.query(
+      `SELECT p.sku, p.name,
+              p.stock_cochabamba, p.stock_santacruz, p.stock_lima,
+              p.min_stock_cochabamba, p.min_stock_santacruz, p.min_stock_lima,
+              p.max_stock_cochabamba, p.max_stock_santacruz, p.max_stock_lima
+       FROM products p
+       JOIN production_process_routes r ON UPPER(r.sku) = UPPER(p.sku)
+       WHERE p.is_active = TRUE
+         AND r.start_process = 'comprar'
+       ORDER BY UPPER(p.name)`
+    );
+
+    const resaleProducts = [];
+    const suggestions = [];
+    for (const row of rowsRes.rows || []) {
+      resaleProducts.push({ sku: String(row.sku || '').toUpperCase(), name: row.name });
+      for (const scope of Object.values(INVENTORY_CITY_SCOPE)) {
+        const stock = Math.max(0, Number.parseInt(row[scope.stockField], 10) || 0);
+        const minStock = Math.max(0, Number.parseInt(row[scope.minField], 10) || 0);
+        const maxStock = Math.max(0, Number.parseInt(row[scope.maxField], 10) || 0);
+        const target = Math.max(minStock, maxStock);
+        if (minStock <= 0 || stock >= minStock) continue;
+        suggestions.push({
+          sku: String(row.sku || '').toUpperCase(),
+          name: row.name,
+          store_location: scope.canonical,
+          stock,
+          min_stock: minStock,
+          max_stock: maxStock,
+          suggested_qty: Math.max(0, target - stock)
+        });
+      }
+    }
+
+    const payload = { suggestions, resale_products: resaleProducts };
+
+    // Admins also get the full product list so they can mark/unmark resale.
+    if (normalizeRole(userContext.role || '') === ROLE_KEYS.admin) {
+      const allRes = await pool.query(
+        `SELECT p.sku, p.name, COALESCE(r.start_process, '') AS start_process
+         FROM products p
+         LEFT JOIN production_process_routes r ON UPPER(r.sku) = UPPER(p.sku)
+         WHERE p.is_active = TRUE
+         ORDER BY UPPER(p.name)`
+      );
+      payload.all_products = allRes.rows.map((row) => ({
+        sku: String(row.sku || '').toUpperCase(),
+        name: row.name,
+        is_resale: row.start_process === 'comprar'
+      }));
+    }
+
+    res.json(payload);
+  } catch (err) {
+    console.error('Product suggestions error:', err);
+    res.status(500).json({ error: 'No se pudieron cargar sugerencias de compra' });
+  }
+});
+
+// Mark / unmark a product as resale (admin). Resale products leave the
+// production board (steps removed, active cards deactivated); unmarking
+// regenerates a standard production route.
+router.post('/api/procurement/resale/:sku', authenticateToken, async (req, res) => {
+  const userContext = await ensureComprasAccess(req, res);
+  if (!userContext) return;
+  if (normalizeRole(userContext.role || '') !== ROLE_KEYS.admin) {
+    return res.status(403).json({ error: 'Solo admin puede cambiar el tipo de producto' });
+  }
+  try {
+    const sku = validateProductSku(req.params.sku);
+    const makeResale = req.body?.resale !== false;
+
+    const productRes = await pool.query(
+      'SELECT sku FROM products WHERE UPPER(sku) = $1 AND is_active = TRUE',
+      [sku]
+    );
+    if (productRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Producto no encontrado o inactivo' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      if (makeResale) {
+        await client.query(
+          `INSERT INTO production_process_routes (sku, start_process, updated_by, updated_at)
+           VALUES ($1, 'comprar', $2, NOW())
+           ON CONFLICT (sku) DO UPDATE
+           SET start_process = 'comprar', updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+          [sku, req.user.id]
+        );
+        await client.query('DELETE FROM product_process_steps WHERE UPPER(sku) = $1', [sku]);
+        await client.query(
+          `UPDATE production_kanban_cards
+           SET is_active = FALSE, updated_at = NOW()
+           WHERE UPPER(sku) = $1 AND source = 'min_stock' AND is_active = TRUE`,
+          [sku]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO production_process_routes (sku, start_process, updated_by, updated_at)
+           VALUES ($1, 'corte_laser', $2, NOW())
+           ON CONFLICT (sku) DO UPDATE
+           SET start_process = 'corte_laser', updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+          [sku, req.user.id]
+        );
+        await replaceProductProcessSteps(client, sku, 'corte_laser');
+      }
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+
+    res.json({
+      message: makeResale
+        ? 'Producto marcado como reventa (se compra, no se fabrica)'
+        : 'Producto devuelto a producción (ruta corte láser; ajústala en Estructura)',
+      sku,
+      is_resale: makeResale
+    });
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error('Resale toggle error:', err);
+    res.status(500).json({ error: 'No se pudo actualizar el tipo de producto' });
   }
 });
 

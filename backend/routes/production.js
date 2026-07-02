@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
-const { getProductionKanbanAccessScope } = require('../lib/inventory');
+const { getProductionKanbanAccessScope, resolveInventoryScopeByCity } = require('../lib/inventory');
 const { PRODUCTION_KANBAN_STAGES, getRouteStagesForSku, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, replaceProductProcessSteps, syncProductionKanbanFromInventory } = require('../lib/kanban');
 const { validateProductSku } = require('../lib/products');
 const { getProductStructure, loadProductionSettings, saveProductStructure, saveProductionSettings } = require('../lib/productStructure');
@@ -150,7 +150,7 @@ router.post('/api/production/kanban/cards/:id/qc', authenticateToken, requireRol
     }
 
     const cardRes = await pool.query(
-      `SELECT id, sku, product_name
+      `SELECT id, sku, product_name, store_location
        FROM production_kanban_cards
        WHERE id = $1
          AND is_active = TRUE
@@ -165,6 +165,8 @@ router.post('/api/production/kanban/cards/:id/qc', authenticateToken, requireRol
     const productName = String(card.product_name || sku).trim() || sku;
 
     await ensureQcProductSettingsSeeded();
+    const stockScope = resolveInventoryScopeByCity(card.store_location);
+    let newStock = null;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -177,6 +179,20 @@ router.post('/api/production/kanban/cards/:id/qc', authenticateToken, requireRol
            VALUES ($1, $2, $3, $4, $5)`,
           [req.user.id, sku, productName, quantity, result]
         );
+      }
+      // Close the loop: approved pieces are finished goods — add them to the
+      // card's sede stock. The (s,S) sync then shrinks/clears the card on its
+      // own once stock reaches the replenishment target.
+      if (passed > 0 && stockScope) {
+        const stockRes = await client.query(
+          `UPDATE products
+           SET ${stockScope.stockField} = ${stockScope.stockField} + $2,
+               last_updated = NOW()
+           WHERE UPPER(sku) = $1
+           RETURNING ${stockScope.stockField} AS new_stock`,
+          [sku, passed]
+        );
+        newStock = stockRes.rows[0] ? Number(stockRes.rows[0].new_stock) : null;
       }
       await client.query('COMMIT');
     } catch (err) {
@@ -191,7 +207,10 @@ router.post('/api/production/kanban/cards/:id/qc', authenticateToken, requireRol
       sku,
       product_name: productName,
       passed,
-      rejected
+      rejected,
+      stock_added: passed > 0 && stockScope ? passed : 0,
+      store_location: card.store_location,
+      new_stock: newStock
     });
   } catch (err) {
     console.error(err);
