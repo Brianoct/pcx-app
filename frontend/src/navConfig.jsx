@@ -13,7 +13,6 @@ const PedidosPanel = lazy(() => import('./PedidosPanel'));
 const Combos = lazy(() => import('./Combos'));
 const Cupones = lazy(() => import('./Cupones'));
 const Calendar = lazy(() => import('./Calendar'));
-const MicrofabricaPanel = lazy(() => import('./MicrofabricaPanel'));
 const ProductionKanban = lazy(() => import('./ProductionKanban'));
 const ExpensesPanel = lazy(() => import('./ExpensesPanel'));
 const ProjectsPanel = lazy(() => import('./ProjectsPanel'));
@@ -26,7 +25,7 @@ const ComprasBoard = lazy(() => import('./ComprasBoard'));
  * - `routeAccess`: panel keys (any-of) required to visit the route. `null` = any logged-in user.
  * - `navAccess`: panel keys (any-of) required to SHOW the item in navigation.
  *   Defaults to `routeAccess`. Some routes are reachable by admins as a fallback
- *   without being advertised in their menus (e.g. Microfábrica).
+ *   without being advertised in their menus.
  * - `render(ctx)`: builds the page element. `ctx` carries session data and callbacks.
  *
  * The array order is the display order of the non-admin nav (first 7 visible,
@@ -82,15 +81,8 @@ export const NAV_ITEMS = [
     render: (ctx) => <ExpensesPanel token={ctx.token} user={ctx.user} role={ctx.role} />
   },
   {
-    path: '/microfabrica',
-    label: 'Microfábrica',
-    routeAccess: ['microfabrica_panel', 'admin'],
-    navAccess: ['microfabrica_panel'],
-    render: (ctx) => <MicrofabricaPanel token={ctx.token} />
-  },
-  {
     path: '/produccion-kanban',
-    label: 'Producción Kanban',
+    label: 'Kanban',
     routeAccess: ['produccion_kanban', 'admin'],
     navAccess: ['produccion_kanban'],
     render: (ctx) => <ProductionKanban token={ctx.token} />
@@ -145,7 +137,7 @@ const SIDEBAR_SECTIONS = [
   { key: 'principal', label: 'Principal', paths: ['/', '/calendario'] },
   { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/history'] },
   { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/comprar'] },
-  { key: 'produccion', label: 'Producción', paths: ['/microfabrica', '/produccion-kanban'] },
+  { key: 'produccion', label: 'Producción', paths: ['/produccion-kanban'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/proyectos'] },
   { key: 'marketing', label: 'Marketing', paths: ['/combos', '/cupones'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
