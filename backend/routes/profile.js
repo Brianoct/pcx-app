@@ -1,11 +1,42 @@
+const crypto = require('crypto');
 const express = require('express');
 const bcrypt = require('bcrypt');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
-const { deleteEmployeeAsset, saveEmployeeAsset } = require('../lib/employeeAssets');
 const { buildUserPayload, loadUserContext, normalizeDisplayName } = require('../lib/users');
 
 const router = express.Router();
+
+// Avatar / payment-QR images live in the DB (user_assets) — the server disk is
+// ephemeral on Render, so files stored there vanish on every deploy.
+const ASSET_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+
+const decodeImageDataUrl = (dataUrl) => {
+  const match = String(dataUrl || '').match(/^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i);
+  if (!match) {
+    const err = new Error('Formato de imagen inválido. Usa JPG, PNG o WEBP.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const mime = String(match[1] || '').toLowerCase();
+  if (!ASSET_MIMES.has(mime)) {
+    const err = new Error('Formato no soportado. Usa JPG, PNG o WEBP.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const buffer = Buffer.from(String(match[2] || '').replace(/\s+/g, ''), 'base64');
+  if (!buffer || buffer.length === 0) {
+    const err = new Error('Imagen vacía.');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (buffer.length > 5 * 1024 * 1024) {
+    const err = new Error('La imagen supera 5MB. Usa una imagen más liviana.');
+    err.statusCode = 400;
+    throw err;
+  }
+  return { mime: mime === 'image/jpg' ? 'image/jpeg' : mime, buffer };
+};
 
 // Trim a free-text field to null-or-capped-string. Returns undefined when the
 // caller didn't send the key (so we leave the column untouched).
@@ -107,21 +138,31 @@ router.post('/api/me/asset', authenticateToken, async (req, res) => {
   const column = kind === 'qr' ? 'payment_qr_url' : 'avatar_url';
 
   try {
-    const currentUser = await loadUserContext(req.user.id);
-    if (!currentUser) return res.status(404).json({ error: 'Usuario no encontrado' });
-    const previousPath = currentUser[column];
-
-    let nextPath = null;
-    if (!req.body?.clear) {
-      nextPath = await saveEmployeeAsset({ dataUrl: req.body?.data_url, kind, userId: req.user.id });
-    }
-
-    await pool.query(`UPDATE users SET ${column} = $1 WHERE id = $2`, [nextPath, req.user.id]);
-    if (previousPath && previousPath !== nextPath) {
-      await deleteEmployeeAsset(previousPath);
+    if (req.body?.clear) {
+      await pool.query('DELETE FROM user_assets WHERE user_id = $1 AND kind = $2', [req.user.id, kind]);
+      await pool.query(`UPDATE users SET ${column} = NULL WHERE id = $1`, [req.user.id]);
+    } else {
+      const { mime, buffer } = decodeImageDataUrl(req.body?.data_url);
+      // New token per upload: unguessable URL + automatic cache busting.
+      const accessToken = crypto.randomBytes(16).toString('hex');
+      await pool.query(
+        `INSERT INTO user_assets (user_id, kind, mime, data, access_token, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT (user_id, kind) DO UPDATE
+         SET mime = EXCLUDED.mime,
+             data = EXCLUDED.data,
+             access_token = EXCLUDED.access_token,
+             updated_at = NOW()`,
+        [req.user.id, kind, mime, buffer, accessToken]
+      );
+      await pool.query(
+        `UPDATE users SET ${column} = $1 WHERE id = $2`,
+        [`/api/user-assets/${req.user.id}/${kind}/${accessToken}`, req.user.id]
+      );
     }
 
     const fresh = await loadUserContext(req.user.id);
+    if (!fresh) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json({
       message: req.body?.clear ? 'Imagen eliminada' : 'Imagen actualizada',
       user: buildUserPayload(fresh)
@@ -130,6 +171,34 @@ router.post('/api/me/asset', authenticateToken, async (req, res) => {
     if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
     console.error(err);
     res.status(500).json({ error: 'No se pudo actualizar la imagen' });
+  }
+});
+
+// Serve a stored image. No auth middleware: <img> tags can't send JWT headers,
+// so access control is the unguessable per-upload token in the URL (it rotates
+// on every re-upload). Immutable caching is safe for the same reason.
+router.get('/api/user-assets/:userId/:kind/:token', async (req, res) => {
+  try {
+    const userId = Number.parseInt(req.params.userId, 10);
+    const kind = req.params.kind === 'qr' ? 'qr' : req.params.kind === 'avatar' ? 'avatar' : null;
+    const token = String(req.params.token || '');
+    if (!Number.isInteger(userId) || userId <= 0 || !kind || !/^[a-f0-9]{32}$/.test(token)) {
+      return res.status(404).end();
+    }
+    const result = await pool.query(
+      'SELECT mime, data, access_token FROM user_assets WHERE user_id = $1 AND kind = $2',
+      [userId, kind]
+    );
+    const row = result.rows[0];
+    if (!row || !crypto.timingSafeEqual(Buffer.from(String(row.access_token)), Buffer.from(token))) {
+      return res.status(404).end();
+    }
+    res.set('Content-Type', row.mime);
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    res.send(row.data);
+  } catch (err) {
+    console.error(err);
+    res.status(404).end();
   }
 });
 

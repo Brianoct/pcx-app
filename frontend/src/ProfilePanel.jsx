@@ -25,6 +25,38 @@ const fileToDataUrl = (file) => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
+// Downscale in the browser before uploading: a phone photo of 4–8MB becomes
+// tens of KB, which is what lets us store these images in the database.
+const downscaleImage = (file, { maxDim, mimeType, quality }) => new Promise((resolve, reject) => {
+  const objectUrl = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(objectUrl);
+    try {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (mimeType === 'image/jpeg') {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL(mimeType, quality));
+    } catch (err) {
+      reject(err);
+    }
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(objectUrl);
+    reject(new Error('No se pudo procesar la imagen'));
+  };
+  img.src = objectUrl;
+});
+
 const MONTHS = [
   ['01', 'enero'], ['02', 'febrero'], ['03', 'marzo'], ['04', 'abril'],
   ['05', 'mayo'], ['06', 'junio'], ['07', 'julio'], ['08', 'agosto'],
@@ -145,7 +177,16 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
     }
     setUploading(kind);
     try {
-      const dataUrl = await fileToDataUrl(file);
+      // Avatars compress well as JPEG; QRs stay PNG so the modules keep sharp
+      // edges and remain scannable.
+      let dataUrl;
+      try {
+        dataUrl = kind === 'qr'
+          ? await downscaleImage(file, { maxDim: 1000, mimeType: 'image/png' })
+          : await downscaleImage(file, { maxDim: 640, mimeType: 'image/jpeg', quality: 0.85 });
+      } catch {
+        dataUrl = await fileToDataUrl(file);
+      }
       const data = await apiRequest('/api/me/asset', {
         method: 'POST',
         token,
