@@ -32,7 +32,9 @@ function ProductStructureAdmin({ token }) {
   const [equipment, setEquipment] = useState([]);
   const [materialsCatalog, setMaterialsCatalog] = useState([]);
   const [laborRate, setLaborRate] = useState('0');
+  const [samplingRate, setSamplingRate] = useState('25');
   const [savingRate, setSavingRate] = useState(false);
+  const [variance, setVariance] = useState(null);
   const [search, setSearch] = useState('');
   const [selectedSku, setSelectedSku] = useState('');
   const [structure, setStructure] = useState(null); // { steps, materials, costing, name }
@@ -45,17 +47,20 @@ function ProductStructureAdmin({ token }) {
     let active = true;
     (async () => {
       try {
-        const [costingRows, equipos, materiales, settings] = await Promise.all([
+        const [costingRows, equipos, materiales, settings, varianceData] = await Promise.all([
           apiRequest('/api/product-costing', { token }),
           apiRequest('/api/admin/equipos', { token }),
           apiRequest('/api/admin/materiales', { token }),
-          apiRequest('/api/production/settings', { token })
+          apiRequest('/api/production/settings', { token }),
+          apiRequest('/api/production/variance', { token }).catch(() => null)
         ]);
         if (!active) return;
         setProducts((Array.isArray(costingRows) ? costingRows : []).map((r) => ({ sku: r.sku, name: r.name })));
         setEquipment(Array.isArray(equipos) ? equipos : []);
         setMaterialsCatalog(Array.isArray(materiales) ? materiales : []);
         setLaborRate(String(settings?.labor_rate_bs_hour ?? 0));
+        setSamplingRate(String(settings?.sampling_rate_pct ?? 25));
+        setVariance(varianceData);
       } catch (err) {
         if (active) setError(err.message || 'No se pudieron cargar catálogos');
       } finally {
@@ -109,12 +114,16 @@ function ProductStructureAdmin({ token }) {
       const data = await apiRequest('/api/production/settings', {
         method: 'PATCH',
         token,
-        body: { labor_rate_bs_hour: Number(laborRate) || 0 }
+        body: {
+          labor_rate_bs_hour: Number(laborRate) || 0,
+          sampling_rate_pct: Number.parseInt(samplingRate, 10) || 0
+        }
       });
       setLaborRate(String(data?.labor_rate_bs_hour ?? laborRate));
-      toast.success('Tarifa de mano de obra guardada');
+      setSamplingRate(String(data?.sampling_rate_pct ?? samplingRate));
+      toast.success('Configuración de producción guardada');
     } catch (err) {
-      toast.error('Error: ' + (err.message || 'No se pudo guardar la tarifa'));
+      toast.error('Error: ' + (err.message || 'No se pudo guardar la configuración'));
     } finally {
       setSavingRate(false);
     }
@@ -259,8 +268,18 @@ function ProductStructureAdmin({ token }) {
               onChange={(e) => setLaborRate(e.target.value)}
             />
           </label>
+          <label className="est-rate-label" title="Probabilidad de pedir una medición real al entrar a una etapa que consume material">
+            Muestreo (%)
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={samplingRate}
+              onChange={(e) => setSamplingRate(e.target.value)}
+            />
+          </label>
           <button type="button" className="btn btn-secondary" onClick={saveRate} disabled={savingRate}>
-            {savingRate ? 'Guardando…' : 'Guardar tarifa'}
+            {savingRate ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
       </div>
@@ -450,6 +469,78 @@ function ProductStructureAdmin({ token }) {
           )}
         </div>
       </div>
+
+      {/* Real vs standard, from operator samples and the movement log */}
+      {variance && (variance.materials?.length > 0 || variance.times?.length > 0) && (
+        <div className="card">
+          <h4 className="est-section-title" style={{ marginBottom: '4px' }}>Mediciones reales vs estándar</h4>
+          <p style={{ color: '#78716c', fontSize: '0.82rem', margin: '0 0 12px' }}>
+            Consumo registrado por operadores (muestreo aleatorio) y tiempos observados en el tablero, comparados con los valores estándar.
+          </p>
+
+          {variance.materials?.length > 0 && (
+            <div style={{ overflowX: 'auto', marginBottom: variance.times?.length > 0 ? '16px' : 0 }}>
+              <table className="table est-variance-table">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Material</th>
+                    <th style={{ textAlign: 'right' }}>Estándar/pza</th>
+                    <th style={{ textAlign: 'right' }}>Real/pza</th>
+                    <th style={{ textAlign: 'right' }}>Muestras</th>
+                    <th style={{ textAlign: 'right' }}>Δ%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {variance.materials.map((row) => (
+                    <tr key={`${row.sku}-${row.material_id}`}>
+                      <td>{row.sku}</td>
+                      <td>{row.name}</td>
+                      <td style={{ textAlign: 'right' }}>{row.std_qty_per_piece !== null ? `${row.std_qty_per_piece} ${row.unit_measure}` : '—'}</td>
+                      <td style={{ textAlign: 'right' }}>{row.avg_qty_per_piece !== null ? `${row.avg_qty_per_piece} ${row.unit_measure}` : '—'}</td>
+                      <td style={{ textAlign: 'right' }}>{row.samples}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: row.delta_pct === null ? '#78716c' : Math.abs(row.delta_pct) <= 10 ? '#047857' : '#b45309' }}>
+                        {row.delta_pct !== null ? `${row.delta_pct > 0 ? '+' : ''}${row.delta_pct}%` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {variance.times?.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table est-variance-table">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Proceso</th>
+                    <th style={{ textAlign: 'right' }}>Estándar (min)</th>
+                    <th style={{ textAlign: 'right' }}>Real prom. (min)</th>
+                    <th style={{ textAlign: 'right' }}>Observaciones</th>
+                    <th style={{ textAlign: 'right' }}>Δ%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {variance.times.map((row) => (
+                    <tr key={`${row.sku}-${row.process}`}>
+                      <td>{row.sku}</td>
+                      <td>{PROCESS_LABEL[row.process] || row.process}</td>
+                      <td style={{ textAlign: 'right' }}>{row.std_minutes !== null ? row.std_minutes : '—'}</td>
+                      <td style={{ textAlign: 'right' }}>{row.avg_minutes !== null ? row.avg_minutes : '—'}</td>
+                      <td style={{ textAlign: 'right' }}>{row.observed}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: row.delta_pct === null ? '#78716c' : Math.abs(row.delta_pct) <= 15 ? '#047857' : '#b45309' }}>
+                        {row.delta_pct !== null ? `${row.delta_pct > 0 ? '+' : ''}${row.delta_pct}%` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
