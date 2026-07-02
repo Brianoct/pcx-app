@@ -1,95 +1,86 @@
 # Product enrichment (CSV round-trip)
 
-A repeatable way to add rich detail to every product — colour, size, dimensions,
-material, physical specs, the tools/items each accessory holds, accessory→board
-compatibility, and a customer-facing description — using a spreadsheet plus AI to
-do the first draft.
+A repeatable way to add rich detail to every product — línea, color, medidas,
+material, capacidad, presentación (docena / media docena), usos, compatibilidad
+y descripciones — using a spreadsheet plus AI for first drafts. All content in
+Spanish.
 
-Details live in `products.attributes` (a JSONB column added by
-`migrations/20260701_add_product_attributes.sql`). Nothing here changes prices,
-names, categories, or stock — those stay in the admin UI.
+Details live in `products.attributes` (JSONB). Prices, categoría del menú,
+activo/inactivo and stock stay in the admin UI — the CSV never changes them.
+
+## Who each field serves
+
+| Audience | What they need | Fields that serve it |
+|---|---|---|
+| **AI (Ventas IA)** | Accurate facts to match customer requests & photos | all attributes — they are injected into the sales-AI prompt (compact form) |
+| **Customer** | Quote lines that identify the product | `name` (already carries color + presentación), `long_description` on the menu |
+| **Sales** | Recognize the product instantly when quoting | naming convention `Tipo + tamaño + color + (presentación)` + SKU |
+| **Admin** | Material & process costing | `material`, `weight`, `unidades_por_lote` (costs per lot = per-piece × lote); process costing lives in "Configurar producción" per SKU |
 
 ## Easiest: in the admin panel (no terminal)
 
 Admins get **Descargar CSV** and **Elegir CSV para importar** buttons on the
-Product Catalog admin page (once this branch is deployed — the migration runs
-automatically on startup):
+Product Catalog admin page:
 
-1. Click **Descargar CSV** → the full catalog downloads as `products-enrichment.csv`.
-2. Fill it in (Excel / Google Sheets), optionally with help from colleagues.
-3. Click **Elegir CSV para importar** → a **preview** shows what will change
-   (updates / skipped / unknown SKUs) without writing anything.
+1. **Descargar CSV** → the full catalog downloads with all columns.
+2. Fill it in (Excel / Google Sheets), with colleagues if you like.
+3. **Elegir CSV para importar** → a **preview** shows updates / skipped /
+   unknown SKUs / duplicates / warnings — nothing is written yet.
 4. Tick "Actualizar nombres" / "Copiar descripción larga al menú" if wanted,
-   then click **Aplicar cambios**.
+   then **Aplicar cambios**.
 
-The command-line scripts below do the same thing for local/server use.
-
-## The loop (command line)
-
-```
-1. Apply the migration            node scripts/migrate.js   (auto-runs on deploy)
-2. Export the live catalog         node scripts/export-products-csv.js
-3. Draft with AI                   (see "AI draft" below) — fills the derivable columns
-4. Verify & fill by hand           open the CSV, correct AI guesses, add real specs
-5. Import (dry run first)          node scripts/import-products-csv.js products-enrichment.csv
-6. Import for real                 node scripts/import-products-csv.js products-enrichment.csv --commit
-```
-
-Step 5 prints exactly what would change and writes nothing. Only `--commit`
-writes. Rows are matched by **SKU**; unknown SKUs are reported and skipped, never
-created. Blank cells are left unchanged (merge, not overwrite), so you can enrich
-in passes.
-
-Add `--sync-description` on import to also copy `long_description` into the
-`description` column (what the public menu shows). Otherwise it stays only in
-`attributes.long_description`.
-
-Add `--update-names` to also rename products from the `name` column (the SKU
-stays the key). Without it, `name` edits are ignored. Prices, category, and
-active status are always managed in the admin UI, not this CSV.
+The CLI scripts (`scripts/export-products-csv.js`, `scripts/import-products-csv.js`)
+do the same thing for local/server use. Migrations run automatically on deploy.
 
 ## Column dictionary
 
 | Column | Editable? | Meaning |
 |---|---|---|
-| `sku` | match key | Identifies the product. Don't change it. |
-| `name` | context / opt-in | Shown for orientation. Edits are ignored unless you pass `--update-names` on import (the SKU always stays the key). |
-| `menu_category`, `is_active`, `sf_price`, `cf_price` | context only | Shown for orientation; **import ignores edits** to these — manage in the admin UI. |
-| `product_line` | yes | Which line the product belongs to: `Acero` or `Armonia`. Import normalizes casing/accents; other values pass through with a warning. |
-| `color` | yes | Colour (e.g. Negro, Rojo, Cromo). |
-| `size` | yes | Size token (e.g. `61x95`, `Grande`, `5cm`). |
-| `dimensions` | yes | Physical size (e.g. `61 x 95 cm`). |
-| `material` | yes | e.g. `Acero`, `PVC`. AI can't know this — you fill it. |
-| `weight` | yes | e.g. `1.2 kg`. You fill it. |
-| `load_capacity` | yes | Max load an accessory holds, e.g. `5 kg`. You fill it. |
-| `works_with` | yes | Tools/items an accessory holds. `;`-separated, e.g. `Desarmadores; Llaves`. |
-| `compatible_boards` | yes | Board SKUs an accessory fits. `;`-separated, e.g. `T6195N; T9495N`. Varies by board — you confirm. |
-| `variant_group` | yes | Groups variants: boards by size (`T6195`), accessories by family (`Repisa`). |
-| `long_description` | yes | Customer-facing description. |
-| `status` | yes | `AI-draft` or `VERIFIED` — your workflow marker. |
-| `notes` | yes | Anything (e.g. "confirm compatibility"). |
+| `sku` | match key | Identifies the product. Never changed by import. |
+| `name` | opt-in | Context; edits apply only with `--update-names` / "Actualizar nombres". Convention: `Tipo + tamaño + color + (presentación)` — this is what sales and customers see on quotes. |
+| `category` | context | `Tablero` / `Accesorio` (orientation only; the app's menu category is managed in the admin UI). |
+| `is_active`, `sf_price`, `cf_price` | context | Never imported. **Prices are per presentación** (a dozen = one sellable unit). |
+| `product_line` | yes | `Acero` (trabajo pesado) or `Armonia` (trabajo liviano). Normalized on import. |
+| `color` | yes | Negro, Blanco, Rojo, Cromo… |
+| `size` | yes | Physical size token: `5cm`, `Grande`, `47x64`, `J`. (Not the lot quantity — see `unidades_por_lote`.) |
+| `dimensions` | yes | Real measurements, e.g. `47 x 64 cm`. |
+| `material` | yes | `Acero al carbono`, `Plástico`, `Acero cromado`… |
+| `weight` | yes | e.g. `1.2 kg`. |
+| `load_capacity` | yes | Max load in weight, e.g. `5 kg`. |
+| `capacidad` | yes | How many items a holder holds, e.g. `10 desarmadores`, `8 llaves`. |
+| `unidades_por_lote` | yes | Pieces per sellable unit: `12` (docena), `6` (media docena), `1`. |
+| `presentacion` | yes | Label people see: `Docena`, `Media docena`, `Unidad`. |
+| `works_with` | yes | What it holds / is used for. Separate with `;` (or one per line). |
+| `compatible` | yes | SKUs it works with, either direction (accessory → boards, board → accessories). `;`- or newline-separated. Import warns if A lists B but B doesn't list A back, and if a referenced SKU doesn't exist. |
+| `variant_group` | yes | Groups color/size variants, e.g. `Tablero 61x95`, `Gancho 5cm Armonia`. |
+| `long_description` | yes | One-two sentence product description (customer-facing with `--sync-description`). |
+| `ambientes` | yes | Environments / use contexts (line-level text is fine). |
+| `status`, `notes` | yes | Workflow markers (`REVISAR`, `VERIFIED`) and free notes. |
 
-`works_with` and `compatible_boards` are stored as JSON arrays; everything else as
-strings. To query later, e.g. "accessories that fit board T6195N":
-`SELECT sku, name FROM products WHERE attributes->'compatible_boards' ? 'T6195N';`
+Legacy headers are accepted on import: `menu_category`→`category`,
+`compatible_boards`/`compatible_con`→`compatible`, `lote`→`unidades_por_lote`,
+`notas`→`notes`.
 
-## AI draft
+## Import safety
 
-The catalog is small and regular, so AI can reliably fill the **derivable**
-columns from the SKU + name: `color`, `size`, `variant_group`, a `works_with`
-guess for accessories, and a `long_description` draft. It **cannot** know real
-specs — `material`, `weight`, `load_capacity`, exact `dimensions`, and true
-`compatible_boards` must be verified by you.
+Dry-run preview by default; SKU-matched; unknown SKUs skipped (never created);
+blank cells preserve existing values (merge); duplicate SKUs in the file — only
+the first row applies, with a warning; rows without SKU are reported and
+skipped; `compatible` references and symmetry are validated with warnings.
 
-Prompt to run against the AI provider (or paste the exported CSV to Claude):
+Example queries once loaded:
 
-> You are enriching a Spanish-language pegboard product catalog (Tableros =
-> perforated boards; Accesorios = holders that clip onto them). For each row,
-> fill ONLY these columns from the SKU and name: color, size, variant_group,
-> works_with (tools an accessory holds, `;`-separated), long_description (one
-> clean Spanish sentence). Leave material, weight, load_capacity, dimensions,
-> and compatible_boards blank — I will verify those. Set status=AI-draft. Return
-> the same CSV columns. Do not invent specs you can't derive from the name.
+```sql
+-- accessories that fit board T6195N
+SELECT sku, name FROM products WHERE attributes->'compatible' ? 'T6195N';
+-- everything in the Armonia line
+SELECT sku, name FROM products WHERE attributes->>'product_line' = 'Armonia';
+```
 
-Then verify every row, fill the spec/compatibility columns, set `status=VERIFIED`,
-and import.
+## How the AI uses this
+
+`lib/salesAssistant.js` injects a compact attribute summary per product into the
+Ventas IA prompt (línea, presentación/lote, capacidad, compatible, first uses),
+and instructs the model that prices are per presentación and to respect
+compatibility when recommending. Keep `works_with` honest and `compatible`
+complete — that is what the model reasons over.

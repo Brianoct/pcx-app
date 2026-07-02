@@ -97,7 +97,7 @@ const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
   await ensureProductCatalogReady();
   const whereClause = includeInactive ? '' : 'WHERE is_active = TRUE';
   const result = await pool.query(
-    `SELECT sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url
+    `SELECT sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, attributes
      FROM products
      ${whereClause}
      ORDER BY UPPER(name) ASC, UPPER(sku) ASC`
@@ -111,7 +111,8 @@ const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
     is_active: Boolean(row.is_active),
     is_gift_eligible: Boolean(row.is_gift_eligible),
     menu_category: String(row.menu_category || '').trim() || null,
-    image_url: String(row.image_url || '').trim() || null
+    image_url: String(row.image_url || '').trim() || null,
+    attributes: row.attributes && typeof row.attributes === 'object' ? row.attributes : {}
   }));
   if (!includeInactive) {
     syncProductCatalogBySkuFromRows(rows);
