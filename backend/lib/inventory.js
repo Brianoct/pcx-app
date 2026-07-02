@@ -5,18 +5,21 @@ const INVENTORY_CITY_SCOPE = {
     canonical: 'Cochabamba',
     stockField: 'stock_cochabamba',
     minField: 'min_stock_cochabamba',
+    maxField: 'max_stock_cochabamba',
     aliases: ['cochabamba', 'cbba']
   },
   'santa cruz': {
     canonical: 'Santa Cruz',
     stockField: 'stock_santacruz',
     minField: 'min_stock_santacruz',
+    maxField: 'max_stock_santacruz',
     aliases: ['santa cruz', 'santacruz', 'scz']
   },
   lima: {
     canonical: 'Lima',
     stockField: 'stock_lima',
     minField: 'min_stock_lima',
+    maxField: 'max_stock_lima',
     aliases: ['lima']
   }
 };

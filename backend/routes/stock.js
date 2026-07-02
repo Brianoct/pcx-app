@@ -99,30 +99,41 @@ router.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Al
 
   const { sku } = req.params;
   const minFields = ['min_stock_cochabamba', 'min_stock_santacruz', 'min_stock_lima'];
+  const maxFields = ['max_stock_cochabamba', 'max_stock_santacruz', 'max_stock_lima'];
+
+  const isValidLevel = (v) => !(v === undefined || v === null || Number.isNaN(Number(v)) || Number(v) < 0);
 
   try {
     if (!inventoryScope.isGlobal) {
       const allowedMinField = inventoryScope.scope.minField;
-      const providedFields = minFields.filter((field) => Object.prototype.hasOwnProperty.call(req.body, field));
+      const allowedMaxField = inventoryScope.scope.maxField;
+      const providedFields = [...minFields, ...maxFields].filter((field) => Object.prototype.hasOwnProperty.call(req.body, field));
       if (providedFields.length === 0) {
         return res.status(400).json({ error: `Debes enviar ${allowedMinField}` });
       }
-      if (providedFields.some((field) => field !== allowedMinField)) {
+      if (providedFields.some((field) => field !== allowedMinField && field !== allowedMaxField)) {
         return res.status(403).json({ error: 'No puedes actualizar mínimos de otro almacén' });
       }
 
-      const minValue = req.body[allowedMinField];
-      if (minValue === undefined || minValue === null || Number.isNaN(Number(minValue)) || Number(minValue) < 0) {
-        return res.status(400).json({ error: 'El mínimo debe ser un número >= 0' });
+      const sets = [];
+      const values = [];
+      for (const field of [allowedMinField, allowedMaxField]) {
+        if (!Object.prototype.hasOwnProperty.call(req.body, field)) continue;
+        if (!isValidLevel(req.body[field])) {
+          return res.status(400).json({ error: 'Los niveles deben ser números >= 0' });
+        }
+        values.push(Number(req.body[field]));
+        sets.push(`${field} = $${values.length}`);
       }
+      values.push(sku.toUpperCase());
 
       const result = await pool.query(
         `UPDATE products
-         SET ${allowedMinField} = $1,
+         SET ${sets.join(', ')},
              last_updated = NOW()
-         WHERE sku = $2
-         RETURNING sku, ${allowedMinField}`,
-        [Number(minValue), sku.toUpperCase()]
+         WHERE sku = $${values.length}
+         RETURNING sku, ${allowedMinField}, ${allowedMaxField}`,
+        values
       );
 
       if (result.rowCount === 0) {
@@ -130,7 +141,7 @@ router.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Al
       }
 
       return res.json({
-        message: 'Mínimo actualizado',
+        message: 'Niveles actualizados',
         ...result.rows[0]
       });
     }
@@ -142,19 +153,32 @@ router.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Al
     } = req.body;
 
     const values = [min_stock_cochabamba, min_stock_santacruz, min_stock_lima];
-    if (values.some((v) => v === undefined || v === null || Number.isNaN(Number(v)) || Number(v) < 0)) {
+    if (values.some((v) => !isValidLevel(v))) {
       return res.status(400).json({ error: 'Los mínimos por almacén son requeridos y deben ser números >= 0' });
+    }
+
+    // Max levels are optional; only provided ones are updated.
+    const maxSets = [];
+    const maxValues = [];
+    for (const field of maxFields) {
+      if (!Object.prototype.hasOwnProperty.call(req.body, field)) continue;
+      if (!isValidLevel(req.body[field])) {
+        return res.status(400).json({ error: 'Los máximos deben ser números >= 0' });
+      }
+      maxValues.push(Number(req.body[field]));
+      maxSets.push(`${field} = $${3 + maxValues.length}`);
     }
 
     const result = await pool.query(
       `UPDATE products
        SET min_stock_cochabamba = $1,
            min_stock_santacruz = $2,
-           min_stock_lima = $3,
+           min_stock_lima = $3${maxSets.length ? `, ${maxSets.join(', ')}` : ''},
            last_updated = NOW()
-       WHERE sku = $4
-       RETURNING sku, min_stock_cochabamba, min_stock_santacruz, min_stock_lima`,
-      [min_stock_cochabamba, min_stock_santacruz, min_stock_lima, sku.toUpperCase()]
+       WHERE sku = $${4 + maxValues.length}
+       RETURNING sku, min_stock_cochabamba, min_stock_santacruz, min_stock_lima,
+                 max_stock_cochabamba, max_stock_santacruz, max_stock_lima`,
+      [min_stock_cochabamba, min_stock_santacruz, min_stock_lima, ...maxValues, sku.toUpperCase()]
     );
 
     if (result.rowCount === 0) {
@@ -162,7 +186,7 @@ router.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Al
     }
 
     res.json({
-      message: 'Mínimos actualizados',
+      message: 'Niveles actualizados',
       ...result.rows[0]
     });
   } catch (err) {
@@ -186,8 +210,9 @@ router.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Al
     if (!inventoryScope.isGlobal) {
       const stockField = inventoryScope.scope.stockField;
       const minField = inventoryScope.scope.minField;
+      const maxField = inventoryScope.scope.maxField;
       const result = await pool.query(`
-        SELECT sku, name, ${stockField}, ${minField}, last_updated
+        SELECT sku, name, ${stockField}, ${minField}, ${maxField}, last_updated
         FROM products
         WHERE is_active = TRUE
         ORDER BY sku
@@ -198,6 +223,7 @@ router.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Al
     const result = await pool.query(`
       SELECT sku, name, stock_cochabamba, stock_santacruz, stock_lima,
              min_stock_cochabamba, min_stock_santacruz, min_stock_lima,
+             max_stock_cochabamba, max_stock_santacruz, max_stock_lima,
              last_updated
       FROM products
       WHERE is_active = TRUE

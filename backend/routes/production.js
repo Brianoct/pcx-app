@@ -2,7 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { getProductionKanbanAccessScope } = require('../lib/inventory');
-const { PRODUCTION_KANBAN_STAGES, getProductionRouteStages, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, syncProductionKanbanFromInventory } = require('../lib/kanban');
+const { PRODUCTION_KANBAN_STAGES, getRouteStagesForSku, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, replaceProductProcessSteps, syncProductionKanbanFromInventory } = require('../lib/kanban');
 const { validateProductSku } = require('../lib/products');
 const { ensureQcProductSettingsSeeded } = require('../lib/qc');
 const { sanitizePanelAccess } = require('../lib/rbac');
@@ -57,7 +57,7 @@ router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requir
       return res.status(400).json({ error: 'Etapa inválida' });
     }
     const currentRes = await pool.query(
-      `SELECT id, sku, start_process
+      `SELECT id, sku, store_location, required_qty, stage, start_process
        FROM production_kanban_cards
        WHERE id = $1
          AND is_active = TRUE
@@ -68,7 +68,7 @@ router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requir
       return res.status(404).json({ error: 'Tarjeta no encontrada o inactiva' });
     }
     const card = currentRes.rows[0];
-    const allowedStages = getProductionRouteStages(card.start_process || 'corte_laser', card.sku);
+    const allowedStages = await getRouteStagesForSku(card.sku, card.start_process || 'corte_laser');
     if (!allowedStages.includes(nextStage)) {
       return res.status(400).json({
         error: `La etapa ${nextStage} no aplica para esta tarjeta (${card.start_process || 'corte_laser'})`
@@ -84,9 +84,18 @@ router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requir
                  start_process, stage, source, last_moved_at, created_at, updated_at`,
       [cardId, nextStage]
     );
+    // Movement log: durations per stage (time between consecutive events) feed
+    // the future cost/throughput baselines.
+    if (card.stage !== nextStage) {
+      await pool.query(
+        `INSERT INTO production_stage_events (card_id, sku, store_location, from_stage, to_stage, qty, moved_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [cardId, String(card.sku || '').toUpperCase(), card.store_location, card.stage || null, nextStage, Number(card.required_qty || 0), req.user.id]
+      );
+    }
     res.json({
       message: 'Etapa actualizada',
-      card: mapProductionKanbanCardRow(updatedRes.rows[0])
+      card: mapProductionKanbanCardRow(updatedRes.rows[0], new Map([[String(card.sku || '').toUpperCase(), allowedStages]]))
     });
   } catch (err) {
     console.error(err);
@@ -198,27 +207,40 @@ router.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRol
     if (existsRes.rowCount === 0) {
       return res.status(404).json({ error: 'Producto no encontrado o inactivo' });
     }
-    await pool.query(
-      `INSERT INTO production_process_routes (sku, start_process, updated_by, updated_at)
-       VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (sku) DO UPDATE
-       SET start_process = EXCLUDED.start_process,
-           updated_by = EXCLUDED.updated_by,
-           updated_at = NOW()`,
-      [sku, startProcess, req.user.id]
-    );
-    await pool.query(
-      `UPDATE production_kanban_cards
-       SET start_process = $2,
-           stage = CASE
-             WHEN stage IN ('corte_laser', 'impresion_3d', 'punzonado') THEN $2
-             ELSE stage
-           END,
-           updated_at = NOW()
-       WHERE UPPER(sku) = $1
-         AND source = 'min_stock'`,
-      [sku, startProcess]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO production_process_routes (sku, start_process, updated_by, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (sku) DO UPDATE
+         SET start_process = EXCLUDED.start_process,
+             updated_by = EXCLUDED.updated_by,
+             updated_at = NOW()`,
+        [sku, startProcess, req.user.id]
+      );
+      // The steps table is the route source of truth; regenerate it for the
+      // new start so the board and validations pick it up immediately.
+      await replaceProductProcessSteps(client, sku, startProcess);
+      await client.query(
+        `UPDATE production_kanban_cards
+         SET start_process = $2,
+             stage = CASE
+               WHEN stage IN ('corte_laser', 'impresion_3d', 'punzonado') THEN $2
+               ELSE stage
+             END,
+             updated_at = NOW()
+         WHERE UPPER(sku) = $1
+           AND source = 'min_stock'`,
+        [sku, startProcess]
+      );
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
     const cards = await syncProductionKanbanFromInventory();
     const affectedCards = cards.filter((card) => card.sku === sku);
     res.json({

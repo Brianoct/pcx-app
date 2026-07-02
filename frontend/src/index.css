@@ -5163,6 +5163,16 @@ img, video, canvas { max-width: 100%; }
   margin: 6px 0 8px;
 }
 
+.prod-stage-timer {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 14px;
+}
+.prod-stage-timer strong { color: var(--text-primary); }
+
 /* Route stepper */
 .prod-route {
   display: flex;
