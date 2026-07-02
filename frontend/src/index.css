@@ -5679,6 +5679,11 @@ img, video, canvas { max-width: 100%; }
   font-family: inherit;
 }
 
+/* Día / Mes / Año selects — day first (Bolivian order). */
+.dob-row { display: flex; gap: 8px; }
+.dob-row select { flex: 1 1 0; min-width: 0; }
+.dob-row select:nth-child(2) { flex: 1.4 1 0; }
+
 @media (max-width: 560px) {
   .profile-hero { flex-direction: column; text-align: center; }
   .profile-hero-info { align-items: center; }
