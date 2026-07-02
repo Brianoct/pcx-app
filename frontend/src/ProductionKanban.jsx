@@ -46,6 +46,9 @@ export default function ProductionKanban({ token }) {
   const [qcForm, setQcForm] = useState({ passed: '', rejected: '' });
   const [qcSaving, setQcSaving] = useState(false);
   const [qcMsg, setQcMsg] = useState('');
+  const [sheetTasks, setSheetTasks] = useState([]);
+  const [taskInputs, setTaskInputs] = useState({});
+  const [taskBusyId, setTaskBusyId] = useState(null);
 
   const loadBoard = async () => {
     setLoading(true);
@@ -98,6 +101,43 @@ export default function ProductionKanban({ token }) {
     setQcForm({ passed: '', rejected: '' });
     setQcMsg('');
   }, [detailId]);
+
+  // Load pending measurement tasks for the open card.
+  useEffect(() => {
+    setSheetTasks([]);
+    setTaskInputs({});
+    if (!detailId) return;
+    let active = true;
+    apiRequest(`/api/production/kanban/cards/${detailId}/tasks`, { token })
+      .then((data) => { if (active) setSheetTasks(Array.isArray(data?.tasks) ? data.tasks : []); })
+      .catch(() => { if (active) setSheetTasks([]); });
+    return () => { active = false; };
+  }, [detailId, token]);
+
+  const resolveTask = async (task, skip) => {
+    const qty = Number(taskInputs[task.id]);
+    if (!skip && (!Number.isFinite(qty) || qty < 0)) {
+      setError('Ingresa la cantidad usada para registrar la medición.');
+      return;
+    }
+    setTaskBusyId(task.id);
+    setError('');
+    try {
+      await apiRequest(`/api/production/tasks/${task.id}/${skip ? 'skip' : 'complete'}`, {
+        method: 'POST',
+        token,
+        body: skip ? {} : { qty_used: qty }
+      });
+      setSheetTasks((prev) => prev.filter((t) => t.id !== task.id));
+      setCards((prev) => prev.map((c) => (
+        c.id === detailId ? { ...c, pending_tasks: Math.max(0, Number(c.pending_tasks || 1) - 1) } : c
+      )));
+    } catch (err) {
+      setError(err.message || 'No se pudo registrar la medición');
+    } finally {
+      setTaskBusyId(null);
+    }
+  };
 
   const setSaving = (key, value) => setSavingMap((prev) => ({ ...prev, [key]: value }));
 
@@ -241,7 +281,14 @@ export default function ProductionKanban({ token }) {
                         disabled={Boolean(savingMap[`stage:${card.id}`])}
                       >
                         <span className="prod-card-name">{card.product_name}</span>
-                        <span className="prod-card-qty">{Number(card.required_qty || 0)} pzas</span>
+                        <span className="prod-card-qty">
+                          {Number(card.required_qty || 0)} pzas
+                          {Number(card.pending_tasks || 0) > 0 && (
+                            <span className="prod-card-task-badge" title="Tareas de medición pendientes">
+                              {card.pending_tasks} tarea{Number(card.pending_tasks) > 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </span>
                         {locationFilter === 'all' && (
                           <span className="prod-card-sede">{card.store_location}</span>
                         )}
@@ -321,6 +368,50 @@ export default function ProductionKanban({ token }) {
               >
                 Avanzar a {STAGE_LABEL[nextStageOf(detailCard)]}
               </button>
+            )}
+
+            {/* Measurement tasks — random sampling of real material usage. */}
+            {sheetTasks.length > 0 && (
+              <div className="prod-tasks">
+                <div className="prod-sheet-section-label">Tareas de medición</div>
+                {sheetTasks.map((task) => (
+                  <div key={task.id} className="prod-task">
+                    <div className="prod-task-question">
+                      ¿Cuánto <strong>{task.material_name}</strong> usaste en {STAGE_LABEL[task.process] || task.process} para este lote
+                      {task.batch_qty > 0 ? ` (${task.batch_qty} pzas)` : ''}?
+                    </div>
+                    <div className="prod-task-controls">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        className="prod-task-input"
+                        placeholder="0"
+                        value={taskInputs[task.id] ?? ''}
+                        onChange={(e) => setTaskInputs((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                      />
+                      <span className="prod-task-unit">{task.unit_measure}</span>
+                      <button
+                        type="button"
+                        className="btn btn-primary prod-task-save"
+                        disabled={taskBusyId === task.id || taskInputs[task.id] === undefined || taskInputs[task.id] === ''}
+                        onClick={() => resolveTask(task, false)}
+                      >
+                        {taskBusyId === task.id ? '…' : 'Registrar'}
+                      </button>
+                      <button
+                        type="button"
+                        className="prod-task-skip"
+                        disabled={taskBusyId === task.id}
+                        onClick={() => resolveTask(task, true)}
+                      >
+                        Omitir
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
 
             {/* Quality control — recorded at packing (embalado). Feeds commission. */}

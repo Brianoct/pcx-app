@@ -5,6 +5,7 @@ const { getProductionKanbanAccessScope } = require('../lib/inventory');
 const { PRODUCTION_KANBAN_STAGES, getRouteStagesForSku, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, replaceProductProcessSteps, syncProductionKanbanFromInventory } = require('../lib/kanban');
 const { validateProductSku } = require('../lib/products');
 const { getProductStructure, loadProductionSettings, saveProductStructure, saveProductionSettings } = require('../lib/productStructure');
+const { countPendingTasksByCard, getVarianceReport, listCardTasks, maybeCreateSamplingTasks, resolveTask } = require('../lib/productionSampling');
 const { ensureQcProductSettingsSeeded } = require('../lib/qc');
 const { sanitizePanelAccess } = require('../lib/rbac');
 const { loadUserContext } = require('../lib/users');
@@ -20,6 +21,10 @@ router.get('/api/production/kanban', authenticateToken, requireRole(['Microfabri
     if (kanbanScope.error) return res.status(403).json({ error: kanbanScope.error });
 
     const cards = await syncProductionKanbanFromInventory();
+    const pendingTasks = await countPendingTasksByCard(cards.map((card) => card.id));
+    for (const card of cards) {
+      card.pending_tasks = pendingTasks.get(card.id) || 0;
+    }
     const totalRequired = cards.reduce((sum, card) => sum + Number(card.required_qty || 0), 0);
     const byStage = Object.fromEntries(PRODUCTION_KANBAN_STAGES.map((stage) => [stage, 0]));
     for (const card of cards) {
@@ -93,6 +98,15 @@ router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requir
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [cardId, String(card.sku || '').toUpperCase(), card.store_location, card.stage || null, nextStage, Number(card.required_qty || 0), req.user.id]
       );
+      // Random measurement task: sometimes ask the operator to record real
+      // material usage for the stage the card just entered.
+      await maybeCreateSamplingTasks({
+        cardId,
+        sku: card.sku,
+        storeLocation: card.store_location,
+        process: nextStage,
+        batchQty: card.required_qty
+      });
     }
     res.json({
       message: 'Etapa actualizada',
@@ -253,6 +267,54 @@ router.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRol
     console.error(err);
     if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
     res.status(500).json({ error: 'No se pudo actualizar proceso inicial' });
+  }
+});
+
+// ─── Measurement tasks (random sampling of real material usage) ──────────────
+
+const PRODUCTION_BOARD_ROLES = ['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin'];
+
+router.get('/api/production/kanban/cards/:id/tasks', authenticateToken, requireRole(PRODUCTION_BOARD_ROLES), async (req, res) => {
+  try {
+    const cardId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(cardId) || cardId <= 0) {
+      return res.status(400).json({ error: 'ID de tarjeta inválido' });
+    }
+    res.json({ tasks: await listCardTasks(cardId) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron cargar tareas de medición' });
+  }
+});
+
+router.post('/api/production/tasks/:id/complete', authenticateToken, requireRole(PRODUCTION_BOARD_ROLES), async (req, res) => {
+  try {
+    const task = await resolveTask(req.params.id, { qtyUsed: req.body?.qty_used, userId: req.user.id });
+    res.json({ message: 'Medición registrada', task });
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo registrar la medición' });
+  }
+});
+
+router.post('/api/production/tasks/:id/skip', authenticateToken, requireRole(PRODUCTION_BOARD_ROLES), async (req, res) => {
+  try {
+    const task = await resolveTask(req.params.id, { skip: true, userId: req.user.id });
+    res.json({ message: 'Tarea omitida', task });
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo omitir la tarea' });
+  }
+});
+
+router.get('/api/production/variance', authenticateToken, requireRole(['admin']), async (_req, res) => {
+  try {
+    res.json(await getVarianceReport());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar el reporte de variaciones' });
   }
 });
 

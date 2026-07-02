@@ -7,27 +7,43 @@ const { createHttpError } = require('./util');
 
 const loadProductionSettings = async () => {
   const res = await pool.query(
-    'SELECT labor_rate_bs_hour, updated_at FROM production_settings WHERE id = 1'
+    'SELECT labor_rate_bs_hour, sampling_rate_pct, updated_at FROM production_settings WHERE id = 1'
   );
   return {
     labor_rate_bs_hour: Number(res.rows[0]?.labor_rate_bs_hour || 0),
+    sampling_rate_pct: Number(res.rows[0]?.sampling_rate_pct ?? 25),
     updated_at: res.rows[0]?.updated_at || null
   };
 };
 
-const saveProductionSettings = async ({ labor_rate_bs_hour }, userId) => {
-  const rate = Number(labor_rate_bs_hour);
-  if (!Number.isFinite(rate) || rate < 0) {
-    throw createHttpError(400, 'labor_rate_bs_hour debe ser un número >= 0');
+const saveProductionSettings = async (payload = {}, userId) => {
+  const current = await loadProductionSettings();
+
+  let rate = current.labor_rate_bs_hour;
+  if (payload.labor_rate_bs_hour !== undefined) {
+    rate = Number(payload.labor_rate_bs_hour);
+    if (!Number.isFinite(rate) || rate < 0) {
+      throw createHttpError(400, 'labor_rate_bs_hour debe ser un número >= 0');
+    }
   }
+
+  let sampling = current.sampling_rate_pct;
+  if (payload.sampling_rate_pct !== undefined) {
+    sampling = Number.parseInt(payload.sampling_rate_pct, 10);
+    if (!Number.isInteger(sampling) || sampling < 0 || sampling > 100) {
+      throw createHttpError(400, 'sampling_rate_pct debe ser un entero entre 0 y 100');
+    }
+  }
+
   await pool.query(
-    `INSERT INTO production_settings (id, labor_rate_bs_hour, updated_by, updated_at)
-     VALUES (1, $1, $2, NOW())
+    `INSERT INTO production_settings (id, labor_rate_bs_hour, sampling_rate_pct, updated_by, updated_at)
+     VALUES (1, $1, $2, $3, NOW())
      ON CONFLICT (id) DO UPDATE
      SET labor_rate_bs_hour = EXCLUDED.labor_rate_bs_hour,
+         sampling_rate_pct = EXCLUDED.sampling_rate_pct,
          updated_by = EXCLUDED.updated_by,
          updated_at = NOW()`,
-    [rate, userId || null]
+    [rate, sampling, userId || null]
   );
   return loadProductionSettings();
 };
