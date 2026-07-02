@@ -247,10 +247,10 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
           <div className="quote-edit-grid">
             <label>
               Nombre visible
-              <input type="text" value={form.display_name} onChange={setField('display_name')} placeholder="Ej: Wendy" />
+              <input type="text" value={form.display_name} onChange={setField('display_name')} placeholder="Ej: Willy" />
             </label>
             <label>
-              Carné de identidad (CI)
+              Carnet de Identidad (CI)
               <input type="text" value={form.national_id} onChange={setField('national_id')} placeholder="Ej: 7654321 CB" />
             </label>
             <label>
@@ -334,7 +334,7 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
                 rows={4}
                 value={form.payment_info}
                 onChange={setField('payment_info')}
-                placeholder={'Ej: Banco Unión\nCuenta: 10000012345\nTitular: Wendy Rojas'}
+                placeholder={'Ej: Banco Unión\nCuenta: 10000012345\nTitular: Willy Huanca'}
               />
             </label>
           </div>
