@@ -11,6 +11,7 @@ import CommissionConfig from './CommissionConfig';
 import PayrollPanel from './PayrollPanel';
 import RoleConfiguration from './RoleConfiguration';
 import ProductCostingAdmin from './ProductCostingAdmin';
+import ProductStructureAdmin from './ProductStructureAdmin';
 import WhatsAppInboxAdmin from './WhatsAppInboxAdmin';
 import AiAssistant from './AiAssistant';
 import SalesAssistant from './SalesAssistant';
@@ -21,7 +22,7 @@ function AdminPanel({ token, user }) {
   const navigate = useNavigate();
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiInfo, setAiInfo] = useState(null);
-  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'pagos', 'calendario'];
+  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'pagos', 'calendario'];
   const tabKeys = aiEnabled ? [...baseTabKeys, 'asistente_ia', 'ventas_ia'] : baseTabKeys;
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
@@ -70,6 +71,12 @@ function AdminPanel({ token, user }) {
       label: 'Materiales',
       icon: 'MT',
       hint: 'Insumos y costos por unidad'
+    },
+    {
+      key: 'estructura',
+      label: 'Estructura',
+      icon: 'ES',
+      hint: 'Ruta, materiales y costo derivado'
     },
     {
       key: 'costeo',
@@ -181,6 +188,7 @@ function AdminPanel({ token, user }) {
         {activeTab === 'productos' && <ProductCatalogAdmin token={token} />}
         {activeTab === 'equipos' && <EquipmentCatalogAdmin token={token} />}
         {activeTab === 'materiales' && <MaterialsCatalogAdmin token={token} />}
+        {activeTab === 'estructura' && <ProductStructureAdmin token={token} />}
         {activeTab === 'costeo' && <ProductCostingAdmin token={token} />}
         {activeTab === 'whatsapp_inbox' && <WhatsAppInboxAdmin token={token} />}
         {activeTab === 'roles' && <RoleConfiguration token={token} />}
