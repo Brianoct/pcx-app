@@ -4,6 +4,7 @@ const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { getProductionKanbanAccessScope } = require('../lib/inventory');
 const { PRODUCTION_KANBAN_STAGES, getRouteStagesForSku, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, replaceProductProcessSteps, syncProductionKanbanFromInventory } = require('../lib/kanban');
 const { validateProductSku } = require('../lib/products');
+const { getProductStructure, loadProductionSettings, saveProductStructure, saveProductionSettings } = require('../lib/productStructure');
 const { ensureQcProductSettingsSeeded } = require('../lib/qc');
 const { sanitizePanelAccess } = require('../lib/rbac');
 const { loadUserContext } = require('../lib/users');
@@ -252,6 +253,51 @@ router.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRol
     console.error(err);
     if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
     res.status(500).json({ error: 'No se pudo actualizar proceso inicial' });
+  }
+});
+
+// ─── Product structure (route steps + BOM) and derived costing ───────────────
+
+router.get('/api/products/:sku/structure', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const structure = await getProductStructure(req.params.sku);
+    res.json(structure);
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar la estructura del producto' });
+  }
+});
+
+router.put('/api/products/:sku/structure', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    await saveProductStructure(req.params.sku, req.body || {}, req.user.id);
+    const structure = await getProductStructure(req.params.sku);
+    res.json({ message: 'Estructura actualizada', ...structure });
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo guardar la estructura del producto' });
+  }
+});
+
+router.get('/api/production/settings', authenticateToken, requireRole(['admin']), async (_req, res) => {
+  try {
+    res.json(await loadProductionSettings());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar configuración de producción' });
+  }
+});
+
+router.patch('/api/production/settings', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const settings = await saveProductionSettings(req.body || {}, req.user.id);
+    res.json({ message: 'Configuración actualizada', ...settings });
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo guardar configuración de producción' });
   }
 });
 
