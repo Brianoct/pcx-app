@@ -193,7 +193,7 @@ function EquipmentCatalogAdmin({ token }) {
 
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px' }}>
+      <div className="card">
         <h3 style={{ marginBottom: '12px' }}>Equipos</h3>
         <form onSubmit={createRow} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
           <input
@@ -278,7 +278,7 @@ function EquipmentCatalogAdmin({ token }) {
         </div>
       )}
 
-      <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px' }}>
+      <div className="card">
         <h3 style={{ marginBottom: '12px' }}>Catálogo de equipos</h3>
         {loading ? (
           <p style={{ color: '#78716c' }}>Cargando equipos...</p>
