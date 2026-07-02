@@ -23,6 +23,7 @@ function QualityControlCommissionConfig({ token }) {
 
   useEffect(() => {
     loadRows();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const updateRate = (sku, value) => {

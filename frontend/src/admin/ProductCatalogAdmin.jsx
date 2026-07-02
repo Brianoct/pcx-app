@@ -33,7 +33,6 @@ function ProductCatalogAdmin({ token }) {
   const [updateNames, setUpdateNames] = useState(false);
   const [syncDescription, setSyncDescription] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState('');
-  const visibleProducts = products.filter((row) => Boolean(row.is_active));
   const inactiveProducts = products.filter((row) => !row.is_active);
 
   const loadProducts = async () => {
