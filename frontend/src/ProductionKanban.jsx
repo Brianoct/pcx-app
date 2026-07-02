@@ -20,6 +20,21 @@ const STAGE_ORDER = STAGES.map((s) => s.key);
 // soldado). Fall back to the full board order if it's ever missing.
 const cardRoute = (card) => (Array.isArray(card?.route) && card.route.length ? card.route : STAGE_ORDER);
 
+// Time the card has been sitting in its current stage (since the last move,
+// or since creation if it was never moved).
+const timeInStage = (card) => {
+  const since = card?.last_moved_at || card?.created_at;
+  if (!since) return null;
+  const ms = Date.now() - new Date(since).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ${minutes % 60} min`;
+  const days = Math.floor(hours / 24);
+  return `${days} d ${hours % 24} h`;
+};
+
 export default function ProductionKanban({ token }) {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -258,6 +273,11 @@ export default function ProductionKanban({ token }) {
               <div><span className="prod-fact-label">Stock actual</span><span className="prod-fact-value">{Number(detailCard.current_stock || 0)}</span></div>
               <div><span className="prod-fact-label">Mínimo</span><span className="prod-fact-value">{Number(detailCard.min_stock || 0)}</span></div>
             </div>
+            {timeInStage(detailCard) && (
+              <div className="prod-stage-timer">
+                En {STAGE_LABEL[detailCard.stage] || detailCard.stage} hace <strong>{timeInStage(detailCard)}</strong>
+              </div>
+            )}
 
             {/* Route progress */}
             <div className="prod-sheet-section-label">Ruta de producción</div>
