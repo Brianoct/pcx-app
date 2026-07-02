@@ -8,6 +8,7 @@ import TimeOffAdminPanel from './TimeOffAdminPanel';
 import QualityControlCommissionConfig from './QualityControlCommissionConfig';
 import QualityControlRecordsAdmin from './QualityControlRecordsAdmin';
 import CommissionConfig from './CommissionConfig';
+import PayrollPanel from './PayrollPanel';
 import RoleConfiguration from './RoleConfiguration';
 import ProductCostingAdmin from './ProductCostingAdmin';
 import WhatsAppInboxAdmin from './WhatsAppInboxAdmin';
@@ -20,7 +21,7 @@ function AdminPanel({ token, user }) {
   const navigate = useNavigate();
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiInfo, setAiInfo] = useState(null);
-  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'calendario'];
+  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'pagos', 'calendario'];
   const tabKeys = aiEnabled ? [...baseTabKeys, 'asistente_ia', 'ventas_ia'] : baseTabKeys;
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
@@ -87,6 +88,12 @@ function AdminPanel({ token, user }) {
       label: 'Comisiones',
       icon: 'C',
       hint: 'Reglas por rol y control calidad'
+    },
+    {
+      key: 'pagos',
+      label: 'Pagos',
+      icon: '$',
+      hint: 'QR y datos de pago del equipo'
     },
     {
       key: 'calendario',
@@ -184,6 +191,7 @@ function AdminPanel({ token, user }) {
             <QualityControlRecordsAdmin token={token} />
           </div>
         )}
+        {activeTab === 'pagos' && <PayrollPanel token={token} />}
         {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}
         {activeTab === 'asistente_ia' && aiEnabled && <AiAssistant token={token} aiInfo={aiInfo} />}
         {activeTab === 'ventas_ia' && aiEnabled && <SalesAssistant token={token} user={user} aiInfo={aiInfo} />}
