@@ -4854,3 +4854,351 @@ img, video, canvas { max-width: 100%; }
   .sidebar-logout,
   .password-toggle-btn { min-height: 40px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRODUCTION BOARD (Producción) — mobile-first.
+
+   Phone portrait: one stage at a time. A horizontal, scrollable pill nav picks
+   the visible stage; only that column renders. Tap a card → bottom sheet with
+   the route + move controls. No drag-and-drop (unreliable on touch).
+
+   Phone landscape (rotate) / tablet+ : the pill nav disappears and ALL stages
+   render side-by-side as a fixed 8-column board in the required left→right
+   order (Impresión 3D · Corte Láser · Punzonado · Plegado · Soldado · Lavado ·
+   Pintado · Embalado).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.prod-page { max-width: 100%; }
+
+.prod-head { margin-bottom: 14px; }
+.prod-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.prod-title { font-size: 1.35rem; font-weight: 800; margin: 0; }
+.prod-sub { color: var(--text-secondary); font-size: 0.82rem; margin: 4px 0 0; }
+.prod-head-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* KPI strip: three compact tiles, scrollable if the phone is very narrow. */
+.prod-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.prod-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.prod-kpi-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.prod-kpi-value { font-size: 1.4rem; font-weight: 800; line-height: 1.1; }
+
+.prod-error {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(254, 226, 226, 0.4);
+}
+
+/* ── Stage pill nav (portrait only) ───────────────────────────────────────── */
+.prod-stage-nav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  margin-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.prod-stage-nav::-webkit-scrollbar { display: none; }
+.prod-stage-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  min-height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.prod-stage-pill.is-active {
+  background: var(--brand-gradient);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: var(--shadow-md);
+}
+.prod-stage-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: rgba(28, 25, 23, 0.08);
+  color: inherit;
+}
+.prod-stage-pill.is-active .prod-stage-pill-count { background: rgba(255, 255, 255, 0.28); }
+
+/* ── Columns ──────────────────────────────────────────────────────────────── */
+.prod-columns { display: block; }
+/* Portrait default: render only the active column full-width. */
+.prod-col { display: none; }
+.prod-col.is-active { display: flex; }
+.prod-col {
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.prod-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.prod-col-name {
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-primary);
+}
+.prod-col-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  background: var(--brand-tint);
+  color: var(--accent-warm);
+}
+.prod-col-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  min-height: 60px;
+}
+.prod-col-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  padding: 14px 6px;
+}
+
+/* Minimal card: name + qty (+ sede when viewing all). Tap → detail sheet. */
+.prod-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  min-height: 48px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-warm);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.prod-card:active:not(:disabled) { transform: translateY(1px); }
+.prod-card-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.prod-card-qty { font-size: 0.8rem; font-weight: 700; color: var(--warning); }
+.prod-card-sede { font-size: 0.72rem; color: var(--text-muted); }
+
+/* ── Landscape / tablet+ : full board, all 8 columns, hide the pill nav ────── */
+@media (orientation: landscape) and (max-width: 1024px), (min-width: 720px) {
+  .prod-stage-nav { display: none; }
+  .prod-columns {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 8px;
+    align-items: start;
+  }
+  .prod-col,
+  .prod-col.is-active { display: flex; }
+  .prod-col-name { font-size: 0.7rem; }
+  .prod-card-name { font-size: 0.82rem; }
+}
+
+/* ── Detail bottom sheet ──────────────────────────────────────────────────── */
+.prod-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(28, 25, 23, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.prod-sheet {
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: 10px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+  box-shadow: var(--shadow-lg);
+}
+@media (min-width: 720px) {
+  .prod-sheet-overlay { align-items: center; }
+  .prod-sheet { border-radius: var(--radius-lg); max-height: 82vh; }
+}
+.prod-sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-soft);
+  margin: 4px auto 12px;
+}
+.prod-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.prod-sheet-title { font-size: 1.1rem; font-weight: 800; line-height: 1.25; }
+.prod-sheet-sku { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+.prod-sheet-close {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.prod-sheet-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.prod-sheet-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+.prod-fact-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.prod-fact-value { font-size: 1.05rem; font-weight: 800; }
+
+.prod-sheet-section-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin: 6px 0 8px;
+}
+
+/* Route stepper */
+.prod-route {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.prod-route-step {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+}
+.prod-route-step.is-done {
+  color: var(--success);
+  border-color: rgba(4, 120, 87, 0.4);
+  background: rgba(4, 120, 87, 0.08);
+}
+.prod-route-step.is-current {
+  color: #fff;
+  border-color: transparent;
+  background: var(--brand-gradient);
+}
+
+/* Move-to chips */
+.prod-move-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.prod-move-chip {
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 9px 13px;
+  min-height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.prod-move-chip.is-current {
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.prod-advance-btn { width: 100%; }
