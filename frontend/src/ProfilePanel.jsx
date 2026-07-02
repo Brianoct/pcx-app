@@ -25,6 +25,14 @@ const fileToDataUrl = (file) => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
+const MONTHS = [
+  ['01', 'enero'], ['02', 'febrero'], ['03', 'marzo'], ['04', 'abril'],
+  ['05', 'mayo'], ['06', 'junio'], ['07', 'julio'], ['08', 'agosto'],
+  ['09', 'septiembre'], ['10', 'octubre'], ['11', 'noviembre'], ['12', 'diciembre']
+];
+const CURRENT_YEAR = new Date().getFullYear();
+const BIRTH_YEARS = Array.from({ length: 85 }, (_, i) => String(CURRENT_YEAR - 15 - i));
+
 const formatMemberSince = (value) => {
   if (!value) return null;
   try {
@@ -66,6 +74,22 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
   const qrSrc = assetUrl(user?.payment_qr_url);
 
   const setField = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
+
+  // Birth date via Día/Mes/Año selects (Bolivia reads day-first, and this is
+  // locale-proof unlike a native <input type="date">). Stored as YYYY-MM-DD.
+  const birthMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(form.birth_date || '');
+  const [birthYear, birthMonth, birthDay] = birthMatch ? [birthMatch[1], birthMatch[2], birthMatch[3]] : ['', '', ''];
+  const daysInMonth = birthMonth ? new Date(Number(birthYear || 2000), Number(birthMonth), 0).getDate() : 31;
+  const setBirthPart = (part, value) => {
+    const next = { y: birthYear, m: birthMonth, d: birthDay, [part]: value };
+    if (next.y && next.m && next.d) {
+      const maxD = new Date(Number(next.y), Number(next.m), 0).getDate();
+      const dd = Math.min(Number(next.d), maxD);
+      setForm((prev) => ({ ...prev, birth_date: `${next.y}-${next.m}-${String(dd).padStart(2, '0')}` }));
+    } else {
+      setForm((prev) => ({ ...prev, birth_date: '' }));
+    }
+  };
 
   const saveProfile = async (event) => {
     event.preventDefault();
@@ -255,7 +279,26 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
             </label>
             <label>
               Fecha de nacimiento
-              <input type="date" value={form.birth_date || ''} onChange={setField('birth_date')} />
+              <div className="dob-row">
+                <select aria-label="Día" value={birthDay} onChange={(e) => setBirthPart('d', e.target.value)}>
+                  <option value="">Día</option>
+                  {Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, '0')).map((d) => (
+                    <option key={d} value={d}>{Number(d)}</option>
+                  ))}
+                </select>
+                <select aria-label="Mes" value={birthMonth} onChange={(e) => setBirthPart('m', e.target.value)}>
+                  <option value="">Mes</option>
+                  {MONTHS.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <select aria-label="Año" value={birthYear} onChange={(e) => setBirthPart('y', e.target.value)}>
+                  <option value="">Año</option>
+                  {BIRTH_YEARS.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
             </label>
             <label>
               Ciudad
