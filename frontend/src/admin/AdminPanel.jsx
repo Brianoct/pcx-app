@@ -6,6 +6,7 @@ import EquipmentCatalogAdmin from './EquipmentCatalogAdmin';
 import MaterialsCatalogAdmin from './MaterialsCatalogAdmin';
 import TimeOffAdminPanel from './TimeOffAdminPanel';
 import QualityControlCommissionConfig from './QualityControlCommissionConfig';
+import QualityControlRecordsAdmin from './QualityControlRecordsAdmin';
 import CommissionConfig from './CommissionConfig';
 import RoleConfiguration from './RoleConfiguration';
 import ProductCostingAdmin from './ProductCostingAdmin';
@@ -180,6 +181,7 @@ function AdminPanel({ token, user }) {
           <div style={{ display: 'grid', gap: '14px' }}>
             <CommissionConfig token={token} />
             <QualityControlCommissionConfig token={token} />
+            <QualityControlRecordsAdmin token={token} />
           </div>
         )}
         {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}

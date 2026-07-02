@@ -10,7 +10,7 @@ const TYPE_ROUTES = {
 const PATH_ROUTES = [
   ['/api/products/', '/inventory'],
   ['/api/time-off', '/calendario'],
-  ['/api/qc/', '/control-calidad'],
+  ['/api/qc/', '/admin'],
   ['/api/combos', '/combos'],
   ['/api/cupones', '/cupones'],
   ['/api/me', '/perfil'],

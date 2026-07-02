@@ -5072,13 +5072,19 @@ img, video, canvas { max-width: 100%; }
   inset: 0;
   z-index: 1000;
   background: rgba(28, 25, 23, 0.45);
+  /* Column layout so the sheet stretches to the viewport width and never
+     overflows on narrow phones (a row flex item won't shrink below its
+     content width). max-width + auto margins center it on wide screens. */
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
 }
 .prod-sheet {
   width: 100%;
   max-width: 520px;
+  margin: 0 auto;
+  min-width: 0;
   max-height: 88vh;
   overflow-y: auto;
   background: var(--bg-secondary);
@@ -5087,7 +5093,7 @@ img, video, canvas { max-width: 100%; }
   box-shadow: var(--shadow-lg);
 }
 @media (min-width: 720px) {
-  .prod-sheet-overlay { align-items: center; }
+  .prod-sheet-overlay { justify-content: center; }
   .prod-sheet { border-radius: var(--radius-lg); max-height: 82vh; }
 }
 .prod-sheet-handle {
@@ -5202,3 +5208,43 @@ img, video, canvas { max-width: 100%; }
 }
 
 .prod-advance-btn { width: 100%; }
+
+/* Quality control block inside the embalado sheet. */
+.prod-qc {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.prod-qc-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.prod-qc-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.prod-qc-field-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.prod-qc-input {
+  /* width:100% + min-width:0 so the number inputs shrink with the grid cell
+     instead of forcing horizontal overflow on narrow phones. */
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+}
+.prod-qc-msg {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.prod-qc-btn { width: 100%; }
