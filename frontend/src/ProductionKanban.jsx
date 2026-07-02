@@ -28,6 +28,9 @@ export default function ProductionKanban({ token }) {
   const [locationFilter, setLocationFilter] = useState('all');
   const [activeStage, setActiveStage] = useState(STAGES[0].key);
   const [detailId, setDetailId] = useState(null);
+  const [qcForm, setQcForm] = useState({ passed: '', rejected: '' });
+  const [qcSaving, setQcSaving] = useState(false);
+  const [qcMsg, setQcMsg] = useState('');
 
   const loadBoard = async () => {
     setLoading(true);
@@ -75,7 +78,38 @@ export default function ProductionKanban({ token }) {
     [visibleCards, detailId]
   );
 
+  // Reset the QC form whenever a different card's sheet opens.
+  useEffect(() => {
+    setQcForm({ passed: '', rejected: '' });
+    setQcMsg('');
+  }, [detailId]);
+
   const setSaving = (key, value) => setSavingMap((prev) => ({ ...prev, [key]: value }));
+
+  const submitQc = async (card) => {
+    if (!card) return;
+    const passed = Number.parseInt(qcForm.passed, 10) || 0;
+    const rejected = Number.parseInt(qcForm.rejected, 10) || 0;
+    if (passed <= 0 && rejected <= 0) {
+      setQcMsg('Ingresa al menos una pieza aprobada o rechazada.');
+      return;
+    }
+    setQcSaving(true);
+    setQcMsg('');
+    try {
+      const res = await apiRequest(`/api/production/kanban/cards/${card.id}/qc`, {
+        method: 'POST',
+        token,
+        body: { passed, rejected }
+      });
+      setQcForm({ passed: '', rejected: '' });
+      setQcMsg(`Registrado: ${res?.passed || passed} aprobadas, ${res?.rejected || rejected} rechazadas.`);
+    } catch (err) {
+      setQcMsg(err.message || 'No se pudo registrar el control de calidad.');
+    } finally {
+      setQcSaving(false);
+    }
+  };
 
   const moveCardToStage = async (card, nextStage) => {
     if (!card || !nextStage || card.stage === nextStage) return;
@@ -267,6 +301,48 @@ export default function ProductionKanban({ token }) {
               >
                 Avanzar a {STAGE_LABEL[nextStageOf(detailCard)]}
               </button>
+            )}
+
+            {/* Quality control — recorded at packing (embalado). Feeds commission. */}
+            {detailCard.stage === 'embalado' && (
+              <div className="prod-qc">
+                <div className="prod-sheet-section-label">Control de calidad</div>
+                <div className="prod-qc-fields">
+                  <label className="prod-qc-field">
+                    <span className="prod-qc-field-label">Aprobadas</span>
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      className="prod-qc-input"
+                      value={qcForm.passed}
+                      onChange={(e) => setQcForm((prev) => ({ ...prev, passed: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </label>
+                  <label className="prod-qc-field">
+                    <span className="prod-qc-field-label">Rechazadas</span>
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      className="prod-qc-input"
+                      value={qcForm.rejected}
+                      onChange={(e) => setQcForm((prev) => ({ ...prev, rejected: e.target.value }))}
+                      placeholder="0"
+                    />
+                  </label>
+                </div>
+                {qcMsg && <div className="prod-qc-msg">{qcMsg}</div>}
+                <button
+                  type="button"
+                  className="btn btn-primary prod-qc-btn"
+                  disabled={qcSaving}
+                  onClick={() => submitQc(detailCard)}
+                >
+                  {qcSaving ? 'Guardando…' : 'Registrar control de calidad'}
+                </button>
+              </div>
             )}
           </div>
         </div>

@@ -152,7 +152,7 @@ router.patch('/api/qc/checks/:id', authenticateToken, async (req, res) => {
       ? normalizeQcResult(req.body?.result)
       : normalizeQcResult(existing.result);
 
-    const productNameMap = await getProductNameMap();
+    const productNameMap = await loadProductNameMap();
     if (!sku || !productNameMap.has(sku)) {
       return res.status(400).json({ error: 'Producto inválido para control de calidad' });
     }

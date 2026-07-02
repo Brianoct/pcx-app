@@ -13,7 +13,6 @@ const PedidosPanel = lazy(() => import('./PedidosPanel'));
 const Combos = lazy(() => import('./Combos'));
 const Cupones = lazy(() => import('./Cupones'));
 const Calendar = lazy(() => import('./Calendar'));
-const QualityControlPanel = lazy(() => import('./QualityControlPanel'));
 const MicrofabricaPanel = lazy(() => import('./MicrofabricaPanel'));
 const ProductionKanban = lazy(() => import('./ProductionKanban'));
 const ExpensesPanel = lazy(() => import('./ExpensesPanel'));
@@ -97,13 +96,6 @@ export const NAV_ITEMS = [
     render: (ctx) => <ProductionKanban token={ctx.token} />
   },
   {
-    path: '/control-calidad',
-    label: 'Control de Calidad',
-    routeAccess: ['control_calidad', 'admin'],
-    navAccess: ['control_calidad'],
-    render: (ctx) => <QualityControlPanel token={ctx.token} />
-  },
-  {
     path: '/proyectos',
     label: 'Proyectos',
     routeAccess: ['proyectos_panel'],
@@ -153,7 +145,7 @@ const SIDEBAR_SECTIONS = [
   { key: 'principal', label: 'Principal', paths: ['/', '/calendario'] },
   { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/history'] },
   { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/comprar'] },
-  { key: 'produccion', label: 'Producción', paths: ['/microfabrica', '/produccion-kanban', '/control-calidad'] },
+  { key: 'produccion', label: 'Producción', paths: ['/microfabrica', '/produccion-kanban'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/proyectos'] },
   { key: 'marketing', label: 'Marketing', paths: ['/combos', '/cupones'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },

@@ -20,7 +20,6 @@ const QUICK_LINK_HINTS = {
   '/gastos': 'Registra y revisa gastos',
   '/microfabrica': 'Panel de microfábrica',
   '/produccion-kanban': 'Tablero de producción',
-  '/control-calidad': 'Control de calidad',
   '/proyectos': 'Proyectos y tareas',
   '/combos': 'Combos de marketing',
   '/cupones': 'Cupones de descuento',

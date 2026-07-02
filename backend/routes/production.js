@@ -4,6 +4,7 @@ const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { getProductionKanbanAccessScope } = require('../lib/inventory');
 const { PRODUCTION_KANBAN_STAGES, getProductionRouteStages, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, syncProductionKanbanFromInventory } = require('../lib/kanban');
 const { validateProductSku } = require('../lib/products');
+const { ensureQcProductSettingsSeeded } = require('../lib/qc');
 const { sanitizePanelAccess } = require('../lib/rbac');
 const { loadUserContext } = require('../lib/users');
 
@@ -90,6 +91,87 @@ router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requir
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo actualizar etapa de la tarjeta' });
+  }
+});
+
+// Record quality-control pass/fail for a production card, straight from the
+// embalado step. Reuses the QC records table so production commission (paid on
+// approved pieces) keeps computing from the same source. Only logs QC — it does
+// not touch inventory stock.
+router.post('/api/production/kanban/cards/:id/qc', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+  try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const kanbanScope = getProductionKanbanAccessScope(userContext, access);
+    if (kanbanScope.error) return res.status(403).json({ error: kanbanScope.error });
+
+    const cardId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(cardId) || cardId <= 0) {
+      return res.status(400).json({ error: 'ID de tarjeta inválido' });
+    }
+
+    const parseCount = (value) => {
+      if (value === undefined || value === null || value === '') return 0;
+      const n = Number.parseInt(value, 10);
+      return Number.isInteger(n) && n >= 0 ? n : NaN;
+    };
+    const passed = parseCount(req.body?.passed);
+    const rejected = parseCount(req.body?.rejected);
+    if (Number.isNaN(passed) || Number.isNaN(rejected)) {
+      return res.status(400).json({ error: 'Cantidades inválidas. Usa enteros mayores o iguales a 0' });
+    }
+    if (passed <= 0 && rejected <= 0) {
+      return res.status(400).json({ error: 'Registra al menos una pieza aprobada o rechazada' });
+    }
+
+    const cardRes = await pool.query(
+      `SELECT id, sku, product_name
+       FROM production_kanban_cards
+       WHERE id = $1
+         AND is_active = TRUE
+         AND source = 'min_stock'`,
+      [cardId]
+    );
+    if (cardRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Tarjeta no encontrada o inactiva' });
+    }
+    const card = cardRes.rows[0];
+    const sku = String(card.sku || '').toUpperCase();
+    const productName = String(card.product_name || sku).trim() || sku;
+
+    await ensureQcProductSettingsSeeded();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const inserts = [];
+      if (passed > 0) inserts.push(['passed', passed]);
+      if (rejected > 0) inserts.push(['rejected', rejected]);
+      for (const [result, quantity] of inserts) {
+        await client.query(
+          `INSERT INTO quality_control_records (user_id, sku, product_name, quantity, result)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [req.user.id, sku, productName, quantity, result]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    res.status(201).json({
+      message: 'Control de calidad registrado',
+      sku,
+      product_name: productName,
+      passed,
+      rejected
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo registrar el control de calidad' });
   }
 });
 
