@@ -18,7 +18,6 @@ const QUICK_LINK_HINTS = {
   '/pedidos': 'Gestiona pedidos del almacén',
   '/inventory': 'Controla el inventario',
   '/gastos': 'Registra y revisa gastos',
-  '/microfabrica': 'Panel de microfábrica',
   '/produccion-kanban': 'Tablero de producción',
   '/proyectos': 'Proyectos y tareas',
   '/combos': 'Combos de marketing',
