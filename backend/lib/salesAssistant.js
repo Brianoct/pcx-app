@@ -241,11 +241,30 @@ const buildFallbackSuggestion = ({ contactName, candidates = [], hasUsableText =
   };
 };
 
+// Compact per-product attribute summary for the model. Caps keep the prompt
+// affordable: works_with lists can hold 50 uses, the model only needs a taste.
+const buildCandidateAttributeBits = (attrs = {}) => {
+  const bits = [];
+  if (attrs.product_line) bits.push(`línea ${attrs.product_line}`);
+  if (attrs.presentacion && attrs.presentacion.toLowerCase() !== 'unidad') {
+    bits.push(`se vende por ${attrs.presentacion}${attrs.unidades_por_lote ? ` (${attrs.unidades_por_lote} unidades)` : ''}`);
+  }
+  if (attrs.capacidad) bits.push(`capacidad: ${attrs.capacidad}`);
+  if (Array.isArray(attrs.compatible) && attrs.compatible.length) {
+    bits.push(`compatible con: ${attrs.compatible.slice(0, 14).join(' ')}`);
+  }
+  if (Array.isArray(attrs.works_with) && attrs.works_with.length) {
+    bits.push(`usos: ${attrs.works_with.slice(0, 6).join(', ')}`);
+  }
+  return bits.join(' | ');
+};
+
 const buildSalesPrompt = ({ contactName, transcript, candidates }) => {
   const candidateLines = candidates
     .map((item) => {
       const desc = String(item.description || '').replace(/\s+/g, ' ').trim().slice(0, 200);
-      return `- ${item.sku} | ${item.name} | SF ${item.sf} Bs | CF ${item.cf} Bs${desc ? ` | ${desc}` : ''}`;
+      const attrBits = buildCandidateAttributeBits(item.attributes);
+      return `- ${item.sku} | ${item.name} | SF ${item.sf} Bs | CF ${item.cf} Bs${desc ? ` | ${desc}` : ''}${attrBits ? ` | ${attrBits}` : ''}`;
     })
     .join('\n');
   return [
@@ -267,6 +286,13 @@ const buildSalesPrompt = ({ contactName, transcript, candidates }) => {
     'muestra herramientas en una foto, sugiere los accesorios o soportes compatibles de',
     'la lista. Si no encuentras una coincidencia exacta, dilo en "notes" en lugar de',
     'forzar un producto parecido.',
+    '',
+    'IMPORTANTE sobre precios y lotes: los precios listados son por presentación de',
+    'venta (si un producto dice "se vende por Docena", el precio es por la docena',
+    'completa y qty=1 significa una docena). Si el cliente pide una cantidad de piezas',
+    'sueltas, conviértela a presentaciones y acláralo en la respuesta. Usa el campo',
+    '"compatible con" para recomendar solo accesorios que corresponden al tablero del',
+    'cliente (y viceversa), y "capacidad" para dimensionar cuántos soportes necesita.',
     '',
     'Si el cliente indica explícitamente a nombre de quién debe ir la cotización,',
     'extrae ese nombre en "customer_name". Si indica una ciudad o departamento de',
