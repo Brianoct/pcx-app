@@ -17,7 +17,8 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updatingId, setUpdatingId] = useState(null);
-  const [checklistModal, setChecklistModal] = useState(null);
+  const [prepModal, setPrepModal] = useState(null);
+  const [labelCopies, setLabelCopies] = useState(1);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
@@ -180,7 +181,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
             : q
         )));
         toast.info('Sin conexión: estado en cola para sincronizar.');
-        return;
+        return true;
       }
 
       await apiRequest(`/api/quotes/${quoteId}/status`, {
@@ -194,9 +195,11 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
       }
       await fetchPedidos();
       toast.success('Estado actualizado correctamente');
+      return true;
     } catch (err) {
       toast.error('Error al actualizar estado: ' + err.message);
       console.error(err);
+      return false;
     } finally {
       setUpdatingId(null);
     }
@@ -264,7 +267,19 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     return expanded;
   };
 
-  const openChecklist = async (quote) => {
+  // Recipient/destination data shared by the printed label and the on-screen preview.
+  const buildLabelData = (quote) => ({
+    recipientName: (quote?.alternative_name && String(quote.alternative_name).trim())
+      ? quote.alternative_name.trim()
+      : (quote?.customer_name || '—'),
+    recipientPhone: (quote?.alternative_phone && String(quote.alternative_phone).trim())
+      ? quote.alternative_phone.trim()
+      : (quote?.customer_phone || '—'),
+    destination: String(quote?.provincia || quote?.department || '—').trim() || '—',
+    notes: quote?.shipping_notes ? String(quote.shipping_notes).trim() : ''
+  });
+
+  const openPrep = async (quote) => {
     let checklistPayload = null;
     let items = [];
     try {
@@ -280,16 +295,18 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     }
     const checked = items.map((item) => (item.isCheckable ? false : true));
     const promoSections = Array.isArray(checklistPayload?.promo_sections) ? checklistPayload.promo_sections : [];
-    setChecklistModal({
-      quoteId: quote.id,
+    setLabelCopies(1);
+    setPrepModal({
+      quote,
       items,
       checked,
-      promoSections
+      promoSections,
+      packed: quote.status === 'Embalado' || quote.status === 'Enviado'
     });
   };
 
   const toggleItem = (index) => {
-    setChecklistModal(prev => {
+    setPrepModal(prev => {
       if (!prev?.items?.[index]?.isCheckable) return prev;
       const newChecked = [...prev.checked];
       newChecked[index] = !newChecked[index];
@@ -298,76 +315,78 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   };
 
   const confirmPacking = async () => {
-    const { quoteId } = checklistModal;
-    if (!window.confirm('¿Confirmar que todos los productos fueron empaquetados correctamente?')) return;
-
-    await handleStatusChange(quoteId, 'Embalado');
-    setChecklistModal(null);
+    const quoteId = prepModal?.quote?.id;
+    if (!quoteId) return;
+    const ok = await handleStatusChange(quoteId, 'Embalado');
+    if (ok) {
+      setPrepModal((prev) => (prev ? { ...prev, packed: true } : prev));
+    }
   };
 
-  const printLabel = (quote) => {
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: [70, 40]
-    });
+  // 70×40mm thermal label, one page per bulto with a "Bulto i/N" counter.
+  const printLabel = (quote, copies = 1) => {
+    const totalCopies = Math.min(Math.max(1, Number.parseInt(copies, 10) || 1), 20);
+    const { recipientName, recipientPhone, destination, notes } = buildLabelData(quote);
 
-    const pageWidth = 70;
-    const pageHeight = 40;
-    const margin = 2.5;
-    const contentX = margin;
-    const contentW = pageWidth - margin * 2;
-    const lineH = 3.8;
-    const maxCenterWidth = contentW - 3;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [70, 40] });
+    const pageW = 70;
+    const pageH = 40;
+    const margin = 2.2;
+    const contentW = pageW - margin * 2;
 
-    const recipientName = (quote.alternative_name && String(quote.alternative_name).trim())
-      ? quote.alternative_name.trim()
-      : (quote.customer_name || '—');
-    const recipientPhone = (quote.alternative_phone && String(quote.alternative_phone).trim())
-      ? quote.alternative_phone.trim()
-      : (quote.customer_phone || '—');
-    const locationText = quote.provincia || quote.department || '—';
-    const notesText = quote.shipping_notes ? String(quote.shipping_notes).trim() : '';
+    for (let copy = 0; copy < totalCopies; copy++) {
+      if (copy > 0) doc.addPage([70, 40], 'landscape');
 
-    // Border and header separator for cleaner thermal print look
-    doc.setDrawColor(0);
-    doc.setLineWidth(0.2);
-    doc.rect(contentX, margin, contentW, pageHeight - margin * 2);
+      doc.setDrawColor(0);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(margin, margin, contentW, pageH - margin * 2, 1.2, 1.2);
 
-    const logoW = 18;
-    const logoH = 7;
-    const logoX = (pageWidth - logoW) / 2;
-    const logoY = margin + 1;
-    doc.addImage(logo, 'PNG', logoX, logoY, logoW, logoH);
-    const separatorY = logoY + logoH + 1.2;
-    doc.line(contentX + 1.5, separatorY, contentX + contentW - 1.5, separatorY);
+      // Header: logo left, order number + bulto counter right.
+      doc.addImage(logo, 'PNG', margin + 2, margin + 1.6, 14.5, 5.6);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.2);
+      doc.text(`PEDIDO #${quote.id}`, pageW - margin - 2, margin + 4, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.6);
+      doc.text(`Bulto ${copy + 1}/${totalCopies}`, pageW - margin - 2, margin + 6.8, { align: 'right' });
 
-    let y = separatorY + 6;
+      const sepY = margin + 8.4;
+      doc.setLineWidth(0.2);
+      doc.line(margin + 1.5, sepY, pageW - margin - 1.5, sepY);
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10.5);
-    const namePrint = fitTextByWidth(doc, recipientName, maxCenterWidth);
-    doc.text(namePrint, pageWidth / 2, y, { align: 'center' });
-    y += lineH + 0.2;
+      // Recipient block.
+      doc.setFontSize(5.8);
+      doc.setTextColor(110, 110, 110);
+      doc.text('D E S T I N A T A R I O', margin + 2, sepY + 3);
+      doc.setTextColor(0, 0, 0);
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    const phonePrint = fitTextByWidth(doc, `Cel: ${recipientPhone}`, maxCenterWidth);
-    doc.text(phonePrint, pageWidth / 2, y, { align: 'center' });
-    y += lineH;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11.5);
+      doc.text(fitTextByWidth(doc, recipientName, contentW - 4), margin + 2, sepY + 7.6);
 
-    const locationPrint = fitTextByWidth(doc, locationText, maxCenterWidth);
-    doc.text(locationPrint, pageWidth / 2, y, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.6);
+      doc.text(fitTextByWidth(doc, `Cel: ${recipientPhone}`, contentW - 4), margin + 2, sepY + 11.6);
 
-    if (notesText) {
-      y += lineH;
-      doc.setFontSize(7.7);
-      const noteLines = doc.splitTextToSize(`Nota: ${notesText}`, contentW - 4).slice(0, 2);
-      noteLines.forEach((line, idx) => {
-        const fitted = fitTextByWidth(doc, line, maxCenterWidth);
-        doc.text(fitted, pageWidth / 2, y + (idx * 3.2), { align: 'center' });
-      });
-      y += Math.max(3.2, noteLines.length * 3.2);
+      // Destination in a high-contrast inverted bar (easy to sort at a glance).
+      const barY = sepY + 13.5;
+      const barH = 6.4;
+      doc.setFillColor(0, 0, 0);
+      doc.rect(margin + 1.5, barY, contentW - 3, barH, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.text(fitTextByWidth(doc, destination.toUpperCase(), contentW - 9), pageW / 2, barY + barH / 2 + 1.4, { align: 'center' });
+      doc.setTextColor(0, 0, 0);
+
+      if (notes) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.6);
+        const noteLines = doc.splitTextToSize(`Nota: ${notes}`, contentW - 4).slice(0, 2);
+        noteLines.forEach((line, idx) => {
+          doc.text(line, margin + 2, barY + barH + 3.2 + idx * 2.8);
+        });
+      }
     }
 
     doc.save(`etiqueta_${quote.id}_${recipientName.replace(/\s+/g, '_') || 'cliente'}.pdf`);
@@ -399,49 +418,14 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   };
 
   const actionButtons = (quote, compact = false) => (
-    <div
-      className="pedidos-action-buttons"
-      style={{
-        gap: compact ? '8px' : '6px',
-        justifyContent: 'center'
-      }}
-    >
+    <div className="pedidos-action-buttons">
       <button
         type="button"
-        className="btn pedidos-action-btn empaque"
-        onClick={() => openChecklist(quote)}
-        title="Lista de empaque"
-        style={{
-          minHeight: compact ? '36px' : '34px',
-          minWidth: compact ? '96px' : '84px',
-          padding: compact ? '8px 12px' : '6px 10px',
-          fontSize: compact ? '0.85rem' : '0.8rem',
-          borderRadius: '8px',
-          border: '1px solid rgba(5, 150, 105, 0.45)',
-          background: 'rgba(16, 185, 129, 0.15)',
-          color: '#047857',
-          fontWeight: 700
-        }}
+        className={`btn pedidos-action-btn pedidos-action-btn--prep ${compact ? 'is-compact' : ''}`}
+        onClick={() => openPrep(quote)}
+        title="Lista de empaque y etiqueta de envío"
       >
-        Empaque
-      </button>
-      <button
-        type="button"
-        className="btn pedidos-action-btn etiqueta"
-        onClick={() => printLabel(quote)}
-        style={{
-          minHeight: compact ? '36px' : '34px',
-          minWidth: compact ? '96px' : '84px',
-          padding: compact ? '8px 12px' : '6px 10px',
-          fontSize: compact ? '0.85rem' : '0.8rem',
-          borderRadius: '8px',
-          border: '1px solid rgba(59, 130, 246, 0.45)',
-          background: 'rgba(59, 130, 246, 0.15)',
-          color: '#1d4ed8',
-          fontWeight: 700
-        }}
-      >
-        Etiqueta
+        Preparar
       </button>
     </div>
   );
@@ -593,14 +577,14 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
               <table className="pedidos-table">
                 <colgroup>
                   <col style={{ width: '5%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '16%' }} />
                   <col style={{ width: '10%' }} />
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '14%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '10%' }} />
-                  <col style={{ width: '12%' }} />
                   <col style={{ width: '15%' }} />
+                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '11%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '10%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -740,172 +724,158 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         </>
       )}
 
-      {/* Lista de Empaque Modal */}
-      {checklistModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'linear-gradient(135deg, rgba(120, 100, 80, 0.86), rgba(255, 255, 255, 0.88))',
-          backdropFilter: 'blur(2px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'radial-gradient(120% 140% at 20% 0%, rgba(219, 234, 254, 0.2), rgba(255, 255, 255, 0.95) 50%), #ffffff',
-            padding: '26px',
-            borderRadius: '16px',
-            width: '90%',
-            maxWidth: '760px',
-            maxHeight: '88vh',
-            overflowY: 'auto',
-            color: '#292524',
-            boxShadow: '0 24px 48px rgba(120, 100, 80, 0.65)',
-            border: '1px solid rgba(214, 204, 192, 0.8)'
-          }}>
-            <div style={{ marginBottom: '16px', textAlign: 'center' }}>
-              <h3 style={{
-                margin: '0 0 6px',
-                color: '#f43f5e',
-                fontSize: '1.75rem',
-                fontWeight: '800',
-                letterSpacing: '0.2px'
-              }}>
-                Lista de Empaque
-              </h3>
-              <div style={{ color: '#1d4ed8', fontSize: '0.95rem', fontWeight: 600 }}>
-                Pedido #{checklistModal.quoteId}
+      {/* Preparar pedido: lista de chequeo + etiqueta en un solo diálogo */}
+      {prepModal && (() => {
+        const { quote } = prepModal;
+        const labelData = buildLabelData(quote);
+        const checkableTotal = prepModal.items.filter((item) => item.isCheckable).length;
+        const checkedCount = prepModal.items.reduce(
+          (sum, item, index) => sum + (item.isCheckable && prepModal.checked[index] ? 1 : 0),
+          0
+        );
+        const allChecked = prepModal.checked.every(Boolean);
+        const busy = updatingId === quote.id;
+        return (
+          <div className="pedidos-prep-overlay" onClick={() => setPrepModal(null)}>
+            <div className="pedidos-prep-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+              <div className="pedidos-prep-head">
+                <div>
+                  <h3 className="pedidos-prep-title">Preparar pedido #{quote.id}</h3>
+                  <div className="pedidos-prep-sub">
+                    {labelData.recipientName} · {labelData.destination}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="pedidos-prep-close"
+                  onClick={() => setPrepModal(null)}
+                  aria-label="Cerrar"
+                >
+                  ✕
+                </button>
               </div>
-            </div>
 
-            {Array.isArray(checklistModal.promoSections) && checklistModal.promoSections.length > 0 && (
-              <div style={{
-                marginBottom: '16px',
-                display: 'grid',
-                gap: '8px',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))'
-              }}>
-                {checklistModal.promoSections.map((promo, index) => {
-                  const isGift = promo?.type === 'gift';
-                  const accentBg = isGift ? 'rgba(16, 185, 129, 0.16)' : 'rgba(37, 99, 235, 0.16)';
-                  const accentBorder = isGift ? '1px solid rgba(52, 211, 153, 0.5)' : '1px solid rgba(96, 165, 250, 0.5)';
-                  const titleColor = isGift ? '#047857' : '#2563eb';
-                  const valueColor = isGift ? '#d1fae5' : '#e0f2fe';
-                  return (
-                    <div
-                      key={`${promo.type || 'promo'}-${index}`}
-                      style={{
-                        background: accentBg,
-                        border: accentBorder,
-                        borderRadius: '10px',
-                        padding: '10px 12px'
-                      }}
-                    >
-                      <div style={{ color: titleColor, fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                        {promo?.title || (isGift ? 'Regalo' : 'Cupón')}
-                      </div>
-                      <strong style={{ color: valueColor, fontSize: '1rem' }}>
-                        {promo?.name || promo?.code || promo?.label || '—'}
-                      </strong>
-                      {(promo?.sku || Number(promo?.qty || 0) > 1) && (
-                        <div style={{ color: valueColor, fontSize: '0.78rem', marginTop: '4px' }}>
-                          {promo?.sku ? `SKU: ${promo.sku}` : ''}{promo?.sku && Number(promo?.qty || 0) > 1 ? ' · ' : ''}{Number(promo?.qty || 0) > 1 ? `Cant: ${promo.qty}` : ''}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <div style={{ marginBottom: '24px' }}>
-              <ul style={{ listStyle: 'none', padding: 0 }}>
-                {checklistModal.items.map((item, index) => (
-                  <li key={index} style={{
-                    marginBottom: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '14px',
-                    fontSize: item.isIndented ? '0.98rem' : '1.12rem',
-                    padding: '11px 12px',
-                    marginLeft: item.isIndented ? '24px' : 0,
-                    background: item.isComboHeader ? 'rgba(225, 29, 72, 0.12)' : 'rgba(245, 241, 236, 0.6)',
-                    borderRadius: '10px',
-                    border: item.isComboHeader ? '1px solid rgba(225, 29, 72, 0.35)' : '1px solid #e7e0d8'
-                  }}>
-                    {item.isCheckable ? (
-                      <input
-                        type="checkbox"
-                        checked={checklistModal.checked[index]}
-                        onChange={() => toggleItem(index)}
-                        style={{
-                          width: '28px',
-                          height: '28px',
-                          accentColor: '#047857'
-                        }}
-                      />
-                    ) : (
-                      <div style={{
-                        width: '28px',
-                        height: '28px',
-                        borderRadius: '6px',
-                        background: 'rgba(225, 29, 72, 0.25)',
-                        border: '1px solid rgba(225, 29, 72, 0.45)'
-                      }} />
-                    )}
-                    <span style={{ flex: 1 }}>
-                      <strong>{item.qty}</strong> × {formatChecklistItemLabel(item)}
+              <div className="pedidos-prep-grid">
+                {/* ── Lista de chequeo ── */}
+                <section className="pedidos-prep-col">
+                  <div className="pedidos-prep-col-head">
+                    <span className="pedidos-prep-col-title">Lista de chequeo</span>
+                    <span className={`pedidos-prep-progress ${checkedCount === checkableTotal ? 'is-done' : ''}`}>
+                      {checkedCount}/{checkableTotal}
                     </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                  </div>
 
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              gap: '16px',
-              marginTop: '22px'
-            }}>
-              <button
-                onClick={() => setChecklistModal(null)}
-                style={{
-                  padding: '11px 28px',
-                  background: '#ffffff',
-                  color: '#57534e',
-                  border: '1px solid #d9d0c5',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  fontWeight: '700'
-                }}
-              >
-                Cancelar
-              </button>
+                  {Array.isArray(prepModal.promoSections) && prepModal.promoSections.length > 0 && (
+                    <div className="pedidos-promos">
+                      {prepModal.promoSections.map((promo, index) => {
+                        const isGift = promo?.type === 'gift';
+                        return (
+                          <div key={`${promo.type || 'promo'}-${index}`} className={`pedidos-promo ${isGift ? 'is-gift' : 'is-coupon'}`}>
+                            <div className="pedidos-promo-type">{promo?.title || (isGift ? 'Regalo' : 'Cupón')}</div>
+                            <strong>{promo?.name || promo?.code || promo?.label || '—'}</strong>
+                            {(promo?.sku || Number(promo?.qty || 0) > 1) && (
+                              <div className="pedidos-promo-meta">
+                                {promo?.sku ? `SKU: ${promo.sku}` : ''}{promo?.sku && Number(promo?.qty || 0) > 1 ? ' · ' : ''}{Number(promo?.qty || 0) > 1 ? `Cant: ${promo.qty}` : ''}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
-              <button
-                onClick={confirmPacking}
-                disabled={!checklistModal.checked.every(Boolean)}
-                style={{
-                  padding: '11px 28px',
-                  background: checklistModal.checked.every(Boolean)
-                    ? 'linear-gradient(180deg, #047857, #059669)'
-                    : '#4b5563',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: checklistModal.checked.every(Boolean) ? 'pointer' : 'not-allowed',
-                  fontSize: '1rem',
-                  fontWeight: '800'
-                }}
-              >
-                Confirmar
-              </button>
+                  <ul className="pedidos-check-list">
+                    {prepModal.items.map((item, index) => (
+                      <li
+                        key={index}
+                        className={`pedidos-check-item ${item.isComboHeader ? 'is-combo' : ''} ${item.isIndented ? 'is-indented' : ''} ${prepModal.checked[index] && item.isCheckable ? 'is-checked' : ''}`}
+                      >
+                        {item.isCheckable ? (
+                          <input
+                            type="checkbox"
+                            className="pedidos-check-box"
+                            checked={prepModal.checked[index]}
+                            onChange={() => toggleItem(index)}
+                          />
+                        ) : (
+                          <span className="pedidos-check-combo-mark" aria-hidden="true" />
+                        )}
+                        <span className="pedidos-check-label">
+                          <strong>{item.qty}</strong> × {formatChecklistItemLabel(item)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {prepModal.packed ? (
+                    <div className="pedidos-prep-packed">✓ Empaque confirmado — pedido embalado</div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary pedidos-prep-confirm"
+                      onClick={confirmPacking}
+                      disabled={!allChecked || busy}
+                    >
+                      {busy ? 'Guardando…' : 'Confirmar empaque'}
+                    </button>
+                  )}
+                </section>
+
+                {/* ── Etiqueta de envío ── */}
+                <section className="pedidos-prep-col">
+                  <div className="pedidos-prep-col-head">
+                    <span className="pedidos-prep-col-title">Etiqueta de envío</span>
+                  </div>
+
+                  <div className="pedidos-label-preview" aria-label="Vista previa de etiqueta">
+                    <div className="pedidos-label-head">
+                      <img src={logo} alt="PCX" className="pedidos-label-logo" />
+                      <div className="pedidos-label-order">
+                        <strong>PEDIDO #{quote.id}</strong>
+                        <span>Bulto 1/{labelCopies}</span>
+                      </div>
+                    </div>
+                    <div className="pedidos-label-kicker">DESTINATARIO</div>
+                    <div className="pedidos-label-name">{labelData.recipientName}</div>
+                    <div className="pedidos-label-phone">Cel: {labelData.recipientPhone}</div>
+                    <div className="pedidos-label-dest">{labelData.destination.toUpperCase()}</div>
+                    {labelData.notes && <div className="pedidos-label-notes">Nota: {labelData.notes}</div>}
+                  </div>
+
+                  <div className="pedidos-copies">
+                    <span className="pedidos-copies-label">Etiquetas (bultos)</span>
+                    <div className="pedidos-copies-stepper">
+                      <button
+                        type="button"
+                        onClick={() => setLabelCopies((prev) => Math.max(1, prev - 1))}
+                        aria-label="Menos etiquetas"
+                      >
+                        −
+                      </button>
+                      <span className="pedidos-copies-value">{labelCopies}</span>
+                      <button
+                        type="button"
+                        onClick={() => setLabelCopies((prev) => Math.min(20, prev + 1))}
+                        aria-label="Más etiquetas"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-secondary pedidos-prep-print"
+                    onClick={() => printLabel(quote, labelCopies)}
+                  >
+                    Imprimir {labelCopies === 1 ? 'etiqueta' : `${labelCopies} etiquetas`}
+                  </button>
+                </section>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
