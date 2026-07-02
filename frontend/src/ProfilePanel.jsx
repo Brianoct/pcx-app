@@ -52,10 +52,15 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
     phone: user?.phone || '',
     city: user?.city || '',
     national_id: user?.national_id || '',
-    birth_date: user?.birth_date || '',
     emergency_contact_name: user?.emergency_contact_name || '',
     emergency_contact_phone: user?.emergency_contact_phone || '',
     payment_info: user?.payment_info || ''
+  });
+  // Birth date parts kept independently so each Día/Mes/Año select persists on
+  // its own (composed into YYYY-MM-DD only when saving).
+  const [birth, setBirth] = useState(() => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(user?.birth_date || '');
+    return m ? { y: m[1], m: m[2], d: m[3] } : { y: '', m: '', d: '' };
   });
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploading, setUploading] = useState('');
@@ -76,20 +81,21 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
   const setField = (key) => (e) => setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   // Birth date via Día/Mes/Año selects (Bolivia reads day-first, and this is
-  // locale-proof unlike a native <input type="date">). Stored as YYYY-MM-DD.
-  const birthMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(form.birth_date || '');
-  const [birthYear, birthMonth, birthDay] = birthMatch ? [birthMatch[1], birthMatch[2], birthMatch[3]] : ['', '', ''];
-  const daysInMonth = birthMonth ? new Date(Number(birthYear || 2000), Number(birthMonth), 0).getDate() : 31;
+  // locale-proof unlike a native <input type="date">).
+  const daysInMonth = birth.m ? new Date(Number(birth.y || 2000), Number(birth.m), 0).getDate() : 31;
   const setBirthPart = (part, value) => {
-    const next = { y: birthYear, m: birthMonth, d: birthDay, [part]: value };
-    if (next.y && next.m && next.d) {
-      const maxD = new Date(Number(next.y), Number(next.m), 0).getDate();
-      const dd = Math.min(Number(next.d), maxD);
-      setForm((prev) => ({ ...prev, birth_date: `${next.y}-${next.m}-${String(dd).padStart(2, '0')}` }));
-    } else {
-      setForm((prev) => ({ ...prev, birth_date: '' }));
-    }
+    setBirth((prev) => {
+      const next = { ...prev, [part]: value };
+      // Clamp the day if the new month/year has fewer days (e.g. Feb 30 -> 28/29).
+      if (next.m && next.d) {
+        const maxD = new Date(Number(next.y || 2000), Number(next.m), 0).getDate();
+        if (Number(next.d) > maxD) next.d = String(maxD).padStart(2, '0');
+      }
+      return next;
+    });
   };
+  // Compose parts into YYYY-MM-DD, or null if incomplete.
+  const composedBirthDate = (birth.y && birth.m && birth.d) ? `${birth.y}-${birth.m}-${birth.d}` : null;
 
   const saveProfile = async (event) => {
     event.preventDefault();
@@ -101,7 +107,7 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
         phone: form.phone ? String(form.phone).trim() : null,
         city: form.city ? String(form.city).trim() : null,
         national_id: form.national_id ? String(form.national_id).trim() : null,
-        birth_date: form.birth_date ? String(form.birth_date).trim() : null,
+        birth_date: composedBirthDate,
         emergency_contact_name: form.emergency_contact_name ? String(form.emergency_contact_name).trim() : null,
         emergency_contact_phone: form.emergency_contact_phone ? String(form.emergency_contact_phone).trim() : null,
         payment_info: form.payment_info ? String(form.payment_info).trim() : null
@@ -280,19 +286,19 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
             <label>
               Fecha de nacimiento
               <div className="dob-row">
-                <select aria-label="Día" value={birthDay} onChange={(e) => setBirthPart('d', e.target.value)}>
+                <select aria-label="Día" value={birth.d} onChange={(e) => setBirthPart('d', e.target.value)}>
                   <option value="">Día</option>
                   {Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, '0')).map((d) => (
                     <option key={d} value={d}>{Number(d)}</option>
                   ))}
                 </select>
-                <select aria-label="Mes" value={birthMonth} onChange={(e) => setBirthPart('m', e.target.value)}>
+                <select aria-label="Mes" value={birth.m} onChange={(e) => setBirthPart('m', e.target.value)}>
                   <option value="">Mes</option>
                   {MONTHS.map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
-                <select aria-label="Año" value={birthYear} onChange={(e) => setBirthPart('y', e.target.value)}>
+                <select aria-label="Año" value={birth.y} onChange={(e) => setBirthPart('y', e.target.value)}>
                   <option value="">Año</option>
                   {BIRTH_YEARS.map((y) => (
                     <option key={y} value={y}>{y}</option>
