@@ -12,7 +12,9 @@ const router = express.Router();
 router.get('/api/users', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, display_name, role, city, phone, panel_access, created_at, is_active FROM users ORDER BY created_at DESC'
+      `SELECT id, email, display_name, role, city, phone, panel_access, created_at, is_active,
+              avatar_url, payment_qr_url, payment_info, national_id
+       FROM users ORDER BY created_at DESC`
     );
     res.json(result.rows.map((u) => ({ ...u, panel_access: sanitizePanelAccess(u.panel_access, u.role) })));
   } catch (err) {

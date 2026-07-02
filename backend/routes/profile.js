@@ -2,75 +2,134 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
+const { deleteEmployeeAsset, saveEmployeeAsset } = require('../lib/employeeAssets');
 const { buildUserPayload, loadUserContext, normalizeDisplayName } = require('../lib/users');
 
 const router = express.Router();
 
+// Trim a free-text field to null-or-capped-string. Returns undefined when the
+// caller didn't send the key (so we leave the column untouched).
+const optionalText = (value, max) => {
+  if (value === undefined) return undefined;
+  const str = String(value || '').trim();
+  if (!str) return null;
+  return str.slice(0, max);
+};
+
 router.patch('/api/me', authenticateToken, async (req, res) => {
-  const { email, city, phone, display_name } = req.body || {};
-  const hasEmail = email !== undefined;
-  const hasCity = city !== undefined;
-  const hasPhone = phone !== undefined;
-  const hasDisplayName = display_name !== undefined;
+  const body = req.body || {};
+  const has = (key) => Object.prototype.hasOwnProperty.call(body, key);
 
-  if (!hasEmail && !hasCity && !hasPhone && !hasDisplayName) {
-    return res.status(400).json({ error: 'No se enviaron cambios para actualizar perfil' });
-  }
+  const hasEmail = has('email');
+  const hasDisplayName = has('display_name');
 
-  const nextEmail = hasEmail ? String(email || '').trim().toLowerCase() : undefined;
-  const nextCity = hasCity ? (city ? String(city).trim() : null) : undefined;
-  const nextPhone = hasPhone ? (phone ? String(phone).trim() : null) : undefined;
-  let nextDisplayName;
+  // Build the SET clause dynamically so we only touch provided fields.
+  const sets = [];
+  const values = [];
+  const push = (column, value) => {
+    values.push(value);
+    sets.push(`${column} = $${values.length}`);
+  };
+
   if (hasDisplayName) {
     try {
-      nextDisplayName = normalizeDisplayName(display_name, { required: false, fieldLabel: 'Nombre visible' });
+      push('display_name', normalizeDisplayName(body.display_name, { required: false, fieldLabel: 'Nombre visible' }));
     } catch (nameErr) {
       return res.status(nameErr?.statusCode || 400).json({ error: nameErr.message || 'Nombre visible inválido' });
     }
   }
 
   if (hasEmail) {
-    if (!nextEmail) {
-      return res.status(400).json({ error: 'El correo no puede estar vacío' });
-    }
+    const nextEmail = String(body.email || '').trim().toLowerCase();
+    if (!nextEmail) return res.status(400).json({ error: 'El correo no puede estar vacío' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
       return res.status(400).json({ error: 'Correo electrónico inválido' });
     }
+    push('email', nextEmail);
   }
 
-  if (hasPhone && nextPhone && !/^\d{8}$/.test(nextPhone)) {
-    return res.status(400).json({ error: 'Teléfono debe tener exactamente 8 dígitos numéricos' });
+  if (has('phone')) {
+    const nextPhone = body.phone ? String(body.phone).trim() : null;
+    if (nextPhone && !/^\d{8}$/.test(nextPhone)) {
+      return res.status(400).json({ error: 'Teléfono debe tener exactamente 8 dígitos numéricos' });
+    }
+    push('phone', nextPhone);
+  }
+
+  if (has('emergency_contact_phone')) {
+    const raw = body.emergency_contact_phone ? String(body.emergency_contact_phone).trim() : null;
+    if (raw && !/^[\d+\s()-]{6,20}$/.test(raw)) {
+      return res.status(400).json({ error: 'Teléfono de emergencia inválido' });
+    }
+    push('emergency_contact_phone', raw);
+  }
+
+  if (has('birth_date')) {
+    const raw = body.birth_date ? String(body.birth_date).trim() : null;
+    if (raw && !/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return res.status(400).json({ error: 'Fecha de nacimiento inválida (usa AAAA-MM-DD)' });
+    }
+    push('birth_date', raw);
+  }
+
+  if (has('city')) push('city', optionalText(body.city, 50));
+  if (has('national_id')) push('national_id', optionalText(body.national_id, 30));
+  if (has('emergency_contact_name')) push('emergency_contact_name', optionalText(body.emergency_contact_name, 80));
+  if (has('payment_info')) push('payment_info', optionalText(body.payment_info, 200));
+
+  if (sets.length === 0) {
+    return res.status(400).json({ error: 'No se enviaron cambios para actualizar perfil' });
   }
 
   try {
-    const currentUser = await loadUserContext(req.user.id);
-    if (!currentUser) return res.status(404).json({ error: 'Usuario no encontrado' });
-
-    const updatedEmail = hasEmail ? nextEmail : currentUser.email;
-    const updatedCity = hasCity ? nextCity : currentUser.city;
-    const updatedPhone = hasPhone ? nextPhone : currentUser.phone;
-    const updatedDisplayName = hasDisplayName ? nextDisplayName : (currentUser.display_name || null);
-
+    values.push(req.user.id);
     const result = await pool.query(
-      `UPDATE users
-       SET email = $1,
-           city = $2,
-           phone = $3,
-           display_name = $4
-       WHERE id = $5
-       RETURNING id, email, display_name, role, city, phone, panel_access`,
-      [updatedEmail, updatedCity, updatedPhone, updatedDisplayName, req.user.id]
+      `UPDATE users SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING id`,
+      values
     );
-
-    const updatedUser = result.rows[0];
-    if (!updatedUser) return res.status(404).json({ error: 'Usuario no encontrado' });
-    res.json({ message: 'Perfil actualizado', user: buildUserPayload(updatedUser) });
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const fresh = await loadUserContext(req.user.id);
+    res.json({ message: 'Perfil actualizado', user: buildUserPayload(fresh) });
   } catch (err) {
     console.error(err);
     if (err.code === '23505') {
       return res.status(409).json({ error: 'El correo ya está en uso por otro usuario' });
     }
     res.status(500).json({ error: 'No se pudo actualizar el perfil' });
+  }
+});
+
+// Upload (or clear) an avatar / payment-QR image for the logged-in employee.
+// Body: { kind: 'avatar'|'qr', data_url } to set, or { kind, clear: true } to remove.
+router.post('/api/me/asset', authenticateToken, async (req, res) => {
+  const kind = req.body?.kind === 'qr' ? 'qr' : req.body?.kind === 'avatar' ? 'avatar' : null;
+  if (!kind) return res.status(400).json({ error: 'Tipo de imagen inválido (avatar o qr)' });
+  const column = kind === 'qr' ? 'payment_qr_url' : 'avatar_url';
+
+  try {
+    const currentUser = await loadUserContext(req.user.id);
+    if (!currentUser) return res.status(404).json({ error: 'Usuario no encontrado' });
+    const previousPath = currentUser[column];
+
+    let nextPath = null;
+    if (!req.body?.clear) {
+      nextPath = await saveEmployeeAsset({ dataUrl: req.body?.data_url, kind, userId: req.user.id });
+    }
+
+    await pool.query(`UPDATE users SET ${column} = $1 WHERE id = $2`, [nextPath, req.user.id]);
+    if (previousPath && previousPath !== nextPath) {
+      await deleteEmployeeAsset(previousPath);
+    }
+
+    const fresh = await loadUserContext(req.user.id);
+    res.json({
+      message: req.body?.clear ? 'Imagen eliminada' : 'Imagen actualizada',
+      user: buildUserPayload(fresh)
+    });
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo actualizar la imagen' });
   }
 });
 

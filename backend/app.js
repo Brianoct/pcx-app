@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { CUSTOMER_MENU_IMAGE_DIR, LEGACY_MENU_IMAGE_DIR } = require('./lib/customerMenu');
+const { EMPLOYEE_ASSET_DIR } = require('./lib/employeeAssets');
 const fsSync = require('fs');
 
 const app = express();
@@ -28,6 +29,7 @@ app.use(express.json({
 
 app.use('/customer-menu-images', express.static(CUSTOMER_MENU_IMAGE_DIR));
 app.use('/menu-images', express.static(CUSTOMER_MENU_IMAGE_DIR));
+app.use('/employee-assets', express.static(EMPLOYEE_ASSET_DIR));
 if (fsSync.existsSync(LEGACY_MENU_IMAGE_DIR)) {
   app.use('/menu-images', express.static(LEGACY_MENU_IMAGE_DIR));
 }
