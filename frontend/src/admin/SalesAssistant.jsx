@@ -396,9 +396,16 @@ function SalesAssistant({ token, user }) {
 
   return (
     <div className="sales-ia">
-      <div className="admin-ai-result-head">
-        <h3 style={{ margin: 0 }}>Ventas IA (beta privada)</h3>
-        <span>Atiende el inbox de WhatsApp con borradores de IA.</span>
+      <div className="sales-ia-head">
+        <div className="sales-ia-head-top">
+          <h3>Ventas IA <span className="sia-beta">beta privada</span></h3>
+          <div className="sia-legend" aria-hidden="true">
+            <span className="sia-legend-item"><span className="sia-dot sia-dot-cliente" />Cliente</span>
+            <span className="sia-legend-item"><span className="sia-dot sia-dot-ventas" />Ventas</span>
+            <span className="sia-legend-item"><span className="sia-dot sia-dot-ia" />IA</span>
+          </div>
+        </div>
+        <p className="sia-head-sub">Un espacio compartido: el cliente pregunta, la IA propone y Ventas decide.</p>
       </div>
 
       {error && <div className="admin-ai-error">{error}</div>}
@@ -406,6 +413,10 @@ function SalesAssistant({ token, user }) {
       <div className="sales-ia-grid">
         {/* Column 1: conversations */}
         <div className="sales-ia-col sales-ia-list">
+          <div className="sia-col-head">
+            <span className="sia-dot sia-dot-cliente" />
+            Bandeja de clientes
+          </div>
           <div className="sales-ia-search">
             <input
               type="text"
@@ -439,8 +450,15 @@ function SalesAssistant({ token, user }) {
           </div>
         </div>
 
-        {/* Column 2: thread + composer */}
+        {/* Column 2: thread + composer (shared space Cliente ↔ Ventas) */}
         <div className="sales-ia-col sales-ia-thread">
+          <div className="sia-col-head">
+            <span className="sia-dot-pair">
+              <span className="sia-dot sia-dot-cliente" />
+              <span className="sia-dot sia-dot-ventas" />
+            </span>
+            Conversación
+          </div>
           {!selectedId && <p className="sales-ia-muted">Selecciona una conversación para empezar.</p>}
           {selectedId && (
             <>
@@ -463,6 +481,9 @@ function SalesAssistant({ token, user }) {
                         onChange={() => toggleMsgSelect(m.id)}
                       />
                     </label>
+                    <span className={`sia-actor ${m.direction === 'inbound' ? 'sia-actor-cliente' : 'sia-actor-ventas'}`}>
+                      {m.direction === 'inbound' ? 'Cliente' : 'Ventas'}
+                    </span>
                     <div>{m.text_body || `[${m.message_type || 'mensaje'}]`}</div>
                     <MediaAttachment message={m} token={token} />
                   </div>
@@ -482,10 +503,10 @@ function SalesAssistant({ token, user }) {
                   disabled={sending}
                 />
                 <div className="sales-ia-composer-actions">
-                  <button type="button" className="admin-ai-pill" onClick={generateSuggestion} disabled={suggesting || loadingThread}>
+                  <button type="button" className="sia-btn-ia" onClick={generateSuggestion} disabled={suggesting || loadingThread}>
                     {suggesting
-                      ? 'Generando…'
-                      : (selectedMsgIds.size > 0 ? `Generar IA (${selectedMsgIds.size} sel.)` : 'Generar sugerencias IA')}
+                      ? '✦ Generando…'
+                      : (selectedMsgIds.size > 0 ? `✦ Generar IA (${selectedMsgIds.size} sel.)` : '✦ Generar sugerencias IA')}
                   </button>
                   <button type="button" className="btn" onClick={sendReply} disabled={sending || !reply.trim()}>
                     {sending ? 'Enviando…' : 'Enviar respuesta'}
@@ -498,7 +519,23 @@ function SalesAssistant({ token, user }) {
 
         {/* Column 3: AI panel */}
         <div className="sales-ia-col sales-ia-panel">
-          {!suggestion && <p className="sales-ia-muted">Genera sugerencias para ver borrador, productos y cotización.</p>}
+          <div className="sia-col-head">
+            <span className="sia-dot sia-dot-ia" />
+            Copiloto IA
+          </div>
+          {!suggestion && (
+            <div className="sia-empty">
+              <span className="sia-empty-mark" aria-hidden="true">✦</span>
+              <p className="sia-empty-flow">
+                <span className="sia-flow-cliente">El cliente pregunta</span>
+                <span className="sia-flow-arrow">→</span>
+                <span className="sia-flow-ia">la IA propone</span>
+                <span className="sia-flow-arrow">→</span>
+                <span className="sia-flow-ventas">Ventas decide</span>
+              </p>
+              <p className="sales-ia-muted">Genera sugerencias para ver borrador de respuesta, productos y cotización.</p>
+            </div>
+          )}
           {suggestion && (
             <>
               {suggestion.focused && (
@@ -515,15 +552,20 @@ function SalesAssistant({ token, user }) {
               )}
 
               <div className="sales-ia-section">
-                <h4>Borrador de respuesta</h4>
+                <h4><span className="sia-chip sia-chip-ia">✦ IA</span>Borrador de respuesta</h4>
                 <p className="sales-ia-draft">{suggestion.reply_draft || '—'}</p>
-                <button type="button" className="admin-ai-pill" onClick={() => setReply(suggestion.reply_draft || '')}>
-                  Usar como respuesta
+                <button
+                  type="button"
+                  className="sia-handoff"
+                  title="Pasa el borrador al compositor para que Ventas lo revise y envíe"
+                  onClick={() => setReply(suggestion.reply_draft || '')}
+                >
+                  Usar como respuesta →
                 </button>
               </div>
 
               <div className="sales-ia-section">
-                <h4>Productos sugeridos</h4>
+                <h4><span className="sia-chip sia-chip-ia">✦ IA</span>Productos sugeridos</h4>
                 {(!suggestion.suggested_products || suggestion.suggested_products.length === 0) && (
                   <p className="sales-ia-muted">Sin sugerencias.</p>
                 )}
@@ -540,7 +582,7 @@ function SalesAssistant({ token, user }) {
               </div>
 
               <div className="sales-ia-section">
-                <h4>Borrador de cotización</h4>
+                <h4><span className="sia-chip sia-chip-mix">IA + Ventas</span>Borrador de cotización</h4>
 
                 <div className="sales-ia-product-search">
                   <input

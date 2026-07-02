@@ -4413,3 +4413,283 @@ button, .btn {
   color: var(--danger);
   font-size: 0.82rem;
 }
+/* ── Ventas IA v2: espacio colaborativo Cliente · Ventas · IA ──────────────
+   Each participant has a stable color identity across the workspace:
+   Cliente = teal, Ventas = blue, IA = violet. The thread column's top strip
+   blends teal→blue (shared customer↔sales space); the AI panel is violet. */
+.sales-ia {
+  --sia-cliente: #0d9488;
+  --sia-cliente-soft: rgba(13, 148, 136, 0.10);
+  --sia-cliente-ink: #115e59;
+  --sia-ventas: #2563eb;
+  --sia-ventas-soft: rgba(37, 99, 235, 0.12);
+  --sia-ventas-ink: #1e3a8a;
+  --sia-ia: #7c3aed;
+  --sia-ia-soft: rgba(124, 58, 237, 0.09);
+  --sia-ia-ink: #5b21b6;
+}
+
+/* Header with tri-color hairline + participant legend */
+.sales-ia-head {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 10px;
+  position: relative;
+}
+.sales-ia-head::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--sia-cliente), var(--sia-ventas) 50%, var(--sia-ia));
+  opacity: 0.75;
+}
+.sales-ia-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sales-ia-head-top h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #1c1917;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sia-beta {
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sia-ia-ink);
+  background: var(--sia-ia-soft);
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.sia-head-sub {
+  margin: 0;
+  color: #78716c;
+  font-size: 0.83rem;
+}
+.sia-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.74rem;
+  color: #57534e;
+  font-weight: 600;
+}
+.sia-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Participant dots */
+.sia-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+}
+.sia-dot-cliente { background: var(--sia-cliente); }
+.sia-dot-ventas { background: var(--sia-ventas); }
+.sia-dot-ia { background: var(--sia-ia); }
+.sia-dot-pair { display: inline-flex; align-items: center; }
+.sia-dot-pair .sia-dot + .sia-dot { margin-left: -3px; }
+
+/* Column identity: top strips + small heads */
+.sales-ia-col {
+  position: relative;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05);
+}
+.sales-ia-col::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+.sales-ia-list::before { background: var(--sia-cliente); opacity: 0.85; }
+.sales-ia-thread::before { background: linear-gradient(90deg, var(--sia-cliente), var(--sia-ventas)); opacity: 0.85; }
+.sales-ia-panel::before { background: var(--sia-ia); opacity: 0.85; }
+
+.sia-col-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #57534e;
+  padding-top: 2px;
+}
+
+/* Bubbles: actor identity */
+.sia-actor {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+  opacity: 0.85;
+}
+.sia-actor-cliente { color: var(--sia-cliente-ink); }
+.sia-actor-ventas { color: var(--sia-ventas-ink); }
+.sales-ia-bubble.in {
+  background: var(--sia-cliente-soft);
+  color: #134e4a;
+  border: 1px solid rgba(13, 148, 136, 0.16);
+}
+.sales-ia-bubble.out {
+  background: var(--sia-ventas-soft);
+  color: var(--sia-ventas-ink);
+  border: 1px solid rgba(37, 99, 235, 0.16);
+}
+
+/* Focusing the IA on messages is a conversation with the IA → violet */
+.sales-ia-bubble.selected {
+  outline: 2px solid var(--sia-ia);
+  outline-offset: 1px;
+}
+.sales-ia-selection-bar {
+  background: var(--sia-ia-soft);
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  color: var(--sia-ia-ink);
+}
+.sales-ia-selection-bar .admin-ai-pill {
+  border-color: rgba(124, 58, 237, 0.4);
+  color: var(--sia-ia-ink);
+}
+
+/* AI actions: violet identity */
+.sia-btn-ia {
+  border: none;
+  border-radius: 10px;
+  min-height: 36px;
+  padding: 0 14px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  box-shadow: 0 1px 2px rgba(91, 33, 182, 0.35);
+  transition: filter 120ms ease, transform 120ms ease;
+}
+.sia-btn-ia:hover:not(:disabled) { filter: brightness(1.08); }
+.sia-btn-ia:active:not(:disabled) { transform: translateY(1px); }
+.sia-btn-ia:disabled { opacity: 0.55; cursor: default; }
+
+/* Section chips: who produced this block */
+.sales-ia-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #44403c;
+}
+.sia-chip {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  padding: 2px 8px;
+  flex: 0 0 auto;
+}
+.sia-chip-ia {
+  color: var(--sia-ia-ink);
+  background: var(--sia-ia-soft);
+  border: 1px solid rgba(124, 58, 237, 0.28);
+}
+.sia-chip-mix {
+  color: #fff;
+  background: linear-gradient(90deg, var(--sia-ia), var(--sia-ventas));
+  border: none;
+}
+
+/* IA draft carries a violet spine; handoff button passes it to Ventas (blue) */
+.sales-ia-draft {
+  border-left: 3px solid var(--sia-ia);
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.05), rgba(124, 58, 237, 0.02));
+}
+.sia-handoff {
+  justify-self: start;
+  border: 1px solid rgba(124, 58, 237, 0.45);
+  background: #fff;
+  color: var(--sia-ia-ink);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.sia-handoff:hover {
+  border-color: var(--sia-ventas);
+  color: var(--sia-ventas-ink);
+  background: var(--sia-ventas-soft);
+}
+
+/* Suggested products: subtle lift on hover */
+.sales-ia-product {
+  background: #fff;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.sales-ia-product:hover {
+  border-color: rgba(124, 58, 237, 0.35);
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.07);
+}
+
+/* Empty state of the AI panel: the collaboration flow */
+.sia-empty {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  text-align: center;
+  padding: 22px 8px;
+}
+.sia-empty-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  color: var(--sia-ia-ink);
+  background: var(--sia-ia-soft);
+  border: 1px solid rgba(124, 58, 237, 0.25);
+}
+.sia-empty-flow {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.sia-flow-cliente { color: var(--sia-cliente-ink); }
+.sia-flow-ia { color: var(--sia-ia-ink); }
+.sia-flow-ventas { color: var(--sia-ventas-ink); }
+.sia-flow-arrow { color: #a8a29e; font-weight: 400; }
+
+/* Active conversation card: customer teal (this column belongs to the client) */
+.sales-ia-conv {
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.sales-ia-conv:hover { border-color: rgba(13, 148, 136, 0.45); }
+.sales-ia-conv.active {
+  border-color: var(--sia-cliente);
+  background: var(--sia-cliente-soft);
+}
