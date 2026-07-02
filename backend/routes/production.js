@@ -56,7 +56,7 @@ router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requir
       return res.status(400).json({ error: 'Etapa inválida' });
     }
     const currentRes = await pool.query(
-      `SELECT id, start_process
+      `SELECT id, sku, start_process
        FROM production_kanban_cards
        WHERE id = $1
          AND is_active = TRUE
@@ -67,7 +67,7 @@ router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requir
       return res.status(404).json({ error: 'Tarjeta no encontrada o inactiva' });
     }
     const card = currentRes.rows[0];
-    const allowedStages = getProductionRouteStages(card.start_process || 'corte_laser');
+    const allowedStages = getProductionRouteStages(card.start_process || 'corte_laser', card.sku);
     if (!allowedStages.includes(nextStage)) {
       return res.status(400).json({
         error: `La etapa ${nextStage} no aplica para esta tarjeta (${card.start_process || 'corte_laser'})`

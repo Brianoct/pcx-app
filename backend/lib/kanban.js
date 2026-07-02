@@ -3,24 +3,34 @@ const { INVENTORY_CITY_SCOPE } = require('./inventory');
 const { ensureProductCatalogReady } = require('./products');
 const { normalizeText } = require('./rbac');
 
-// Manufacturing-only stages, in board order. "comprar" (purchasing) and
-// "pintado" were removed; "impresion_3d" was added.
+// Manufacturing stages, in board (display) order.
 const PRODUCTION_KANBAN_STAGES = [
-  'corte_laser',
   'impresion_3d',
+  'corte_laser',
   'punzonado',
-  'lavado',
   'plegado',
+  'soldado',
+  'lavado',
+  'pintado',
   'embalado'
 ];
 
 const PRODUCTION_KANBAN_START_STAGES = new Set(['corte_laser', 'impresion_3d', 'punzonado']);
 
+// Base routes by first operation. Metal parts share plegado → lavado → pintado →
+// embalado; 3D (plastic) parts are only printed and packed. "soldado" (welding)
+// is not in any base route — it is injected only for products that are welded
+// (see WELDED_SKUS / getProductionRouteStages).
 const PRODUCTION_KANBAN_ROUTE_BY_START = {
-  corte_laser: ['corte_laser', 'lavado', 'plegado', 'embalado'],
+  corte_laser: ['corte_laser', 'plegado', 'lavado', 'pintado', 'embalado'],
   impresion_3d: ['impresion_3d', 'embalado'],
-  punzonado: ['punzonado', 'lavado', 'plegado', 'embalado']
+  punzonado: ['punzonado', 'plegado', 'lavado', 'pintado', 'embalado']
 };
+
+// Products that require a welding step. Soldado is inserted right after plegado
+// in their route. Only the steel box is welded for now; add SKUs here as more
+// welded products come online (a per-product route table can replace this later).
+const WELDED_SKUS = new Set(['C15N']);
 
 // Products configured as resale ("comprar") are excluded from the production
 // board; purchasing will be handled by a dedicated board in a later step.
@@ -38,8 +48,10 @@ const normalizeProductionKanbanStage = (value = '', { allowNull = false } = {}) 
   if (normalized === 'corte_laser' || normalized === 'laser' || normalized === 'corte') return 'corte_laser';
   if (normalized === 'impresion_3d' || normalized === 'impresion3d' || normalized === 'impresion' || normalized === '3d' || normalized === 'print_3d' || normalized === 'print3d') return 'impresion_3d';
   if (normalized === 'punzonado' || normalized === 'punzonadora' || normalized === 'punch') return 'punzonado';
-  if (normalized === 'lavado' || normalized === 'wash') return 'lavado';
   if (normalized === 'plegado' || normalized === 'doblado' || normalized === 'folding') return 'plegado';
+  if (normalized === 'soldado' || normalized === 'soldadura' || normalized === 'weld' || normalized === 'welding') return 'soldado';
+  if (normalized === 'lavado' || normalized === 'wash') return 'lavado';
+  if (normalized === 'pintado' || normalized === 'pintura' || normalized === 'paint' || normalized === 'painting') return 'pintado';
   if (normalized === 'embalado' || normalized === 'empaque' || normalized === 'pack') return 'embalado';
   return null;
 };
@@ -52,9 +64,18 @@ const normalizeProductionStartProcess = (value = '') => {
   return PRODUCTION_KANBAN_START_STAGES.has(stage) ? stage : null;
 };
 
-const getProductionRouteStages = (startProcess = 'corte_laser') => {
+const getProductionRouteStages = (startProcess = 'corte_laser', sku = '') => {
   const normalizedStart = normalizeProductionStartProcess(startProcess) || 'corte_laser';
-  return PRODUCTION_KANBAN_ROUTE_BY_START[normalizedStart] || PRODUCTION_KANBAN_ROUTE_BY_START.corte_laser;
+  const base = PRODUCTION_KANBAN_ROUTE_BY_START[normalizedStart] || PRODUCTION_KANBAN_ROUTE_BY_START.corte_laser;
+  // Inject the welding step right after plegado for welded products only.
+  const normalizedSku = String(sku || '').trim().toUpperCase();
+  if (WELDED_SKUS.has(normalizedSku)) {
+    const plegadoIdx = base.indexOf('plegado');
+    if (plegadoIdx >= 0 && !base.includes('soldado')) {
+      return [...base.slice(0, plegadoIdx + 1), 'soldado', ...base.slice(plegadoIdx + 1)];
+    }
+  }
+  return base;
 };
 
 const inferDefaultProductionStartProcess = (product = {}) => {
@@ -65,13 +86,14 @@ const inferDefaultProductionStartProcess = (product = {}) => {
 };
 
 const mapProductionKanbanCardRow = (row = {}) => {
+  const sku = String(row.sku || '').toUpperCase();
   const startProcess = normalizeProductionStartProcess(row.start_process || 'corte_laser') || 'corte_laser';
   const stageCandidate = normalizeProductionKanbanStage(row.stage || '', { allowNull: true }) || startProcess;
-  const validRoute = getProductionRouteStages(startProcess);
+  const validRoute = getProductionRouteStages(startProcess, sku);
   const safeStage = validRoute.includes(stageCandidate) ? stageCandidate : startProcess;
   return {
     id: Number(row.id),
-    sku: String(row.sku || '').toUpperCase(),
+    sku,
     product_name: String(row.product_name || row.name || '').trim(),
     store_location: String(row.store_location || '').trim(),
     current_stock: Number(row.current_stock || 0),
@@ -79,6 +101,7 @@ const mapProductionKanbanCardRow = (row = {}) => {
     required_qty: Number(row.required_qty || 0),
     start_process: startProcess,
     stage: safeStage,
+    route: validRoute,
     source: String(row.source || 'min_stock').trim() || 'min_stock',
     last_moved_at: row.last_moved_at || null,
     created_at: row.created_at || null,
@@ -111,7 +134,7 @@ const syncProductionKanbanFromInventory = async () => {
     // Resale items are not produced; they will live on the purchasing board.
     if (isResaleStartProcess(configuredStartRaw)) continue;
     const startProcess = normalizeProductionStartProcess(configuredStartRaw || '') || inferDefaultProductionStartProcess(product);
-    const validRouteStages = getProductionRouteStages(startProcess);
+    const validRouteStages = getProductionRouteStages(startProcess, sku);
     for (const location of PRODUCTION_KANBAN_LOCATION_FIELDS) {
       const stock = Math.max(0, Number.parseInt(product[location.stockField], 10) || 0);
       const minStock = Math.max(0, Number.parseInt(product[location.minField], 10) || 0);
@@ -173,12 +196,14 @@ const syncProductionKanbanFromInventory = async () => {
      WHERE is_active = TRUE
        AND source = 'min_stock'
      ORDER BY CASE stage
-        WHEN 'corte_laser' THEN 1
-        WHEN 'impresion_3d' THEN 2
+        WHEN 'impresion_3d' THEN 1
+        WHEN 'corte_laser' THEN 2
         WHEN 'punzonado' THEN 3
-        WHEN 'lavado' THEN 4
-        WHEN 'plegado' THEN 5
-        WHEN 'embalado' THEN 6
+        WHEN 'plegado' THEN 4
+        WHEN 'soldado' THEN 5
+        WHEN 'lavado' THEN 6
+        WHEN 'pintado' THEN 7
+        WHEN 'embalado' THEN 8
          ELSE 99
        END,
        required_qty DESC,
