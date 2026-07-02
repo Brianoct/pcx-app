@@ -93,7 +93,7 @@ function RoleConfiguration({ token }) {
   }
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: '12px', padding: '20px' }}>
+    <div className="card">
       <h3 style={{ marginBottom: '12px' }}>Configuración de Roles</h3>
       <p style={{ color: '#78716c', marginBottom: '16px' }}>
         Edita los paneles por rol y guarda con un solo clic. Puedes guardar solo la plantilla o guardar y aplicar a todos los usuarios del rol.

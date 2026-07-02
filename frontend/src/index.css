@@ -4693,3 +4693,164 @@ button, .btn {
   border-color: var(--sia-cliente);
   background: var(--sia-cliente-soft);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Global "sharp" UI pass
+   Extends the Ventas IA visual language across the whole app: crisper shadows,
+   a brand accent hairline on cards, consistent keyboard focus rings, tactile
+   button press states, and a mobile-first spacing/safety layer. Placed last so
+   it refines the shared primitives (.card, buttons, shadows) site-wide.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Crisper, tighter shadows than the original warm/blurry set (reads sharper). */
+:root {
+  --shadow-sm: 0 1px 2px rgba(28, 25, 23, 0.06);
+  --shadow-md: 0 2px 8px rgba(28, 25, 23, 0.08);
+  --shadow-lg: 0 6px 20px rgba(28, 25, 23, 0.10);
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.30);
+}
+
+/* Cards: defined 1px border + brand accent hairline along the top edge. */
+.card {
+  position: relative;
+  border-color: rgba(214, 204, 192, 0.75);
+  overflow-wrap: break-word;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--brand-gradient);
+  opacity: 0.85;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  pointer-events: none;
+}
+
+/* Lighter, sharper elevation on the mobile card/list rows. */
+.mobile-card { box-shadow: var(--shadow-md); overflow-wrap: break-word; }
+
+/* Consistent keyboard focus ring everywhere (accessibility + crisp feel). */
+:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+button:focus-visible,
+.btn:focus-visible,
+a:focus-visible,
+.sidebar-link:focus-visible,
+.form-input:focus-visible,
+.form-select:focus-visible,
+.form-textarea:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Tactile press + a clear, uniform disabled state for every button. */
+button:active:not(:disabled),
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+button:disabled,
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Reusable sharp primitives (adopt in markup as needed). */
+.section-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 2px 9px;
+  background: var(--brand-tint);
+  color: var(--accent-warm);
+  border: 1px solid rgba(255, 127, 48, 0.3);
+}
+
+/* Media never forces horizontal scroll on a phone. */
+img, video, canvas { max-width: 100%; }
+
+/* ── Mobile-first safety + spacing (phones are the primary surface) ────────── */
+@media (max-width: 640px) {
+  /* Reclaim horizontal space: tighter card + page padding on phones. */
+  .card { padding: 16px; border-radius: var(--radius-md); margin-bottom: 16px; }
+  .container { padding: 16px 12px 28px; }
+
+  /* Any flex row of actions/filters wraps instead of overflowing or overlapping. */
+  .filter-bar,
+  .btn-row,
+  .actions-row,
+  .toolbar,
+  .admin-ai-toolbar,
+  .admin-ai-controls,
+  .sales-ia-composer-actions,
+  .sales-ia-quote-foot,
+  .mobile-card-header { flex-wrap: wrap; }
+
+  /* Full-viewport padding for overlays so modals never touch the screen edge. */
+  .quote-edit-overlay { padding: 16px 10px; }
+  .quote-edit-modal { padding: 14px; }
+  .quote-edit-grid { grid-template-columns: 1fr; }
+
+  /* Long unbroken tokens (SKUs, URLs, emails) wrap instead of pushing width. */
+  .card, .mobile-card, .sales-ia-col { overflow-wrap: anywhere; }
+}
+
+/* Respect reduced-motion preferences. */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+  button:active:not(:disabled), .btn:active:not(:disabled) { transform: none; }
+}
+
+/* ── Mobile audit fixes (overlap + tap targets) ───────────────────────────── */
+
+/* Topbar: on narrow phones the title must be able to ellipsize and the right-
+   side chips must not overflow. Drop the "Top vendedor" label (keep star +
+   amount) and cap the sync chip width so the row always fits. */
+@media (max-width: 560px) {
+  .topbar { gap: 8px; }
+  .topbar-title { flex: 1 1 auto; min-width: 0; }
+  /* The right cluster may shrink; the sync chip truncates first, and the
+     commission amount (the number that matters) is protected from shrinking. */
+  .topbar-right { min-width: 0; flex-shrink: 1; gap: 6px; }
+  .sync-status { min-width: 0; }
+  .commission-chip-label { display: none; }
+  .commission-chip { flex-shrink: 0; }
+  .sync-chip {
+    max-width: 92px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Stat cards stack cleanly instead of risking a 320px column on a 360px screen. */
+  .dashboard-grid { grid-template-columns: 1fr; }
+
+  /* Bring small/dense buttons up to a comfortable ~40px tap target on phones. */
+  .quote-actions-item,
+  .sync-chip,
+  .compras-card-actions .btn,
+  .quote-edit-line-remove-btn,
+  .pedidos-action-btn,
+  .sidebar-logout,
+  .password-toggle-btn { min-height: 40px; }
+}

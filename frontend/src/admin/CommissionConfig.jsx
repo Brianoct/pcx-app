@@ -93,7 +93,7 @@ function CommissionConfig({ token }) {
   ];
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: '12px', padding: '20px' }}>
+    <div className="card">
       <h3 style={{ marginBottom: '12px' }}>Comisiones por Rol</h3>
       <p style={{ color: '#78716c', marginBottom: '16px' }}>
         Aquí defines los porcentajes configurables de comisión. Los cambios impactan el cálculo en tiempo real.

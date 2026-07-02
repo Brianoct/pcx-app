@@ -404,7 +404,7 @@ function ProductCatalogAdmin({ token }) {
 
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
-      <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px' }}>
+      <div className="card">
         <h3 style={{ marginBottom: '8px' }}>Detalles de productos (CSV)</h3>
         <p style={{ color: '#555', fontSize: '0.9em', marginBottom: '12px' }}>
           Descarga el catálogo completo, completa los detalles (línea, color, medidas, materiales,
@@ -457,7 +457,7 @@ function ProductCatalogAdmin({ token }) {
           </div>
         )}
       </div>
-      <div style={{ background: '#ffffff', padding: '20px', borderRadius: '12px' }}>
+      <div className="card">
         <h3 style={{ marginBottom: '12px' }}>Agregar producto al cotizador</h3>
         <form onSubmit={createProduct} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
           <input
@@ -579,7 +579,7 @@ function ProductCatalogAdmin({ token }) {
         </div>
       )}
 
-      <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px' }}>
+      <div className="card">
         <h3 style={{ marginBottom: '12px' }}>Productos del cotizador</h3>
         {loading ? (
           <p style={{ color: '#78716c' }}>Cargando productos...</p>
@@ -684,7 +684,7 @@ function ProductCatalogAdmin({ token }) {
       </div>
 
       {inactiveProducts.length > 0 && (
-        <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px' }}>
+        <div className="card">
           <h4 style={{ marginBottom: '8px' }}>Productos inactivos</h4>
           <p style={{ marginBottom: '10px', color: '#78716c' }}>
             Reactiva un producto marcando <strong>Activo</strong> y guardando.

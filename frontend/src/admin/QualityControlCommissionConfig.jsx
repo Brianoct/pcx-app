@@ -76,7 +76,7 @@ function QualityControlCommissionConfig({ token }) {
   if (loading) return <div style={{ textAlign: 'center', padding: '30px' }}>Cargando comisiones por producto...</div>;
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: '12px', padding: '20px' }}>
+    <div className="card">
       <h3 style={{ marginBottom: '10px' }}>Control de calidad — comisión por producto</h3>
       <p style={{ color: '#78716c', marginBottom: '14px' }}>
         Define el % por producto para comisión de piezas aprobadas. Aplica a Admin, Almacén Lider, Microfabrica Lider y Microfabrica.
