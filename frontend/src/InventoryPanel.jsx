@@ -14,6 +14,8 @@ function InventoryPanel({ token, role, access }) {
   const [originalMins, setOriginalMins] = useState({});
   const [saveMessage, setSaveMessage] = useState('');
   const [globalStoreView, setGlobalStoreView] = useState('all');
+  const [search, setSearch] = useState('');
+  const [alertsOnly, setAlertsOnly] = useState(false);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
@@ -343,27 +345,76 @@ function InventoryPanel({ token, role, access }) {
     );
   }
 
+  const productHasAlert = (product) => visibleStores
+    .some((store) => getStockLevel(product, store.field, store.minField, store.maxField) !== 'ok');
+
+  const searchTerm = search.trim().toLowerCase();
+  const visibleProducts = products.filter((product) => {
+    if (searchTerm && !`${product.sku} ${product.name || ''}`.toLowerCase().includes(searchTerm)) return false;
+    if (alertsOnly && !productHasAlert(product)) return false;
+    return true;
+  });
+
+  const levelChip = (level) => {
+    if (level === 'critical') return <span className="inv-chip is-critical">Sin stock</span>;
+    if (level === 'low') return <span className="inv-chip is-low">Bajo mín</span>;
+    if (level === 'over') return <span className="inv-chip is-over">Sobre máx</span>;
+    return <span className="inv-chip is-ok">OK</span>;
+  };
+
+  const worstLevel = (levels) => (
+    levels.includes('critical') ? 'critical'
+      : levels.includes('low') ? 'low'
+        : levels.includes('over') ? 'over'
+          : 'ok'
+  );
+
+  const renderTriplet = (product, store, level) => (
+    <>
+      <input
+        type="number"
+        min="0"
+        className={`inv-input inv-input-stock is-${level}`}
+        value={product[store.field] ?? 0}
+        onChange={(e) => handleStockChange(product.sku, store.field, e.target.value)}
+        aria-label={`Stock ${store.location}`}
+      />
+      <input
+        type="number"
+        min="0"
+        className="inv-input inv-input-min"
+        value={product[store.minField] ?? 0}
+        onChange={(e) => handleMinChange(product.sku, store.minField, e.target.value)}
+        aria-label={`Mínimo ${store.location}`}
+        title="Mínimo: dispara producción"
+      />
+      <input
+        type="number"
+        min="0"
+        className="inv-input inv-input-max"
+        value={product[store.maxField] ?? 0}
+        onChange={(e) => handleMinChange(product.sku, store.maxField, e.target.value)}
+        aria-label={`Máximo ${store.location}`}
+        title="Máximo: nivel de reposición"
+      />
+    </>
+  );
+
   return (
-    <div className="container">
+    <div className="container inv-page">
       <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
         Inventario
       </h2>
-      <p style={{ textAlign: 'center', color: '#78716c', marginBottom: '14px' }}>
+      <p className="inv-view-note">
         Vista: {canViewGlobalInventory ? 'Global' : `Individual (${individualStore?.location || 'Ciudad no configurada'})`}
       </p>
+
       {canViewGlobalInventory && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginBottom: '14px' }}>
+        <div className="inv-city-pills">
           <button
             type="button"
-            className="btn"
+            className={`inv-city-pill ${globalStoreView === 'all' ? 'is-active' : ''}`}
             onClick={() => setGlobalStoreView('all')}
-            style={{
-              minHeight: '34px',
-              padding: '6px 12px',
-              background: globalStoreView === 'all' ? '#2563eb' : '#ffffff',
-              color: '#292524',
-              border: globalStoreView === 'all' ? '1px solid #3b82f6' : '1px solid #e7e0d8'
-            }}
           >
             Todas
           </button>
@@ -371,15 +422,8 @@ function InventoryPanel({ token, role, access }) {
             <button
               key={`filter-${store.key}`}
               type="button"
-              className="btn"
+              className={`inv-city-pill ${globalStoreView === store.key ? 'is-active' : ''}`}
               onClick={() => setGlobalStoreView(store.key)}
-              style={{
-                minHeight: '34px',
-                padding: '6px 12px',
-                background: globalStoreView === store.key ? '#2563eb' : '#ffffff',
-                color: '#292524',
-                border: globalStoreView === store.key ? '1px solid #3b82f6' : '1px solid #e7e0d8'
-              }}
             >
               {store.location}
             </button>
@@ -387,296 +431,169 @@ function InventoryPanel({ token, role, access }) {
         </div>
       )}
 
-      <div style={{
-        position: 'sticky',
-        top: '70px',
-        zIndex: 20,
-        background: '#ffffff',
-        border: '1px solid #e7e0d8',
-        borderRadius: '12px',
-        padding: '12px',
-        marginBottom: '16px',
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '12px'
-      }}>
-        <div style={{ color: '#78716c', fontSize: '0.95rem' }}>
-          Cambios pendientes: <strong style={{ color: changedSkus.length > 0 ? '#f59e0b' : '#047857' }}>{changedSkus.length}</strong>
+      <div className="inv-toolbar">
+        <div className="inv-toolbar-row">
+          <input
+            type="text"
+            className="inv-search"
+            placeholder="Buscar producto o SKU…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <button
+            type="button"
+            className={`inv-alert-toggle ${alertsOnly ? 'is-on' : ''}`}
+            onClick={() => setAlertsOnly((prev) => !prev)}
+          >
+            Solo alertas ({lowOrCriticalCount + overstockCount})
+          </button>
         </div>
-        <div style={{ color: '#dc2626', fontSize: '0.9rem', fontWeight: 600 }}>
-          Bajo mínimo: {lowOrCriticalCount}
+        <div className="inv-toolbar-row inv-toolbar-meta">
+          <span>
+            Pendientes: <strong style={{ color: (changedSkus.length + changedMinSkus.length) > 0 ? '#f59e0b' : '#047857' }}>
+              {new Set([...changedSkus, ...changedMinSkus]).size}
+            </strong>
+          </span>
+          <span style={{ color: '#dc2626' }}>Bajo mínimo: <strong>{lowOrCriticalCount}</strong></span>
           {overstockCount > 0 && (
-            <span style={{ color: '#2563eb', marginLeft: '12px' }}>Sobre máximo: {overstockCount}</span>
+            <span style={{ color: '#2563eb' }}>Sobre máximo: <strong>{overstockCount}</strong></span>
           )}
-        </div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button
-            onClick={saveMinimums}
-            disabled={savingMins || changedMinSkus.length === 0}
-            className="btn"
-            style={{
-              padding: '10px 18px',
-              background: savingMins || changedMinSkus.length === 0 ? '#d9d0c5' : '#f59e0b',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: savingMins || changedMinSkus.length === 0 ? 'not-allowed' : 'pointer',
-              minWidth: '160px',
-              fontWeight: '700'
-            }}
-          >
-            {savingMins ? 'Guardando niveles...' : 'Guardar min/max'}
-          </button>
-          <button
-            onClick={saveAllChanges}
-            disabled={saving || changedSkus.length === 0}
-            className="btn"
-            style={{
-              padding: '10px 18px',
-              background: saving || changedSkus.length === 0 ? '#d9d0c5' : '#047857',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: saving || changedSkus.length === 0 ? 'not-allowed' : 'pointer',
-              minWidth: '190px',
-              fontWeight: '700'
-            }}
-          >
-            {saving ? 'Guardando cambios...' : 'Guardar cambios de inventario'}
-          </button>
+          <div className="inv-toolbar-actions">
+            <button
+              type="button"
+              onClick={saveMinimums}
+              disabled={savingMins || changedMinSkus.length === 0}
+              className="btn inv-save-levels"
+            >
+              {savingMins ? 'Guardando…' : 'Guardar min/max'}
+            </button>
+            <button
+              type="button"
+              onClick={saveAllChanges}
+              disabled={saving || changedSkus.length === 0}
+              className="btn inv-save-stock"
+            >
+              {saving ? 'Guardando…' : 'Guardar inventario'}
+            </button>
+          </div>
         </div>
       </div>
 
       {saveMessage && (
-        <div style={{
-          marginBottom: '12px',
-          padding: '10px 12px',
-          borderRadius: '8px',
-          color: saveMessage.startsWith('Error') ? '#b91c1c' : '#047857',
-          background: saveMessage.startsWith('Error') ? 'rgba(254, 226, 226, 0.35)' : 'rgba(209, 250, 229, 0.35)',
-          border: saveMessage.startsWith('Error') ? '1px solid #ef4444' : '1px solid #047857'
-        }}>
+        <div className={`inv-save-msg ${saveMessage.startsWith('Error') ? 'is-error' : ''}`}>
           {saveMessage}
         </div>
       )}
 
-      {isMobile ? (
+      {visibleProducts.length === 0 ? (
+        <p style={{ textAlign: 'center', color: '#78716c', padding: '30px 0' }}>
+          {products.length === 0 ? 'No hay productos registrados.' : 'Sin productos que coincidan con el filtro.'}
+        </p>
+      ) : isMobile ? (
         <div className="mobile-cards-list">
-          {products.length === 0 ? (
-            <p style={{ textAlign: 'center', color: '#78716c', padding: '30px 0' }}>
-              No hay productos registrados.
-            </p>
-          ) : (
-            products.map((product) => {
-              const changed = changedSkuSet.has(product.sku);
-              const minChanged = changedMinSkuSet.has(product.sku);
-              const inputStyle = {
-                width: '110px',
-                padding: '8px',
-                textAlign: 'center',
-                borderRadius: '6px',
-                border: changed ? '1px solid #f59e0b' : '1px solid #e7e0d8',
-                background: '#ffffff',
-                color: '#047857'
-              };
-              const minInputStyle = {
-                width: '110px',
-                padding: '8px',
-                textAlign: 'center',
-                borderRadius: '6px',
-                border: minChanged ? '1px solid #f59e0b' : '1px solid #e7e0d8',
-                background: '#ffffff',
-                color: '#b45309'
-              };
-              return (
-                <div
-                  key={product.sku}
-                  className="mobile-card"
-                  style={{ borderColor: changed ? '#f59e0b' : '#e7e0d8' }}
-                >
-                  <div className="mobile-card-header">
-                    <span className="mobile-card-id">{product.sku}</span>
-                    <span
-                      className="mobile-card-total"
-                      style={{ color: changed ? '#f59e0b' : '#047857' }}
-                    >
-                      {changed ? 'Pendiente' : 'Guardado'}
-                    </span>
+          {visibleProducts.map((product) => {
+            const pending = changedSkuSet.has(product.sku) || changedMinSkuSet.has(product.sku);
+            const levels = visibleStores.map((store) => getStockLevel(product, store.field, store.minField, store.maxField));
+            return (
+              <div key={product.sku} className={`mobile-card inv-m-card ${pending ? 'is-pending' : ''}`}>
+                <div className="inv-m-head">
+                  <div className="inv-m-title">
+                    <span className="inv-sku">{product.sku}</span>
+                    <span className="inv-name">{product.name}</span>
                   </div>
-
-                  <div className="mobile-card-body">
-                    <div className="mobile-card-row">
-                      <span className="mobile-card-label">Producto</span>
-                      <span style={{ textAlign: 'right' }}>{product.name}</span>
-                    </div>
-                    {visibleStores.map((store) => {
-                      const level = getStockLevel(product, store.field, store.minField, store.maxField);
-                      const stockColor = level === 'ok' ? '#047857' : level === 'over' ? '#2563eb' : '#b91c1c';
-                      return (
-                        <div className="mobile-card-row" key={`${product.sku}-${store.key || store.location}`}>
-                          <span className="mobile-card-label">{store.location}</span>
-                          <div style={{ display: 'grid', gap: '6px', justifyItems: 'end' }}>
-                            <input
-                              type="number"
-                              min="0"
-                              value={product[store.field] ?? 0}
-                              onChange={(e) => handleStockChange(product.sku, store.field, e.target.value)}
-                              style={{
-                                ...inputStyle,
-                                borderColor: level === 'ok' || level === 'over' ? inputStyle.border : '#ef4444',
-                                color: stockColor
-                              }}
-                            />
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <input
-                                type="number"
-                                min="0"
-                                value={product[store.minField] ?? 0}
-                                onChange={(e) => handleMinChange(product.sku, store.minField, e.target.value)}
-                                style={{ ...minInputStyle, width: '76px' }}
-                                placeholder="Mín"
-                                title="Mínimo (dispara producción)"
-                              />
-                              <input
-                                type="number"
-                                min="0"
-                                value={product[store.maxField] ?? 0}
-                                onChange={(e) => handleMinChange(product.sku, store.maxField, e.target.value)}
-                                style={{ ...minInputStyle, width: '76px', color: '#2563eb' }}
-                                placeholder="Máx"
-                                title="Máximo (nivel de reposición)"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    <div className="mobile-card-row">
-                      <span className="mobile-card-label">Actualizado</span>
-                      <span>
-                        {product.last_updated
-                          ? new Date(product.last_updated).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })
-                          : '—'}
-                      </span>
-                    </div>
-                  </div>
+                  {pending
+                    ? <span className="inv-chip is-pending">Pendiente</span>
+                    : levelChip(worstLevel(levels))}
                 </div>
-              );
-            })
-          )}
+                {visibleStores.map((store, index) => (
+                  <div key={`${product.sku}-${store.key}`} className={`inv-m-store is-${levels[index]}`}>
+                    <div className="inv-m-store-name">
+                      {store.location}
+                      {levels[index] !== 'ok' && levelChip(levels[index])}
+                    </div>
+                    <div className="inv-m-fields">
+                      <label>
+                        Stock
+                        <input
+                          type="number"
+                          min="0"
+                          className={`inv-input inv-input-stock is-${levels[index]}`}
+                          value={product[store.field] ?? 0}
+                          onChange={(e) => handleStockChange(product.sku, store.field, e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Mín
+                        <input
+                          type="number"
+                          min="0"
+                          className="inv-input inv-input-min"
+                          value={product[store.minField] ?? 0}
+                          onChange={(e) => handleMinChange(product.sku, store.minField, e.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Máx
+                        <input
+                          type="number"
+                          min="0"
+                          className="inv-input inv-input-max"
+                          value={product[store.maxField] ?? 0}
+                          onChange={(e) => handleMinChange(product.sku, store.maxField, e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            minWidth: '1400px',
-            tableLayout: 'fixed'
-          }}>
+        <div className="inv-table-wrap">
+          <table className="inv-table">
             <thead>
-              <tr style={{ background: '#ffffff' }}>
-                <th style={{ padding: '14px 12px', width: '100px', textAlign: 'center' }}>SKU</th>
-                <th style={{ padding: '14px 12px', width: '280px', textAlign: 'center' }}>Producto</th>
+              <tr>
+                <th className="inv-th inv-th-product">Producto</th>
                 {visibleStores.map((store) => (
-                  <th key={`${store.location}-stock`} style={{ padding: '14px 12px', width: '130px', textAlign: 'center' }}>{store.location}</th>
+                  <th key={`${store.key}-head`} className="inv-th inv-th-city">
+                    {store.location}
+                    <span className="inv-th-caption">Stock · Mín · Máx</span>
+                  </th>
                 ))}
-                {visibleStores.map((store) => (
-                  <th key={`${store.location}-min`} style={{ padding: '14px 12px', width: '170px', textAlign: 'center' }}>{store.minLabel}</th>
-                ))}
-                <th style={{ padding: '14px 12px', width: '180px', textAlign: 'center' }}>Última actualización</th>
-                <th style={{ padding: '14px 12px', width: '120px', textAlign: 'center' }}>Estado</th>
+                <th className="inv-th inv-th-state">Estado</th>
               </tr>
             </thead>
             <tbody>
-              {products.length === 0 ? (
-                <tr>
-                  <td colSpan={2 + (visibleStores.length * 2) + 2} style={{ textAlign: 'center', padding: '40px', color: '#78716c' }}>
-                    No hay productos registrados.
-                  </td>
-                </tr>
-              ) : (
-                products.map(product => (
-                  <tr key={product.sku} style={{ borderBottom: '1px solid #e7e0d8' }}>
-                    <td style={{ padding: '14px 12px', textAlign: 'center' }}>{product.sku}</td>
-                    <td style={{ padding: '14px 12px' }}>{product.name}</td>
-
-                    {visibleStores.map((store) => {
-                      const level = getStockLevel(product, store.field, store.minField, store.maxField);
-                      return (
-                        <td key={`${product.sku}-${store.location}-stock`} style={{ padding: '14px 12px', textAlign: 'center' }}>
-                          <input
-                            type="number"
-                            min="0"
-                            value={product[store.field] ?? 0}
-                            onChange={(e) => handleStockChange(product.sku, store.field, e.target.value)}
-                            style={{
-                              width: '90px',
-                              padding: '8px',
-                              textAlign: 'center',
-                              borderRadius: '6px',
-                              border: level === 'ok' || level === 'over'
-                                ? (changedSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #e7e0d8')
-                                : '1px solid #ef4444',
-                              background: '#ffffff',
-                              color: level === 'ok' ? '#047857' : level === 'over' ? '#2563eb' : '#b91c1c'
-                            }}
-                          />
-                        </td>
-                      );
-                    })}
-                    {visibleStores.map((store) => (
-                      <td key={`${product.sku}-${store.location}-min`} style={{ padding: '14px 12px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                          <input
-                            type="number"
-                            min="0"
-                            value={product[store.minField] ?? 0}
-                            onChange={(e) => handleMinChange(product.sku, store.minField, e.target.value)}
-                            title="Mínimo (dispara producción)"
-                            style={{
-                              width: '66px',
-                              padding: '8px 6px',
-                              textAlign: 'center',
-                              borderRadius: '6px',
-                              border: changedMinSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #e7e0d8',
-                              background: '#ffffff',
-                              color: '#b45309'
-                            }}
-                          />
-                          <input
-                            type="number"
-                            min="0"
-                            value={product[store.maxField] ?? 0}
-                            onChange={(e) => handleMinChange(product.sku, store.maxField, e.target.value)}
-                            title="Máximo (nivel de reposición)"
-                            style={{
-                              width: '66px',
-                              padding: '8px 6px',
-                              textAlign: 'center',
-                              borderRadius: '6px',
-                              border: changedMinSkuSet.has(product.sku) ? '1px solid #f59e0b' : '1px solid #e7e0d8',
-                              background: '#ffffff',
-                              color: '#2563eb'
-                            }}
-                          />
+              {visibleProducts.map((product) => {
+                const pending = changedSkuSet.has(product.sku) || changedMinSkuSet.has(product.sku);
+                const levels = visibleStores.map((store) => getStockLevel(product, store.field, store.minField, store.maxField));
+                return (
+                  <tr key={product.sku} className={pending ? 'is-pending' : ''}>
+                    <td className="inv-td inv-td-product">
+                      <span className="inv-sku">{product.sku}</span>
+                      <span className="inv-name">{product.name}</span>
+                      <span className="inv-updated">
+                        {product.last_updated
+                          ? new Date(product.last_updated).toLocaleDateString('es-BO')
+                          : ''}
+                      </span>
+                    </td>
+                    {visibleStores.map((store, index) => (
+                      <td key={`${product.sku}-${store.key}`} className={`inv-td inv-td-city is-${levels[index]}`}>
+                        <div className="inv-triplet">
+                          {renderTriplet(product, store, levels[index])}
                         </div>
                       </td>
                     ))}
-
-                    <td style={{ padding: '14px 12px', textAlign: 'center', color: '#78716c' }}>
-                      {product.last_updated 
-                        ? new Date(product.last_updated).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' })
-                        : '—'}
-                    </td>
-
-                    <td style={{ padding: '14px 12px', textAlign: 'center', color: changedSkuSet.has(product.sku) || changedMinSkuSet.has(product.sku) ? '#f59e0b' : '#047857', fontWeight: '700' }}>
-                      {changedSkuSet.has(product.sku) || changedMinSkuSet.has(product.sku) ? 'Pendiente' : 'Guardado'}
+                    <td className="inv-td inv-td-state">
+                      {pending
+                        ? <span className="inv-chip is-pending">Pendiente</span>
+                        : levelChip(worstLevel(levels))}
                     </td>
                   </tr>
-                ))
-              )}
+                );
+              })}
             </tbody>
           </table>
         </div>
