@@ -26,7 +26,10 @@ const sanitizeSlices = (raw) => {
         top: Boolean(slice?.top),
         type,
         percent: type === 'discount' ? Number(slice?.percent) : null,
-        gift_sku: type === 'gift' ? String(slice?.gift_sku || '').trim().toUpperCase().slice(0, 50) : null
+        gift_sku: type === 'gift' ? String(slice?.gift_sku || '').trim().toUpperCase().slice(0, 50) : null,
+        // Optional second gift option (Acero vs Armonía): the seller picks
+        // one of the two in Cotizar when the customer wins this slice.
+        gift_sku_2: type === 'gift' ? (String(slice?.gift_sku_2 || '').trim().toUpperCase().slice(0, 50) || null) : null
       };
     })
     .filter((slice) => slice.label);
@@ -44,7 +47,12 @@ const sanitizeSlices = (raw) => {
 // straight into the Regalo field (and the pedidos checklist). Any product in
 // the catalog qualifies — the regalo field is ruleta-only now.
 const validateGiftSkus = async (slices) => {
-  const giftSkus = [...new Set(slices.filter((s) => s.type === 'gift').map((s) => s.gift_sku))];
+  const giftSkus = [...new Set(
+    slices
+      .filter((s) => s.type === 'gift')
+      .flatMap((s) => [s.gift_sku, s.gift_sku_2])
+      .filter(Boolean)
+  )];
   if (giftSkus.length === 0) return null;
   const skuRes = await pool.query(
     'SELECT sku FROM products WHERE UPPER(sku) = ANY($1) AND is_active = TRUE',
@@ -94,6 +102,7 @@ const buildSpinRow = (row) => ({
   prize_type: row.prize_type || null,
   prize_percent: row.prize_percent !== null && row.prize_percent !== undefined ? Number(row.prize_percent) : null,
   prize_gift_sku: row.prize_gift_sku || null,
+  prize_gift_sku_2: row.prize_gift_sku_2 || null,
   redeemed_at: row.redeemed_at || null,
   redeemed_quote_id: row.redeemed_quote_id !== null && row.redeemed_quote_id !== undefined ? Number(row.redeemed_quote_id) : null,
   created_at: row.created_at || null,
@@ -381,14 +390,15 @@ router.post('/api/wheel/public/:token/spin', async (req, res) => {
     const updateRes = await pool.query(
       `UPDATE wheel_spins
        SET status = 'spun', prize_label = $2, prize_index = $3, is_top_prize = $4,
-           prize_type = $5, prize_percent = $6, prize_gift_sku = $7, spun_at = NOW()
+           prize_type = $5, prize_percent = $6, prize_gift_sku = $7, prize_gift_sku_2 = $8, spun_at = NOW()
        WHERE id = $1 AND status = 'pending'
        RETURNING prize_label, prize_index, is_top_prize`,
       [
         spin.id, prize.label, prizeIndex, Boolean(prize.top),
         prizeType,
         prizeType === 'discount' && Number.isFinite(Number(prize.percent)) ? Number(prize.percent) : null,
-        prizeType === 'gift' ? (prize.gift_sku || null) : null
+        prizeType === 'gift' ? (prize.gift_sku || null) : null,
+        prizeType === 'gift' ? (prize.gift_sku_2 || null) : null
       ]
     );
 

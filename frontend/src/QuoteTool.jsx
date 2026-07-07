@@ -103,7 +103,15 @@ export default function QuoteTool({ token, user }) {
       setDiscountMode('percent');
       setDiscountInput(Number(wheelPrize.prize_percent));
     } else if (wheelPrize.prize_type === 'gift' && wheelPrize.prize_gift_sku) {
-      setSelectedGiftSku(String(wheelPrize.prize_gift_sku).trim().toUpperCase());
+      const optionA = String(wheelPrize.prize_gift_sku).trim().toUpperCase();
+      const optionB = String(wheelPrize.prize_gift_sku_2 || '').trim().toUpperCase();
+      if (optionB) {
+        // Two options (Acero vs Armonía): the seller chooses in the banner.
+        // Keep an already-made choice; otherwise leave empty until they pick.
+        setSelectedGiftSku((prev) => (prev === optionA || prev === optionB ? prev : ''));
+      } else {
+        setSelectedGiftSku(optionA);
+      }
     }
   }, [wheelPrize]);
 
@@ -1019,8 +1027,31 @@ export default function QuoteTool({ token, user }) {
                 🎡 {wheelPrize.is_top_prize ? '🏆 PREMIO MAYOR de la ruleta' : 'Premio de la ruleta'}:{' '}
                 <strong>{wheelPrize.prize_label}</strong>
                 {wheelPrize.prize_type === 'discount' && <em className="quote-wheel-applied"> · aplicado al descuento ✓</em>}
-                {wheelPrize.prize_type === 'gift' && <em className="quote-wheel-applied"> · cargado como regalo ✓</em>}
+                {wheelPrize.prize_type === 'gift' && !wheelPrize.prize_gift_sku_2 && (
+                  <em className="quote-wheel-applied"> · cargado como regalo ✓</em>
+                )}
               </span>
+              {wheelPrize.prize_type === 'gift' && wheelPrize.prize_gift_sku_2 && (
+                <span className="quote-wheel-choice">
+                  <em>El cliente elige:</em>
+                  {[wheelPrize.prize_gift_sku, wheelPrize.prize_gift_sku_2].map((sku) => {
+                    const normalized = String(sku).trim().toUpperCase();
+                    const option = giftOptions.find((giftProduct) => giftProduct.sku === normalized);
+                    const isChosen = selectedGiftSku === normalized;
+                    return (
+                      <button
+                        key={normalized}
+                        type="button"
+                        className={`quote-wheel-option ${isChosen ? 'is-chosen' : ''}`}
+                        onClick={() => setSelectedGiftSku(normalized)}
+                      >
+                        {isChosen ? '✓ ' : ''}{option?.label || normalized}
+                      </button>
+                    );
+                  })}
+                  {!selectedGiftSku && <em className="quote-wheel-choose-hint">← elige una opción</em>}
+                </span>
+              )}
               <button type="button" className="quote-wheel-redeem" onClick={redeemWheelPrize}>
                 Marcar usado
               </button>

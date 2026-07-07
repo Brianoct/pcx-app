@@ -7306,3 +7306,42 @@ img, video, canvas { max-width: 100%; }
 }
 
 .wheel-respin-btn:hover { background: rgba(255, 255, 255, 0.22); }
+
+/* Two-option gift prize: the seller picks Acero vs Armonía in the banner */
+.quote-wheel-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.quote-wheel-choice > em {
+  font-style: normal;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.quote-wheel-option {
+  border: 1px solid rgba(139, 92, 246, 0.5);
+  background: var(--bg-secondary);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.quote-wheel-option.is-chosen {
+  background: rgba(22, 163, 74, 0.12);
+  border-color: rgba(22, 163, 74, 0.6);
+  color: #15803d;
+}
+
+.quote-wheel-choose-hint {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: #b45309;
+  font-weight: 700;
+}

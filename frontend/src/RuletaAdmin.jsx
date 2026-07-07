@@ -89,7 +89,8 @@ export default function RuletaAdmin({ token }) {
       top: Boolean(slice.top),
       type: slice.type || 'text',
       percent: slice.type === 'discount' ? Number(slice.percent) || 0 : undefined,
-      gift_sku: slice.type === 'gift' ? String(slice.gift_sku || '').trim().toUpperCase() : undefined
+      gift_sku: slice.type === 'gift' ? String(slice.gift_sku || '').trim().toUpperCase() : undefined,
+      gift_sku_2: slice.type === 'gift' ? (String(slice.gift_sku_2 || '').trim().toUpperCase() || undefined) : undefined
     }))
   });
 
@@ -305,16 +306,30 @@ export default function RuletaAdmin({ token }) {
                   </span>
                 )}
                 {slice.type === 'gift' && (
-                  <select
-                    className="ruleta-gift-select"
-                    value={slice.gift_sku || ''}
-                    onChange={(e) => editSlice(i, 'gift_sku', e.target.value)}
-                  >
-                    <option value="">Elegir producto regalo…</option>
-                    {products.map((product) => (
-                      <option key={product.sku} value={product.sku}>{product.name} ({product.sku})</option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      className="ruleta-gift-select"
+                      value={slice.gift_sku || ''}
+                      onChange={(e) => editSlice(i, 'gift_sku', e.target.value)}
+                      title="Opción 1 (ej: línea Acero)"
+                    >
+                      <option value="">Opción 1 del regalo…</option>
+                      {products.map((product) => (
+                        <option key={product.sku} value={product.sku}>{product.name} ({product.sku})</option>
+                      ))}
+                    </select>
+                    <select
+                      className="ruleta-gift-select"
+                      value={slice.gift_sku_2 || ''}
+                      onChange={(e) => editSlice(i, 'gift_sku_2', e.target.value)}
+                      title="Opción 2 opcional (ej: línea Armonía) — el vendedor elige una de las dos"
+                    >
+                      <option value="">Opción 2 (opcional)…</option>
+                      {products.map((product) => (
+                        <option key={product.sku} value={product.sku}>{product.name} ({product.sku})</option>
+                      ))}
+                    </select>
+                  </>
                 )}
                 {totalWeight > 0 && (
                   <span className="ruleta-slice-odds">
