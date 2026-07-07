@@ -12,18 +12,28 @@ const TOKEN_RE = /^[a-f0-9]{32}$/;
 const MAX_SLICES = 12;
 const MIN_SLICES = 2;
 
+const PRIZE_TYPES = new Set(['text', 'discount', 'gift']);
+
 const sanitizeSlices = (raw) => {
   if (!Array.isArray(raw)) return null;
   const slices = raw
-    .map((slice) => ({
-      label: String(slice?.label || '').trim().slice(0, 60),
-      weight: Number(slice?.weight),
-      top: Boolean(slice?.top)
-    }))
+    .map((slice) => {
+      const type = PRIZE_TYPES.has(slice?.type) ? slice.type : 'text';
+      return {
+        label: String(slice?.label || '').trim().slice(0, 60),
+        weight: Number(slice?.weight),
+        top: Boolean(slice?.top),
+        type,
+        percent: type === 'discount' ? Number(slice?.percent) : null,
+        gift_sku: type === 'gift' ? String(slice?.gift_sku || '').trim().toUpperCase().slice(0, 50) : null
+      };
+    })
     .filter((slice) => slice.label);
   if (slices.length < MIN_SLICES || slices.length > MAX_SLICES) return null;
   for (const slice of slices) {
     if (!Number.isFinite(slice.weight) || slice.weight < 0 || slice.weight > 1000) return null;
+    if (slice.type === 'discount' && (!Number.isFinite(slice.percent) || slice.percent <= 0 || slice.percent > 100)) return null;
+    if (slice.type === 'gift' && !slice.gift_sku) return null;
   }
   if (!slices.some((slice) => slice.weight > 0)) return null;
   return slices;
@@ -65,7 +75,11 @@ const buildSpinRow = (row) => ({
   prize_label: row.prize_label || null,
   prize_index: row.prize_index !== null && row.prize_index !== undefined ? Number(row.prize_index) : null,
   is_top_prize: Boolean(row.is_top_prize),
+  prize_type: row.prize_type || null,
+  prize_percent: row.prize_percent !== null && row.prize_percent !== undefined ? Number(row.prize_percent) : null,
+  prize_gift_sku: row.prize_gift_sku || null,
   redeemed_at: row.redeemed_at || null,
+  redeemed_quote_id: row.redeemed_quote_id !== null && row.redeemed_quote_id !== undefined ? Number(row.redeemed_quote_id) : null,
   created_at: row.created_at || null,
   spun_at: row.spun_at || null
 });
@@ -99,6 +113,22 @@ router.put('/api/wheel/config', authenticateToken, requireRole(['Marketing Lider
   }
   const isActive = req.body?.is_active === undefined ? true : Boolean(req.body.is_active);
   try {
+    // Gift slices must reference a real, gift-eligible product so the prize
+    // can drop straight into the Regalo field (and the pedidos checklist).
+    const giftSkus = [...new Set(slices.filter((s) => s.type === 'gift').map((s) => s.gift_sku))];
+    if (giftSkus.length > 0) {
+      const skuRes = await pool.query(
+        'SELECT sku FROM products WHERE UPPER(sku) = ANY($1) AND is_gift_eligible = TRUE',
+        [giftSkus]
+      );
+      const found = new Set(skuRes.rows.map((r) => String(r.sku).toUpperCase()));
+      const missing = giftSkus.filter((sku) => !found.has(sku));
+      if (missing.length > 0) {
+        return res.status(400).json({
+          error: `Estos SKU no existen o no son elegibles como regalo: ${missing.join(', ')}`
+        });
+      }
+    }
     // Every save bumps the version = new campaign: customers who spun the old
     // wheel can receive a new link for this one.
     const result = await pool.query(
@@ -199,12 +229,13 @@ router.post('/api/wheel/spins/:id/redeem', authenticateToken, async (req, res) =
   if (!userContext) return;
   const spinId = Number.parseInt(req.params.id, 10);
   if (!Number.isInteger(spinId) || spinId <= 0) return res.status(400).json({ error: 'Giro inválido' });
+  const quoteId = Number.parseInt(req.body?.quote_id, 10);
   try {
     const result = await pool.query(
-      `UPDATE wheel_spins SET redeemed_at = NOW(), redeemed_by = $2
+      `UPDATE wheel_spins SET redeemed_at = NOW(), redeemed_by = $2, redeemed_quote_id = $3
        WHERE id = $1 AND status = 'spun' AND redeemed_at IS NULL
        RETURNING *`,
-      [spinId, req.user.id]
+      [spinId, req.user.id, Number.isInteger(quoteId) && quoteId > 0 ? quoteId : null]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Premio no encontrado o ya usado' });
     res.json({ message: 'Premio marcado como usado', spin: buildSpinRow(result.rows[0]) });
@@ -258,12 +289,19 @@ router.post('/api/wheel/public/:token/spin', async (req, res) => {
     // THE lock: only one request can ever flip pending → spun. Refreshes,
     // double taps and parallel requests all lose the race and get the
     // already-recorded result instead of a second spin.
+    const prizeType = PRIZE_TYPES.has(prize.type) ? prize.type : 'text';
     const updateRes = await pool.query(
       `UPDATE wheel_spins
-       SET status = 'spun', prize_label = $2, prize_index = $3, is_top_prize = $4, spun_at = NOW()
+       SET status = 'spun', prize_label = $2, prize_index = $3, is_top_prize = $4,
+           prize_type = $5, prize_percent = $6, prize_gift_sku = $7, spun_at = NOW()
        WHERE id = $1 AND status = 'pending'
        RETURNING prize_label, prize_index, is_top_prize`,
-      [spin.id, prize.label, prizeIndex, Boolean(prize.top)]
+      [
+        spin.id, prize.label, prizeIndex, Boolean(prize.top),
+        prizeType,
+        prizeType === 'discount' && Number.isFinite(Number(prize.percent)) ? Number(prize.percent) : null,
+        prizeType === 'gift' ? (prize.gift_sku || null) : null
+      ]
     );
 
     if (updateRes.rowCount === 0) {

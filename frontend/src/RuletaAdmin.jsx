@@ -19,6 +19,23 @@ export default function RuletaAdmin({ token }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [giftProducts, setGiftProducts] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    apiRequest('/api/product-catalog', { token })
+      .then((data) => {
+        if (!active) return;
+        setGiftProducts((Array.isArray(data) ? data : [])
+          .filter((product) => Boolean(product?.is_gift_eligible))
+          .map((product) => ({
+            sku: String(product.sku || '').trim().toUpperCase(),
+            name: String(product.name || '').trim() || product.sku
+          })));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [token]);
 
   useEffect(() => {
     let active = true;
@@ -51,7 +68,10 @@ export default function RuletaAdmin({ token }) {
           slices: slices.map((slice) => ({
             label: String(slice.label || '').trim(),
             weight: Number(slice.weight) || 0,
-            top: Boolean(slice.top)
+            top: Boolean(slice.top),
+            type: slice.type || 'text',
+            percent: slice.type === 'discount' ? Number(slice.percent) || 0 : undefined,
+            gift_sku: slice.type === 'gift' ? String(slice.gift_sku || '').trim().toUpperCase() : undefined
           })),
           is_active: isActive
         }
@@ -128,11 +148,47 @@ export default function RuletaAdmin({ token }) {
               >
                 ✕
               </button>
-              {totalWeight > 0 && (
-                <div className="ruleta-slice-odds">
-                  {(((Number(slice.weight) || 0) / totalWeight) * 100).toFixed(1)}% de probabilidad
-                </div>
-              )}
+              <div className="ruleta-slice-type">
+                <select
+                  value={slice.type || 'text'}
+                  onChange={(e) => editSlice(i, 'type', e.target.value)}
+                  title="Qué hace este premio al llegar a Cotizar"
+                >
+                  <option value="text">Solo texto (no llena nada)</option>
+                  <option value="discount">Descuento % (llena Descuento)</option>
+                  <option value="gift">Regalo (llena Regalo)</option>
+                </select>
+                {slice.type === 'discount' && (
+                  <span className="ruleta-type-extra">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={slice.percent ?? ''}
+                      placeholder="%"
+                      onChange={(e) => editSlice(i, 'percent', e.target.value)}
+                    />
+                    <span>% de descuento</span>
+                  </span>
+                )}
+                {slice.type === 'gift' && (
+                  <select
+                    className="ruleta-gift-select"
+                    value={slice.gift_sku || ''}
+                    onChange={(e) => editSlice(i, 'gift_sku', e.target.value)}
+                  >
+                    <option value="">Elegir producto regalo…</option>
+                    {giftProducts.map((product) => (
+                      <option key={product.sku} value={product.sku}>{product.name} ({product.sku})</option>
+                    ))}
+                  </select>
+                )}
+                {totalWeight > 0 && (
+                  <span className="ruleta-slice-odds">
+                    {(((Number(slice.weight) || 0) / totalWeight) * 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
             </div>
           ))}
 
@@ -141,7 +197,7 @@ export default function RuletaAdmin({ token }) {
               type="button"
               className="btn btn-secondary"
               disabled={slices.length >= MAX_SLICES}
-              onClick={() => setSlices((prev) => [...prev, { label: '', weight: 10, top: false }])}
+              onClick={() => setSlices((prev) => [...prev, { label: '', weight: 10, top: false, type: 'text' }])}
             >
               + Agregar espacio
             </button>
