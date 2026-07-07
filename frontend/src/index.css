@@ -7165,3 +7165,32 @@ img, video, canvas { max-width: 100%; }
   cursor: pointer;
   font-size: 0.9rem;
 }
+
+/* Slice prize-type row (second line under each slice) */
+.ruleta-slice-type {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 2px 0 4px;
+}
+
+.ruleta-slice-type select,
+.ruleta-slice-type input {
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+}
+
+.ruleta-type-extra { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-muted); }
+.ruleta-type-extra input { width: 70px; }
+.ruleta-gift-select { max-width: 260px; }
+.ruleta-slice-type .ruleta-slice-odds { grid-column: auto; margin-left: auto; font-weight: 700; }
+
+.quote-wheel-applied { font-style: normal; font-size: 0.8rem; color: #15803d; font-weight: 700; }
+.quote-gift-locked { opacity: 0.85; cursor: not-allowed; }

@@ -862,13 +862,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         seller_user_id: editingQuote.seller_user_id ? Number(editingQuote.seller_user_id) : null,
         venta_type: editingQuote.venta_type || 'sf',
         discount_percent: Number(editingQuote.discount_percent || 0),
-        // Gift is now explicit in the edit form: selected → keep/change it,
-        // "Sin regalo" → clear it deliberately.
-        gift_sku: editingQuote.gift_sku ? String(editingQuote.gift_sku).toUpperCase() : null,
-        gift_qty: editingQuote.gift_sku ? Math.max(1, Number.parseInt(editingQuote.gift_qty, 10) || 1) : 0,
-        gift_name: editingQuote.gift_sku
-          ? (availableProducts.find((item) => String(item.sku || '').toUpperCase() === String(editingQuote.gift_sku).toUpperCase())?.name || null)
-          : null,
+        // Gift fields deliberately NOT sent: the regalo comes from the
+        // ruleta and must survive later edits untouched (the backend
+        // preserves gift when the fields are absent).
         rows: (Array.isArray(editingQuote.line_items) ? editingQuote.line_items : []).map((row) => ({
           sku: String(row.sku || '').toUpperCase(),
           qty: Number.parseInt(row.qty, 10) || 1,
@@ -1672,20 +1668,15 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                 />
               </label>
               <label>
-                Regalo
-                <select
-                  value={editingQuote.gift_sku || ''}
-                  onChange={(e) => onEditField('gift_sku', e.target.value)}
-                >
-                  <option value="">Sin regalo</option>
-                  {availableProducts
-                    .filter((item) => Boolean(item?.is_gift_eligible))
-                    .map((item) => (
-                      <option key={item.sku} value={String(item.sku || '').toUpperCase()}>
-                        {item.name} ({item.sku})
-                      </option>
-                    ))}
-                </select>
+                Regalo (ruleta)
+                <input
+                  type="text"
+                  value={editingQuote.gift_sku
+                    ? `${availableProducts.find((item) => String(item.sku || '').toUpperCase() === String(editingQuote.gift_sku).toUpperCase())?.name || editingQuote.gift_sku} (x${Math.max(1, Number.parseInt(editingQuote.gift_qty, 10) || 1)})`
+                    : 'Sin regalo'}
+                  disabled
+                  title="El regalo viene de la ruleta de premios y se conserva al editar"
+                />
               </label>
               <label style={{ display: 'none' }}>
                 Subtotal

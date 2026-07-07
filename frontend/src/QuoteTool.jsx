@@ -94,6 +94,19 @@ export default function QuoteTool({ token, user }) {
     return () => { active = false; clearTimeout(timer); };
   }, [token, customerPhone]);
 
+  // The prize lands in the REAL quote fields: a discount prize fills the
+  // descuento section, a gift prize fills the Regalo field (which is
+  // ruleta-only now) and flows to the pedidos checklist like any regalo.
+  useEffect(() => {
+    if (!wheelPrize) return;
+    if (wheelPrize.prize_type === 'discount' && Number(wheelPrize.prize_percent) > 0) {
+      setDiscountMode('percent');
+      setDiscountInput(Number(wheelPrize.prize_percent));
+    } else if (wheelPrize.prize_type === 'gift' && wheelPrize.prize_gift_sku) {
+      setSelectedGiftSku(String(wheelPrize.prize_gift_sku).trim().toUpperCase());
+    }
+  }, [wheelPrize]);
+
   const buildWheelUrl = (spinToken) =>
     `${window.location.origin}${window.location.pathname}#/ruleta/${spinToken}`;
 
@@ -822,6 +835,17 @@ export default function QuoteTool({ token, user }) {
       if (savedData?.assigned_to) {
         toast.info(`Cliente de cartera: la venta se asignó a ${savedData.assigned_to}.`);
       }
+      // The wheel prize was applied to this quote — consume it so it can't
+      // be used on a second one. Fire-and-forget: a hiccup here must not
+      // interrupt the sale.
+      if (wheelPrize?.id) {
+        apiRequest(`/api/wheel/spins/${wheelPrize.id}/redeem`, {
+          method: 'POST',
+          token,
+          body: { quote_id: quoteNumber }
+        }).catch(() => {});
+        setWheelPrize(null);
+      }
       const dateParts = currentDateTime?.split(', ') || [];
       const dateText = dateParts.length > 1 ? dateParts.slice(1).join(', ') : currentDateTime;
       const safeCustomerName = String(customerName || 'sin_nombre').trim().replace(/\s+/g, '_');
@@ -993,6 +1017,8 @@ export default function QuoteTool({ token, user }) {
               <span className="quote-wheel-prize-text">
                 🎡 {wheelPrize.is_top_prize ? '🏆 PREMIO MAYOR de la ruleta' : 'Premio de la ruleta'}:{' '}
                 <strong>{wheelPrize.prize_label}</strong>
+                {wheelPrize.prize_type === 'discount' && <em className="quote-wheel-applied"> · aplicado al descuento ✓</em>}
+                {wheelPrize.prize_type === 'gift' && <em className="quote-wheel-applied"> · cargado como regalo ✓</em>}
               </span>
               <button type="button" className="quote-wheel-redeem" onClick={redeemWheelPrize}>
                 Marcar usado
@@ -1155,13 +1181,14 @@ export default function QuoteTool({ token, user }) {
             </div>
 
             <div>
-              <label className="form-label">Regalo para cliente</label>
+              <label className="form-label">Regalo (premio de ruleta)</label>
               <select
                 value={selectedGiftSku}
-                onChange={(e) => setSelectedGiftSku(String(e.target.value || '').trim().toUpperCase())}
-                className="form-select"
+                className="form-select quote-gift-locked"
+                disabled
+                title="El regalo se llena automáticamente cuando el cliente gana uno en la ruleta"
               >
-                <option value="">Sin regalo</option>
+                <option value="">Sin regalo — lo llena la ruleta</option>
                 {giftOptions.map((giftProduct) => (
                   <option key={giftProduct.sku} value={giftProduct.sku}>{giftProduct.label}</option>
                 ))}
