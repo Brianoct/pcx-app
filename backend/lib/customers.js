@@ -50,7 +50,8 @@ const buildCustomerRow = (row = {}) => ({
   updated_at: row.updated_at || null,
   quotes_count: row.quotes_count !== undefined ? Number(row.quotes_count || 0) : undefined,
   total_spent: row.total_spent !== undefined ? Number(row.total_spent || 0) : undefined,
-  last_quote_at: row.last_quote_at !== undefined ? (row.last_quote_at || null) : undefined
+  last_quote_at: row.last_quote_at !== undefined ? (row.last_quote_at || null) : undefined,
+  last_store_location: row.last_store_location !== undefined ? (row.last_store_location || null) : undefined
 });
 
 // Called whenever a quote is created/edited: keeps the customer book current

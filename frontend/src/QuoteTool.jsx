@@ -6,7 +6,6 @@ import { apiRequest } from './apiClient';
 import { clearDraftState, useDraftState } from './useDraftState';
 import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
-import Field from './ui/Field';
 import QuoteCatalogPicker from './QuoteCatalogPicker';
 import CustomerHub, { CustomerSearchField } from './crm/CustomerHub';
 
@@ -19,6 +18,8 @@ const clampNumber = (value, min, max) => {
 };
 
 const DEFAULT_GIFT_QTY = 1;
+
+const ALMACEN_OPTIONS = ['Cochabamba', 'Lima', 'Santa Cruz'];
 
 export default function QuoteTool({ token, user }) {
   const toast = useToast();
@@ -55,8 +56,17 @@ export default function QuoteTool({ token, user }) {
     if (!customer) return;
     setCustomerName(String(customer.name || '').slice(0, 26));
     setCustomerPhone(String(customer.phone || '').slice(0, 26));
-    if (customer.department) setDepartment(customer.department);
-    if (customer.provincia) setProvincia(customer.provincia);
+    if (customer.provincia) {
+      setProvincia(customer.provincia);
+      setIsProvincia(true);
+    } else if (customer.department) {
+      setDepartment(customer.department);
+      setIsProvincia(false);
+    }
+    // Cartera: preselect the rep who owns this customer and repeat the
+    // almacén of their last quote — the seller only confirms.
+    if (customer.assigned_user_id) setAssignedSellerId(String(customer.assigned_user_id));
+    if (ALMACEN_OPTIONS.includes(customer.last_store_location)) setAlmacen(customer.last_store_location);
   };
 
   useEffect(() => {
@@ -904,9 +914,9 @@ export default function QuoteTool({ token, user }) {
 
       {(
         <div className="card quote-client-card">
-          <h3 className="quote-section-title">1. Cliente</h3>
-          <div className="crm-quote-toolbar">
-            <span className="crm-quote-hint">Escribe el nombre y elige un cliente guardado, o ábrelos todos.</span>
+          <div className="quote-client-head">
+            <h3 className="quote-section-title">1. Cliente</h3>
+            <span className="crm-quote-hint">Escribe el nombre y elige un cliente guardado.</span>
             <button type="button" className="btn btn-secondary crm-open-btn" onClick={() => setCrmOpen(true)}>
               Clientes
               {crmFollowUpsDue > 0 && <span className="crm-due-badge">{crmFollowUpsDue}</span>}
@@ -924,9 +934,9 @@ export default function QuoteTool({ token, user }) {
                 maxLength={26}
                 className="form-input"
               />
-              <div className={`form-counter ${customerName.length >= 23 ? 'limit' : ''}`}>
-                {customerName.length}/26
-              </div>
+              {customerName.length >= 23 && (
+                <div className="form-counter limit">{customerName.length}/26</div>
+              )}
             </div>
 
             <div>
@@ -934,26 +944,25 @@ export default function QuoteTool({ token, user }) {
               <input
                 type="tel"
                 maxLength={26}
-                placeholder="Ej: 77778888 (máx 26)"
+                placeholder="Ej: 77778888"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 className="form-input"
               />
-              <div className={`form-counter ${customerPhone.length >= 23 ? 'limit' : ''}`}>
-                {customerPhone.length}/26
+              {customerPhone.length >= 23 && (
+                <div className="form-counter limit">{customerPhone.length}/26</div>
+              )}
+            </div>
+
+            <div>
+              <div className="form-label quote-label-row">
+                <span>{isProvincia ? 'Provincia' : 'Departamento'}</span>
+                <label className="quote-inline-toggle">
+                  <input type="checkbox" checked={isProvincia} onChange={(e) => setIsProvincia(e.target.checked)} />
+                  Es provincia
+                </label>
               </div>
-            </div>
-
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label className="form-check-label">
-                <input type="checkbox" checked={isProvincia} onChange={(e) => setIsProvincia(e.target.checked)} />
-                Provincia (no departamento)
-              </label>
-            </div>
-
-            {isProvincia ? (
-              <div>
-                <label className="form-label">Provincia</label>
+              {isProvincia ? (
                 <input
                   type="text"
                   maxLength={26}
@@ -962,13 +971,7 @@ export default function QuoteTool({ token, user }) {
                   onChange={(e) => setProvincia(e.target.value)}
                   className="form-input"
                 />
-                <div className={`form-counter ${provincia.length >= 23 ? 'limit' : ''}`}>
-                  {provincia.length}/26
-                </div>
-              </div>
-            ) : (
-              <div>
-                <label className="form-label">Departamento</label>
+              ) : (
                 <select
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
@@ -985,8 +988,8 @@ export default function QuoteTool({ token, user }) {
                   <option value="Santa Cruz">Santa Cruz</option>
                   <option value="Tarija">Tarija</option>
                 </select>
-              </div>
-            )}
+              )}
+            </div>
 
             <div>
               <label className="form-label">Almacén</label>
@@ -996,9 +999,9 @@ export default function QuoteTool({ token, user }) {
                 className="form-select"
               >
                 <option value="" disabled>Almacén</option>
-                <option value="Cochabamba">Cochabamba</option>
-                <option value="Lima">Lima</option>
-                <option value="Santa Cruz">Santa Cruz</option>
+                {ALMACEN_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
               </select>
             </div>
 
@@ -1023,9 +1026,7 @@ export default function QuoteTool({ token, user }) {
             )}
 
             <div>
-              <label className="form-label">
-                Cupón marketing activo
-              </label>
+              <label className="form-label">Cupón marketing</label>
               <select
                 value={selectedCouponCode}
                 onChange={(e) => setSelectedCouponCode(e.target.value)}
@@ -1041,9 +1042,7 @@ export default function QuoteTool({ token, user }) {
             </div>
 
             <div>
-              <label className="form-label">
-                Regalo para cliente
-              </label>
+              <label className="form-label">Regalo para cliente</label>
               <select
                 value={selectedGiftSku}
                 onChange={(e) => setSelectedGiftSku(String(e.target.value || '').trim().toUpperCase())}
@@ -1054,18 +1053,30 @@ export default function QuoteTool({ token, user }) {
                   <option key={giftProduct.sku} value={giftProduct.sku}>{giftProduct.label}</option>
                 ))}
               </select>
-              <div className="form-hint">
-                Lista preseleccionada desde catálogo de productos.
-              </div>
             </div>
 
-            <div style={{ gridColumn: '1 / -1' }}>
+            <div>
+              <label className="form-label">Notas de envío (opcional)</label>
+              <input
+                type="text"
+                maxLength={26}
+                placeholder="Instrucciones, referencias..."
+                value={shippingNotes}
+                onChange={(e) => setShippingNotes(e.target.value)}
+                className="form-input"
+              />
+              {shippingNotes.length >= 23 && (
+                <div className="form-counter limit">{shippingNotes.length}/26</div>
+              )}
+            </div>
+
+            <div className="quote-altname-cell">
               <label className="form-check-label">
                 <input type="checkbox" checked={useAlternativeName} onChange={(e) => setUseAlternativeName(e.target.checked)} />
                 Enviar a nombre diferente
               </label>
               {useAlternativeName && (
-                <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                <div className="quote-altname-inputs">
                   <input
                     type="text"
                     maxLength={26}
@@ -1086,21 +1097,6 @@ export default function QuoteTool({ token, user }) {
               )}
             </div>
           </div>
-
-          <Field label="Notas de envío (opcional, máx 26)" className="quote-notes-field">
-            <textarea
-              maxLength={26}
-              placeholder="Instrucciones, referencias..."
-              value={shippingNotes}
-              onChange={(e) => setShippingNotes(e.target.value)}
-              rows={3}
-              className="form-textarea"
-            />
-            <div className={`form-counter ${shippingNotes.length >= 23 ? 'limit' : ''}`}>
-              {shippingNotes.length}/26
-            </div>
-          </Field>
-
         </div>
       )}
 
