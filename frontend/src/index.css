@@ -7194,3 +7194,115 @@ img, video, canvas { max-width: 100%; }
 
 .quote-wheel-applied { font-style: normal; font-size: 0.8rem; color: #15803d; font-weight: 700; }
 .quote-gift-locked { opacity: 0.85; cursor: not-allowed; }
+
+/* ── Ruleta campaigns ───────────────────────────────────────────────────── */
+
+.ruleta-campaign-list { margin-bottom: 18px; }
+
+.ruleta-campaign-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ruleta-campaign-list-head h3 { margin: 0; font-size: 1rem; }
+
+.ruleta-empty { color: var(--text-muted); font-size: 0.88rem; margin: 6px 0; }
+
+.ruleta-campaign-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.ruleta-campaign-table th,
+.ruleta-campaign-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.ruleta-campaign-table tr.is-selected td { background: rgba(59, 130, 246, 0.06); }
+.ruleta-campaign-name { font-weight: 700; }
+
+.ruleta-badge-active {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #15803d;
+  background: rgba(22, 163, 74, 0.12);
+  white-space: nowrap;
+}
+
+.ruleta-badge-off {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.ruleta-campaign-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.ruleta-campaign-actions .btn { min-height: 32px; padding: 4px 10px; font-size: 0.78rem; }
+
+.ruleta-name-field {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.ruleta-name-field input {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+/* Full-screen test mode: same stage the customer sees, plus test chrome */
+.wheel-test-overlay { z-index: 2200; }
+
+.wheel-test-close {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border-radius: 999px;
+  width: 40px;
+  height: 40px;
+  font-size: 1rem;
+  cursor: pointer;
+  z-index: 2210;
+}
+
+.wheel-test-badge {
+  margin-bottom: 10px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.18);
+  border: 1px dashed rgba(251, 191, 36, 0.7);
+  color: #fde68a;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.wheel-respin-btn {
+  margin-top: 14px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.wheel-respin-btn:hover { background: rgba(255, 255, 255, 0.22); }

@@ -186,8 +186,9 @@ export default function QuoteTool({ token, user }) {
     }
     return sku || name || 'Producto';
   };
+  // Any catalog product can arrive as a ruleta gift; the list is display-only
+  // (the field is locked) so it simply mirrors the full catalog.
   const giftOptions = products
-    .filter((product) => Boolean(product?.is_gift_eligible))
     .map((product) => {
       const sku = String(product?.sku || '').trim().toUpperCase();
       const name = String(product?.name || '').trim() || sku;
