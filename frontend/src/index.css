@@ -5412,6 +5412,53 @@ img, video, canvas { max-width: 100%; }
 
 .est-variance-table { min-width: 640px; }
 
+/* Pedidos header: centered title with the pagado-alert toggle on the right */
+.pedidos-title-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+.pedidos-title-row h2 {
+  margin: 0;
+  color: #dc2626;
+}
+
+.pedidos-sound-toggle {
+  position: absolute;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pedidos-sound-toggle.is-on {
+  border-color: rgba(22, 163, 74, 0.45);
+  background: rgba(22, 163, 74, 0.08);
+  color: #15803d;
+}
+
+@media (max-width: 640px) {
+  .pedidos-title-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .pedidos-sound-toggle {
+    position: static;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    PEDIDOS — "Preparar pedido" dialog (lista de chequeo + etiqueta juntas).
    Bottom sheet on phones, centered two-column dialog on wide screens.

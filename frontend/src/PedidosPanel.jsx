@@ -1,10 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import jsPDF from 'jspdf';
 import logo from './assets/logo.png';
 import { buildAccessForUser, canAccessPanel, normalizeRole } from './roleAccess';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
+
+const ALERT_SOUND_PREF_KEY = 'pcx.pedidosAlertSound';
+const PEDIDOS_POLL_MS = 30000;
 
 function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const toast = useToast();
@@ -22,6 +25,14 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
+  // Live alert when a pedido turns Pagado: sound + toast (+ system
+  // notification if the tab is in background and permission was granted).
+  const [alertSoundOn, setAlertSoundOn] = useState(() =>
+    typeof window !== 'undefined' ? localStorage.getItem(ALERT_SOUND_PREF_KEY) !== 'off' : true
+  );
+  const knownPagadoIdsRef = useRef(null); // null until the first load sets the baseline
+  const audioCtxRef = useRef(null);
+  const baseTitleRef = useRef(typeof document !== 'undefined' ? document.title : '');
 
   // Pagination
   const pedidosPerPage = 10;
@@ -99,8 +110,54 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const fetchPedidos = async () => {
-    setLoading(true);
+  // Web Audio ding — no asset file, and reusing one context avoids the
+  // browser's per-page context limit.
+  const playAlertDing = () => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      const now = ctx.currentTime;
+      [[880, 0], [1318.5, 0.18]].forEach(([freq, delay]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now + delay);
+        gain.gain.exponentialRampToValueAtTime(0.35, now + delay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + delay + 0.6);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.65);
+      });
+    } catch { /* sound is best-effort */ }
+  };
+
+  const notifyNewPagados = (freshQuotes) => {
+    if (alertSoundOn) playAlertDing();
+    for (const quote of freshQuotes.slice(0, 3)) {
+      toast.info(`🔔 Pedido pagado: ${quote.customer_name || 'Cliente'} — ${canonicalWarehouse(quote.store_location) || 'sin almacén'}`);
+    }
+    if (freshQuotes.length > 3) {
+      toast.info(`…y ${freshQuotes.length - 3} pedidos pagados más`);
+    }
+    if (document.hidden) {
+      document.title = `(${freshQuotes.length}) 🔔 Pedido pagado`;
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+          new Notification('Nuevo pedido pagado', {
+            body: freshQuotes.map((q) => `${q.customer_name || 'Cliente'} — ${canonicalWarehouse(q.store_location)}`).join('\n')
+          });
+        } catch { /* notification is best-effort */ }
+      }
+    }
+  };
+
+  const fetchPedidos = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const useTeamView = canViewPedidosGlobal;
       const data = await apiRequest(`/api/quotes${useTeamView ? '?team=true' : ''}`, { token });
@@ -110,15 +167,60 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         q.status === 'Embalado' ||
         q.status === 'Enviado'
       );
-      
+
+      const pagadoIds = new Set(filtered.filter((q) => q.status === 'Pagado').map((q) => q.id));
+      if (knownPagadoIdsRef.current) {
+        const fresh = filtered.filter((q) => q.status === 'Pagado' && !knownPagadoIdsRef.current.has(q.id));
+        if (fresh.length > 0) notifyNewPagados(fresh);
+      }
+      knownPagadoIdsRef.current = pagadoIds;
+
       setPedidos(filtered);
       setFilteredPedidos(filtered);
-      setCurrentPage(1);
+      if (!silent) setCurrentPage(1);
     } catch (err) {
-      setError(err.message);
+      if (!silent) {
+        setError(err.message);
+      }
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+    }
+  };
+
+  // Background poll so the warehouse hears about new pagados without
+  // refreshing. Ref indirection keeps the interval on the latest closure.
+  const fetchPedidosRef = useRef(fetchPedidos);
+  fetchPedidosRef.current = fetchPedidos;
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchPedidosRef.current({ silent: true });
+    }, PEDIDOS_POLL_MS);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // Restore the tab title once the user looks at the page again.
+  useEffect(() => {
+    const baseTitle = baseTitleRef.current;
+    const onVisible = () => {
+      if (!document.hidden) document.title = baseTitle;
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      document.title = baseTitle;
+    };
+  }, []);
+
+  const toggleAlertSound = () => {
+    const next = !alertSoundOn;
+    setAlertSoundOn(next);
+    try { localStorage.setItem(ALERT_SOUND_PREF_KEY, next ? 'on' : 'off'); } catch { /* private mode */ }
+    if (next) {
+      playAlertDing();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
     }
   };
 
@@ -159,6 +261,10 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
 
   const handleStatusChange = async (quoteId, newStatus) => {
     setUpdatingId(quoteId);
+    // Don't alert over a change this same user just made.
+    if (newStatus === 'Pagado' && knownPagadoIdsRef.current) {
+      knownPagadoIdsRef.current.add(quoteId);
+    }
     try {
       if (!isOnline) {
         const actionId = enqueueWrite({
@@ -433,9 +539,17 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
 
   return (
     <div className="container">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
-        Pedidos
-      </h2>
+      <div className="pedidos-title-row">
+        <h2>Pedidos</h2>
+        <button
+          type="button"
+          className={`pedidos-sound-toggle ${alertSoundOn ? 'is-on' : ''}`}
+          onClick={toggleAlertSound}
+          title="Sonido y aviso cuando un pedido pasa a Pagado"
+        >
+          {alertSoundOn ? '🔔 Alerta de pagados: activa' : '🔕 Alerta de pagados: apagada'}
+        </button>
+      </div>
 
       {/* Filter Bar - exact same style as QuoteHistory */}
       <div className="filter-bar">
