@@ -4,6 +4,7 @@ const { authenticateToken } = require('../lib/authMiddleware');
 const { getPedidosAccessScope } = require('../lib/inventory');
 const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, getQuoteSaveIdempotencyCacheKey, lineItemsFingerprint, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftSelectionForQuote } = require('../lib/quotes');
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
+const { upsertCustomerFromQuote } = require('../lib/customers');
 const { loadUserContext, resolveUserDisplayName } = require('../lib/users');
 const { createHttpError, getUserDisplayName } = require('../lib/util');
 
@@ -245,6 +246,17 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    // CRM: keep the customer book current (non-blocking; failures logged only).
+    await upsertCustomerFromQuote({
+      name: customer_name,
+      phone: customer_phone,
+      department,
+      provincia,
+      vendor: vendorDisplayName,
+      userId: req.user.id
+    });
+
     const responseBody = { id: quoteId, message: 'Cotización guardada' };
     if (idempotencyCacheKey) {
       quoteSaveIdempotencyCache.set(idempotencyCacheKey, {
@@ -299,7 +311,9 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
       query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                      q.total, q.status, q.payment_method, q.payment_cash_bs, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+                      q.total, q.status, q.payment_method, q.payment_cash_bs,
+                      q.gift_name, q.gift_sku, q.gift_qty,
+                      q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
                ORDER BY q.created_at DESC`;
@@ -309,7 +323,9 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
       query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                      q.total, q.status, q.payment_method, q.payment_cash_bs, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+                      q.total, q.status, q.payment_method, q.payment_cash_bs,
+                      q.gift_name, q.gift_sku, q.gift_qty,
+                      q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
                WHERE q.store_location = $1
@@ -320,7 +336,9 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
       query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
-                      q.total, q.status, q.payment_method, q.payment_cash_bs, q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+                      q.total, q.status, q.payment_method, q.payment_cash_bs,
+                      q.gift_name, q.gift_sku, q.gift_qty,
+                      q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
                WHERE q.user_id = $1
@@ -525,6 +543,20 @@ router.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
         isComboHeader: false,
         isIndented: false,
         isCheckable: true
+      });
+    }
+
+    // The regalo must be PACKED, so it is a checkable line in the list — not
+    // just an informative chip that's easy to miss.
+    if (quote.gift_name || quote.gift_sku) {
+      items.push({
+        displayName: `REGALO — ${String(quote.gift_name || quote.gift_sku).trim()}`,
+        sku: String(quote.gift_sku || '').trim().toUpperCase() || null,
+        qty: Math.max(1, Number.parseInt(quote.gift_qty, 10) || 1),
+        isComboHeader: false,
+        isIndented: false,
+        isCheckable: true,
+        isGift: true
       });
     }
 
@@ -943,6 +975,17 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
       ]
     );
     await client.query('COMMIT');
+
+    // CRM: corrected name/phone on edit also refreshes the customer book.
+    await upsertCustomerFromQuote({
+      name: customer_name,
+      phone: customer_phone,
+      department,
+      provincia,
+      vendor: nextVendorName,
+      userId: req.user.id
+    });
+
     return res.json({ message: 'Cotización actualizada', id: quoteId });
   } catch (err) {
     await client.query('ROLLBACK');

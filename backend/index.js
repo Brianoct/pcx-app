@@ -26,7 +26,8 @@ const routers = [
   require('./routes/adminStats'),
   require('./routes/ai'),
   require('./routes/qc'),
-  require('./routes/profile')
+  require('./routes/profile'),
+  require('./routes/customers')
 ];
 
 for (const router of routers) {

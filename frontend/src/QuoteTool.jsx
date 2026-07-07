@@ -8,6 +8,7 @@ import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
 import Field from './ui/Field';
 import QuoteCatalogPicker from './QuoteCatalogPicker';
+import CustomerHub, { CustomerSearchField } from './crm/CustomerHub';
 
 const PRODUCTS_VIEW_STORAGE_KEY = 'pcx.quoteProductsView';
 
@@ -46,6 +47,26 @@ export default function QuoteTool({ token, user }) {
   const [customerPhone, setCustomerPhone] = useState('');
   const [department, setDepartment] = useState('');
   const [provincia, setProvincia] = useState('');
+  const [crmOpen, setCrmOpen] = useState(false);
+  const [crmFollowUpsDue, setCrmFollowUpsDue] = useState(0);
+
+  // Picking a customer (from autocomplete or the hub) fills the quote form —
+  // the whole point: never re-type customer data.
+  const applyCustomer = (customer) => {
+    if (!customer) return;
+    setCustomerName(String(customer.name || '').slice(0, 26));
+    setCustomerPhone(String(customer.phone || '').slice(0, 26));
+    if (customer.department) setDepartment(customer.department);
+    if (customer.provincia) setProvincia(customer.provincia);
+  };
+
+  useEffect(() => {
+    let active = true;
+    apiRequest('/api/customers?limit=1', { token })
+      .then((data) => { if (active) setCrmFollowUpsDue(Number(data?.follow_ups_due || 0)); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [token, crmOpen]);
   const [isProvincia, setIsProvincia] = useState(false);
   const [almacen, setAlmacen] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
@@ -900,15 +921,23 @@ export default function QuoteTool({ token, user }) {
 
       {step === 1 && (
         <div className="card quote-client-card">
+          <div className="crm-quote-toolbar">
+            <span className="crm-quote-hint">Escribe el nombre y elige un cliente guardado, o ábrelos todos.</span>
+            <button type="button" className="btn btn-secondary crm-open-btn" onClick={() => setCrmOpen(true)}>
+              Clientes
+              {crmFollowUpsDue > 0 && <span className="crm-due-badge">{crmFollowUpsDue}</span>}
+            </button>
+          </div>
           <div className="quote-client-grid">
             <div>
               <label className="form-label">Cliente</label>
-              <input
-                type="text"
-                maxLength={26}
-                placeholder="Nombre (máx 26)"
+              <CustomerSearchField
+                token={token}
                 value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
+                onChange={setCustomerName}
+                onPick={applyCustomer}
+                placeholder="Nombre (máx 26)"
+                maxLength={26}
                 className="form-input"
               />
               <div className={`form-counter ${customerName.length >= 23 ? 'limit' : ''}`}>
@@ -1432,6 +1461,13 @@ export default function QuoteTool({ token, user }) {
           </div>
         </div>
       )}
+
+      <CustomerHub
+        token={token}
+        open={crmOpen}
+        onClose={() => setCrmOpen(false)}
+        onUseCustomer={applyCustomer}
+      />
     </div>
   );
 }
