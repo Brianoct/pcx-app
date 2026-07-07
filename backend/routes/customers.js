@@ -28,14 +28,15 @@ const QUOTES_BY_PHONE_JOIN = `regexp_replace(COALESCE(q.customer_phone, ''), '\\
       AND c.phone_normalized IS NOT NULL AND c.phone_normalized <> ''`;
 
 const CUSTOMER_LIST_SELECT = `
-  SELECT c.*, s.quotes_count, s.total_spent, s.last_quote_at,
+  SELECT c.*, s.quotes_count, s.total_spent, s.last_quote_at, s.last_store_location,
          COALESCE(NULLIF(TRIM(owner.display_name), ''), split_part(owner.email, '@', 1)) AS owner_name
   FROM customers c
   LEFT JOIN users owner ON owner.id = c.assigned_user_id
   LEFT JOIN LATERAL (
     SELECT COUNT(*)::int AS quotes_count,
            COALESCE(SUM(CASE WHEN q.status IN ('Pagado', 'Embalado', 'Enviado') THEN q.total ELSE 0 END), 0) AS total_spent,
-           MAX(q.created_at) AS last_quote_at
+           MAX(q.created_at) AS last_quote_at,
+           (array_agg(q.store_location ORDER BY q.created_at DESC))[1] AS last_store_location
     FROM quotes q
     WHERE ${QUOTES_BY_PHONE_JOIN}
   ) s ON TRUE`;
