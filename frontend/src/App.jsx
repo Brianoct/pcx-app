@@ -10,6 +10,7 @@ import './index.css';
 
 const PublicCustomerMenu = lazy(() => import('./PublicCustomerMenu'));
 const ComprasScan = lazy(() => import('./ComprasScan'));
+const WheelSpin = lazy(() => import('./WheelSpin'));
 
 const routeFallback = <div className="route-loading" aria-label="Cargando">Cargando…</div>;
 
@@ -47,6 +48,7 @@ function App() {
           <Routes>
             <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
             <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
+            <Route path="/ruleta/:spinToken" element={<WheelSpin />} />
             <Route path="*" element={<Login onLogin={login} />} />
           </Routes>
         </Suspense>
@@ -90,6 +92,7 @@ function App() {
               <Route path="/comprar/scan/:token" element={<ComprasScan token={token} />} />
               <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
               <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
+              <Route path="/ruleta/:spinToken" element={<WheelSpin />} />
               <Route path="*" element={<Navigate to={defaultPath} replace />} />
             </Routes>
           </Suspense>
