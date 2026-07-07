@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiRequest, API_BASE } from '../apiClient';
 import { generateModernQuotePdf } from '../quotePdf';
+import CustomerHub from '../crm/CustomerHub';
 
 const MEDIA_TYPES = ['image', 'video', 'audio', 'document'];
 
@@ -79,6 +80,26 @@ function SalesAssistant({ token, user }) {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [conversation, setConversation] = useState(null);
+  const [crmOpen, setCrmOpen] = useState(false);
+  const [crmCustomerId, setCrmCustomerId] = useState(null);
+  const [cartera, setCartera] = useState(null);
+
+  // Cartera: recognize the incoming number against the customer book so the
+  // rep sees who this is (and who attends them) without asking.
+  useEffect(() => {
+    setCartera(null);
+    const digits = String(conversation?.contact_phone || '').replace(/\D/g, '');
+    if (digits.length < 7) return;
+    let active = true;
+    apiRequest(`/api/customers?search=${encodeURIComponent(digits.slice(-8))}&limit=1`, { token })
+      .then((data) => {
+        if (!active) return;
+        const match = (data?.customers || [])[0];
+        if (match) setCartera(match);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [conversation?.contact_phone, token]);
   const [messages, setMessages] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [loadingThread, setLoadingThread] = useState(false);
@@ -399,6 +420,14 @@ function SalesAssistant({ token, user }) {
       <div className="sales-ia-head">
         <div className="sales-ia-head-top">
           <h3>Ventas IA <span className="sia-beta">beta privada</span></h3>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ minHeight: 34, padding: '6px 12px' }}
+            onClick={() => { setCrmCustomerId(null); setCrmOpen(true); }}
+          >
+            Clientes
+          </button>
           <div className="sia-legend" aria-hidden="true">
             <span className="sia-legend-item"><span className="sia-dot sia-dot-cliente" />Cliente</span>
             <span className="sia-legend-item"><span className="sia-dot sia-dot-ventas" />Ventas</span>
@@ -464,6 +493,16 @@ function SalesAssistant({ token, user }) {
             <>
               <div className="sales-ia-thread-head">
                 <strong>{conversation?.contact_name || conversation?.contact_phone || `Conversación ${selectedId}`}</strong>
+                {cartera && (
+                  <button
+                    type="button"
+                    className="sia-cartera-chip"
+                    onClick={() => { setCrmCustomerId(cartera.id); setCrmOpen(true); }}
+                    title="Abrir ficha del cliente"
+                  >
+                    Cliente: {cartera.name}{cartera.owner_name ? ` · Atiende: ${cartera.owner_name}` : ''}
+                  </button>
+                )}
                 <small className="sales-ia-muted">Marca mensajes para enfocar la IA (opcional)</small>
               </div>
               <div className="sales-ia-messages">
@@ -701,6 +740,13 @@ function SalesAssistant({ token, user }) {
           )}
         </div>
       </div>
+
+      <CustomerHub
+        token={token}
+        open={crmOpen}
+        onClose={() => setCrmOpen(false)}
+        initialCustomerId={crmCustomerId}
+      />
     </div>
   );
 }

@@ -84,6 +84,7 @@ export function CustomerSearchField({ token, value, onChange, onPick, placeholde
               <span className="crm-suggestion-meta">
                 {customer.phone || 's/tel'}{customer.department ? ` · ${customer.department}` : ''}
                 {customer.quotes_count > 0 ? ` · ${customer.quotes_count} cotiz.` : ''}
+                {customer.owner_name ? ` · Atiende: ${customer.owner_name}` : ''}
               </span>
             </button>
           ))}
@@ -94,7 +95,7 @@ export function CustomerSearchField({ token, value, onChange, onPick, placeholde
 }
 
 // ─── Full hub: list + ficha + seguimiento + pipeline + notas ─────────────────
-export default function CustomerHub({ token, open, onClose, onUseCustomer }) {
+export default function CustomerHub({ token, open, onClose, onUseCustomer, initialCustomerId = null }) {
   const [customers, setCustomers] = useState([]);
   const [followUpsDue, setFollowUpsDue] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -108,6 +109,23 @@ export default function CustomerHub({ token, open, onClose, onUseCustomer }) {
   const [msg, setMsg] = useState('');
   const [creating, setCreating] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '' });
+  const [sellers, setSellers] = useState([]);
+
+  // Sellers list for the "Atiende" (cartera) selector.
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    apiRequest('/api/sellers/assignable', { token })
+      .then((rows) => { if (active) setSellers(Array.isArray(rows) ? rows : []); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [open, token]);
+
+  // Open straight on a customer's ficha (e.g. recognized WhatsApp number).
+  useEffect(() => {
+    if (open && initialCustomerId) openDetail(initialCustomerId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialCustomerId]);
 
   const loadList = async () => {
     setLoading(true);
@@ -329,6 +347,7 @@ export default function CustomerHub({ token, open, onClose, onUseCustomer }) {
                     <span className="crm-row-meta">
                       {customer.phone || 's/tel'}
                       {customer.quotes_count > 0 && ` · ${customer.quotes_count} cotiz. · ${money(customer.total_spent)}`}
+                      {customer.owner_name && ` · Atiende: ${customer.owner_name}`}
                     </span>
                   </div>
                   <div className="crm-row-side">
@@ -352,6 +371,24 @@ export default function CustomerHub({ token, open, onClose, onUseCustomer }) {
                 Usar en cotización
               </button>
             )}
+
+            <div className="crm-section-label">Atiende (cartera)</div>
+            <select
+              className="crm-search"
+              value={detail.customer.assigned_user_id || ''}
+              disabled={saving}
+              onChange={(e) => patchCustomer({ assigned_user_id: e.target.value ? Number(e.target.value) : null }, { refreshList: true })}
+            >
+              <option value="">Sin asignar</option>
+              {sellers.map((seller) => (
+                <option key={seller.id} value={seller.id}>
+                  {seller.display_name || String(seller.email || '').split('@')[0]}
+                </option>
+              ))}
+            </select>
+            <p className="crm-owner-hint">
+              Las nuevas ventas y chats de este cliente se asignan automáticamente a su vendedor.
+            </p>
 
             <div className="crm-section-label">Etapa</div>
             <div className="crm-stage-filter">
