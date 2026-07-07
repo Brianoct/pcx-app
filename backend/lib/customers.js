@@ -44,6 +44,8 @@ const buildCustomerRow = (row = {}) => ({
   follow_up_at: formatDateOnly(row.follow_up_at),
   follow_up_note: row.follow_up_note || null,
   assigned_vendor: row.assigned_vendor || null,
+  assigned_user_id: row.assigned_user_id !== null && row.assigned_user_id !== undefined ? Number(row.assigned_user_id) : null,
+  owner_name: row.owner_name !== undefined ? (row.owner_name || null) : undefined,
   created_at: row.created_at || null,
   updated_at: row.updated_at || null,
   quotes_count: row.quotes_count !== undefined ? Number(row.quotes_count || 0) : undefined,
@@ -60,15 +62,18 @@ const upsertCustomerFromQuote = async ({ name, phone, department, provincia, ven
     const safeName = trimOrNull(name, 160);
     if (!phoneNormalized || !safeName) return null;
     const result = await pool.query(
-      `INSERT INTO customers (name, phone, phone_normalized, department, provincia, assigned_vendor, pipeline_stage, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, 'cotizado', $7)
+      `INSERT INTO customers (name, phone, phone_normalized, department, provincia, assigned_vendor, assigned_user_id, pipeline_stage, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'cotizado', $7)
        ON CONFLICT (phone_normalized) WHERE phone_normalized IS NOT NULL AND phone_normalized <> ''
        DO UPDATE SET
          name = EXCLUDED.name,
          phone = EXCLUDED.phone,
          department = COALESCE(EXCLUDED.department, customers.department),
          provincia = COALESCE(EXCLUDED.provincia, customers.provincia),
-         assigned_vendor = COALESCE(EXCLUDED.assigned_vendor, customers.assigned_vendor),
+         assigned_vendor = COALESCE(customers.assigned_vendor, EXCLUDED.assigned_vendor),
+         -- First rep to attend the customer becomes the owner; never stolen by
+         -- a later upsert.
+         assigned_user_id = COALESCE(customers.assigned_user_id, EXCLUDED.assigned_user_id),
          pipeline_stage = CASE
            WHEN customers.pipeline_stage IN ('contactado', 'inactivo') THEN 'cotizado'
            ELSE customers.pipeline_stage
@@ -92,9 +97,38 @@ const upsertCustomerFromQuote = async ({ name, phone, department, provincia, ven
   }
 };
 
+// Find the owning rep for a phone number. WhatsApp numbers carry the country
+// code (591…) while customers usually store the local number, so we match on
+// the last 8 digits (Bolivian local length).
+const findCustomerOwnerByPhone = async (phone, db = pool) => {
+  const digits = normalizeCustomerPhone(phone);
+  if (digits.length < 7) return null;
+  const result = await db.query(
+    `SELECT c.id AS customer_id, c.name, c.assigned_user_id,
+            u.display_name AS owner_display_name, u.email AS owner_email, u.is_active AS owner_active
+     FROM customers c
+     LEFT JOIN users u ON u.id = c.assigned_user_id
+     WHERE c.phone_normalized <> ''
+       AND RIGHT(c.phone_normalized, 8) = RIGHT($1, 8)
+     ORDER BY c.id ASC
+     LIMIT 1`,
+    [digits]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    customer_id: Number(row.customer_id),
+    customer_name: row.name,
+    owner_user_id: row.assigned_user_id !== null ? Number(row.assigned_user_id) : null,
+    owner_name: String(row.owner_display_name || '').trim() || String(row.owner_email || '').split('@')[0] || null,
+    owner_active: Boolean(row.owner_active)
+  };
+};
+
 module.exports = {
   CUSTOMER_PIPELINE_STAGES,
   buildCustomerRow,
+  findCustomerOwnerByPhone,
   normalizeCustomerPhone,
   normalizePipelineStage,
   trimOrNull,

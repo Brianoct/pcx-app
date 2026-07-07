@@ -4,7 +4,7 @@ const { authenticateToken } = require('../lib/authMiddleware');
 const { getPedidosAccessScope } = require('../lib/inventory');
 const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, getQuoteSaveIdempotencyCacheKey, lineItemsFingerprint, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftSelectionForQuote } = require('../lib/quotes');
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
-const { upsertCustomerFromQuote } = require('../lib/customers');
+const { findCustomerOwnerByPhone, upsertCustomerFromQuote } = require('../lib/customers');
 const { loadUserContext, resolveUserDisplayName } = require('../lib/users');
 const { createHttpError, getUserDisplayName } = require('../lib/util');
 
@@ -197,6 +197,18 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       vendorDisplayName = resolveUserDisplayName(seller, vendorDisplayName);
     }
 
+    // Cartera: if this customer already belongs to a rep, the sale is credited
+    // to that rep (unless a seller was explicitly assigned above).
+    let carteraOwnerName = null;
+    if (!requiresAssignedSeller) {
+      const cartera = await findCustomerOwnerByPhone(customer_phone, client);
+      if (cartera?.owner_user_id && cartera.owner_active && cartera.owner_user_id !== quoteOwnerId) {
+        quoteOwnerId = cartera.owner_user_id;
+        vendorDisplayName = cartera.owner_name || vendorDisplayName;
+        carteraOwnerName = cartera.owner_name;
+      }
+    }
+
     const giftSelection = await resolveGiftSelectionForQuote(
       client,
       { sku: gift_sku, qty: gift_qty, name: gift_name },
@@ -257,7 +269,13 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       userId: req.user.id
     });
 
-    const responseBody = { id: quoteId, message: 'Cotización guardada' };
+    const responseBody = {
+      id: quoteId,
+      message: carteraOwnerName
+        ? `Cotización guardada y asignada a ${carteraOwnerName} (cliente de su cartera)`
+        : 'Cotización guardada',
+      assigned_to: carteraOwnerName
+    };
     if (idempotencyCacheKey) {
       quoteSaveIdempotencyCache.set(idempotencyCacheKey, {
         inFlight: false,

@@ -6593,3 +6593,28 @@ img, video, canvas { max-width: 100%; }
 .crm-quote-id { font-weight: 800; color: var(--text-primary); }
 .crm-quote-date { color: var(--text-muted); }
 .crm-quote-total { margin-left: auto; font-weight: 800; color: var(--success); }
+.crm-owner-hint { font-size: 0.74rem; color: var(--text-muted); margin: 6px 0 0; }
+
+/* One-page Cotizar keeps the familiar numbered sections as headings. */
+.quote-section-title {
+  margin: 0 0 14px;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+/* Recognized-customer chip in Ventas IA */
+.sia-cartera-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  background: rgba(4, 120, 87, 0.1);
+  border: 1px solid rgba(4, 120, 87, 0.4);
+  color: var(--success);
+  cursor: pointer;
+}

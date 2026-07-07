@@ -28,8 +28,10 @@ const QUOTES_BY_PHONE_JOIN = `regexp_replace(COALESCE(q.customer_phone, ''), '\\
       AND c.phone_normalized IS NOT NULL AND c.phone_normalized <> ''`;
 
 const CUSTOMER_LIST_SELECT = `
-  SELECT c.*, s.quotes_count, s.total_spent, s.last_quote_at
+  SELECT c.*, s.quotes_count, s.total_spent, s.last_quote_at,
+         COALESCE(NULLIF(TRIM(owner.display_name), ''), split_part(owner.email, '@', 1)) AS owner_name
   FROM customers c
+  LEFT JOIN users owner ON owner.id = c.assigned_user_id
   LEFT JOIN LATERAL (
     SELECT COUNT(*)::int AS quotes_count,
            COALESCE(SUM(CASE WHEN q.status IN ('Pagado', 'Embalado', 'Enviado') THEN q.total ELSE 0 END), 0) AS total_spent,
@@ -177,6 +179,17 @@ const parseCustomerPayload = (body = {}, { partial = false } = {}) => {
     out.follow_up_at = raw;
   }
   if (has('follow_up_note')) out.follow_up_note = trimOrNull(body.follow_up_note, 300);
+  if (has('assigned_user_id')) {
+    if (body.assigned_user_id === null || body.assigned_user_id === '') {
+      out.assigned_user_id = null;
+    } else {
+      const ownerId = Number.parseInt(body.assigned_user_id, 10);
+      if (!Number.isInteger(ownerId) || ownerId <= 0) {
+        throw createHttpError(400, 'Vendedor asignado inválido');
+      }
+      out.assigned_user_id = ownerId;
+    }
+  }
   return out;
 };
 
@@ -241,6 +254,7 @@ router.patch('/api/customers/:id', authenticateToken, async (req, res) => {
   } catch (err) {
     if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
     if (err?.code === '23505') return res.status(409).json({ error: 'Ya existe un cliente con ese teléfono' });
+    if (err?.code === '23503') return res.status(400).json({ error: 'Vendedor asignado no existe' });
     console.error(err);
     res.status(500).json({ error: 'No se pudo actualizar el cliente' });
   }

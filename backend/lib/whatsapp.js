@@ -613,6 +613,40 @@ const assignConversationRoundRobin = async (client, conversationId, { reason = '
   return nextUserId;
 };
 
+// Cartera routing: assign an unowned conversation to the rep who already
+// attends this customer. Does NOT advance round-robin state, so distribution
+// of genuinely new customers stays even. Returns the user id or null.
+const assignConversationToCustomerOwner = async (client, conversationId, waPhone) => {
+  try {
+    const { findCustomerOwnerByPhone } = require('./customers');
+    const cartera = await findCustomerOwnerByPhone(waPhone, client);
+    if (!cartera?.owner_user_id) return null;
+
+    // The owner must still be an eligible, active sales user.
+    const eligible = await loadEligibleWhatsAppSalesUsers(client);
+    if (!eligible.some((row) => Number(row.id) === cartera.owner_user_id)) return null;
+
+    await client.query(
+      `UPDATE whatsapp_conversations
+       SET assigned_user_id = $2,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [conversationId, cartera.owner_user_id]
+    );
+    await client.query(
+      `INSERT INTO whatsapp_assignment_logs (
+        conversation_id, previous_user_id, assigned_user_id, reason, changed_by
+      ) VALUES ($1, NULL, $2, 'auto_cartera_owner', NULL)`,
+      [conversationId, cartera.owner_user_id]
+    );
+    return cartera.owner_user_id;
+  } catch (err) {
+    // Cartera lookup must never break message ingestion; fall back to RR.
+    console.warn('Cartera assignment failed (fallback a round robin):', err.message);
+    return null;
+  }
+};
+
 const processInboundWhatsAppMessage = async (message = {}, contactsByWaId = new Map()) => {
   const fromPhone = normalizeWhatsAppPhone(message.from || '');
   const waMessageId = String(message.id || '').trim();
@@ -746,7 +780,13 @@ const processInboundWhatsAppMessage = async (message = {}, contactsByWaId = new 
         [conversationId, textBody || null, createdAt]
       );
       if (!currentlyAssigned) {
-        await assignConversationRoundRobin(client, conversationId, { reason: 'auto_round_robin_inbound', changedBy: null });
+        // Cartera first: if this number belongs to a known customer with an
+        // owning rep, assign the conversation straight to that rep WITHOUT
+        // touching round-robin state — new-customer distribution stays even.
+        const ownerAssigned = await assignConversationToCustomerOwner(client, conversationId, fromPhone);
+        if (!ownerAssigned) {
+          await assignConversationRoundRobin(client, conversationId, { reason: 'auto_round_robin_inbound', changedBy: null });
+        }
       }
       broadcastPayload = {
         conversation_id: conversationId,

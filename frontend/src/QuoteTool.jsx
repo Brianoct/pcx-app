@@ -31,7 +31,6 @@ export default function QuoteTool({ token, user }) {
   const draftStorageKey = `pcx.quoteDraft.v2:${userDraftSuffix}`;
   const [draft, setDraft] = useDraftState(draftStorageKey, null);
 
-  const [step, setStep] = useState(1);
 
   const [rows, setRows] = useState([]);
   const [ventaType, setVentaType] = useState('sf');
@@ -148,7 +147,6 @@ export default function QuoteTool({ token, user }) {
   }, [token]);
 
   useEffect(() => {
-    if (step !== 2) return;
     const fetchCombos = async () => {
       try {
         const data = await apiRequest('/api/combos', { token });
@@ -158,13 +156,14 @@ export default function QuoteTool({ token, user }) {
       }
     };
     fetchCombos();
-  }, [step, token]);
+  }, [token]);
 
   useEffect(() => {
-    if (step === 2 && rows.length === 0) {
+    if (rows.length === 0) {
       addRow();
     }
-  }, [step]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const updateDateTime = () => {
@@ -436,7 +435,7 @@ export default function QuoteTool({ token, user }) {
   }, [ventaType]);
 
   useEffect(() => {
-    if (!almacen || step !== 2) return;
+    if (!almacen) return;
     const refreshStock = async () => {
       for (const row of rows) {
         if (row.sku) {
@@ -450,14 +449,13 @@ export default function QuoteTool({ token, user }) {
       }
     };
     refreshStock();
-  }, [almacen, step]);
+  }, [almacen]);
 
   useEffect(() => {
     if (restoredDraftKeyRef.current === draftStorageKey) return;
     restoredDraftKeyRef.current = draftStorageKey;
     if (!draft || !draft.values || !draft.hasContent) return;
     const values = draft.values;
-    if (values.step) setStep(values.step);
     if (Array.isArray(values.rows)) setRows(values.rows);
     if (values.ventaType) setVentaType(values.ventaType);
     if (typeof values.discountMode === 'string') {
@@ -519,7 +517,6 @@ export default function QuoteTool({ token, user }) {
       if (prefill?.customerName) setCustomerName(String(prefill.customerName).slice(0, 26));
       if (prefill?.customerPhone) setCustomerPhone(String(prefill.customerPhone).slice(0, 26));
       if (prefill?.conversationId) setWhatsappConversationId(Number(prefill.conversationId));
-      setStep(1);
     } catch {
       // malformed prefill; start the quote empty
     }
@@ -533,7 +530,6 @@ export default function QuoteTool({ token, user }) {
     setDraft({
       hasContent,
       values: {
-        step,
         rows,
         ventaType,
         discountMode,
@@ -554,7 +550,6 @@ export default function QuoteTool({ token, user }) {
       }
     });
   }, [
-    step,
     rows,
     ventaType,
     discountMode,
@@ -592,7 +587,6 @@ export default function QuoteTool({ token, user }) {
     (!requiresSellerAssignment || assignedSellerId);
 
   const resetQuoteForm = () => {
-    setStep(1);
     setRows([]);
     setVentaType('sf');
     setDiscountMode('percent');
@@ -758,6 +752,10 @@ export default function QuoteTool({ token, user }) {
       }
 
       const quoteNumber = savedData?.id || savedData?.quote?.id || null;
+      // Cartera: the backend may have credited the sale to the customer's rep.
+      if (savedData?.assigned_to) {
+        toast.info(`Cliente de cartera: la venta se asignó a ${savedData.assigned_to}.`);
+      }
       const dateParts = currentDateTime?.split(', ') || [];
       const dateText = dateParts.length > 1 ? dateParts.slice(1).join(', ') : currentDateTime;
       const safeCustomerName = String(customerName || 'sin_nombre').trim().replace(/\s+/g, '_');
@@ -904,23 +902,9 @@ export default function QuoteTool({ token, user }) {
         )}
       </header>
 
-      <div className="quote-stepper">
-        <button
-          onClick={() => setStep(1)}
-          className={`quote-step-btn ${step === 1 ? 'active' : ''}`}
-        >
-          1. Cliente
-        </button>
-        <button
-          onClick={() => setStep(2)}
-          className={`quote-step-btn ${step === 2 ? 'active' : ''}`}
-        >
-          2. Productos
-        </button>
-      </div>
-
-      {step === 1 && (
+      {(
         <div className="card quote-client-card">
+          <h3 className="quote-section-title">1. Cliente</h3>
           <div className="crm-quote-toolbar">
             <span className="crm-quote-hint">Escribe el nombre y elige un cliente guardado, o ábrelos todos.</span>
             <button type="button" className="btn btn-secondary crm-open-btn" onClick={() => setCrmOpen(true)}>
@@ -1117,17 +1101,12 @@ export default function QuoteTool({ token, user }) {
             </div>
           </Field>
 
-          <button
-            onClick={() => setStep(2)}
-            className="btn btn-primary btn-block"
-          >
-            Siguiente: Productos →
-          </button>
         </div>
       )}
 
-      {step === 2 && (
+      {(
         <div className="card quote-products-card">
+          <h3 className="quote-section-title">2. Productos</h3>
           <div className="quote-products-toolbar">
             <div className="quote-sale-type-group">
               <button
