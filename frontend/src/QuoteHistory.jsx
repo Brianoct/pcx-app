@@ -751,6 +751,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       subtotal: Number(quote.subtotal || 0),
       total: Number(quote.total || 0),
       status: quote.status || 'Cotizado',
+      gift_sku: String(quote.gift_sku || '').trim().toUpperCase(),
+      gift_qty: Math.max(1, Number.parseInt(quote.gift_qty, 10) || 1),
       line_items: Array.isArray(quote.line_items) ? quote.line_items : []
     };
 
@@ -860,6 +862,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         seller_user_id: editingQuote.seller_user_id ? Number(editingQuote.seller_user_id) : null,
         venta_type: editingQuote.venta_type || 'sf',
         discount_percent: Number(editingQuote.discount_percent || 0),
+        // Gift is now explicit in the edit form: selected → keep/change it,
+        // "Sin regalo" → clear it deliberately.
+        gift_sku: editingQuote.gift_sku ? String(editingQuote.gift_sku).toUpperCase() : null,
+        gift_qty: editingQuote.gift_sku ? Math.max(1, Number.parseInt(editingQuote.gift_qty, 10) || 1) : 0,
+        gift_name: editingQuote.gift_sku
+          ? (availableProducts.find((item) => String(item.sku || '').toUpperCase() === String(editingQuote.gift_sku).toUpperCase())?.name || null)
+          : null,
         rows: (Array.isArray(editingQuote.line_items) ? editingQuote.line_items : []).map((row) => ({
           sku: String(row.sku || '').toUpperCase(),
           qty: Number.parseInt(row.qty, 10) || 1,
@@ -1661,6 +1670,22 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                   value={editingQuote.discount_percent}
                   onChange={(e) => onEditField('discount_percent', e.target.value)}
                 />
+              </label>
+              <label>
+                Regalo
+                <select
+                  value={editingQuote.gift_sku || ''}
+                  onChange={(e) => onEditField('gift_sku', e.target.value)}
+                >
+                  <option value="">Sin regalo</option>
+                  {availableProducts
+                    .filter((item) => Boolean(item?.is_gift_eligible))
+                    .map((item) => (
+                      <option key={item.sku} value={String(item.sku || '').toUpperCase()}>
+                        {item.name} ({item.sku})
+                      </option>
+                    ))}
+                </select>
               </label>
               <label style={{ display: 'none' }}>
                 Subtotal

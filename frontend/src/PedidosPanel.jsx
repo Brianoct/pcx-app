@@ -70,6 +70,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     return `${out}${suffix}`;
   };
   const formatChecklistItemLabel = (item) => {
+    if (item?.isGift) return String(item?.displayName || 'REGALO').trim();
     const sku = String(item?.sku || '').trim().toUpperCase();
     const rawName = String(item?.displayName || '').trim() || 'Producto desconocido';
     if (sku && /^COMBO_\d+$/i.test(sku)) return rawName;
@@ -788,7 +789,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                     {prepModal.items.map((item, index) => (
                       <li
                         key={index}
-                        className={`pedidos-check-item ${item.isComboHeader ? 'is-combo' : ''} ${item.isIndented ? 'is-indented' : ''} ${prepModal.checked[index] && item.isCheckable ? 'is-checked' : ''}`}
+                        className={`pedidos-check-item ${item.isComboHeader ? 'is-combo' : ''} ${item.isIndented ? 'is-indented' : ''} ${item.isGift ? 'is-gift-item' : ''} ${prepModal.checked[index] && item.isCheckable ? 'is-checked' : ''}`}
                       >
                         {item.isCheckable ? (
                           <input
