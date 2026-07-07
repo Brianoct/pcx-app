@@ -76,6 +76,62 @@ export default function QuoteTool({ token, user }) {
       .catch(() => {});
     return () => { active = false; };
   }, [token, crmOpen]);
+
+  // Ruleta: whenever the phone identifies a customer with an unused wheel
+  // prize, surface it so the seller applies it to this quote.
+  const [wheelPrize, setWheelPrize] = useState(null);
+  const [wheelDialog, setWheelDialog] = useState(null); // { url?, existing?, error?, spun? }
+  const [wheelBusy, setWheelBusy] = useState(false);
+  useEffect(() => {
+    const digits = String(customerPhone || '').replace(/\D/g, '');
+    if (digits.length < 7) { setWheelPrize(null); return undefined; }
+    let active = true;
+    const timer = setTimeout(() => {
+      apiRequest(`/api/wheel/prize?phone=${encodeURIComponent(digits)}`, { token })
+        .then((data) => { if (active) setWheelPrize(data?.prize || null); })
+        .catch(() => { if (active) setWheelPrize(null); });
+    }, 400);
+    return () => { active = false; clearTimeout(timer); };
+  }, [token, customerPhone]);
+
+  const buildWheelUrl = (spinToken) =>
+    `${window.location.origin}${window.location.pathname}#/ruleta/${spinToken}`;
+
+  const createWheelLink = async () => {
+    const digits = String(customerPhone || '').replace(/\D/g, '');
+    if (digits.length < 7) {
+      toast.error('Escribe primero el teléfono del cliente para generar su giro.');
+      return;
+    }
+    setWheelBusy(true);
+    try {
+      const data = await apiRequest('/api/wheel/spins', {
+        method: 'POST',
+        token,
+        body: { customer_name: customerName, customer_phone: customerPhone }
+      });
+      setWheelDialog({ url: buildWheelUrl(data.spin.token), existing: Boolean(data.existing) });
+    } catch (err) {
+      if (err?.payload?.spin?.prize_label) {
+        setWheelDialog({ spun: true, error: err.message });
+      } else {
+        toast.error(err.message || 'No se pudo generar el giro');
+      }
+    } finally {
+      setWheelBusy(false);
+    }
+  };
+
+  const redeemWheelPrize = async () => {
+    if (!wheelPrize?.id) return;
+    try {
+      await apiRequest(`/api/wheel/spins/${wheelPrize.id}/redeem`, { method: 'POST', token });
+      toast.success('Premio marcado como usado');
+      setWheelPrize(null);
+    } catch (err) {
+      toast.error(err.message || 'No se pudo marcar el premio');
+    }
+  };
   const [isProvincia, setIsProvincia] = useState(false);
   const [almacen, setAlmacen] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
@@ -917,11 +973,68 @@ export default function QuoteTool({ token, user }) {
           <div className="quote-client-head">
             <h3 className="quote-section-title">1. Cliente</h3>
             <span className="crm-quote-hint">Escribe el nombre y elige un cliente guardado.</span>
+            <button
+              type="button"
+              className="btn btn-secondary crm-open-btn quote-wheel-btn"
+              onClick={createWheelLink}
+              disabled={wheelBusy}
+              title="Generar enlace de la ruleta de premios para este cliente"
+            >
+              🎡 Ruleta
+            </button>
             <button type="button" className="btn btn-secondary crm-open-btn" onClick={() => setCrmOpen(true)}>
               Clientes
               {crmFollowUpsDue > 0 && <span className="crm-due-badge">{crmFollowUpsDue}</span>}
             </button>
           </div>
+
+          {wheelPrize && (
+            <div className={`quote-wheel-prize ${wheelPrize.is_top_prize ? 'is-top' : ''}`}>
+              <span className="quote-wheel-prize-text">
+                🎡 {wheelPrize.is_top_prize ? '🏆 PREMIO MAYOR de la ruleta' : 'Premio de la ruleta'}:{' '}
+                <strong>{wheelPrize.prize_label}</strong>
+              </span>
+              <button type="button" className="quote-wheel-redeem" onClick={redeemWheelPrize}>
+                Marcar usado
+              </button>
+            </div>
+          )}
+
+          {wheelDialog && (
+            <div className="quote-wheel-dialog">
+              {wheelDialog.spun ? (
+                <span className="quote-wheel-dialog-text">{wheelDialog.error}</span>
+              ) : (
+                <>
+                  <span className="quote-wheel-dialog-text">
+                    {wheelDialog.existing ? 'Este cliente ya tenía un giro pendiente:' : 'Enlace de giro listo:'}{' '}
+                    <code>{wheelDialog.url}</code>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(wheelDialog.url).then(
+                        () => toast.success('Enlace copiado'),
+                        () => toast.error('No se pudo copiar')
+                      );
+                    }}
+                  >
+                    Copiar
+                  </button>
+                  <a
+                    className="btn btn-primary quote-wheel-wa"
+                    href={`https://wa.me/${(() => { const d = String(customerPhone || '').replace(/\D/g, ''); return d.startsWith('591') ? d : `591${d}`; })()}?text=${encodeURIComponent(`🎡 ¡Tienes un giro de nuestra ruleta de premios! Gira aquí: ${wheelDialog.url}`)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Enviar por WhatsApp
+                  </a>
+                </>
+              )}
+              <button type="button" className="quote-wheel-dialog-close" onClick={() => setWheelDialog(null)} aria-label="Cerrar">✕</button>
+            </div>
+          )}
           <div className="quote-client-grid">
             <div>
               <label className="form-label">Cliente</label>
