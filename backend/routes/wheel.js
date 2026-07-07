@@ -11,8 +11,9 @@ const router = express.Router();
 const TOKEN_RE = /^[a-f0-9]{32}$/;
 const MAX_SLICES = 12;
 const MIN_SLICES = 2;
-
 const PRIZE_TYPES = new Set(['text', 'discount', 'gift']);
+
+const requireMarketing = requireRole(['Marketing Lider', 'Admin']);
 
 const sanitizeSlices = (raw) => {
   if (!Array.isArray(raw)) return null;
@@ -37,6 +38,21 @@ const sanitizeSlices = (raw) => {
   }
   if (!slices.some((slice) => slice.weight > 0)) return null;
   return slices;
+};
+
+// Gift slices must reference a real, active product so the prize can drop
+// straight into the Regalo field (and the pedidos checklist). Any product in
+// the catalog qualifies — the regalo field is ruleta-only now.
+const validateGiftSkus = async (slices) => {
+  const giftSkus = [...new Set(slices.filter((s) => s.type === 'gift').map((s) => s.gift_sku))];
+  if (giftSkus.length === 0) return null;
+  const skuRes = await pool.query(
+    'SELECT sku FROM products WHERE UPPER(sku) = ANY($1) AND is_active = TRUE',
+    [giftSkus]
+  );
+  const found = new Set(skuRes.rows.map((r) => String(r.sku).toUpperCase()));
+  const missing = giftSkus.filter((sku) => !found.has(sku));
+  return missing.length > 0 ? missing : null;
 };
 
 // The prize is decided HERE, never in the browser. The client animation just
@@ -84,64 +100,136 @@ const buildSpinRow = (row) => ({
   spun_at: row.spun_at || null
 });
 
-// ── Marketing config ────────────────────────────────────────────────────────
+const buildCampaignRow = (row) => ({
+  id: Number(row.id),
+  name: row.name,
+  slices: Array.isArray(row.slices) ? row.slices : [],
+  is_active: Boolean(row.is_active),
+  created_at: row.created_at || null,
+  updated_at: row.updated_at || null,
+  links: row.links !== undefined ? Number(row.links || 0) : undefined,
+  spins: row.spins !== undefined ? Number(row.spins || 0) : undefined,
+  top_prizes: row.top_prizes !== undefined ? Number(row.top_prizes || 0) : undefined
+});
 
-router.get('/api/wheel/config', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
+// ── Marketing: campaign CRUD ────────────────────────────────────────────────
+
+router.get('/api/wheel/campaigns', authenticateToken, requireMarketing, async (req, res) => {
   try {
-    const result = await pool.query('SELECT slices, is_active, version, updated_at FROM wheel_config WHERE id = 1');
-    const row = result.rows[0] || { slices: [], is_active: false, version: 0 };
-    const statsRes = await pool.query(
-      `SELECT config_version,
-              COUNT(*)::int AS links,
-              COUNT(*) FILTER (WHERE status = 'spun')::int AS spins,
-              COUNT(*) FILTER (WHERE is_top_prize)::int AS top_prizes
-       FROM wheel_spins GROUP BY config_version ORDER BY config_version DESC LIMIT 5`
+    const result = await pool.query(
+      `SELECT c.*, s.links, s.spins, s.top_prizes
+       FROM wheel_campaigns c
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS links,
+                COUNT(*) FILTER (WHERE ws.status = 'spun')::int AS spins,
+                COUNT(*) FILTER (WHERE ws.is_top_prize)::int AS top_prizes
+         FROM wheel_spins ws WHERE ws.campaign_id = c.id
+       ) s ON TRUE
+       ORDER BY c.is_active DESC, c.updated_at DESC`
     );
-    res.json({ config: row, stats: statsRes.rows });
+    res.json({ campaigns: result.rows.map(buildCampaignRow) });
   } catch (err) {
-    console.error('Error loading wheel config:', err);
-    res.status(500).json({ error: 'No se pudo cargar la ruleta' });
+    console.error('Error loading wheel campaigns:', err);
+    res.status(500).json({ error: 'No se pudieron cargar las campañas' });
   }
 });
 
-router.put('/api/wheel/config', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
+router.post('/api/wheel/campaigns', authenticateToken, requireMarketing, async (req, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 80);
   const slices = sanitizeSlices(req.body?.slices);
+  if (!name) return res.status(400).json({ error: 'La campaña necesita un nombre' });
   if (!slices) {
     return res.status(400).json({
       error: `La ruleta necesita entre ${MIN_SLICES} y ${MAX_SLICES} espacios con texto, y al menos uno con probabilidad mayor a 0`
     });
   }
-  const isActive = req.body?.is_active === undefined ? true : Boolean(req.body.is_active);
   try {
-    // Gift slices must reference a real, gift-eligible product so the prize
-    // can drop straight into the Regalo field (and the pedidos checklist).
-    const giftSkus = [...new Set(slices.filter((s) => s.type === 'gift').map((s) => s.gift_sku))];
-    if (giftSkus.length > 0) {
-      const skuRes = await pool.query(
-        'SELECT sku FROM products WHERE UPPER(sku) = ANY($1) AND is_gift_eligible = TRUE',
-        [giftSkus]
-      );
-      const found = new Set(skuRes.rows.map((r) => String(r.sku).toUpperCase()));
-      const missing = giftSkus.filter((sku) => !found.has(sku));
-      if (missing.length > 0) {
-        return res.status(400).json({
-          error: `Estos SKU no existen o no son elegibles como regalo: ${missing.join(', ')}`
-        });
-      }
-    }
-    // Every save bumps the version = new campaign: customers who spun the old
-    // wheel can receive a new link for this one.
+    const missing = await validateGiftSkus(slices);
+    if (missing) return res.status(400).json({ error: `Estos SKU no existen o están inactivos: ${missing.join(', ')}` });
     const result = await pool.query(
-      `UPDATE wheel_config
-       SET slices = $1::jsonb, is_active = $2, version = version + 1, updated_by = $3, updated_at = NOW()
-       WHERE id = 1
-       RETURNING slices, is_active, version, updated_at`,
-      [JSON.stringify(slices), isActive, req.user.id]
+      `INSERT INTO wheel_campaigns (name, slices, created_by)
+       VALUES ($1, $2::jsonb, $3) RETURNING *`,
+      [name, JSON.stringify(slices), req.user.id]
     );
-    res.json({ message: 'Ruleta guardada', config: result.rows[0] });
+    res.status(201).json({ message: 'Campaña creada', campaign: buildCampaignRow(result.rows[0]) });
   } catch (err) {
-    console.error('Error saving wheel config:', err);
-    res.status(500).json({ error: 'No se pudo guardar la ruleta' });
+    console.error('Error creating wheel campaign:', err);
+    res.status(500).json({ error: 'No se pudo crear la campaña' });
+  }
+});
+
+router.put('/api/wheel/campaigns/:id', authenticateToken, requireMarketing, async (req, res) => {
+  const campaignId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(campaignId) || campaignId <= 0) return res.status(400).json({ error: 'Campaña inválida' });
+  const name = String(req.body?.name || '').trim().slice(0, 80);
+  const slices = sanitizeSlices(req.body?.slices);
+  if (!name) return res.status(400).json({ error: 'La campaña necesita un nombre' });
+  if (!slices) {
+    return res.status(400).json({
+      error: `La ruleta necesita entre ${MIN_SLICES} y ${MAX_SLICES} espacios con texto, y al menos uno con probabilidad mayor a 0`
+    });
+  }
+  try {
+    const missing = await validateGiftSkus(slices);
+    if (missing) return res.status(400).json({ error: `Estos SKU no existen o están inactivos: ${missing.join(', ')}` });
+    const result = await pool.query(
+      `UPDATE wheel_campaigns SET name = $2, slices = $3::jsonb, updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [campaignId, name, JSON.stringify(slices)]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Campaña no encontrada' });
+    res.json({ message: 'Campaña guardada', campaign: buildCampaignRow(result.rows[0]) });
+  } catch (err) {
+    console.error('Error updating wheel campaign:', err);
+    res.status(500).json({ error: 'No se pudo guardar la campaña' });
+  }
+});
+
+// Activate (or deactivate with {active:false}); at most one campaign is live.
+router.post('/api/wheel/campaigns/:id/activate', authenticateToken, requireMarketing, async (req, res) => {
+  const campaignId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(campaignId) || campaignId <= 0) return res.status(400).json({ error: 'Campaña inválida' });
+  const makeActive = req.body?.active === undefined ? true : Boolean(req.body.active);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (makeActive) {
+      await client.query('UPDATE wheel_campaigns SET is_active = FALSE WHERE is_active');
+    }
+    const result = await client.query(
+      'UPDATE wheel_campaigns SET is_active = $2, updated_at = NOW() WHERE id = $1 RETURNING *',
+      [campaignId, makeActive]
+    );
+    if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Campaña no encontrada' });
+    }
+    await client.query('COMMIT');
+    res.json({
+      message: makeActive ? 'Campaña activada' : 'Campaña desactivada',
+      campaign: buildCampaignRow(result.rows[0])
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error activating wheel campaign:', err);
+    res.status(500).json({ error: 'No se pudo cambiar la campaña activa' });
+  } finally {
+    client.release();
+  }
+});
+
+router.delete('/api/wheel/campaigns/:id', authenticateToken, requireMarketing, async (req, res) => {
+  const campaignId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(campaignId) || campaignId <= 0) return res.status(400).json({ error: 'Campaña inválida' });
+  try {
+    // Spins keep their history (campaign_id goes NULL via the FK); customer
+    // prizes already won stay intact and redeemable.
+    const result = await pool.query('DELETE FROM wheel_campaigns WHERE id = $1 RETURNING id', [campaignId]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Campaña no encontrada' });
+    res.json({ message: 'Campaña eliminada' });
+  } catch (err) {
+    console.error('Error deleting wheel campaign:', err);
+    res.status(500).json({ error: 'No se pudo eliminar la campaña' });
   }
 });
 
@@ -157,23 +245,23 @@ router.post('/api/wheel/spins', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Teléfono del cliente inválido (mínimo 7 dígitos)' });
   }
   try {
-    const configRes = await pool.query('SELECT slices, is_active, version FROM wheel_config WHERE id = 1');
-    const config = configRes.rows[0];
-    if (!config || !config.is_active) {
-      return res.status(409).json({ error: 'La ruleta está desactivada. Pide a marketing que la active.' });
+    const campaignRes = await pool.query('SELECT * FROM wheel_campaigns WHERE is_active LIMIT 1');
+    const campaign = campaignRes.rows[0];
+    if (!campaign) {
+      return res.status(409).json({ error: 'No hay ninguna campaña de ruleta activa. Pide a marketing que active una.' });
     }
-    const slices = sanitizeSlices(config.slices);
+    const slices = sanitizeSlices(campaign.slices);
     if (!slices) {
-      return res.status(409).json({ error: 'La ruleta no tiene premios configurados todavía.' });
+      return res.status(409).json({ error: 'La campaña activa no tiene premios válidos configurados.' });
     }
 
     // One spin per customer per campaign. Matching on the RIGHT 8 digits
     // tolerates the 591 country prefix, same as the cartera lookup.
     const existingRes = await pool.query(
       `SELECT * FROM wheel_spins
-       WHERE config_version = $1 AND RIGHT(phone_normalized, 8) = RIGHT($2, 8)
+       WHERE campaign_id = $1 AND RIGHT(phone_normalized, 8) = RIGHT($2, 8)
        ORDER BY created_at DESC LIMIT 1`,
-      [config.version, phoneNormalized]
+      [campaign.id, phoneNormalized]
     );
     if (existingRes.rowCount > 0) {
       const existing = existingRes.rows[0];
@@ -190,10 +278,10 @@ router.post('/api/wheel/spins', authenticateToken, async (req, res) => {
 
     const token = crypto.randomBytes(16).toString('hex');
     const insertRes = await pool.query(
-      `INSERT INTO wheel_spins (token, customer_name, customer_phone, phone_normalized, slices, config_version, created_by)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+      `INSERT INTO wheel_spins (token, customer_name, customer_phone, phone_normalized, slices, campaign_id, config_version, created_by)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
        RETURNING *`,
-      [token, customerName || null, customerPhone, phoneNormalized, JSON.stringify(slices), config.version, req.user.id]
+      [token, customerName || null, customerPhone, phoneNormalized, JSON.stringify(slices), campaign.id, campaign.id, req.user.id]
     );
     res.status(201).json({ spin: buildSpinRow(insertRes.rows[0]) });
   } catch (err) {

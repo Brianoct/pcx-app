@@ -156,9 +156,8 @@ const resolveGiftSelectionForQuote = async (client, giftSelection, giftNameLegac
     if (!giftProduct.is_active) {
       throw createHttpError(400, 'El producto de regalo seleccionado está inactivo');
     }
-    if (!giftProduct.is_gift_eligible) {
-      throw createHttpError(400, 'El producto seleccionado no está habilitado como regalo para cotizador');
-    }
+    // Any active product qualifies as gift: the regalo field is filled only
+    // by the ruleta, and marketing picks the prize from the full catalog.
     return {
       gift_name: String(giftProduct.name || '').trim() || normalizedGift.name || null,
       gift_sku: String(giftProduct.sku || '').trim().toUpperCase(),
