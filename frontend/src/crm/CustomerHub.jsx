@@ -428,6 +428,21 @@ export default function CustomerHub({ token, open, onClose, onUseCustomer, initi
                 value={detail.customer.follow_up_note || ''}
                 onChange={editField('follow_up_note')}
               />
+              {(detail.customer.follow_up_at || detail.customer.follow_up_note) && (
+                <button
+                  type="button"
+                  className="btn btn-secondary crm-followup-clear"
+                  disabled={saving}
+                  onClick={() => {
+                    setDetail((prev) => (prev
+                      ? { ...prev, customer: { ...prev.customer, follow_up_at: '', follow_up_note: '' } }
+                      : prev));
+                    patchCustomer({ follow_up_at: null, follow_up_note: null }, { refreshList: true });
+                  }}
+                >
+                  Quitar
+                </button>
+              )}
             </div>
 
             <button type="button" className="btn btn-secondary crm-save-btn" disabled={saving} onClick={saveFicha}>
