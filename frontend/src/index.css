@@ -6619,8 +6619,9 @@ img, video, canvas { max-width: 100%; }
   font-weight: 500;
   width: 100%;
 }
-.crm-followup { display: grid; grid-template-columns: 150px 1fr; gap: 8px; }
+.crm-followup { display: grid; grid-template-columns: 150px 1fr auto; gap: 8px; }
 @media (max-width: 520px) { .crm-followup { grid-template-columns: 1fr; } }
+.crm-followup-clear { min-height: 42px; }
 .crm-save-btn { margin-top: 12px; align-self: flex-start; }
 
 .crm-note-add { display: flex; gap: 8px; align-items: flex-start; }
