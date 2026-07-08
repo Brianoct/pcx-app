@@ -3,8 +3,11 @@ const { INVENTORY_CITY_SCOPE } = require('./inventory');
 const { ensureProductCatalogReady } = require('./products');
 const { normalizeText } = require('./rbac');
 
-// Manufacturing stages, in board (display) order.
+// Board (display) order. 'planificacion' is where new cards pile up (quantity
+// still fluid); 'recepcion' is where finished goods wait to be confirmed at
+// the destination warehouse (only intact pieces enter stock).
 const PRODUCTION_KANBAN_STAGES = [
+  'planificacion',
   'impresion_3d',
   'corte_laser',
   'punzonado',
@@ -12,8 +15,19 @@ const PRODUCTION_KANBAN_STAGES = [
   'soldado',
   'lavado',
   'pintado',
-  'embalado'
+  'embalado',
+  'recepcion'
 ];
+
+const PRODUCTION_KANBAN_PLANNING_STAGE = 'planificacion';
+const PRODUCTION_KANBAN_RECEPTION_STAGE = 'recepcion';
+
+// Every product route is wrapped with the shared first/last stages.
+const wrapProductionRoute = (steps = []) => {
+  const middle = (Array.isArray(steps) ? steps : [])
+    .filter((step) => step && step !== PRODUCTION_KANBAN_PLANNING_STAGE && step !== PRODUCTION_KANBAN_RECEPTION_STAGE);
+  return [PRODUCTION_KANBAN_PLANNING_STAGE, ...middle, PRODUCTION_KANBAN_RECEPTION_STAGE];
+};
 
 const PRODUCTION_KANBAN_START_STAGES = new Set(['corte_laser', 'impresion_3d', 'punzonado']);
 
@@ -54,6 +68,8 @@ const normalizeProductionKanbanStage = (value = '', { allowNull = false } = {}) 
   if (normalized === 'lavado' || normalized === 'wash') return 'lavado';
   if (normalized === 'pintado' || normalized === 'pintura' || normalized === 'paint' || normalized === 'painting') return 'pintado';
   if (normalized === 'embalado' || normalized === 'empaque' || normalized === 'pack') return 'embalado';
+  if (normalized === 'planificacion' || normalized === 'planeacion' || normalized === 'planning' || normalized === 'plan') return 'planificacion';
+  if (normalized === 'recepcion' || normalized === 'reception' || normalized === 'recibir' || normalized === 'en_camino') return 'recepcion';
   return null;
 };
 
@@ -112,8 +128,10 @@ const getRouteStagesForSku = async (sku, startProcess = 'corte_laser') => {
      ORDER BY step_order`,
     [normalizedSku]
   );
-  if (res.rowCount > 0) return res.rows.map((row) => row.process);
-  return getProductionRouteStages(startProcess, normalizedSku);
+  const steps = res.rowCount > 0
+    ? res.rows.map((row) => row.process)
+    : getProductionRouteStages(startProcess, normalizedSku);
+  return wrapProductionRoute(steps);
 };
 
 // Regenerate a product's steps from its start process (used when the start
@@ -136,9 +154,11 @@ const replaceProductProcessSteps = async (client, sku, startProcess) => {
 const mapProductionKanbanCardRow = (row = {}, routeStagesBySku = null) => {
   const sku = String(row.sku || '').toUpperCase();
   const startProcess = normalizeProductionStartProcess(row.start_process || 'corte_laser') || 'corte_laser';
-  const stageCandidate = normalizeProductionKanbanStage(row.stage || '', { allowNull: true }) || startProcess;
-  const validRoute = (routeStagesBySku && routeStagesBySku.get(sku)) || getProductionRouteStages(startProcess, sku);
-  const safeStage = validRoute.includes(stageCandidate) ? stageCandidate : validRoute[0] || startProcess;
+  const stageCandidate = normalizeProductionKanbanStage(row.stage || '', { allowNull: true }) || PRODUCTION_KANBAN_PLANNING_STAGE;
+  const validRoute = wrapProductionRoute(
+    (routeStagesBySku && routeStagesBySku.get(sku)) || getProductionRouteStages(startProcess, sku)
+  );
+  const safeStage = validRoute.includes(stageCandidate) ? stageCandidate : validRoute[0];
   return {
     id: Number(row.id),
     sku,
@@ -147,6 +167,7 @@ const mapProductionKanbanCardRow = (row = {}, routeStagesBySku = null) => {
     current_stock: Number(row.current_stock || 0),
     min_stock: Number(row.min_stock || 0),
     required_qty: Number(row.required_qty || 0),
+    qty_frozen: Boolean(row.qty_frozen),
     start_process: startProcess,
     stage: safeStage,
     route: validRoute,
@@ -196,7 +217,6 @@ const syncProductionKanbanFromInventory = async () => {
     // Resale items are not produced; they will live on the purchasing board.
     if (isResaleStartProcess(configuredStartRaw)) continue;
     const startProcess = normalizeProductionStartProcess(configuredStartRaw || '') || inferDefaultProductionStartProcess(product);
-    const validRouteStages = stepsBySku.get(sku) || getProductionRouteStages(startProcess, sku);
     for (const location of PRODUCTION_KANBAN_LOCATION_FIELDS) {
       const stock = Math.max(0, Number.parseInt(product[location.stockField], 10) || 0);
       const minStock = Math.max(0, Number.parseInt(product[location.minField], 10) || 0);
@@ -211,40 +231,58 @@ const syncProductionKanbanFromInventory = async () => {
       const requiredQty = Math.max(0, targetLevel - stock);
       if (requiredQty <= 0) continue;
       activeKeys.push(key);
+      // Fluid vs frozen: while a card sits in Planificación (or was completed
+      // and is being re-triggered) the sync owns its quantity. The moment it
+      // left planning, the quantity is a production order — the sync only
+      // refreshes the informative stock/min numbers and never rewrites the
+      // qty, the stage, or the freeze flag. This is the fix for quantities
+      // drifting while a card crossed the factory.
       await pool.query(
         `INSERT INTO production_kanban_cards (
-           sku, product_name, store_location, current_stock, min_stock, required_qty, start_process, stage, source, is_active, updated_at
+           sku, product_name, store_location, current_stock, min_stock, required_qty, start_process, stage, source, is_active, qty_frozen, updated_at
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 'min_stock', TRUE, NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'planificacion', 'min_stock', TRUE, FALSE, NOW())
          ON CONFLICT (sku, store_location, source) DO UPDATE
          SET product_name = EXCLUDED.product_name,
              current_stock = EXCLUDED.current_stock,
              min_stock = EXCLUDED.min_stock,
-             required_qty = EXCLUDED.required_qty,
-             start_process = EXCLUDED.start_process,
-             is_active = TRUE,
+             required_qty = CASE
+               WHEN NOT production_kanban_cards.is_active OR NOT production_kanban_cards.qty_frozen
+                 THEN EXCLUDED.required_qty
+               ELSE production_kanban_cards.required_qty
+             END,
+             start_process = CASE
+               WHEN NOT production_kanban_cards.is_active OR NOT production_kanban_cards.qty_frozen
+                 THEN EXCLUDED.start_process
+               ELSE production_kanban_cards.start_process
+             END,
              stage = CASE
-               WHEN production_kanban_cards.stage IS NULL THEN EXCLUDED.stage
-              WHEN production_kanban_cards.stage IN ('corte_laser', 'impresion_3d', 'punzonado')
-                 AND production_kanban_cards.stage <> EXCLUDED.start_process
-                 THEN EXCLUDED.stage
-               WHEN NOT (production_kanban_cards.stage = ANY($8::text[]))
-                 THEN EXCLUDED.stage
+               WHEN NOT production_kanban_cards.is_active THEN 'planificacion'
+               WHEN production_kanban_cards.stage IS NULL THEN 'planificacion'
                ELSE production_kanban_cards.stage
              END,
+             qty_frozen = CASE
+               WHEN NOT production_kanban_cards.is_active THEN FALSE
+               ELSE production_kanban_cards.qty_frozen
+             END,
+             is_active = TRUE,
              updated_at = NOW()`,
-        [sku, productName, locationLabel, stock, minStock, requiredQty, startProcess, validRouteStages]
+        [sku, productName, locationLabel, stock, minStock, requiredQty, startProcess]
       );
     }
   }
 
+  // Auto-clear only applies to planning cards (quantity still fluid). Frozen
+  // cards are real production orders: they finish at Recepción, never by a
+  // stock fluctuation.
   if (activeKeys.length === 0) {
     await pool.query(
       `UPDATE production_kanban_cards
        SET is_active = FALSE,
            updated_at = NOW()
        WHERE source = 'min_stock'
-         AND is_active = TRUE`
+         AND is_active = TRUE
+         AND qty_frozen = FALSE`
     );
   } else {
     await pool.query(
@@ -253,6 +291,7 @@ const syncProductionKanbanFromInventory = async () => {
            updated_at = NOW()
        WHERE source = 'min_stock'
          AND is_active = TRUE
+         AND qty_frozen = FALSE
          AND NOT ((sku || '::' || store_location) = ANY($1::text[]))`,
       [activeKeys]
     );
@@ -260,11 +299,12 @@ const syncProductionKanbanFromInventory = async () => {
 
   const cardsRes = await pool.query(
     `SELECT id, sku, product_name, store_location, current_stock, min_stock, required_qty,
-            start_process, stage, source, last_moved_at, created_at, updated_at
+            qty_frozen, start_process, stage, source, last_moved_at, created_at, updated_at
      FROM production_kanban_cards
      WHERE is_active = TRUE
        AND source = 'min_stock'
      ORDER BY CASE stage
+        WHEN 'planificacion' THEN 0
         WHEN 'impresion_3d' THEN 1
         WHEN 'corte_laser' THEN 2
         WHEN 'punzonado' THEN 3
@@ -273,6 +313,7 @@ const syncProductionKanbanFromInventory = async () => {
         WHEN 'lavado' THEN 6
         WHEN 'pintado' THEN 7
         WHEN 'embalado' THEN 8
+        WHEN 'recepcion' THEN 9
          ELSE 99
        END,
        required_qty DESC,

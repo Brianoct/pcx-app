@@ -65,7 +65,7 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
     if (canProduction) {
       jobs.production = pool.query(
         `SELECT COUNT(*)::int AS active_cards,
-                COUNT(*) FILTER (WHERE stage = 'embalado')::int AS por_control
+                COUNT(*) FILTER (WHERE stage = 'recepcion')::int AS por_recibir
          FROM production_kanban_cards WHERE is_active = TRUE`
       );
     }
@@ -116,7 +116,7 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
       stock_alerts: data.stockAlerts ? Number(data.stockAlerts.rows[0].alerts) : null,
       production: data.production ? {
         active_cards: Number(data.production.rows[0].active_cards),
-        por_control: Number(data.production.rows[0].por_control)
+        por_recibir: Number(data.production.rows[0].por_recibir)
       } : null,
       crm_due: data.crmDue ? Number(data.crmDue.rows[0].due) : null,
       crm_due_list: data.crmDueList ? data.crmDueList.rows.map((row) => ({

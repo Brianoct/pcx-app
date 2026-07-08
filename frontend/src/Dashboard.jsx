@@ -104,8 +104,9 @@ export default function Dashboard({ token, user, role, access }) {
       key: 'prod',
       label: 'Producción activa',
       value: overview.production.active_cards,
-      detail: `${overview.production.por_control} en embalado`,
-      to: '/produccion-kanban'
+      detail: `${overview.production.por_recibir} por recibir`,
+      to: '/produccion-kanban',
+      warn: Number(overview.production.por_recibir) > 0
     });
   }
   if (overview?.my_day) {
