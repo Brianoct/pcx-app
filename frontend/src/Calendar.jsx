@@ -1,412 +1,277 @@
-import { useEffect, useMemo, useState } from 'react';
+// Plan del día: the team's workday at a glance. In the morning meeting each
+// person logs their tasks for today with a time frame; everyone's day shows
+// side by side, one column per person. Replaces the old event calendar.
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { apiRequest } from './apiClient';
-import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
-import {
-  DEFAULT_TYPE_MAP,
-  EVENT_TYPE_LIST,
-  MONTH_LABELS,
-  STATUS_LABELS,
-  WEEKDAY_LABELS,
-  buildTypeMap,
-  eventsOnDay,
-  formatDateLong,
-  getMonthGrid,
-  toDateText,
-  todayText
-} from './calendarShared';
 
-const emptyForm = (dayText, typeKey = 'meeting', typeMap = DEFAULT_TYPE_MAP) => ({
-  id: null,
-  title: '',
-  event_type: typeKey,
-  start_date: dayText,
-  end_date: dayText,
-  all_day: typeMap[typeKey]?.default_all_day ?? true,
-  start_time: '',
-  end_time: '',
-  visibility: 'team',
-  notes: ''
-});
+const DAY_START = 7 * 60;   // board shows 07:00 …
+const DAY_END = 19 * 60;    // … to 19:00
+const HOUR_PX = 56;
+const REFRESH_MS = 45000;   // meeting mode: keep everyone's board fresh
 
-export default function Calendar({ token }) {
-  const { enqueueWrite } = useOutbox();
-  const toast = useToast();
-  const [monthCursor, setMonthCursor] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
+const USER_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4',
+  '#f97316', '#84cc16', '#6366f1', '#14b8a6', '#e11d48', '#0ea5e9'
+];
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const toDateText = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const minuteLabel = (minute) => `${pad2(Math.floor(minute / 60))}:${pad2(minute % 60)}`;
+
+const TIME_OPTIONS = [];
+for (let m = DAY_START; m <= DAY_END; m += 30) TIME_OPTIONS.push(m);
+
+// Overlapping tasks in one column share the width via simple lanes.
+const assignLanes = (tasks) => {
+  const sorted = [...tasks].sort((a, b) => a.start_minute - b.start_minute || a.id - b.id);
+  const laneEnds = [];
+  const withLanes = sorted.map((task) => {
+    let lane = laneEnds.findIndex((end) => end <= task.start_minute);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(0); }
+    laneEnds[lane] = task.end_minute;
+    return { ...task, lane };
   });
-  const [events, setEvents] = useState([]);
-  const [typeList, setTypeList] = useState(EVENT_TYPE_LIST);
-  const [summary, setSummary] = useState(null);
+  const laneCount = Math.max(1, laneEnds.length);
+  return withLanes.map((task) => ({ ...task, laneCount }));
+};
+
+export default function Calendar({ token, user }) {
+  const toast = useToast();
+  const [date, setDate] = useState(() => toDateText(new Date()));
+  const [team, setTeam] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [filterType, setFilterType] = useState('all');
-  const [onlyMine, setOnlyMine] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [startMinute, setStartMinute] = useState(8 * 60);
+  const [endMinute, setEndMinute] = useState(9 * 60);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState(() => emptyForm(todayText()));
-  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [nowMinute, setNowMinute] = useState(() => new Date().getHours() * 60 + new Date().getMinutes());
 
-  const typeMap = useMemo(() => buildTypeMap(typeList), [typeList]);
-  const grid = useMemo(() => getMonthGrid(monthCursor), [monthCursor]);
-  const windowBounds = useMemo(() => ({
-    start: toDateText(grid[0]),
-    end: toDateText(grid[grid.length - 1])
-  }), [grid]);
+  const isToday = date === toDateText(new Date());
+  const myId = Number(user?.id);
 
-  const filteredEvents = useMemo(() => {
-    if (filterType === 'all') return events;
-    return events.filter((ev) => ev.event_type === filterType);
-  }, [events, filterType]);
-
-  useEffect(() => {
-    let active = true;
-    apiRequest('/api/calendar/types', { token })
-      .then((data) => { if (active && Array.isArray(data) && data.length) setTypeList(data); })
-      .catch(() => { /* keep fallback catalog */ });
-    return () => { active = false; };
-  }, [token]);
-
-  const loadEvents = async () => {
-    setLoading(true);
-    setError('');
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const params = new URLSearchParams({ start: windowBounds.start, end: windowBounds.end });
-      if (onlyMine) params.set('mine', 'true');
-      const [eventsData, summaryData] = await Promise.all([
-        apiRequest(`/api/calendar/events?${params.toString()}`, { token }),
-        apiRequest(`/api/calendar/summary?year=${monthCursor.getFullYear()}`, { token })
-      ]);
-      setEvents(Array.isArray(eventsData) ? eventsData : []);
-      setSummary(summaryData || null);
+      const data = await apiRequest(`/api/day-plan?date=${date}`, { token });
+      setTeam(Array.isArray(data?.team) ? data.team : []);
+      setTasks(Array.isArray(data?.tasks) ? data.tasks : []);
     } catch (err) {
-      setError(err.message || 'No se pudo cargar el calendario');
+      if (!silent) toast.error(err.message || 'No se pudo cargar el plan');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, windowBounds.start, windowBounds.end, onlyMine]);
+  }, [date, token]);
 
-  const goToToday = () => {
-    const now = new Date();
-    setMonthCursor(new Date(now.getFullYear(), now.getMonth(), 1));
-  };
-  const shiftMonth = (delta) => {
-    setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
-  };
+  useEffect(() => { load(); }, [load]);
 
-  const openCreate = (dayText) => {
-    setSelectedEvent(null);
-    setForm(emptyForm(dayText, filterType !== 'all' ? filterType : 'meeting', typeMap));
-    setModalOpen(true);
-  };
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      load(true);
+      const now = new Date();
+      setNowMinute(now.getHours() * 60 + now.getMinutes());
+    }, REFRESH_MS);
+    return () => clearInterval(intervalId);
+  }, [load]);
 
-  const openEdit = (event) => {
-    setSelectedEvent(event);
-    setForm({
-      id: event.id,
-      title: event.title || '',
-      event_type: event.event_type,
-      start_date: String(event.start_date).slice(0, 10),
-      end_date: String(event.end_date || event.start_date).slice(0, 10),
-      all_day: Boolean(event.all_day),
-      start_time: event.start_time ? String(event.start_time).slice(0, 5) : '',
-      end_time: event.end_time ? String(event.end_time).slice(0, 5) : '',
-      visibility: event.visibility || 'team',
-      notes: event.notes || ''
-    });
-    setModalOpen(true);
+  const shiftDay = (delta) => {
+    const [y, m, d] = date.split('-').map(Number);
+    setDate(toDateText(new Date(y, m - 1, d + delta)));
   };
 
-  const closeModal = () => {
-    setModalOpen(false);
-    setSelectedEvent(null);
-  };
-
-  const canEditSelected = !selectedEvent || selectedEvent.is_owner;
-
-  const updateForm = (patch) => setForm((prev) => ({ ...prev, ...patch }));
-
-  const onTypeChange = (nextType) => {
-    setForm((prev) => ({
-      ...prev,
-      event_type: nextType,
-      all_day: typeMap[nextType]?.default_all_day ?? prev.all_day
-    }));
-  };
-
-  const buildPayload = () => {
-    const payload = {
-      title: form.title.trim() || (typeMap[form.event_type]?.label || 'Evento'),
-      event_type: form.event_type,
-      start_date: form.start_date,
-      end_date: form.end_date && form.end_date >= form.start_date ? form.end_date : form.start_date,
-      all_day: form.all_day,
-      visibility: form.visibility,
-      notes: form.notes.trim() || null
-    };
-    if (!form.all_day) {
-      payload.start_time = form.start_time || null;
-      payload.end_time = form.end_time || null;
-    } else {
-      payload.start_time = null;
-      payload.end_time = null;
-    }
-    return payload;
-  };
-
-  const saveEvent = async (e) => {
-    e.preventDefault();
-    if (!form.start_date) {
-      toast.error('Indica la fecha de inicio');
-      return;
-    }
+  const addTask = async () => {
+    if (!title.trim() || saving) return;
     setSaving(true);
     try {
-      const payload = buildPayload();
-      if (form.id) {
-        await apiRequest(`/api/calendar/events/${form.id}`, { method: 'PATCH', token, body: payload });
-        toast.success('Evento actualizado');
-      } else if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        enqueueWrite({
-          label: `Evento ${payload.title} (${payload.start_date})`,
-          path: '/api/calendar/events',
-          options: { method: 'POST', token, body: payload, retries: 0 },
-          meta: { eventType: payload.event_type, startDate: payload.start_date }
-        });
-        toast.info('Sin conexión: el evento se sincronizará luego.');
-      } else {
-        await apiRequest('/api/calendar/events', { method: 'POST', token, body: payload });
-        toast.success('Evento creado');
-      }
-      closeModal();
-      await loadEvents();
+      const data = await apiRequest('/api/day-plan', {
+        method: 'POST',
+        token,
+        body: { date, title: title.trim(), start_minute: startMinute, end_minute: endMinute }
+      });
+      setTasks((prev) => [...prev, data.task]);
+      setTitle('');
+      // Chain the next entry right after this one — fast logging in the meeting.
+      const duration = endMinute - startMinute;
+      const nextStart = Math.min(endMinute, DAY_END - 30);
+      setStartMinute(nextStart);
+      setEndMinute(Math.min(nextStart + duration, DAY_END));
     } catch (err) {
-      toast.error(err.message || 'No se pudo guardar el evento');
+      toast.error(err.message || 'No se pudo agregar');
     } finally {
       setSaving(false);
     }
   };
 
-  const deleteEvent = async () => {
-    if (!form.id) return;
-    if (typeof window !== 'undefined' && !window.confirm('¿Eliminar este evento?')) return;
-    setSaving(true);
+  const toggleDone = async (task) => {
     try {
-      await apiRequest(`/api/calendar/events/${form.id}`, { method: 'DELETE', token });
-      toast.success('Evento eliminado');
-      closeModal();
-      await loadEvents();
+      const data = await apiRequest(`/api/day-plan/${task.id}`, {
+        method: 'PATCH', token, body: { is_done: !task.is_done }
+      });
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? data.task : t)));
     } catch (err) {
-      toast.error(err.message || 'No se pudo eliminar el evento');
-    } finally {
-      setSaving(false);
+      toast.error(err.message || 'No se pudo actualizar');
     }
   };
 
-  const today = todayText();
-  const currentMonth = monthCursor.getMonth();
+  const removeTask = async (task) => {
+    if (!window.confirm(`¿Eliminar "${task.title}"?`)) return;
+    try {
+      await apiRequest(`/api/day-plan/${task.id}`, { method: 'DELETE', token });
+      setTasks((prev) => prev.filter((t) => t.id !== task.id));
+    } catch (err) {
+      toast.error(err.message || 'No se pudo eliminar');
+    }
+  };
+
+  const tasksByUser = useMemo(() => {
+    const map = new Map();
+    for (const task of tasks) {
+      if (!map.has(task.user_id)) map.set(task.user_id, []);
+      map.get(task.user_id).push(task);
+    }
+    return map;
+  }, [tasks]);
+
+  // My column first, then people WITH a plan, then the rest — the meeting
+  // reads left to right.
+  const columns = useMemo(() => {
+    const score = (member) => (member.id === myId ? 2 : (tasksByUser.has(member.id) ? 1 : 0));
+    return [...team].sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name, 'es'));
+  }, [team, tasksByUser, myId]);
+
+  const planned = team.filter((member) => tasksByUser.has(member.id)).length;
+  const doneCount = tasks.filter((t) => t.is_done).length;
+  const boardHeight = ((DAY_END - DAY_START) / 60) * HOUR_PX;
+  const hourMarks = [];
+  for (let m = DAY_START; m <= DAY_END; m += 60) hourMarks.push(m);
+
+  const dateLabel = useMemo(() => {
+    const [y, m, d] = date.split('-').map(Number);
+    const formatted = new Intl.DateTimeFormat('es-BO', { weekday: 'long', day: 'numeric', month: 'long' })
+      .format(new Date(y, m - 1, d));
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  }, [date]);
 
   return (
-    <div className="container cal-page">
-      <div className="cal-toolbar">
-        <div className="cal-toolbar-left">
-          <button type="button" className="btn" onClick={() => shiftMonth(-1)} aria-label="Mes anterior">‹</button>
-          <button type="button" className="btn" onClick={goToToday}>Hoy</button>
-          <button type="button" className="btn" onClick={() => shiftMonth(1)} aria-label="Mes siguiente">›</button>
-          <h2 className="cal-month-title">{MONTH_LABELS[currentMonth]} {monthCursor.getFullYear()}</h2>
+    <div className="container dayplan-page">
+      <div className="dayplan-head">
+        <div>
+          <h2 className="dayplan-title">Plan del día</h2>
+          <p className="dayplan-subtitle">{dateLabel}{isToday ? ' · hoy' : ''}</p>
         </div>
-        <div className="cal-toolbar-right">
-          <select className="filter-select" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            <option value="all">Todos los tipos</option>
-            {typeList.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-          </select>
-          <label className="cal-checkbox">
-            <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} />
-            Solo míos
-          </label>
-          <button type="button" className="btn btn-primary" onClick={() => openCreate(today)}>+ Nuevo evento</button>
+        <div className="dayplan-nav">
+          <button type="button" className="btn btn-secondary" onClick={() => shiftDay(-1)} aria-label="Día anterior">‹</button>
+          <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
+          <button type="button" className="btn btn-secondary" onClick={() => shiftDay(1)} aria-label="Día siguiente">›</button>
+          {!isToday && (
+            <button type="button" className="btn btn-primary" onClick={() => setDate(toDateText(new Date()))}>Hoy</button>
+          )}
         </div>
       </div>
 
-      {summary && (
-        <div className="cal-quota">
-          <div className="cal-quota-item">
-            <span>Vacaciones disponibles</span>
-            <strong>{summary.vacation_remaining} / 14</strong>
-          </div>
-          <div className="cal-quota-item">
-            <span>Enfermedad disponible</span>
-            <strong>{summary.sick_remaining} / 5</strong>
-          </div>
-          <div className="cal-quota-item">
-            <span>Días parciales aprobados</span>
-            <strong>{summary.partial_used || 0}</strong>
-          </div>
-        </div>
-      )}
-
-      {error && <div className="card cal-error">{error}</div>}
-
-      <div className="cal-legend">
-        {typeList.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            className={`cal-legend-item ${filterType === t.key ? 'active' : ''}`}
-            onClick={() => setFilterType((prev) => (prev === t.key ? 'all' : t.key))}
-          >
-            <span className="cal-dot" style={{ background: t.color }} />
-            {t.label}
-          </button>
-        ))}
+      <div className="card dayplan-add">
+        <span className="dayplan-add-label">Mi tarea:</span>
+        <input
+          type="text"
+          maxLength={120}
+          placeholder="¿Qué vas a hacer? (ej: Armar pedidos de Santa Cruz)"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }}
+        />
+        <select value={startMinute} onChange={(e) => {
+          const v = Number(e.target.value);
+          setStartMinute(v);
+          if (endMinute <= v) setEndMinute(Math.min(v + 60, DAY_END));
+        }}>
+          {TIME_OPTIONS.filter((m) => m < DAY_END).map((m) => (
+            <option key={m} value={m}>{minuteLabel(m)}</option>
+          ))}
+        </select>
+        <span className="dayplan-add-sep">→</span>
+        <select value={endMinute} onChange={(e) => setEndMinute(Number(e.target.value))}>
+          {TIME_OPTIONS.filter((m) => m > startMinute).map((m) => (
+            <option key={m} value={m}>{minuteLabel(m)}</option>
+          ))}
+        </select>
+        <button type="button" className="btn btn-primary" disabled={saving || !title.trim()} onClick={addTask}>
+          {saving ? '…' : '+ Agregar'}
+        </button>
       </div>
 
-      <div className="cal-grid card">
-        <div className="cal-weekdays">
-          {WEEKDAY_LABELS.map((d) => <div key={d} className="cal-weekday">{d}</div>)}
-        </div>
-        <div className={`cal-days ${loading ? 'is-loading' : ''}`}>
-          {grid.map((day) => {
-            const dayText = toDateText(day);
-            const inMonth = day.getMonth() === currentMonth;
-            const isToday = dayText === today;
-            const dayEvents = eventsOnDay(filteredEvents, dayText);
+      <div className="dayplan-meta">
+        <span><strong>{planned}</strong>/{team.length} con plan</span>
+        <span><strong>{tasks.length}</strong> tareas</span>
+        <span><strong>{doneCount}</strong> hechas</span>
+        <span className="dayplan-meta-hint">Toca ✓ en tus tareas al completarlas</span>
+      </div>
+
+      {loading ? (
+        <p className="dashboard-muted">Cargando plan…</p>
+      ) : (
+        <div className="dayplan-board">
+          <div className="dayplan-time-col">
+            <div className="dayplan-time-spacer" />
+            {hourMarks.map((m) => (
+              <div key={m} className="dayplan-hour-label" style={{ height: HOUR_PX }}>{minuteLabel(m)}</div>
+            ))}
+          </div>
+          {columns.map((member) => {
+            const memberTasks = assignLanes(tasksByUser.get(member.id) || []);
+            const color = USER_COLORS[member.id % USER_COLORS.length];
+            const isMine = member.id === myId;
+            const memberDone = memberTasks.filter((t) => t.is_done).length;
             return (
-              <div
-                key={dayText}
-                className={`cal-day ${inMonth ? '' : 'cal-day-muted'} ${isToday ? 'cal-day-today' : ''}`}
-                onClick={() => openCreate(dayText)}
-                role="button"
-                tabIndex={0}
-              >
-                <div className="cal-day-number">{day.getDate()}</div>
-                <div className="cal-day-events">
-                  {dayEvents.slice(0, 4).map((ev) => (
-                    <button
-                      key={`${ev.id}-${dayText}`}
-                      type="button"
-                      className={`cal-event ${ev.status === 'pending' ? 'is-pending' : ''} ${ev.status === 'rejected' ? 'is-rejected' : ''}`}
-                      style={{ background: ev.color || typeMap[ev.event_type]?.color || '#78716c' }}
-                      title={`${ev.title} · ${ev.owner_name || ev.owner_email || ''}`}
-                      onClick={(e) => { e.stopPropagation(); openEdit(ev); }}
-                    >
-                      {!ev.all_day && ev.start_time ? `${String(ev.start_time).slice(0, 5)} ` : ''}{ev.title}
-                    </button>
+              <div key={member.id} className={`dayplan-col ${isMine ? 'is-mine' : ''}`}>
+                <div className="dayplan-col-head" style={{ borderTopColor: color }}>
+                  <span className="dayplan-col-name">{member.name}{isMine ? ' (yo)' : ''}</span>
+                  <span className={`dayplan-col-count ${memberTasks.length === 0 ? 'is-empty' : ''}`}>
+                    {memberTasks.length === 0 ? 'sin plan' : `${memberDone}/${memberTasks.length} ✓`}
+                  </span>
+                </div>
+                <div className="dayplan-col-body" style={{ height: boardHeight }}>
+                  {hourMarks.slice(1, -1).map((m) => (
+                    <div key={m} className="dayplan-hour-line" style={{ top: ((m - DAY_START) / 60) * HOUR_PX }} />
                   ))}
-                  {dayEvents.length > 4 && (
-                    <span className="cal-more">+{dayEvents.length - 4} más</span>
+                  {isToday && nowMinute >= DAY_START && nowMinute <= DAY_END && (
+                    <div className="dayplan-now-line" style={{ top: ((nowMinute - DAY_START) / 60) * HOUR_PX }} />
                   )}
+                  {memberTasks.map((task) => {
+                    const top = Math.max(0, ((task.start_minute - DAY_START) / 60) * HOUR_PX);
+                    const height = Math.max(24, ((Math.min(task.end_minute, DAY_END) - Math.max(task.start_minute, DAY_START)) / 60) * HOUR_PX - 3);
+                    const width = 100 / task.laneCount;
+                    return (
+                      <div
+                        key={task.id}
+                        className={`dayplan-task ${task.is_done ? 'is-done' : ''}`}
+                        style={{
+                          top,
+                          height,
+                          left: `${task.lane * width}%`,
+                          width: `calc(${width}% - 4px)`,
+                          background: color
+                        }}
+                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${task.title}`}
+                      >
+                        <span className="dayplan-task-time">{minuteLabel(task.start_minute)}–{minuteLabel(task.end_minute)}</span>
+                        <span className="dayplan-task-title">{task.title}</span>
+                        {isMine && (
+                          <span className="dayplan-task-actions">
+                            <button type="button" title={task.is_done ? 'Marcar pendiente' : 'Marcar hecha'} onClick={() => toggleDone(task)}>
+                              {task.is_done ? '↺' : '✓'}
+                            </button>
+                            <button type="button" title="Eliminar" onClick={() => removeTask(task)}>✕</button>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {modalOpen && (
-        <div className="cal-modal-overlay" onClick={closeModal}>
-          <div className="cal-modal card" onClick={(e) => e.stopPropagation()}>
-            <div className="cal-modal-header">
-              <h3>{form.id ? (canEditSelected ? 'Editar evento' : 'Detalle del evento') : 'Nuevo evento'}</h3>
-              <button type="button" className="cal-modal-close" onClick={closeModal} aria-label="Cerrar">×</button>
-            </div>
-
-            {form.id && !canEditSelected ? (
-              <div className="cal-detail">
-                <p><strong>{form.title}</strong></p>
-                <p>{typeMap[form.event_type]?.label || form.event_type}</p>
-                <p>{formatDateLong(form.start_date)} → {formatDateLong(form.end_date)}</p>
-                {selectedEvent?.owner_name && <p>Responsable: {selectedEvent.owner_name}</p>}
-                <p>Estado: {STATUS_LABELS[selectedEvent?.status] || selectedEvent?.status}</p>
-                {form.notes && <p className="cal-detail-notes">{form.notes}</p>}
-              </div>
-            ) : (
-              <form onSubmit={saveEvent} className="cal-form">
-                <div>
-                  <label className="form-label">Título</label>
-                  <input
-                    className="filter-input"
-                    style={{ width: '100%' }}
-                    value={form.title}
-                    placeholder={typeMap[form.event_type]?.label || 'Evento'}
-                    onChange={(e) => updateForm({ title: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="form-label">Tipo</label>
-                  <select className="filter-select" style={{ width: '100%' }} value={form.event_type} onChange={(e) => onTypeChange(e.target.value)}>
-                    {typeList.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-                  </select>
-                </div>
-                <div className="cal-form-row">
-                  <div>
-                    <label className="form-label">Desde</label>
-                    <input type="date" className="filter-input" style={{ width: '100%' }} value={form.start_date}
-                      onChange={(e) => updateForm({ start_date: e.target.value, end_date: form.end_date < e.target.value ? e.target.value : form.end_date })} />
-                  </div>
-                  <div>
-                    <label className="form-label">Hasta</label>
-                    <input type="date" className="filter-input" style={{ width: '100%' }} value={form.end_date}
-                      min={form.start_date}
-                      onChange={(e) => updateForm({ end_date: e.target.value })} />
-                  </div>
-                </div>
-                <label className="cal-checkbox">
-                  <input type="checkbox" checked={form.all_day} onChange={(e) => updateForm({ all_day: e.target.checked })} />
-                  Todo el día
-                </label>
-                {!form.all_day && (
-                  <div className="cal-form-row">
-                    <div>
-                      <label className="form-label">Hora inicio</label>
-                      <input type="time" className="filter-input" style={{ width: '100%' }} value={form.start_time} onChange={(e) => updateForm({ start_time: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="form-label">Hora fin</label>
-                      <input type="time" className="filter-input" style={{ width: '100%' }} value={form.end_time} onChange={(e) => updateForm({ end_time: e.target.value })} />
-                    </div>
-                  </div>
-                )}
-                <div>
-                  <label className="form-label">Visibilidad</label>
-                  <select className="filter-select" style={{ width: '100%' }} value={form.visibility} onChange={(e) => updateForm({ visibility: e.target.value })}>
-                    <option value="team">Equipo (visible para coordinar)</option>
-                    <option value="personal">Personal (solo yo)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="form-label">Notas</label>
-                  <textarea
-                    rows={3}
-                    className="cal-textarea"
-                    value={form.notes}
-                    placeholder="Detalle (opcional)"
-                    onChange={(e) => updateForm({ notes: e.target.value })}
-                  />
-                </div>
-                {typeMap[form.event_type]?.category === 'time_off' && (
-                  <p className="form-hint">Las solicitudes de tiempo libre quedan pendientes hasta la aprobación de un administrador.</p>
-                )}
-                <div className="cal-modal-actions">
-                  {form.id && (
-                    <button type="button" className="btn cal-btn-danger" onClick={deleteEvent} disabled={saving}>Eliminar</button>
-                  )}
-                  <div className="cal-modal-actions-right">
-                    <button type="button" className="btn" onClick={closeModal} disabled={saving}>Cancelar</button>
-                    <button type="submit" className="btn btn-primary" disabled={saving}>
-                      {saving ? 'Guardando…' : (form.id ? 'Guardar' : 'Crear')}
-                    </button>
-                  </div>
-                </div>
-              </form>
-            )}
-          </div>
         </div>
       )}
     </div>

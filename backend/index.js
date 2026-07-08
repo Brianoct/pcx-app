@@ -28,7 +28,9 @@ const routers = [
   require('./routes/qc'),
   require('./routes/profile'),
   require('./routes/customers'),
-  require('./routes/wheel')
+  require('./routes/wheel'),
+  require('./routes/dayplan'),
+  require('./routes/overview')
 ];
 
 for (const router of routers) {

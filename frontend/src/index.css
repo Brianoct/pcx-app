@@ -7345,3 +7345,281 @@ img, video, canvas { max-width: 100%; }
   color: #b45309;
   font-weight: 700;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INICIO — at-a-glance tiles & lists
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.glance-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.glance-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.glance-tile:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08); }
+
+.glance-tile.is-warn { border-color: rgba(220, 38, 38, 0.4); background: rgba(220, 38, 38, 0.04); }
+.glance-tile.is-warn .glance-tile-value { color: #dc2626; }
+
+.glance-tile-value { font-size: 1.7rem; font-weight: 900; color: var(--text-primary); line-height: 1.1; }
+.glance-tile-label { font-size: 0.82rem; font-weight: 700; color: var(--text-primary); }
+.glance-tile-detail { font-size: 0.74rem; color: var(--text-muted); }
+
+.glance-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.glance-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+.glance-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 0.86rem;
+}
+
+.glance-list li:last-child { border-bottom: none; }
+.glance-list li span { color: var(--text-muted); font-size: 0.78rem; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PLAN DEL DÍA — team day board
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dayplan-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 20px 0 14px;
+}
+
+.dayplan-title { margin: 0; }
+.dayplan-subtitle { margin: 2px 0 0; color: var(--text-muted); font-size: 0.9rem; }
+
+.dayplan-nav { display: flex; align-items: center; gap: 8px; }
+.dayplan-nav .btn { min-height: 38px; padding: 6px 14px; }
+.dayplan-nav input[type="date"] {
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+}
+
+.dayplan-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.dayplan-add-label { font-size: 0.85rem; font-weight: 800; color: var(--text-muted); white-space: nowrap; }
+
+.dayplan-add input[type="text"] {
+  flex: 1;
+  min-width: 220px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-size: 0.92rem;
+}
+
+.dayplan-add select {
+  min-height: 42px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dayplan-add-sep { color: var(--text-muted); font-weight: 700; }
+
+.dayplan-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  font-size: 0.83rem;
+  color: var(--text-muted);
+}
+
+.dayplan-meta-hint { margin-left: auto; font-size: 0.75rem; }
+
+.dayplan-board {
+  display: flex;
+  align-items: flex-start;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  padding-bottom: 8px;
+}
+
+.dayplan-time-col {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex: 0 0 52px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+}
+
+.dayplan-time-spacer { height: 46px; }
+
+.dayplan-hour-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-align: right;
+  padding-right: 6px;
+  transform: translateY(-7px);
+}
+
+.dayplan-col {
+  flex: 1 0 160px;
+  min-width: 160px;
+  border-right: 1px dashed var(--border);
+}
+
+.dayplan-col.is-mine { background: rgba(59, 130, 246, 0.035); }
+
+.dayplan-col-head {
+  height: 46px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4px 10px;
+  border-top: 3px solid transparent;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: inherit;
+}
+
+.dayplan-col-name {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dayplan-col-count { font-size: 0.7rem; color: var(--text-muted); font-weight: 700; }
+.dayplan-col-count.is-empty { color: #b45309; }
+
+.dayplan-col-body { position: relative; }
+
+.dayplan-hour-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid rgba(214, 204, 192, 0.35);
+  pointer-events: none;
+}
+
+.dayplan-now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 2px solid #dc2626;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.dayplan-now-line::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc2626;
+}
+
+.dayplan-task {
+  position: absolute;
+  border-radius: 8px;
+  padding: 4px 8px;
+  color: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  z-index: 1;
+}
+
+.dayplan-task.is-done { opacity: 0.55; }
+.dayplan-task.is-done .dayplan-task-title { text-decoration: line-through; }
+
+.dayplan-task-time { font-size: 0.64rem; font-weight: 800; opacity: 0.9; }
+
+.dayplan-task-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.dayplan-task-actions {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  display: flex;
+  gap: 3px;
+}
+
+.dayplan-task-actions button {
+  border: none;
+  border-radius: 6px;
+  width: 20px;
+  height: 20px;
+  font-size: 0.68rem;
+  line-height: 1;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.dayplan-task-actions button:hover { background: rgba(255, 255, 255, 0.45); }
+
+@media (max-width: 640px) {
+  .dayplan-add { padding: 12px; }
+  .dayplan-add input[type="text"] { min-width: 100%; }
+  .dayplan-col { flex: 1 0 140px; min-width: 140px; }
+  .dayplan-meta-hint { display: none; }
+}
