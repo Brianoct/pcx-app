@@ -131,6 +131,78 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
       };
     });
 
+    // ── Comparison vs previous month + conversion funnel ─────────────────────
+    const prevMonth = targetMonth === 1 ? 12 : targetMonth - 1;
+    const prevYear = targetMonth === 1 ? targetYear - 1 : targetYear;
+    const prevFilter = buildDateFilter(prevMonth, prevYear, 'q', 1);
+
+    const periodSummarySql = `
+      SELECT
+        COUNT(*) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado'))::int AS sold_count,
+        COALESCE(SUM(q.total) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')), 0) AS sold_total,
+        COUNT(*)::int AS quotes_count
+      FROM quotes q
+      WHERE TRUE`;
+    const [currentSummaryRes, prevSummaryRes] = await Promise.all([
+      pool.query(`${periodSummarySql} ${dateFilter.sql}`, dateFilter.params),
+      pool.query(`${periodSummarySql} ${prevFilter.sql}`, prevFilter.params)
+    ]);
+    const buildPeriodSummary = (row) => {
+      const soldCount = Number(row?.sold_count || 0);
+      const soldTotal = Number(row?.sold_total || 0);
+      const quotesCount = Number(row?.quotes_count || 0);
+      return {
+        quotes_count: quotesCount,
+        sold_count: soldCount,
+        sold_total: soldTotal,
+        avg_ticket: soldCount > 0 ? soldTotal / soldCount : 0,
+        conversion_pct: quotesCount > 0 ? (soldCount / quotesCount) * 100 : 0
+      };
+    };
+    const periodSummary = buildPeriodSummary(currentSummaryRes.rows[0]);
+    const previousSummary = {
+      ...buildPeriodSummary(prevSummaryRes.rows[0]),
+      month: prevMonth,
+      year: prevYear
+    };
+
+    // Funnel by stage reached (each status implies the previous ones).
+    const funnelRes = await pool.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE q.status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado'))::int AS confirmado,
+        COUNT(*) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado'))::int AS pagado,
+        COUNT(*) FILTER (WHERE q.status = 'Enviado')::int AS enviado
+      FROM quotes q
+      WHERE TRUE ${dateFilter.sql}
+    `, dateFilter.params);
+
+    // Per-seller conversion (grouped case-insensitively, latest spelling).
+    const sellerConversionRes = await pool.query(`
+      SELECT
+        (array_agg(q.vendor ORDER BY q.created_at DESC))[1] AS vendor,
+        COUNT(*)::int AS quotes_count,
+        COUNT(*) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado'))::int AS sold_count,
+        COALESCE(SUM(q.total) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')), 0) AS sold_total
+      FROM quotes q
+      WHERE q.vendor IS NOT NULL AND TRIM(q.vendor) <> '' ${dateFilter.sql}
+      GROUP BY LOWER(TRIM(q.vendor))
+      ORDER BY sold_total DESC
+      LIMIT 10
+    `, dateFilter.params);
+
+    // Previous month's daily curve (ghost line behind the current one).
+    const prevDailyRes = await pool.query(`
+      SELECT
+        EXTRACT(DAY FROM ${reportingCreatedAtExpr})::INT AS day_num,
+        SUM(q.total) AS total_sales
+      FROM quotes q
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        ${prevFilter.sql}
+      GROUP BY day_num
+      ORDER BY day_num ASC
+    `, prevFilter.params);
+
     const activeUsersRes = await pool.query(
       `SELECT id, email, display_name, role, city
        FROM users
@@ -286,7 +358,21 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
       salesByDepartment: departmentSalesRes.rows,
       dailySalesSeries,
       activeUserCommissions: commissionByUser,
-      totalCommissionToDate
+      totalCommissionToDate,
+      periodSummary,
+      previousSummary,
+      funnel: funnelRes.rows[0],
+      sellerConversion: sellerConversionRes.rows.map((row) => ({
+        vendor: row.vendor,
+        quotes_count: Number(row.quotes_count || 0),
+        sold_count: Number(row.sold_count || 0),
+        sold_total: Number(row.sold_total || 0),
+        conversion_pct: Number(row.quotes_count) > 0 ? (Number(row.sold_count) / Number(row.quotes_count)) * 100 : 0
+      })),
+      prevDailySalesSeries: prevDailyRes.rows.map((row) => ({
+        day_num: Number(row.day_num),
+        total_sales: Number(row.total_sales || 0)
+      }))
     });
   } catch (err) {
     console.error(err);
