@@ -65,20 +65,20 @@ router.get('/api/customers', authenticateToken, async (req, res) => {
       where.push(`c.pipeline_stage = $${params.length}`);
     }
     if (String(req.query.due || '') === '1') {
-      where.push('c.follow_up_at IS NOT NULL AND c.follow_up_at <= CURRENT_DATE');
+      where.push("c.follow_up_at IS NOT NULL AND c.follow_up_at <= (NOW() AT TIME ZONE 'America/La_Paz')::date");
     }
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 300);
     const result = await pool.query(
       `${CUSTOMER_LIST_SELECT}
        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-       ORDER BY (c.follow_up_at IS NOT NULL AND c.follow_up_at <= CURRENT_DATE) DESC,
+       ORDER BY (c.follow_up_at IS NOT NULL AND c.follow_up_at <= (NOW() AT TIME ZONE 'America/La_Paz')::date) DESC,
                 s.last_quote_at DESC NULLS LAST,
                 c.updated_at DESC
        LIMIT ${limit}`,
       params
     );
     const dueRes = await pool.query(
-      'SELECT COUNT(*)::int AS due FROM customers WHERE follow_up_at IS NOT NULL AND follow_up_at <= CURRENT_DATE'
+      "SELECT COUNT(*)::int AS due FROM customers WHERE follow_up_at IS NOT NULL AND follow_up_at <= (NOW() AT TIME ZONE 'America/La_Paz')::date"
     );
     res.json({
       customers: result.rows.map(buildCustomerRow),

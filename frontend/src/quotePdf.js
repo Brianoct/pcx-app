@@ -1,10 +1,35 @@
 import jsPDF from 'jspdf';
+import logoAsset from './assets/logo.png';
 
 const BRAND_RED = [225, 29, 72];
 const TEXT_DARK = [15, 23, 42];
 const TEXT_MUTED = [100, 116, 139];
 const BORDER_SOFT = [226, 232, 240];
 const BG_SOFT = [248, 250, 252];
+
+// The raw logo is RGBA; jsPDF composites its alpha unpredictably (black
+// boxes / red smears) and the old fixed 34×14 box squashed it. Pre-render it
+// once onto a white canvas at natural size and keep the real aspect ratio.
+let logoPrepared = null;
+if (typeof window !== 'undefined') {
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      logoPrepared = {
+        dataUrl: canvas.toDataURL('image/png'),
+        ratio: img.naturalWidth / img.naturalHeight
+      };
+    } catch { /* PDF simply renders without logo */ }
+  };
+  img.src = logoAsset;
+}
 
 const toMoney = (value) => Number(value || 0).toFixed(2);
 
@@ -61,48 +86,60 @@ export function generateModernQuotePdf({
 
   const drawTopBar = () => {
     doc.setFillColor(...BRAND_RED);
-    doc.rect(0, 0, pageW, 4, 'F');
+    doc.rect(0, 0, pageW, 3, 'F');
   };
 
   const drawTableHeader = (y, continuation = false) => {
     doc.setFillColor(30, 41, 59);
-    doc.rect(left, y, tableW, 9, 'F');
+    doc.roundedRect(left, y, tableW, 9, 1.5, 1.5, 'F');
+    doc.rect(left, y + 4, tableW, 5, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text(continuation ? 'Descripcion (continuacion)' : 'Descripcion', left + 3, y + 6);
+    doc.setFontSize(9.5);
+    doc.text(continuation ? 'Descripción (continuación)' : 'Descripción', left + 3, y + 6);
     doc.text('Cant.', 128, y + 6, { align: 'center' });
     doc.text('P. Unit.', 160, y + 6, { align: 'right' });
     doc.text('Subtotal', right - 3, y + 6, { align: 'right' });
-    return y + 9;
+    doc.setFillColor(...BRAND_RED);
+    doc.rect(left, y + 9, tableW, 0.8, 'F');
+    return y + 9.8;
   };
 
   drawTopBar();
 
-  if (logo) {
-    doc.addImage(logo, 'PNG', left, 10, 34, 14);
+  // Logo at its REAL aspect ratio, pre-composited on white (no black box).
+  if (logoPrepared) {
+    const logoH = 13;
+    const logoW = Math.min(46, logoH * logoPrepared.ratio);
+    doc.addImage(logoPrepared.dataUrl, 'PNG', left, 9, logoW, logoH);
+  } else if (logo) {
+    doc.addImage(logo, 'PNG', left, 9, 35.5, 13);
   }
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
+  doc.setFontSize(21);
   doc.setTextColor(...TEXT_DARK);
-  doc.text('Cotizacion', right, 18, { align: 'right' });
+  doc.text('COTIZACIÓN', right, 16, { align: 'right' });
 
   if (quoteNumber != null && quoteNumber !== '') {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(...TEXT_MUTED);
-    doc.text(`Nro: ${quoteNumber}`, right, 24, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...BRAND_RED);
+    doc.text(`Nro ${quoteNumber}`, right, 22.5, { align: 'right' });
   }
+
+  doc.setDrawColor(...BORDER_SOFT);
+  doc.setLineWidth(0.4);
+  doc.line(left, 25.5, right, 25.5);
 
   const metaChips = [
     `Vendedor: ${vendorName || '—'}`,
-    `Almacen: ${storeLocation || '—'}`,
+    `Almacén: ${storeLocation || '—'}`,
     `Fecha: ${dateText || '—'}`
   ];
 
   let chipX = left;
-  let chipY = 31;
+  let chipY = 33;
   metaChips.forEach((chip) => {
     const chipW = doc.getTextWidth(chip) + 8;
     if (chipX + chipW > right) {
@@ -127,20 +164,24 @@ export function generateModernQuotePdf({
   doc.setDrawColor(...BORDER_SOFT);
   doc.roundedRect(left, cursorY, tableW, 24, 2, 2, 'FD');
 
+  // Red accent on the client card's left edge.
+  doc.setFillColor(...BRAND_RED);
+  doc.roundedRect(left, cursorY, 1.6, 24, 0.8, 0.8, 'F');
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...TEXT_MUTED);
-  doc.text('CLIENTE', left + 4, cursorY + 6);
-  doc.text('TELEFONO', 106, cursorY + 6);
-  doc.text('UBICACION', left + 4, cursorY + 16);
+  doc.text('CLIENTE', left + 5, cursorY + 6);
+  doc.text('TELÉFONO', 106, cursorY + 6);
+  doc.text('UBICACIÓN', left + 5, cursorY + 16);
   doc.text('ORIGEN', 106, cursorY + 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(11);
   doc.setTextColor(...TEXT_DARK);
-  doc.text(truncate(customerName || '—', 28), left + 4, cursorY + 11);
+  doc.text(truncate(customerName || '—', 28), left + 5, cursorY + 11);
   doc.text(truncate(customerPhone || '—', 24), 106, cursorY + 11);
-  doc.text(truncate(locationText, 30), left + 4, cursorY + 21);
+  doc.text(truncate(locationText, 30), left + 5, cursorY + 21);
   doc.text(truncate(dispatchSourceText, 30), 106, cursorY + 21);
 
   cursorY += 28;
@@ -238,44 +279,43 @@ export function generateModernQuotePdf({
       ? [{ label: `Descuento (${Number(discountPercent)}%)`, value: `${toMoney(discountValue)} Bs` }]
       : [])
   ];
-  const summaryH = 18 + summaryLines.length * 7.5 + 10;
+  const summaryH = 10 + summaryLines.length * 7 + 13;
 
-  doc.setFillColor(...BG_SOFT);
+  doc.setFillColor(255, 255, 255);
   doc.setDrawColor(...BORDER_SOFT);
   doc.roundedRect(summaryX, rowY + 6, summaryW, summaryH, 2, 2, 'FD');
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...TEXT_DARK);
-  doc.text('Resumen', summaryX + 4, rowY + 13);
-
-  let summaryY = rowY + 20;
+  let summaryY = rowY + 14;
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(9.5);
   summaryLines.forEach((line) => {
     doc.setTextColor(...TEXT_MUTED);
-    doc.text(line.label, summaryX + 4, summaryY);
+    doc.text(line.label, summaryX + 5, summaryY);
     doc.setTextColor(...TEXT_DARK);
-    doc.text(line.value, right - 3, summaryY, { align: 'right' });
+    doc.text(line.value, right - 5, summaryY, { align: 'right' });
     summaryY += 7;
   });
 
-  doc.setDrawColor(...BORDER_SOFT);
-  doc.line(summaryX + 4, summaryY, right - 3, summaryY);
-  summaryY += 7;
+  // TOTAL band in brand red — the number the customer looks for.
+  doc.setFillColor(...BRAND_RED);
+  doc.roundedRect(summaryX + 2.5, summaryY - 2.5, summaryW - 5, 10, 1.8, 1.8, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(...BRAND_RED);
-  doc.text(`TOTAL: ${toMoney(total)} Bs`, right - 3, summaryY, { align: 'right' });
+  doc.setFontSize(11.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text('TOTAL', summaryX + 6, summaryY + 4);
+  doc.text(`${toMoney(total)} Bs`, right - 6, summaryY + 4, { align: 'right' });
+  summaryY += 10;
 
-  const footerY = Math.max(summaryY + 10, pageH - 18);
+  const footerY = Math.max(summaryY + 12, pageH - 16);
   doc.setDrawColor(...BORDER_SOFT);
+  doc.setLineWidth(0.4);
   doc.line(left, footerY - 5, right, footerY - 5);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(...TEXT_MUTED);
-  doc.text('Cotizacion valida por 7 dias', left, footerY);
-  doc.text('Gracias por confiar en PCX', right, footerY, { align: 'right' });
+  doc.text('Cotización válida por 7 días  ·  Gracias por confiar en PCX', pageW / 2, footerY, { align: 'center' });
+  doc.setFillColor(...BRAND_RED);
+  doc.rect(0, pageH - 3, pageW, 3, 'F');
 
   if (autoSave) {
     doc.save(filename);

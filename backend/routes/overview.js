@@ -6,6 +6,12 @@ const { loadUserContext } = require('../lib/users');
 
 const router = express.Router();
 
+// "Today" is Bolivia's today, not the server's: the backend runs in UTC, so
+// from ~20:00 La Paz onward CURRENT_DATE is already tomorrow and today's
+// numbers would show as zero.
+const BO_TODAY = "(NOW() AT TIME ZONE 'America/La_Paz')::date";
+const BO_DATE = (col) => `(${col} AT TIME ZONE 'UTC' AT TIME ZONE 'America/La_Paz')::date`;
+
 // One round trip for the Inicio page: every number the user is allowed to
 // see, in a single payload. Sections the user can't access come back null so
 // the client simply doesn't render those tiles.
@@ -33,7 +39,7 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
                 COALESCE(SUM(total), 0) AS quotes_total,
                 COUNT(*) FILTER (WHERE status IN ('Pagado', 'Embalado', 'Enviado'))::int AS sold_count
          FROM quotes
-         WHERE created_at::date = CURRENT_DATE ${seesTeamQuotes ? '' : 'AND user_id = $1'}`,
+         WHERE ${BO_DATE('created_at')} = ${BO_TODAY} ${seesTeamQuotes ? '' : 'AND user_id = $1'}`,
         seesTeamQuotes ? [] : [req.user.id]
       );
     }
@@ -43,7 +49,7 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
            COUNT(*) FILTER (WHERE status = 'Confirmado')::int AS confirmado,
            COUNT(*) FILTER (WHERE status = 'Pagado')::int AS pagado,
            COUNT(*) FILTER (WHERE status = 'Embalado')::int AS embalado,
-           COUNT(*) FILTER (WHERE status = 'Enviado' AND created_at::date = CURRENT_DATE)::int AS enviado_hoy
+           COUNT(*) FILTER (WHERE status = 'Enviado' AND ${BO_DATE('created_at')} = ${BO_TODAY})::int AS enviado_hoy
          FROM quotes`
       );
       jobs.toPrepare = pool.query(
@@ -72,24 +78,24 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
     if (canCrm) {
       jobs.crmDue = pool.query(
         `SELECT COUNT(*)::int AS due FROM customers
-         WHERE follow_up_at IS NOT NULL AND follow_up_at <= CURRENT_DATE`
+         WHERE follow_up_at IS NOT NULL AND follow_up_at <= ${BO_TODAY}`
       );
       jobs.crmDueList = pool.query(
         `SELECT id, name, phone, follow_up_at, follow_up_note FROM customers
-         WHERE follow_up_at IS NOT NULL AND follow_up_at <= CURRENT_DATE
+         WHERE follow_up_at IS NOT NULL AND follow_up_at <= ${BO_TODAY}
          ORDER BY follow_up_at ASC LIMIT 4`
       );
     }
     jobs.myDay = pool.query(
       `SELECT COUNT(*)::int AS tasks, COUNT(*) FILTER (WHERE is_done)::int AS done
-       FROM day_plan_tasks WHERE user_id = $1 AND task_date = CURRENT_DATE`,
+       FROM day_plan_tasks WHERE user_id = $1 AND task_date = ${BO_TODAY}`,
       [req.user.id]
     );
     jobs.teamDay = pool.query(
       `SELECT u.id, COALESCE(NULLIF(TRIM(u.display_name), ''), split_part(u.email, '@', 1)) AS name,
               COUNT(t.id)::int AS tasks, COUNT(t.id) FILTER (WHERE t.is_done)::int AS done
        FROM day_plan_tasks t JOIN users u ON u.id = t.user_id
-       WHERE t.task_date = CURRENT_DATE
+       WHERE t.task_date = ${BO_TODAY}
        GROUP BY u.id, u.display_name, u.email
        ORDER BY name`
     );
