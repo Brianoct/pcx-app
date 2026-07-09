@@ -1,13 +1,8 @@
 // src/AdminDashboard.jsx
-import { useState, useEffect, cloneElement, lazy, Suspense } from 'react';
+import { useState, useEffect, cloneElement } from 'react';
 import { apiRequest } from './apiClient';
 import boliviaAdminMapSvg from './assets/bolivia-admin1.svg?raw';
 import { useToast } from './ui/toastContext';
-
-// three.js is heavy — the 3D map only loads when someone switches to it.
-const Bolivia3DMap = lazy(() => import('./Bolivia3DMap'));
-
-const MAP_VIEW_STORAGE_KEY = 'pcx-dashboard-map-view';
 
 const BOLIVIA_DEPARTMENT_MAP = {
   'la paz': 'La Paz',
@@ -180,14 +175,6 @@ function AdminDashboard({ token }) {
   const [cardOrder, setCardOrder] = useState(DASHBOARD_CARD_ORDER);
   const [draggedCardId, setDraggedCardId] = useState('');
   const [dragOverCardId, setDragOverCardId] = useState('');
-  const [mapView, setMapView] = useState(() => {
-    if (typeof window === 'undefined') return '2d';
-    return window.localStorage.getItem(MAP_VIEW_STORAGE_KEY) === '3d' ? '3d' : '2d';
-  });
-  const switchMapView = (view) => {
-    setMapView(view);
-    try { window.localStorage.setItem(MAP_VIEW_STORAGE_KEY, view); } catch { /* private mode */ }
-  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -667,40 +654,7 @@ function AdminDashboard({ token }) {
     ),
     map: (
       <section className="dashboard-card dashboard-map-card">
-        <div className="dashboard-map-head">
-          <h3>Mapa de Bolivia · Ventas por departamento</h3>
-          <div className="dashboard-map-toggle" role="tablist" aria-label="Vista del mapa">
-            <button
-              type="button"
-              className={mapView === '2d' ? 'is-active' : ''}
-              onClick={() => switchMapView('2d')}
-            >
-              2D
-            </button>
-            <button
-              type="button"
-              className={mapView === '3d' ? 'is-active' : ''}
-              onClick={() => switchMapView('3d')}
-            >
-              3D
-            </button>
-          </div>
-        </div>
-        {mapView === '3d' ? (
-          <div className="dashboard-map-wrap">
-            <Suspense fallback={<p className="dashboard-empty">Cargando mapa 3D…</p>}>
-              <Bolivia3DMap featureRows={mapFeatureRows} formatValue={formatBs} />
-            </Suspense>
-            <div className="dashboard-map-ranking">
-              {mapRankingRows.map((row) => (
-                <div key={row.id} className="dashboard-map-ranking-row">
-                  <strong>{row.department}</strong>
-                  <span>{formatBs(row.totalSales)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
+        <h3>Mapa de Bolivia · Ventas por departamento</h3>
         <div className="dashboard-map-wrap">
           <div className="dashboard-bolivia-map">
             <svg
@@ -746,7 +700,6 @@ function AdminDashboard({ token }) {
             ))}
           </div>
         </div>
-        )}
         <div className="dashboard-map-legend">
           <span className="dashboard-map-legend-label">Menor venta</span>
           <span className="dashboard-map-legend-gradient" />
