@@ -684,136 +684,128 @@ function ProductCatalogAdmin({ token }) {
         </div>
         {loading ? (
           <p style={{ color: '#78716c' }}>Cargando productos...</p>
+        ) : visibleProducts.length === 0 ? (
+          <p style={{ color: '#78716c' }}>Sin productos.</p>
         ) : (
-          <div className="pcat-table-scroll">
-            <table className="table pcat-table">
-              <thead>
-                <tr>
-                  <th>Imagen</th>
-                  <th>SKU</th>
-                  <th>Nombre</th>
-                  <th>Descripción</th>
-                  <th className="pcat-num">SF</th>
-                  <th className="pcat-num">CF</th>
-                  <th className="pcat-center">Activo</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleProducts.length === 0 ? (
-                  <tr><td colSpan={8} style={{ textAlign: 'center', color: '#78716c' }}>Sin productos</td></tr>
-                ) : visibleProducts.map((row) => (
-                  <tr key={row.sku}>
-                    <td>
-                      <div className="pcat-image-cell">
-                        <div className="pcat-thumb">
-                          {row.image_url
-                            ? <img src={resolveImageUrl(row.image_url)} alt={row.name || row.sku} loading="lazy" />
-                            : <span className="pcat-thumb-empty">Sin foto</span>}
-                        </div>
-                        <div className="pcat-image-actions">
-                          <label className={`pcat-upload-btn ${imageBusySku === row.sku ? 'is-busy' : ''}`}>
-                            {imageBusySku === row.sku ? '…' : (row.image_url ? 'Cambiar' : 'Subir')}
-                            <input
-                              type="file"
-                              accept="image/png,image/jpeg,image/webp"
-                              disabled={imageBusySku === row.sku}
-                              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadProductImage(row, f); }}
-                              style={{ display: 'none' }}
-                            />
-                          </label>
-                          {row.image_url && (
-                            <button
-                              type="button"
-                              className="pcat-remove-btn"
-                              disabled={imageBusySku === row.sku}
-                              onClick={() => removeProductImage(row)}
-                            >
-                              Quitar
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="pcat-sku">{row.sku}</td>
-                    <td>
+          <div className="pcat-list">
+            {visibleProducts.map((row) => (
+              <div key={row.sku} className={`pcat-item ${row.is_active ? '' : 'is-inactive'}`}>
+                <div className="pcat-item-media">
+                  <div className="pcat-thumb">
+                    {row.image_url
+                      ? <img src={resolveImageUrl(row.image_url)} alt={row.name || row.sku} loading="lazy" />
+                      : <span className="pcat-thumb-empty">Sin foto</span>}
+                  </div>
+                  <div className="pcat-image-actions">
+                    <label className={`pcat-upload-btn ${imageBusySku === row.sku ? 'is-busy' : ''}`}>
+                      {imageBusySku === row.sku ? '…' : (row.image_url ? 'Cambiar' : 'Subir')}
                       <input
-                        value={row.name || ''}
-                        onChange={(e) => onRowField(row.sku, 'name', e.target.value)}
-                        className="form-input pcat-name-input"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        disabled={imageBusySku === row.sku}
+                        onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadProductImage(row, f); }}
+                        style={{ display: 'none' }}
                       />
-                    </td>
-                    <td>
-                      <textarea
-                        value={row.description || ''}
-                        onChange={(e) => onRowField(row.sku, 'description', e.target.value)}
-                        className="form-input pcat-desc-input"
-                        rows={2}
-                        placeholder="Uso / para qué sirve"
-                      />
-                    </td>
-                    <td className="pcat-num">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={Number(row.sf ?? row.sf_price ?? 0)}
-                        onChange={(e) => onRowField(row.sku, 'sf', e.target.value)}
-                        className="form-input pcat-price-input"
-                      />
-                    </td>
-                    <td className="pcat-num">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={Number(row.cf ?? row.cf_price ?? 0)}
-                        onChange={(e) => onRowField(row.sku, 'cf', e.target.value)}
-                        className="form-input pcat-price-input"
-                      />
-                    </td>
-                    <td className="pcat-center">
-                      <label className="pcat-switch" title={row.is_active ? 'Activo' : 'Inactivo'}>
+                    </label>
+                    {row.image_url && (
+                      <button
+                        type="button"
+                        className="pcat-remove-btn"
+                        disabled={imageBusySku === row.sku}
+                        onClick={() => removeProductImage(row)}
+                      >
+                        Quitar
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pcat-item-fields">
+                  <div className="pcat-item-topline">
+                    <span className="pcat-sku">{row.sku}</span>
+                    <label className="pcat-switch-inline" title={row.is_active ? 'Activo' : 'Inactivo'}>
+                      <span className="pcat-switch">
                         <input
                           type="checkbox"
                           checked={Boolean(row.is_active)}
                           onChange={(e) => onRowField(row.sku, 'is_active', e.target.checked)}
                         />
                         <span className="pcat-switch-track" />
-                      </label>
-                    </td>
-                    <td>
-                      <div className="pcat-actions">
-                        <button
-                          type="button"
-                          className="pcat-action pcat-action--save"
-                          onClick={() => saveProduct(row)}
-                          disabled={saving}
-                        >
-                          Guardar
-                        </button>
-                        <button
-                          type="button"
-                          className="pcat-action pcat-action--config"
-                          onClick={() => openProductionConfig(row)}
-                          disabled={saving || configLoading}
-                        >
-                          Producción
-                        </button>
-                        <button
-                          type="button"
-                          className="pcat-action pcat-action--danger"
-                          onClick={() => deleteProduct(row)}
-                          disabled={saving || !row.is_active}
-                        >
-                          Desactivar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </span>
+                      {row.is_active ? 'Activo' : 'Inactivo'}
+                    </label>
+                  </div>
+
+                  <label className="pcat-field">
+                    <span>Nombre</span>
+                    <input
+                      value={row.name || ''}
+                      onChange={(e) => onRowField(row.sku, 'name', e.target.value)}
+                      className="form-input"
+                    />
+                  </label>
+
+                  <label className="pcat-field">
+                    <span>Descripción <em>(uso / para qué sirve)</em></span>
+                    <textarea
+                      value={row.description || ''}
+                      onChange={(e) => onRowField(row.sku, 'description', e.target.value)}
+                      className="form-input pcat-desc"
+                      rows={2}
+                      placeholder="Uso / para qué sirve — ayuda a la IA"
+                    />
+                  </label>
+
+                  <div className="pcat-price-row">
+                    <label className="pcat-field pcat-field--price">
+                      <span>Precio SF</span>
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={Number(row.sf ?? row.sf_price ?? 0)}
+                        onChange={(e) => onRowField(row.sku, 'sf', e.target.value)}
+                        className="form-input"
+                      />
+                    </label>
+                    <label className="pcat-field pcat-field--price">
+                      <span>Precio CF</span>
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={Number(row.cf ?? row.cf_price ?? 0)}
+                        onChange={(e) => onRowField(row.sku, 'cf', e.target.value)}
+                        className="form-input"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pcat-actions">
+                  <button
+                    type="button"
+                    className="pcat-action pcat-action--save"
+                    onClick={() => saveProduct(row)}
+                    disabled={saving}
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    type="button"
+                    className="pcat-action pcat-action--config"
+                    onClick={() => openProductionConfig(row)}
+                    disabled={saving || configLoading}
+                  >
+                    Producción
+                  </button>
+                  <button
+                    type="button"
+                    className="pcat-action pcat-action--danger"
+                    onClick={() => deleteProduct(row)}
+                    disabled={saving || !row.is_active}
+                  >
+                    Desactivar
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
