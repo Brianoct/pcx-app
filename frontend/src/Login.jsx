@@ -1,15 +1,19 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { apiRequest } from './apiClient';
+import logo from './assets/logo.png';
 
 function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSubmitting(true);
     try {
       const data = await apiRequest('/api/login', {
         method: 'POST',
@@ -19,15 +23,18 @@ function Login({ onLogin }) {
       onLogin(data.token, data.user);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
     <div className="login-shell">
       <div className="login-card">
-        <h2 className="login-title">
-          PCX
-        </h2>
+        <div className="login-brand">
+          <img src={logo} alt="PCX" className="login-logo" />
+          <p className="login-brand-sub">Panel del equipo</p>
+        </div>
         {error && <p className="login-error">{error}</p>}
         <form onSubmit={handleSubmit}>
           <div className="login-field">
@@ -36,7 +43,7 @@ function Login({ onLogin }) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="ejemplo@sales.com"
+              placeholder="ejemplo@pcxind.com"
               required
               className="login-input"
             />
@@ -61,11 +68,12 @@ function Login({ onLogin }) {
               </button>
             </div>
           </div>
-          <button type="submit" className="btn btn-primary login-submit">
-            Iniciar Sesión
+          <button type="submit" className="login-submit" disabled={submitting}>
+            {submitting ? 'Ingresando…' : 'Iniciar Sesión'}
           </button>
         </form>
       </div>
+      <Link to="/" className="login-back">← Volver a la página principal</Link>
     </div>
   );
 }
