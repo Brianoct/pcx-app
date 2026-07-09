@@ -11,6 +11,7 @@ import './index.css';
 const PublicCustomerMenu = lazy(() => import('./PublicCustomerMenu'));
 const ComprasScan = lazy(() => import('./ComprasScan'));
 const WheelSpin = lazy(() => import('./WheelSpin'));
+const LandingPage = lazy(() => import('./LandingPage'));
 
 const routeFallback = <div className="route-loading" aria-label="Cargando">Cargando…</div>;
 
@@ -49,6 +50,10 @@ function App() {
             <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
             <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
             <Route path="/ruleta/:spinToken" element={<WheelSpin />} />
+            {/* Visitors land on the splash page; the team enters via the
+                discreet "Ingresar" link (or any deep link, which still shows
+                the login directly). */}
+            <Route path="/" element={<LandingPage />} />
             <Route path="*" element={<Login onLogin={login} />} />
           </Routes>
         </Suspense>
