@@ -141,6 +141,17 @@ export default function Calendar({ token, user }) {
     return [...team].sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name, 'es'));
   }, [team, tasksByUser, myId]);
 
+  // Colors follow the roster POSITION, not the user id: id % palette made two
+  // people whose ids differ by 12 share a color. Position guarantees every
+  // teammate a distinct color (up to the palette size).
+  const colorByUserId = useMemo(() => {
+    const map = new Map();
+    team.forEach((member, index) => {
+      map.set(member.id, USER_COLORS[index % USER_COLORS.length]);
+    });
+    return map;
+  }, [team]);
+
   const planned = team.filter((member) => tasksByUser.has(member.id)).length;
   const doneCount = tasks.filter((t) => t.is_done).length;
   const boardHeight = ((DAY_END - DAY_START) / 60) * HOUR_PX;
@@ -220,7 +231,7 @@ export default function Calendar({ token, user }) {
           </div>
           {columns.map((member) => {
             const memberTasks = assignLanes(tasksByUser.get(member.id) || []);
-            const color = USER_COLORS[member.id % USER_COLORS.length];
+            const color = colorByUserId.get(member.id) || USER_COLORS[0];
             const isMine = member.id === myId;
             const memberDone = memberTasks.filter((t) => t.is_done).length;
             return (
