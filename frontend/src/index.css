@@ -7981,46 +7981,137 @@ img, video, canvas { max-width: 100%; }
   .landing-actions { margin-top: 20px; }
 }
 
-/* Product catalog admin — image upload cell */
-.pcat-image-cell { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRODUCT CATALOG ADMIN — clean editable table
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.pcat-table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.pcat-search { max-width: 280px; min-height: 40px; }
+
+.pcat-table-scroll { overflow-x: auto; }
+
+.pcat-table { min-width: 1000px; border-collapse: separate; border-spacing: 0; }
+
+.pcat-table thead th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 800;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.pcat-table tbody td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(214, 204, 192, 0.35);
+  vertical-align: middle;
+}
+
+.pcat-table tbody tr:hover { background: rgba(59, 130, 246, 0.03); }
+
+.pcat-num { text-align: right; }
+.pcat-center { text-align: center; }
+
+.pcat-sku {
+  font-family: ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.pcat-name-input { min-width: 150px; }
+.pcat-desc-input { min-width: 220px; resize: vertical; font-size: 0.85rem; }
+.pcat-price-input { width: 88px; text-align: right; }
+
+/* Image cell: thumbnail with the upload controls tucked beneath it. */
+.pcat-image-cell { display: flex; flex-direction: column; gap: 6px; align-items: center; width: 76px; }
 
 .pcat-thumb {
-  width: 64px;
-  height: 64px;
-  border-radius: 8px;
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
   border: 1px solid var(--border);
   background: #f5f1ec;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .pcat-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.pcat-thumb-empty { font-size: 0.64rem; color: #a8a29e; font-weight: 600; }
+.pcat-thumb-empty { font-size: 0.62rem; color: #a8a29e; font-weight: 700; }
 
 .pcat-image-actions { display: flex; gap: 4px; }
 
-.pcat-upload-btn {
-  padding: 4px 9px;
-  border-radius: 7px;
-  border: 1px solid #c7d2fe;
-  background: #eef2ff;
-  color: #3730a3;
-  font-size: 0.72rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.pcat-upload-btn.is-busy { opacity: 0.6; cursor: default; }
-
+.pcat-upload-btn,
 .pcat-remove-btn {
-  padding: 4px 8px;
-  border-radius: 7px;
-  border: 1px solid #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
-  font-size: 0.72rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.68rem;
   font-weight: 700;
   cursor: pointer;
+  line-height: 1.4;
 }
+
+.pcat-upload-btn { border: 1px solid #c7d2fe; background: #eef2ff; color: #3730a3; }
+.pcat-upload-btn.is-busy { opacity: 0.6; cursor: default; }
+.pcat-remove-btn { border: 1px solid #fecaca; background: #fef2f2; color: #b91c1c; }
+
+/* Actions: a tidy stack of equal-width compact buttons (was giant + ragged). */
+.pcat-actions { display: flex; flex-direction: column; gap: 6px; min-width: 108px; }
+
+.pcat-action {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.12s ease, background 0.12s ease;
+}
+
+.pcat-action:disabled { opacity: 0.5; cursor: default; }
+.pcat-action:not(:disabled):hover { filter: brightness(0.95); }
+
+.pcat-action--save { background: #1c1917; color: #ffffff; }
+.pcat-action--config { background: #ffffff; color: #0369a1; border-color: #bae6fd; }
+.pcat-action--danger { background: #ffffff; color: #b91c1c; border-color: #fecaca; }
+
+/* iOS-style active toggle instead of a bare checkbox + Sí/No. */
+.pcat-switch { display: inline-flex; cursor: pointer; }
+.pcat-switch input { display: none; }
+.pcat-switch-track {
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: #d6d3d1;
+  position: relative;
+  transition: background 0.15s ease;
+}
+.pcat-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+.pcat-switch input:checked + .pcat-switch-track { background: #16a34a; }
+.pcat-switch input:checked + .pcat-switch-track::after { transform: translateX(18px); }
