@@ -55,9 +55,15 @@ export default function Bolivia3DMap({ featureRows, formatValue }) {
       const row = salesById.get(nodeId);
       if (!row) continue;
       const depth = BASE_DEPTH + (row.ratio || 0) * MAX_EXTRA_DEPTH;
-      const material = new THREE.MeshLambertMaterial({ color: fillColorFor(row.ratio, row.totalSales > 0) });
+      // DoubleSide: the group is Y-flipped below (SVG's Y axis points down,
+      // three.js's points up), which inverts face winding.
+      const material = new THREE.MeshLambertMaterial({
+        color: fillColorFor(row.ratio, row.totalSales > 0),
+        side: THREE.DoubleSide
+      });
       const sideMaterial = new THREE.MeshLambertMaterial({
-        color: fillColorFor(row.ratio, row.totalSales > 0).multiplyScalar(0.72)
+        color: fillColorFor(row.ratio, row.totalSales > 0).multiplyScalar(0.72),
+        side: THREE.DoubleSide
       });
       for (const shape of SVGLoader.createShapes(path)) {
         const geometry = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
@@ -68,13 +74,15 @@ export default function Bolivia3DMap({ featureRows, formatValue }) {
       }
     }
 
-    // Center the country and lay it "flat" facing the tilted camera.
+    // Center the country, flip Y (SVG grows downward — without this Bolivia
+    // renders mirrored/upside-down) and tilt it toward the camera.
     const bounds = new THREE.Box3().setFromObject(group);
     const center = bounds.getCenter(new THREE.Vector3());
     group.position.set(-center.x, -center.y, 0);
     const pivot = new THREE.Group();
     pivot.add(group);
-    pivot.rotation.x = -Math.PI / 3.1; // tilt toward the viewer
+    pivot.scale.y = -1;
+    pivot.rotation.x = -Math.PI / 4.2; // tilt toward the viewer
     scene.add(pivot);
 
     const size = bounds.getSize(new THREE.Vector3());
@@ -111,16 +119,18 @@ export default function Bolivia3DMap({ featureRows, formatValue }) {
     };
     renderer.domElement.addEventListener('pointermove', onPointerMove);
 
+    // Gentle oscillation instead of a full spin: the map stays recognizable
+    // (north up) at all times.
     let rafId = 0;
-    let spinning = true;
-    const onPointerDown = () => { spinning = !spinning; };
+    let swaying = true;
+    const onPointerDown = () => { swaying = !swaying; };
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
-    const animate = () => {
-      if (spinning) pivot.rotation.z += 0.0035;
+    const animate = (time) => {
+      if (swaying) pivot.rotation.z = Math.sin((time || 0) * 0.0005) * 0.22;
       renderer.render(scene, camera);
       rafId = requestAnimationFrame(animate);
     };
-    animate();
+    animate(0);
 
     const onResize = () => {
       const w = mount.clientWidth || width;
@@ -150,7 +160,7 @@ export default function Bolivia3DMap({ featureRows, formatValue }) {
   return (
     <div className="bolivia3d-wrap" ref={mountRef}>
       <div className="bolivia3d-tooltip" ref={tooltipRef} />
-      <div className="bolivia3d-hint">La altura y el color = ventas · toca para pausar el giro</div>
+      <div className="bolivia3d-hint">La altura y el color = ventas · toca para pausar el movimiento</div>
     </div>
   );
 }
