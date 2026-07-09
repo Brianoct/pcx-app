@@ -137,6 +137,9 @@ const normalizeText = (value = '') => String(value || '')
 const DASHBOARD_CARD_ORDER = [
   'summary',
   'funnel',
+  'customers',
+  'productionQuality',
+  'ruleta',
   'products',
   'salespeople',
   'locations',
@@ -330,6 +333,15 @@ function AdminDashboard({ token }) {
     );
   };
 
+  const customerMix = stats.customerMix || null;
+  const topCustomers = Array.isArray(stats.topCustomers) ? stats.topCustomers : [];
+  const productionQuality = stats.productionQuality || null;
+  const wheelRoi = stats.wheelRoi || null;
+  const mixTotal = customerMix ? Number(customerMix.new_total) + Number(customerMix.repeat_total) : 0;
+  const repeatPct = mixTotal > 0 ? (Number(customerMix.repeat_total) / mixTotal) * 100 : 0;
+  const qcTotal = productionQuality ? productionQuality.qc_passed + productionQuality.qc_rejected : 0;
+  const receptionTotal = productionQuality ? productionQuality.received + productionQuality.damaged : 0;
+
   // Backend counts are already cumulative (Pagado implies Confirmado, etc.).
   const funnelSteps = funnel ? [
     { label: 'Cotizaciones', value: Number(funnel.total || 0) },
@@ -502,6 +514,87 @@ function AdminDashboard({ token }) {
               </div>
             )}
           </>
+        )}
+      </section>
+    ),
+    customers: (
+      <section className="dashboard-card">
+        <h3>Clientes del periodo</h3>
+        {!customerMix || (mixTotal === 0 && customerMix.new_customers === 0) ? (
+          <p className="dashboard-empty">Sin datos este periodo</p>
+        ) : (
+          <>
+            <div className="dashboard-mini-kpis">
+              <div><span>Clientes nuevos registrados</span><strong>{customerMix.new_customers}</strong></div>
+              <div><span>Ventas de clientes recurrentes</span><strong>{repeatPct.toFixed(0)}%</strong></div>
+            </div>
+            {mixTotal > 0 && (
+              <div className="dashboard-mix-bar" title={`Nuevos ${formatBs(customerMix.new_total)} · Recurrentes ${formatBs(customerMix.repeat_total)}`}>
+                <div className="dashboard-mix-new" style={{ width: `${100 - repeatPct}%` }}>Nuevos</div>
+                <div className="dashboard-mix-repeat" style={{ width: `${repeatPct}%` }}>Recurrentes</div>
+              </div>
+            )}
+            {topCustomers.length > 0 && (
+              <>
+                <h4 className="dashboard-subtitle">Top clientes del mes</h4>
+                <ol className="dashboard-list">
+                  {topCustomers.map((customer, index) => (
+                    <li key={`${customer.name}-${index}`}>
+                      <strong>{customer.name}</strong> — {formatBs(customer.total_spent)} ({customer.orders_count} pedido{customer.orders_count > 1 ? 's' : ''})
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+          </>
+        )}
+      </section>
+    ),
+    productionQuality: (
+      <section className="dashboard-card">
+        <h3>Calidad de producción</h3>
+        {!productionQuality || (qcTotal === 0 && receptionTotal === 0) ? (
+          <p className="dashboard-empty">Sin actividad de producción este periodo</p>
+        ) : (
+          <div className="dashboard-mini-kpis dashboard-mini-kpis-grid">
+            <div>
+              <span>Aprobadas en calidad</span>
+              <strong>{productionQuality.qc_passed}</strong>
+            </div>
+            <div>
+              <span>Rechazadas en calidad</span>
+              <strong className={productionQuality.qc_rejected > 0 ? 'is-bad' : ''}>
+                {productionQuality.qc_rejected}
+                {qcTotal > 0 ? ` (${((productionQuality.qc_rejected / qcTotal) * 100).toFixed(1)}%)` : ''}
+              </strong>
+            </div>
+            <div>
+              <span>Recibidas en almacén</span>
+              <strong>{productionQuality.received}</strong>
+            </div>
+            <div>
+              <span>Dañadas en tránsito</span>
+              <strong className={productionQuality.damaged > 0 ? 'is-bad' : ''}>
+                {productionQuality.damaged}
+                {receptionTotal > 0 ? ` (${((productionQuality.damaged / receptionTotal) * 100).toFixed(1)}%)` : ''}
+              </strong>
+            </div>
+          </div>
+        )}
+      </section>
+    ),
+    ruleta: (
+      <section className="dashboard-card">
+        <h3>Ruleta de premios · ROI</h3>
+        {!wheelRoi || wheelRoi.links_created + wheelRoi.spins_done + wheelRoi.prizes_redeemed === 0 ? (
+          <p className="dashboard-empty">Sin actividad de la ruleta este periodo</p>
+        ) : (
+          <div className="dashboard-mini-kpis dashboard-mini-kpis-grid">
+            <div><span>Enlaces enviados</span><strong>{wheelRoi.links_created}</strong></div>
+            <div><span>Giros realizados</span><strong>{wheelRoi.spins_done}</strong></div>
+            <div><span>Premios canjeados</span><strong>{wheelRoi.prizes_redeemed}</strong></div>
+            <div><span>Bs vendidos con premio</span><strong className="is-good">{formatBs(wheelRoi.redeemed_sales_total)}</strong></div>
+          </div>
         )}
       </section>
     ),

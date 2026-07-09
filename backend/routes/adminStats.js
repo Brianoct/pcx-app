@@ -5,7 +5,7 @@ const { answerAdminAiQuestion } = require('../lib/aiAssistant');
 const { computeQualityControlCommissionTotal, loadCommissionSettings } = require('../lib/commission');
 const { resolveInventoryScopeByCity } = require('../lib/inventory');
 const { ROLE_KEYS, normalizeRole } = require('../lib/rbac');
-const { COMPLETED_STATUSES, buildDateFilter, buildReportingCreatedAtExpr } = require('../lib/reporting');
+const { COMPLETED_STATUSES, REPORTING_TIMEZONE, buildDateFilter, buildReportingCreatedAtExpr } = require('../lib/reporting');
 
 const router = express.Router();
 
@@ -203,6 +203,75 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
       ORDER BY day_num ASC
     `, prevFilter.params);
 
+    // Period matcher for non-quote tables (targetMonth/Year are validated ints).
+    const tzCol = (col) => `timezone('${REPORTING_TIMEZONE}', ${col} AT TIME ZONE 'UTC')`;
+    const inPeriod = (col) =>
+      `EXTRACT(MONTH FROM ${tzCol(col)}) = ${targetMonth} AND EXTRACT(YEAR FROM ${tzCol(col)}) = ${targetYear}`;
+
+    // ── Customer analytics: new vs repeat revenue + top customers ────────────
+    const customerMixRes = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE prior.id IS NOT NULL)::int AS repeat_count,
+        COALESCE(SUM(q.total) FILTER (WHERE prior.id IS NOT NULL), 0) AS repeat_total,
+        COUNT(*) FILTER (WHERE prior.id IS NULL)::int AS new_count,
+        COALESCE(SUM(q.total) FILTER (WHERE prior.id IS NULL), 0) AS new_total
+      FROM quotes q
+      LEFT JOIN LATERAL (
+        SELECT p.id FROM quotes p
+        WHERE regexp_replace(COALESCE(p.customer_phone, ''), '\\D', '', 'g') <> ''
+          AND regexp_replace(COALESCE(p.customer_phone, ''), '\\D', '', 'g')
+              = regexp_replace(COALESCE(q.customer_phone, ''), '\\D', '', 'g')
+          AND p.created_at < q.created_at
+        LIMIT 1
+      ) prior ON TRUE
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado') ${dateFilter.sql}
+    `, dateFilter.params);
+    const newCustomersRes = await pool.query(
+      `SELECT COUNT(*)::int AS new_customers FROM customers c WHERE ${inPeriod('c.created_at')}`
+    );
+    const topCustomersRes = await pool.query(`
+      SELECT
+        (array_agg(q.customer_name ORDER BY q.created_at DESC))[1] AS name,
+        COUNT(*)::int AS orders_count,
+        SUM(q.total) AS total_spent
+      FROM quotes q
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        AND regexp_replace(COALESCE(q.customer_phone, ''), '\\D', '', 'g') <> ''
+        ${dateFilter.sql}
+      GROUP BY regexp_replace(COALESCE(q.customer_phone, ''), '\\D', '', 'g')
+      ORDER BY total_spent DESC
+      LIMIT 5
+    `, dateFilter.params);
+
+    // ── Production quality: QC gate + warehouse reception (new kanban flow) ──
+    const qcPeriodRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(quantity) FILTER (WHERE result = 'passed'), 0)::int AS qc_passed,
+        COALESCE(SUM(quantity) FILTER (WHERE result = 'rejected'), 0)::int AS qc_rejected
+      FROM quality_control_records
+      WHERE ${inPeriod('created_at')}
+    `);
+    const receptionPeriodRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(qty) FILTER (WHERE to_stage = 'recibido'), 0)::int AS received,
+        COALESCE(SUM(qty) FILTER (WHERE to_stage = 'danado_transito'), 0)::int AS damaged
+      FROM production_stage_events
+      WHERE to_stage IN ('recibido', 'danado_transito')
+        AND EXTRACT(MONTH FROM timezone('${REPORTING_TIMEZONE}', moved_at)) = ${targetMonth}
+        AND EXTRACT(YEAR FROM timezone('${REPORTING_TIMEZONE}', moved_at)) = ${targetYear}
+    `);
+
+    // ── Ruleta ROI: activity in the period + Bs sold on redeemed prizes ──────
+    const wheelRoiRes = await pool.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM wheel_spins s WHERE ${inPeriod('s.created_at')}) AS links_created,
+        (SELECT COUNT(*)::int FROM wheel_spins s WHERE s.spun_at IS NOT NULL AND ${inPeriod('s.spun_at')}) AS spins_done,
+        (SELECT COUNT(*)::int FROM wheel_spins s WHERE s.redeemed_at IS NOT NULL AND ${inPeriod('s.redeemed_at')}) AS prizes_redeemed,
+        (SELECT COALESCE(SUM(q.total), 0)
+         FROM wheel_spins s JOIN quotes q ON q.id = s.redeemed_quote_id
+         WHERE s.redeemed_at IS NOT NULL AND ${inPeriod('s.redeemed_at')}) AS redeemed_sales_total
+    `);
+
     const activeUsersRes = await pool.query(
       `SELECT id, email, display_name, role, city
        FROM users
@@ -372,7 +441,30 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
       prevDailySalesSeries: prevDailyRes.rows.map((row) => ({
         day_num: Number(row.day_num),
         total_sales: Number(row.total_sales || 0)
-      }))
+      })),
+      customerMix: {
+        ...customerMixRes.rows[0],
+        repeat_total: Number(customerMixRes.rows[0]?.repeat_total || 0),
+        new_total: Number(customerMixRes.rows[0]?.new_total || 0),
+        new_customers: Number(newCustomersRes.rows[0]?.new_customers || 0)
+      },
+      topCustomers: topCustomersRes.rows.map((row) => ({
+        name: row.name,
+        orders_count: Number(row.orders_count || 0),
+        total_spent: Number(row.total_spent || 0)
+      })),
+      productionQuality: {
+        qc_passed: Number(qcPeriodRes.rows[0]?.qc_passed || 0),
+        qc_rejected: Number(qcPeriodRes.rows[0]?.qc_rejected || 0),
+        received: Number(receptionPeriodRes.rows[0]?.received || 0),
+        damaged: Number(receptionPeriodRes.rows[0]?.damaged || 0)
+      },
+      wheelRoi: {
+        links_created: Number(wheelRoiRes.rows[0]?.links_created || 0),
+        spins_done: Number(wheelRoiRes.rows[0]?.spins_done || 0),
+        prizes_redeemed: Number(wheelRoiRes.rows[0]?.prizes_redeemed || 0),
+        redeemed_sales_total: Number(wheelRoiRes.rows[0]?.redeemed_sales_total || 0)
+      }
     });
   } catch (err) {
     console.error(err);
