@@ -1,6 +1,44 @@
 import { useState, useEffect } from 'react';
-import { apiRequest } from '../apiClient';
+import { apiRequest, API_BASE } from '../apiClient';
 import { useOutbox } from '../OutboxProvider';
+
+// Catalog images are relative capability URLs (/api/product-assets/...); the
+// <img> tag needs the absolute backend origin.
+const resolveImageUrl = (rawUrl = '') => {
+  const value = String(rawUrl || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith('/')) return `${String(API_BASE || '').replace(/\/+$/, '')}${value}`;
+  return value;
+};
+
+// Downscale on the client so uploads stay tens of KB — the catalog grid shows
+// small cards, so 800px is plenty.
+const downscaleImage = (file, { maxDim = 800, quality = 0.82 } = {}) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+    img.src = String(reader.result || '');
+  };
+  reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+  reader.readAsDataURL(file);
+});
+
 function ProductCatalogAdmin({ token }) {
   const { enqueueWrite } = useOutbox();
   const [products, setProducts] = useState([]);
@@ -25,6 +63,7 @@ function ProductCatalogAdmin({ token }) {
   const [configModal, setConfigModal] = useState(null);
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
+  const [imageBusySku, setImageBusySku] = useState('');
   // Product enrichment CSV round-trip
   const [importCsvText, setImportCsvText] = useState('');
   const [importFileName, setImportFileName] = useState('');
@@ -249,6 +288,51 @@ function ProductCatalogAdmin({ token }) {
       setMessage(`Error: ${err.message}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadProductImage = async (row, file) => {
+    if (!file) return;
+    setImageBusySku(row.sku);
+    setMessage('');
+    try {
+      const dataUrl = await downscaleImage(file);
+      const res = await apiRequest(`/api/product-catalog/${encodeURIComponent(row.sku)}/image`, {
+        method: 'POST',
+        token,
+        body: { data_url: dataUrl },
+        timeoutMs: 30000,
+        retries: 0
+      });
+      setProducts((prev) => prev.map((item) => (
+        item.sku === row.sku ? { ...item, image_url: res.image_url } : item
+      )));
+      setMessage(`Imagen de ${row.sku} actualizada.`);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setImageBusySku('');
+    }
+  };
+
+  const removeProductImage = async (row) => {
+    if (!window.confirm(`¿Quitar la imagen de ${row.sku}?`)) return;
+    setImageBusySku(row.sku);
+    setMessage('');
+    try {
+      await apiRequest(`/api/product-catalog/${encodeURIComponent(row.sku)}/image`, {
+        method: 'DELETE',
+        token,
+        retries: 0
+      });
+      setProducts((prev) => prev.map((item) => (
+        item.sku === row.sku ? { ...item, image_url: null } : item
+      )));
+      setMessage(`Imagen de ${row.sku} eliminada.`);
+    } catch (err) {
+      setMessage(`Error: ${err.message}`);
+    } finally {
+      setImageBusySku('');
     }
   };
 
@@ -587,6 +671,7 @@ function ProductCatalogAdmin({ token }) {
             <table className="table" style={{ minWidth: '1040px' }}>
               <thead>
                 <tr>
+                  <th>Imagen</th>
                   <th>SKU</th>
                   <th>Nombre</th>
                   <th>Descripción</th>
@@ -598,9 +683,40 @@ function ProductCatalogAdmin({ token }) {
               </thead>
               <tbody>
                 {products.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: 'center', color: '#78716c' }}>Sin productos</td></tr>
+                  <tr><td colSpan={8} style={{ textAlign: 'center', color: '#78716c' }}>Sin productos</td></tr>
                 ) : products.map((row) => (
                   <tr key={row.sku}>
+                    <td>
+                      <div className="pcat-image-cell">
+                        <div className="pcat-thumb">
+                          {row.image_url
+                            ? <img src={resolveImageUrl(row.image_url)} alt={row.name || row.sku} loading="lazy" />
+                            : <span className="pcat-thumb-empty">Sin foto</span>}
+                        </div>
+                        <div className="pcat-image-actions">
+                          <label className={`pcat-upload-btn ${imageBusySku === row.sku ? 'is-busy' : ''}`}>
+                            {imageBusySku === row.sku ? '…' : (row.image_url ? 'Cambiar' : 'Subir')}
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              disabled={imageBusySku === row.sku}
+                              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadProductImage(row, f); }}
+                              style={{ display: 'none' }}
+                            />
+                          </label>
+                          {row.image_url && (
+                            <button
+                              type="button"
+                              className="pcat-remove-btn"
+                              disabled={imageBusySku === row.sku}
+                              onClick={() => removeProductImage(row)}
+                            >
+                              Quitar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </td>
                     <td>{row.sku}</td>
                     <td>
                       <input

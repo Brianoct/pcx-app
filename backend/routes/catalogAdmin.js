@@ -1,6 +1,8 @@
+const crypto = require('crypto');
 const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
+const { decodeImageDataUrl } = require('../lib/imageAssets');
 const { PRODUCT_COST_COMPONENT_KEYS, buildProductCostingResponseRow, parseProductCostingPayload } = require('../lib/costing');
 const { PRODUCT_PROCESS_KEYS, buildEquipmentResponseRow, buildMaterialResponseRow, getProductProductionConfig, normalizeEquipmentPayload, normalizeMaterialPayload, normalizeProductProductionConfigPayload, saveProductProductionConfig } = require('../lib/productionResources');
 const { ensureProductCatalogReady, loadProductCatalogRows, normalizeProductPayload, validateProductSku } = require('../lib/products');
@@ -753,6 +755,102 @@ router.patch('/api/product-costing/:sku', authenticateToken, requireRole(['admin
     console.error(err);
     if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
     res.status(500).json({ error: 'No se pudo guardar costeo de producto' });
+  }
+});
+
+// ─── PRODUCT CATALOG IMAGES (stored in DB, served via capability URL) ────────
+
+// Upload/replace a product's catalog photo. Admin only. Client downscales the
+// image before sending; we store the bytes and point products.image_url at the
+// capability URL (token rotates each upload, busting caches).
+router.post('/api/product-catalog/:sku/image', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const sku = validateProductSku(req.params.sku);
+    const existsRes = await pool.query('SELECT sku FROM products WHERE UPPER(sku) = $1', [sku]);
+    if (existsRes.rowCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+    const canonicalSku = String(existsRes.rows[0].sku);
+
+    const { mime, buffer } = decodeImageDataUrl(req.body?.data_url);
+    const accessToken = crypto.randomBytes(16).toString('hex');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO product_assets (sku, mime, data, access_token, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (sku) DO UPDATE
+         SET mime = EXCLUDED.mime, data = EXCLUDED.data, access_token = EXCLUDED.access_token, updated_at = NOW()`,
+        [canonicalSku, mime, buffer, accessToken]
+      );
+      const imageUrl = `/api/product-assets/${encodeURIComponent(canonicalSku)}/${accessToken}`;
+      await client.query(
+        'UPDATE products SET image_url = $2, last_updated = NOW() WHERE UPPER(sku) = $1',
+        [sku, imageUrl]
+      );
+      await client.query('COMMIT');
+      res.json({ message: 'Imagen actualizada', sku: canonicalSku, image_url: imageUrl });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error('Error uploading product image:', err);
+    res.status(500).json({ error: 'No se pudo subir la imagen' });
+  }
+});
+
+router.delete('/api/product-catalog/:sku/image', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const sku = validateProductSku(req.params.sku);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM product_assets WHERE UPPER(sku) = $1', [sku]);
+      // Only clear the pointer if it referenced our own asset (leave manual
+      // external URLs untouched).
+      await client.query(
+        "UPDATE products SET image_url = NULL, last_updated = NOW() WHERE UPPER(sku) = $1 AND image_url LIKE '/api/product-assets/%'",
+        [sku]
+      );
+      await client.query('COMMIT');
+      res.json({ message: 'Imagen eliminada', sku });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error('Error deleting product image:', err);
+    res.status(500).json({ error: 'No se pudo eliminar la imagen' });
+  }
+});
+
+// Public serve (no auth): the capability token in the path is the guard, so the
+// image loads in a plain <img> tag on the catalog and the customer menu.
+router.get('/api/product-assets/:sku/:token', async (req, res) => {
+  try {
+    const sku = String(req.params.sku || '').trim().toUpperCase();
+    const token = String(req.params.token || '');
+    if (!sku || !/^[a-f0-9]{32}$/.test(token)) return res.status(404).end();
+    const result = await pool.query(
+      'SELECT mime, data, access_token FROM product_assets WHERE UPPER(sku) = $1',
+      [sku]
+    );
+    const row = result.rows[0];
+    if (!row || !crypto.timingSafeEqual(Buffer.from(String(row.access_token)), Buffer.from(token))) {
+      return res.status(404).end();
+    }
+    res.set('Content-Type', row.mime);
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(row.data);
+  } catch (err) {
+    console.error('Error serving product image:', err);
+    res.status(404).end();
   }
 });
 

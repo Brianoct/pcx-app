@@ -4,39 +4,9 @@ const bcrypt = require('bcrypt');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
 const { buildUserPayload, loadUserContext, normalizeDisplayName } = require('../lib/users');
+const { decodeImageDataUrl } = require('../lib/imageAssets');
 
 const router = express.Router();
-
-// Avatar / payment-QR images live in the DB (user_assets) — the server disk is
-// ephemeral on Render, so files stored there vanish on every deploy.
-const ASSET_MIMES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
-
-const decodeImageDataUrl = (dataUrl) => {
-  const match = String(dataUrl || '').match(/^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i);
-  if (!match) {
-    const err = new Error('Formato de imagen inválido. Usa JPG, PNG o WEBP.');
-    err.statusCode = 400;
-    throw err;
-  }
-  const mime = String(match[1] || '').toLowerCase();
-  if (!ASSET_MIMES.has(mime)) {
-    const err = new Error('Formato no soportado. Usa JPG, PNG o WEBP.');
-    err.statusCode = 400;
-    throw err;
-  }
-  const buffer = Buffer.from(String(match[2] || '').replace(/\s+/g, ''), 'base64');
-  if (!buffer || buffer.length === 0) {
-    const err = new Error('Imagen vacía.');
-    err.statusCode = 400;
-    throw err;
-  }
-  if (buffer.length > 5 * 1024 * 1024) {
-    const err = new Error('La imagen supera 5MB. Usa una imagen más liviana.');
-    err.statusCode = 400;
-    throw err;
-  }
-  return { mime: mime === 'image/jpg' ? 'image/jpeg' : mime, buffer };
-};
 
 // Trim a free-text field to null-or-capped-string. Returns undefined when the
 // caller didn't send the key (so we leave the column untouched).
