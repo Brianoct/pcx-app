@@ -5,7 +5,7 @@ const { answerAdminAiQuestion } = require('../lib/aiAssistant');
 const { computeQualityControlCommissionTotal, loadCommissionSettings } = require('../lib/commission');
 const { resolveInventoryScopeByCity } = require('../lib/inventory');
 const { ROLE_KEYS, normalizeRole } = require('../lib/rbac');
-const { COMPLETED_STATUSES, buildDateFilter, buildReportingCreatedAtExpr } = require('../lib/reporting');
+const { COMPLETED_STATUSES, REPORTING_TIMEZONE, buildDateFilter, buildReportingCreatedAtExpr } = require('../lib/reporting');
 
 const router = express.Router();
 
@@ -130,6 +130,147 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
         total_sales: Number(row?.total_sales || 0)
       };
     });
+
+    // ── Comparison vs previous month + conversion funnel ─────────────────────
+    const prevMonth = targetMonth === 1 ? 12 : targetMonth - 1;
+    const prevYear = targetMonth === 1 ? targetYear - 1 : targetYear;
+    const prevFilter = buildDateFilter(prevMonth, prevYear, 'q', 1);
+
+    const periodSummarySql = `
+      SELECT
+        COUNT(*) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado'))::int AS sold_count,
+        COALESCE(SUM(q.total) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')), 0) AS sold_total,
+        COUNT(*)::int AS quotes_count
+      FROM quotes q
+      WHERE TRUE`;
+    const [currentSummaryRes, prevSummaryRes] = await Promise.all([
+      pool.query(`${periodSummarySql} ${dateFilter.sql}`, dateFilter.params),
+      pool.query(`${periodSummarySql} ${prevFilter.sql}`, prevFilter.params)
+    ]);
+    const buildPeriodSummary = (row) => {
+      const soldCount = Number(row?.sold_count || 0);
+      const soldTotal = Number(row?.sold_total || 0);
+      const quotesCount = Number(row?.quotes_count || 0);
+      return {
+        quotes_count: quotesCount,
+        sold_count: soldCount,
+        sold_total: soldTotal,
+        avg_ticket: soldCount > 0 ? soldTotal / soldCount : 0,
+        conversion_pct: quotesCount > 0 ? (soldCount / quotesCount) * 100 : 0
+      };
+    };
+    const periodSummary = buildPeriodSummary(currentSummaryRes.rows[0]);
+    const previousSummary = {
+      ...buildPeriodSummary(prevSummaryRes.rows[0]),
+      month: prevMonth,
+      year: prevYear
+    };
+
+    // Funnel by stage reached (each status implies the previous ones).
+    const funnelRes = await pool.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE q.status IN ('Confirmado', 'Pagado', 'Embalado', 'Enviado'))::int AS confirmado,
+        COUNT(*) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado'))::int AS pagado,
+        COUNT(*) FILTER (WHERE q.status = 'Enviado')::int AS enviado
+      FROM quotes q
+      WHERE TRUE ${dateFilter.sql}
+    `, dateFilter.params);
+
+    // Per-seller conversion (grouped case-insensitively, latest spelling).
+    const sellerConversionRes = await pool.query(`
+      SELECT
+        (array_agg(q.vendor ORDER BY q.created_at DESC))[1] AS vendor,
+        COUNT(*)::int AS quotes_count,
+        COUNT(*) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado'))::int AS sold_count,
+        COALESCE(SUM(q.total) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')), 0) AS sold_total
+      FROM quotes q
+      WHERE q.vendor IS NOT NULL AND TRIM(q.vendor) <> '' ${dateFilter.sql}
+      GROUP BY LOWER(TRIM(q.vendor))
+      ORDER BY sold_total DESC
+      LIMIT 10
+    `, dateFilter.params);
+
+    // Previous month's daily curve (ghost line behind the current one).
+    const prevDailyRes = await pool.query(`
+      SELECT
+        EXTRACT(DAY FROM ${reportingCreatedAtExpr})::INT AS day_num,
+        SUM(q.total) AS total_sales
+      FROM quotes q
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        ${prevFilter.sql}
+      GROUP BY day_num
+      ORDER BY day_num ASC
+    `, prevFilter.params);
+
+    // Period matcher for non-quote tables (targetMonth/Year are validated ints).
+    const tzCol = (col) => `timezone('${REPORTING_TIMEZONE}', ${col} AT TIME ZONE 'UTC')`;
+    const inPeriod = (col) =>
+      `EXTRACT(MONTH FROM ${tzCol(col)}) = ${targetMonth} AND EXTRACT(YEAR FROM ${tzCol(col)}) = ${targetYear}`;
+
+    // ── Customer analytics: new vs repeat revenue + top customers ────────────
+    const customerMixRes = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE prior.id IS NOT NULL)::int AS repeat_count,
+        COALESCE(SUM(q.total) FILTER (WHERE prior.id IS NOT NULL), 0) AS repeat_total,
+        COUNT(*) FILTER (WHERE prior.id IS NULL)::int AS new_count,
+        COALESCE(SUM(q.total) FILTER (WHERE prior.id IS NULL), 0) AS new_total
+      FROM quotes q
+      LEFT JOIN LATERAL (
+        SELECT p.id FROM quotes p
+        WHERE regexp_replace(COALESCE(p.customer_phone, ''), '\\D', '', 'g') <> ''
+          AND regexp_replace(COALESCE(p.customer_phone, ''), '\\D', '', 'g')
+              = regexp_replace(COALESCE(q.customer_phone, ''), '\\D', '', 'g')
+          AND p.created_at < q.created_at
+        LIMIT 1
+      ) prior ON TRUE
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado') ${dateFilter.sql}
+    `, dateFilter.params);
+    const newCustomersRes = await pool.query(
+      `SELECT COUNT(*)::int AS new_customers FROM customers c WHERE ${inPeriod('c.created_at')}`
+    );
+    const topCustomersRes = await pool.query(`
+      SELECT
+        (array_agg(q.customer_name ORDER BY q.created_at DESC))[1] AS name,
+        COUNT(*)::int AS orders_count,
+        SUM(q.total) AS total_spent
+      FROM quotes q
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        AND regexp_replace(COALESCE(q.customer_phone, ''), '\\D', '', 'g') <> ''
+        ${dateFilter.sql}
+      GROUP BY regexp_replace(COALESCE(q.customer_phone, ''), '\\D', '', 'g')
+      ORDER BY total_spent DESC
+      LIMIT 5
+    `, dateFilter.params);
+
+    // ── Production quality: QC gate + warehouse reception (new kanban flow) ──
+    const qcPeriodRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(quantity) FILTER (WHERE result = 'passed'), 0)::int AS qc_passed,
+        COALESCE(SUM(quantity) FILTER (WHERE result = 'rejected'), 0)::int AS qc_rejected
+      FROM quality_control_records
+      WHERE ${inPeriod('created_at')}
+    `);
+    const receptionPeriodRes = await pool.query(`
+      SELECT
+        COALESCE(SUM(qty) FILTER (WHERE to_stage = 'recibido'), 0)::int AS received,
+        COALESCE(SUM(qty) FILTER (WHERE to_stage = 'danado_transito'), 0)::int AS damaged
+      FROM production_stage_events
+      WHERE to_stage IN ('recibido', 'danado_transito')
+        AND EXTRACT(MONTH FROM timezone('${REPORTING_TIMEZONE}', moved_at)) = ${targetMonth}
+        AND EXTRACT(YEAR FROM timezone('${REPORTING_TIMEZONE}', moved_at)) = ${targetYear}
+    `);
+
+    // ── Ruleta ROI: activity in the period + Bs sold on redeemed prizes ──────
+    const wheelRoiRes = await pool.query(`
+      SELECT
+        (SELECT COUNT(*)::int FROM wheel_spins s WHERE ${inPeriod('s.created_at')}) AS links_created,
+        (SELECT COUNT(*)::int FROM wheel_spins s WHERE s.spun_at IS NOT NULL AND ${inPeriod('s.spun_at')}) AS spins_done,
+        (SELECT COUNT(*)::int FROM wheel_spins s WHERE s.redeemed_at IS NOT NULL AND ${inPeriod('s.redeemed_at')}) AS prizes_redeemed,
+        (SELECT COALESCE(SUM(q.total), 0)
+         FROM wheel_spins s JOIN quotes q ON q.id = s.redeemed_quote_id
+         WHERE s.redeemed_at IS NOT NULL AND ${inPeriod('s.redeemed_at')}) AS redeemed_sales_total
+    `);
 
     const activeUsersRes = await pool.query(
       `SELECT id, email, display_name, role, city
@@ -286,7 +427,44 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
       salesByDepartment: departmentSalesRes.rows,
       dailySalesSeries,
       activeUserCommissions: commissionByUser,
-      totalCommissionToDate
+      totalCommissionToDate,
+      periodSummary,
+      previousSummary,
+      funnel: funnelRes.rows[0],
+      sellerConversion: sellerConversionRes.rows.map((row) => ({
+        vendor: row.vendor,
+        quotes_count: Number(row.quotes_count || 0),
+        sold_count: Number(row.sold_count || 0),
+        sold_total: Number(row.sold_total || 0),
+        conversion_pct: Number(row.quotes_count) > 0 ? (Number(row.sold_count) / Number(row.quotes_count)) * 100 : 0
+      })),
+      prevDailySalesSeries: prevDailyRes.rows.map((row) => ({
+        day_num: Number(row.day_num),
+        total_sales: Number(row.total_sales || 0)
+      })),
+      customerMix: {
+        ...customerMixRes.rows[0],
+        repeat_total: Number(customerMixRes.rows[0]?.repeat_total || 0),
+        new_total: Number(customerMixRes.rows[0]?.new_total || 0),
+        new_customers: Number(newCustomersRes.rows[0]?.new_customers || 0)
+      },
+      topCustomers: topCustomersRes.rows.map((row) => ({
+        name: row.name,
+        orders_count: Number(row.orders_count || 0),
+        total_spent: Number(row.total_spent || 0)
+      })),
+      productionQuality: {
+        qc_passed: Number(qcPeriodRes.rows[0]?.qc_passed || 0),
+        qc_rejected: Number(qcPeriodRes.rows[0]?.qc_rejected || 0),
+        received: Number(receptionPeriodRes.rows[0]?.received || 0),
+        damaged: Number(receptionPeriodRes.rows[0]?.damaged || 0)
+      },
+      wheelRoi: {
+        links_created: Number(wheelRoiRes.rows[0]?.links_created || 0),
+        spins_done: Number(wheelRoiRes.rows[0]?.spins_done || 0),
+        prizes_redeemed: Number(wheelRoiRes.rows[0]?.prizes_redeemed || 0),
+        redeemed_sales_total: Number(wheelRoiRes.rows[0]?.redeemed_sales_total || 0)
+      }
     });
   } catch (err) {
     console.error(err);

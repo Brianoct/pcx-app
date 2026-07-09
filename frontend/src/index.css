@@ -7663,3 +7663,133 @@ img, video, canvas { max-width: 100%; }
   font-size: 0.9rem;
   min-height: 42px;
 }
+
+/* ── Estadísticas: deltas, embudo, mapa 3D ─────────────────────────────── */
+
+.dashboard-delta {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.dashboard-delta.is-up { color: #15803d; }
+.dashboard-delta.is-down { color: #dc2626; }
+.dashboard-delta.is-flat { color: var(--text-muted); font-weight: 500; }
+
+.dashboard-funnel { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+
+.dashboard-funnel-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) 52px;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashboard-funnel-label { font-size: 0.82rem; font-weight: 700; color: var(--text-muted); text-align: right; }
+
+.dashboard-funnel-track { background: var(--surface-input); border-radius: 8px; overflow: hidden; }
+
+.dashboard-funnel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #1e40af, #f97316);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.dashboard-funnel-rate { font-size: 0.78rem; font-weight: 800; color: var(--text-muted); }
+
+.dashboard-funnel-sellers h4 { margin: 10px 0 8px; font-size: 0.88rem; }
+.dashboard-funnel-sellers table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+.dashboard-funnel-sellers th, .dashboard-funnel-sellers td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.dashboard-funnel-sellers td.is-good { color: #15803d; font-weight: 800; }
+.dashboard-funnel-sellers td.is-low { color: #dc2626; font-weight: 800; }
+
+.dashboard-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dashboard-map-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.dashboard-map-toggle button {
+  border: none;
+  background: var(--bg-secondary);
+  padding: 6px 16px;
+  font-weight: 800;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.dashboard-map-toggle button.is-active { background: #1e293b; color: #ffffff; }
+
+.bolivia3d-wrap { position: relative; flex: 1; min-width: 0; }
+.bolivia3d-wrap canvas { width: 100% !important; border-radius: 12px; }
+
+.bolivia3d-tooltip {
+  display: none;
+  position: absolute;
+  z-index: 5;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.bolivia3d-hint {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.dashboard-line-path-prev {
+  fill: none;
+  stroke: #94a3b8;
+  stroke-width: 1.6;
+  stroke-dasharray: 5 4;
+  opacity: 0.8;
+}
+
+/* Estadísticas: mini KPI blocks + customer mix bar */
+.dashboard-mini-kpis { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; }
+.dashboard-mini-kpis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.dashboard-mini-kpis > div { display: flex; flex-direction: column; gap: 2px; }
+.dashboard-mini-kpis span { font-size: 0.78rem; color: var(--text-muted); font-weight: 600; }
+.dashboard-mini-kpis strong { font-size: 1.3rem; color: var(--text-primary); }
+.dashboard-mini-kpis strong.is-bad { color: #dc2626; }
+.dashboard-mini-kpis strong.is-good { color: #15803d; }
+
+.dashboard-mix-bar {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 30px;
+  margin-bottom: 12px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #ffffff;
+}
+.dashboard-mix-new { background: #3b82f6; display: flex; align-items: center; padding: 0 10px; white-space: nowrap; overflow: hidden; }
+.dashboard-mix-repeat { background: #15803d; display: flex; align-items: center; justify-content: flex-end; padding: 0 10px; white-space: nowrap; overflow: hidden; }
+
+.dashboard-subtitle { margin: 10px 0 6px; font-size: 0.88rem; }

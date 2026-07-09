@@ -1,8 +1,13 @@
 // src/AdminDashboard.jsx
-import { useState, useEffect, cloneElement } from 'react';
+import { useState, useEffect, cloneElement, lazy, Suspense } from 'react';
 import { apiRequest } from './apiClient';
 import boliviaAdminMapSvg from './assets/bolivia-admin1.svg?raw';
 import { useToast } from './ui/toastContext';
+
+// three.js is heavy — the 3D map only loads when someone switches to it.
+const Bolivia3DMap = lazy(() => import('./Bolivia3DMap'));
+
+const MAP_VIEW_STORAGE_KEY = 'pcx-dashboard-map-view';
 
 const BOLIVIA_DEPARTMENT_MAP = {
   'la paz': 'La Paz',
@@ -131,6 +136,10 @@ const normalizeText = (value = '') => String(value || '')
 
 const DASHBOARD_CARD_ORDER = [
   'summary',
+  'funnel',
+  'customers',
+  'productionQuality',
+  'ruleta',
   'products',
   'salespeople',
   'locations',
@@ -171,6 +180,14 @@ function AdminDashboard({ token }) {
   const [cardOrder, setCardOrder] = useState(DASHBOARD_CARD_ORDER);
   const [draggedCardId, setDraggedCardId] = useState('');
   const [dragOverCardId, setDragOverCardId] = useState('');
+  const [mapView, setMapView] = useState(() => {
+    if (typeof window === 'undefined') return '2d';
+    return window.localStorage.getItem(MAP_VIEW_STORAGE_KEY) === '3d' ? '3d' : '2d';
+  });
+  const switchMapView = (view) => {
+    setMapView(view);
+    try { window.localStorage.setItem(MAP_VIEW_STORAGE_KEY, view); } catch { /* private mode */ }
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -294,6 +311,46 @@ function AdminDashboard({ token }) {
   const mapRankingRows = [...mapFeatureRows]
     .sort((a, b) => b.totalSales - a.totalSales);
 
+  // Comparison vs previous month + funnel (new backend fields).
+  const periodSummary = stats.periodSummary || null;
+  const previousSummary = stats.previousSummary || null;
+  const funnel = stats.funnel || null;
+  const sellerConversion = Array.isArray(stats.sellerConversion) ? stats.sellerConversion : [];
+  const prevDailySeries = Array.isArray(stats.prevDailySalesSeries) ? stats.prevDailySalesSeries : [];
+
+  const renderDelta = (current, previous, { invert = false } = {}) => {
+    const prev = Number(previous || 0);
+    const curr = Number(current || 0);
+    if (prev <= 0) return <span className="dashboard-delta is-flat">— sin mes anterior</span>;
+    const pct = ((curr - prev) / prev) * 100;
+    if (!Number.isFinite(pct)) return null;
+    const up = pct >= 0;
+    const good = invert ? !up : up;
+    return (
+      <span className={`dashboard-delta ${good ? 'is-up' : 'is-down'}`}>
+        {up ? '▲' : '▼'} {Math.abs(pct).toFixed(0)}% vs mes anterior
+      </span>
+    );
+  };
+
+  const customerMix = stats.customerMix || null;
+  const topCustomers = Array.isArray(stats.topCustomers) ? stats.topCustomers : [];
+  const productionQuality = stats.productionQuality || null;
+  const wheelRoi = stats.wheelRoi || null;
+  const mixTotal = customerMix ? Number(customerMix.new_total) + Number(customerMix.repeat_total) : 0;
+  const repeatPct = mixTotal > 0 ? (Number(customerMix.repeat_total) / mixTotal) * 100 : 0;
+  const qcTotal = productionQuality ? productionQuality.qc_passed + productionQuality.qc_rejected : 0;
+  const receptionTotal = productionQuality ? productionQuality.received + productionQuality.damaged : 0;
+
+  // Backend counts are already cumulative (Pagado implies Confirmado, etc.).
+  const funnelSteps = funnel ? [
+    { label: 'Cotizaciones', value: Number(funnel.total || 0) },
+    { label: 'Confirmadas o más', value: Number(funnel.confirmado || 0) },
+    { label: 'Pagadas o más', value: Number(funnel.pagado || 0) },
+    { label: 'Enviadas', value: Number(funnel.enviado || 0) }
+  ] : [];
+  const funnelMax = Math.max(...funnelSteps.map((step) => step.value), 1);
+
   const chartWidth = 760;
   const chartHeight = 320;
   const chartPad = { top: 24, right: 20, bottom: 52, left: 74 };
@@ -317,6 +374,16 @@ function AdminDashboard({ token }) {
   const yTickValues = [0, 0.25, 0.5, 0.75, 1].map((step) => Number((safeYMax * step).toFixed(2)));
   const xTickDays = Array.from({ length: monthDaysCount }, (_, i) => i + 1)
     .filter((day) => day === 1 || day === monthDaysCount || day % 5 === 0);
+
+  // Ghost line: previous month's daily sales for visual comparison.
+  const prevLinePath = prevDailySeries
+    .filter((item) => Number(item.day_num) >= 1 && Number(item.day_num) <= monthDaysCount)
+    .map((item, index) => {
+      const x = xForDay(Number(item.day_num));
+      const y = yForValue(Math.min(Number(item.total_sales || 0), safeYMax));
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(' ');
 
   const reorderCards = (sourceId, targetId) => {
     if (!sourceId || !targetId || sourceId === targetId) return;
@@ -367,21 +434,168 @@ function AdminDashboard({ token }) {
         <div className="dashboard-summary-grid">
           <div className="dashboard-summary-item">
             <span>Total ventas</span>
-            <strong>{formatBs(totalSalesInPeriod)}</strong>
+            <strong>{formatBs(periodSummary?.sold_total ?? totalSalesInPeriod)}</strong>
+            {periodSummary && previousSummary && renderDelta(periodSummary.sold_total, previousSummary.sold_total)}
+          </div>
+          <div className="dashboard-summary-item">
+            <span>Total pedidos</span>
+            <strong>{periodSummary?.sold_count ?? totalPedidosInPeriod}</strong>
+            {periodSummary && previousSummary && renderDelta(periodSummary.sold_count, previousSummary.sold_count)}
+          </div>
+          <div className="dashboard-summary-item">
+            <span>Venta promedio</span>
+            <strong>{formatBs(periodSummary?.avg_ticket || 0)}</strong>
+            {periodSummary && previousSummary && renderDelta(periodSummary.avg_ticket, previousSummary.avg_ticket)}
+          </div>
+          <div className="dashboard-summary-item">
+            <span>Conversión (cotización → venta)</span>
+            <strong>{`${Number(periodSummary?.conversion_pct || 0).toFixed(1)}%`}</strong>
+            {periodSummary && previousSummary && renderDelta(periodSummary.conversion_pct, previousSummary.conversion_pct)}
           </div>
           <div className="dashboard-summary-item">
             <span>Total comisiones</span>
             <strong>{formatBs(totalCommissionsToDate)}</strong>
           </div>
           <div className="dashboard-summary-item">
-            <span>Total pedidos</span>
-            <strong>{totalPedidosInPeriod}</strong>
-          </div>
-          <div className="dashboard-summary-item">
             <span>Total productos combinados</span>
             <strong>{totalCombinedProducts}</strong>
           </div>
         </div>
+      </section>
+    ),
+    funnel: (
+      <section className="dashboard-card dashboard-card-wide">
+        <h3>Embudo de conversión del periodo</h3>
+        {funnelSteps.length === 0 || funnelSteps[0].value === 0 ? (
+          <p className="dashboard-empty">Sin cotizaciones este periodo</p>
+        ) : (
+          <>
+            <div className="dashboard-funnel">
+              {funnelSteps.map((step, index) => {
+                const widthPct = Math.max(6, (step.value / funnelMax) * 100);
+                const prevValue = index > 0 ? funnelSteps[index - 1].value : null;
+                const stepRate = prevValue ? (prevValue > 0 ? (step.value / prevValue) * 100 : 0) : null;
+                return (
+                  <div key={step.label} className="dashboard-funnel-row">
+                    <div className="dashboard-funnel-label">{step.label}</div>
+                    <div className="dashboard-funnel-track">
+                      <div className="dashboard-funnel-bar" style={{ width: `${widthPct}%` }}>
+                        <span>{step.value}</span>
+                      </div>
+                    </div>
+                    <div className="dashboard-funnel-rate">
+                      {stepRate !== null ? `${stepRate.toFixed(0)}%` : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {sellerConversion.length > 0 && (
+              <div className="dashboard-funnel-sellers">
+                <h4>Conversión por vendedor</h4>
+                <table>
+                  <thead>
+                    <tr><th>Vendedor</th><th>Cotizaciones</th><th>Ventas</th><th>Tasa</th><th>Bs vendidos</th></tr>
+                  </thead>
+                  <tbody>
+                    {sellerConversion.map((seller) => (
+                      <tr key={seller.vendor}>
+                        <td>{seller.vendor}</td>
+                        <td>{seller.quotes_count}</td>
+                        <td>{seller.sold_count}</td>
+                        <td className={seller.conversion_pct >= 30 ? 'is-good' : seller.conversion_pct < 15 ? 'is-low' : ''}>
+                          {seller.conversion_pct.toFixed(0)}%
+                        </td>
+                        <td>{formatBs(seller.sold_total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+    ),
+    customers: (
+      <section className="dashboard-card">
+        <h3>Clientes del periodo</h3>
+        {!customerMix || (mixTotal === 0 && customerMix.new_customers === 0) ? (
+          <p className="dashboard-empty">Sin datos este periodo</p>
+        ) : (
+          <>
+            <div className="dashboard-mini-kpis">
+              <div><span>Clientes nuevos registrados</span><strong>{customerMix.new_customers}</strong></div>
+              <div><span>Ventas de clientes recurrentes</span><strong>{repeatPct.toFixed(0)}%</strong></div>
+            </div>
+            {mixTotal > 0 && (
+              <div className="dashboard-mix-bar" title={`Nuevos ${formatBs(customerMix.new_total)} · Recurrentes ${formatBs(customerMix.repeat_total)}`}>
+                <div className="dashboard-mix-new" style={{ width: `${100 - repeatPct}%` }}>Nuevos</div>
+                <div className="dashboard-mix-repeat" style={{ width: `${repeatPct}%` }}>Recurrentes</div>
+              </div>
+            )}
+            {topCustomers.length > 0 && (
+              <>
+                <h4 className="dashboard-subtitle">Top clientes del mes</h4>
+                <ol className="dashboard-list">
+                  {topCustomers.map((customer, index) => (
+                    <li key={`${customer.name}-${index}`}>
+                      <strong>{customer.name}</strong> — {formatBs(customer.total_spent)} ({customer.orders_count} pedido{customer.orders_count > 1 ? 's' : ''})
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+          </>
+        )}
+      </section>
+    ),
+    productionQuality: (
+      <section className="dashboard-card">
+        <h3>Calidad de producción</h3>
+        {!productionQuality || (qcTotal === 0 && receptionTotal === 0) ? (
+          <p className="dashboard-empty">Sin actividad de producción este periodo</p>
+        ) : (
+          <div className="dashboard-mini-kpis dashboard-mini-kpis-grid">
+            <div>
+              <span>Aprobadas en calidad</span>
+              <strong>{productionQuality.qc_passed}</strong>
+            </div>
+            <div>
+              <span>Rechazadas en calidad</span>
+              <strong className={productionQuality.qc_rejected > 0 ? 'is-bad' : ''}>
+                {productionQuality.qc_rejected}
+                {qcTotal > 0 ? ` (${((productionQuality.qc_rejected / qcTotal) * 100).toFixed(1)}%)` : ''}
+              </strong>
+            </div>
+            <div>
+              <span>Recibidas en almacén</span>
+              <strong>{productionQuality.received}</strong>
+            </div>
+            <div>
+              <span>Dañadas en tránsito</span>
+              <strong className={productionQuality.damaged > 0 ? 'is-bad' : ''}>
+                {productionQuality.damaged}
+                {receptionTotal > 0 ? ` (${((productionQuality.damaged / receptionTotal) * 100).toFixed(1)}%)` : ''}
+              </strong>
+            </div>
+          </div>
+        )}
+      </section>
+    ),
+    ruleta: (
+      <section className="dashboard-card">
+        <h3>Ruleta de premios · ROI</h3>
+        {!wheelRoi || wheelRoi.links_created + wheelRoi.spins_done + wheelRoi.prizes_redeemed === 0 ? (
+          <p className="dashboard-empty">Sin actividad de la ruleta este periodo</p>
+        ) : (
+          <div className="dashboard-mini-kpis dashboard-mini-kpis-grid">
+            <div><span>Enlaces enviados</span><strong>{wheelRoi.links_created}</strong></div>
+            <div><span>Giros realizados</span><strong>{wheelRoi.spins_done}</strong></div>
+            <div><span>Premios canjeados</span><strong>{wheelRoi.prizes_redeemed}</strong></div>
+            <div><span>Bs vendidos con premio</span><strong className="is-good">{formatBs(wheelRoi.redeemed_sales_total)}</strong></div>
+          </div>
+        )}
       </section>
     ),
     products: (
@@ -453,7 +667,40 @@ function AdminDashboard({ token }) {
     ),
     map: (
       <section className="dashboard-card dashboard-map-card">
-        <h3>Mapa de Bolivia · Ventas por departamento</h3>
+        <div className="dashboard-map-head">
+          <h3>Mapa de Bolivia · Ventas por departamento</h3>
+          <div className="dashboard-map-toggle" role="tablist" aria-label="Vista del mapa">
+            <button
+              type="button"
+              className={mapView === '2d' ? 'is-active' : ''}
+              onClick={() => switchMapView('2d')}
+            >
+              2D
+            </button>
+            <button
+              type="button"
+              className={mapView === '3d' ? 'is-active' : ''}
+              onClick={() => switchMapView('3d')}
+            >
+              3D
+            </button>
+          </div>
+        </div>
+        {mapView === '3d' ? (
+          <div className="dashboard-map-wrap">
+            <Suspense fallback={<p className="dashboard-empty">Cargando mapa 3D…</p>}>
+              <Bolivia3DMap featureRows={mapFeatureRows} formatValue={formatBs} />
+            </Suspense>
+            <div className="dashboard-map-ranking">
+              {mapRankingRows.map((row) => (
+                <div key={row.id} className="dashboard-map-ranking-row">
+                  <strong>{row.department}</strong>
+                  <span>{formatBs(row.totalSales)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
         <div className="dashboard-map-wrap">
           <div className="dashboard-bolivia-map">
             <svg
@@ -499,6 +746,7 @@ function AdminDashboard({ token }) {
             ))}
           </div>
         </div>
+        )}
         <div className="dashboard-map-legend">
           <span className="dashboard-map-legend-label">Menor venta</span>
           <span className="dashboard-map-legend-gradient" />
@@ -508,7 +756,7 @@ function AdminDashboard({ token }) {
     ),
     dailySales: (
       <section className="dashboard-card dashboard-line-card">
-        <h3>Línea diaria · Ventas del mes</h3>
+        <h3>Línea diaria · Ventas del mes <small style={{ fontWeight: 500, color: '#94a3b8' }}>(línea punteada = mes anterior)</small></h3>
         <div className="dashboard-line-wrap">
           <svg
             viewBox={`0 0 ${chartWidth} ${chartHeight}`}
@@ -550,6 +798,7 @@ function AdminDashboard({ token }) {
               className="dashboard-line-axis"
             />
 
+            {prevLinePath ? <path d={prevLinePath} className="dashboard-line-path-prev" /> : null}
             {linePath ? <path d={linePath} className="dashboard-line-path" /> : null}
             {lineChartPoints.map((point) => (
               <circle key={point.day_num} cx={point.x} cy={point.y} r="3.2" className="dashboard-line-point" />
