@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import logo from './assets/logo.png';
 
-// TODO: replace with the real sales WhatsApp number (country code, no +).
-const WHATSAPP_NUMBER = '59170000000';
+const WHATSAPP_NUMBER = '59169618264';
 const WHATSAPP_MESSAGE = 'Hola PCX, quiero conocer sus productos de organización.';
 
 // The three words the brand stands on.
