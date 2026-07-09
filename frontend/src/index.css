@@ -7645,3 +7645,21 @@ img, video, canvas { max-width: 100%; }
   border-color: rgba(59, 130, 246, 0.4);
   color: #1d4ed8;
 }
+
+/* Sleek quick links: label-only pills */
+.dashboard-quick-links.is-sleek {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dashboard-quick-links.is-sleek .dashboard-quick-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-height: 42px;
+}

@@ -8,22 +8,6 @@ import { canAccessPanel } from './roleAccess';
 import { NAV_ITEMS, allowsAny } from './navConfig';
 import PerformanceDashboard from './PerformanceDashboard';
 
-const QUICK_LINK_HINTS = {
-  '/cotizar': 'Genera cotizaciones para clientes',
-  '/history': 'Revisa cotizaciones registradas',
-  '/pedidos': 'Gestiona pedidos del almacén',
-  '/inventory': 'Controla el inventario',
-  '/gastos': 'Registra y revisa gastos',
-  '/produccion-kanban': 'Tablero de producción',
-  '/proyectos': 'Proyectos y tareas',
-  '/combos': 'Combos de marketing',
-  '/cupones': 'Cupones de descuento',
-  '/ruleta-premios': 'Ruleta de premios para clientes',
-  '/calendario': 'Plan del día del equipo',
-  '/admin': 'Configuración y administración',
-  '/dashboard': 'Estadísticas globales'
-};
-
 const formatBs = (value) => `${Number(value || 0).toFixed(2).replace(/\.00$/, '')} Bs`;
 
 export default function Dashboard({ token, user, role, access }) {
@@ -43,7 +27,7 @@ export default function Dashboard({ token, user, role, access }) {
     NAV_ITEMS
       .filter((item) => item.path !== '/' && item.path !== '/perfil')
       .filter((item) => allowsAny(access, item.navAccess || item.routeAccess))
-      .map((item) => ({ to: item.path, label: item.label, hint: QUICK_LINK_HINTS[item.path] || '' }))
+      .map((item) => ({ to: item.path, label: item.label }))
   ), [access]);
 
   useEffect(() => {
@@ -213,11 +197,10 @@ export default function Dashboard({ token, user, role, access }) {
         {quickLinks.length === 0 ? (
           <p className="dashboard-muted">No tienes paneles asignados todavía.</p>
         ) : (
-          <div className="dashboard-quick-links">
+          <div className="dashboard-quick-links is-sleek">
             {quickLinks.map((link) => (
               <button key={link.to} type="button" className="dashboard-quick-link" onClick={() => navigate(link.to)}>
-                <strong>{link.label}</strong>
-                {link.hint && <small>{link.hint}</small>}
+                {link.label}
               </button>
             ))}
           </div>

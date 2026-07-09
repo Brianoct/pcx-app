@@ -228,7 +228,7 @@ export default function Calendar({ token, user }) {
                 <div className="dayplan-col-head" style={{ borderTopColor: color }}>
                   <span className="dayplan-col-name">{member.name}{isMine ? ' (yo)' : ''}</span>
                   <span className={`dayplan-col-count ${memberTasks.length === 0 ? 'is-empty' : ''}`}>
-                    {memberTasks.length === 0 ? 'sin plan' : `${memberDone}/${memberTasks.length} ✓`}
+                    {memberTasks.length === 0 ? 'por planificar' : `${memberDone}/${memberTasks.length} ✓`}
                   </span>
                 </div>
                 <div className="dayplan-col-body" style={{ height: boardHeight }}>

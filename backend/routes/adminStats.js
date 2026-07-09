@@ -50,13 +50,13 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
     // 2. Top salespeople
     const salesRes = await pool.query(`
       SELECT 
-        q.vendor,
+        (array_agg(q.vendor ORDER BY q.created_at DESC))[1] as vendor,
         COUNT(*) as order_count,
         SUM(q.total) as total_sales
       FROM quotes q
       WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
         ${dateFilter.sql}
-      GROUP BY q.vendor
+      GROUP BY LOWER(TRIM(q.vendor))
       ORDER BY total_sales DESC
       LIMIT 10
     `, dateFilter.params);
