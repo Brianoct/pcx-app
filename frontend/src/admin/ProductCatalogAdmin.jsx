@@ -64,6 +64,7 @@ function ProductCatalogAdmin({ token }) {
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [imageBusySku, setImageBusySku] = useState('');
+  const [productSearch, setProductSearch] = useState('');
   // Product enrichment CSV round-trip
   const [importCsvText, setImportCsvText] = useState('');
   const [importFileName, setImportFileName] = useState('');
@@ -73,6 +74,14 @@ function ProductCatalogAdmin({ token }) {
   const [syncDescription, setSyncDescription] = useState(false);
   const [enrichMsg, setEnrichMsg] = useState('');
   const inactiveProducts = products.filter((row) => !row.is_active);
+  const visibleProducts = (() => {
+    const q = productSearch.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((row) => (
+      String(row.sku || '').toLowerCase().includes(q)
+      || String(row.name || '').toLowerCase().includes(q)
+    ));
+  })();
 
   const loadProducts = async () => {
     setLoading(true);
@@ -663,28 +672,37 @@ function ProductCatalogAdmin({ token }) {
       )}
 
       <div className="card">
-        <h3 style={{ marginBottom: '12px' }}>Productos del cotizador</h3>
+        <div className="pcat-table-head">
+          <h3 style={{ margin: 0 }}>Productos del cotizador</h3>
+          <input
+            type="search"
+            className="form-input pcat-search"
+            placeholder="Buscar por SKU o nombre…"
+            value={productSearch}
+            onChange={(e) => setProductSearch(e.target.value)}
+          />
+        </div>
         {loading ? (
           <p style={{ color: '#78716c' }}>Cargando productos...</p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table" style={{ minWidth: '1040px' }}>
+          <div className="pcat-table-scroll">
+            <table className="table pcat-table">
               <thead>
                 <tr>
                   <th>Imagen</th>
                   <th>SKU</th>
                   <th>Nombre</th>
                   <th>Descripción</th>
-                  <th style={{ textAlign: 'right' }}>SF</th>
-                  <th style={{ textAlign: 'right' }}>CF</th>
-                  <th>Activo</th>
+                  <th className="pcat-num">SF</th>
+                  <th className="pcat-num">CF</th>
+                  <th className="pcat-center">Activo</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {products.length === 0 ? (
+                {visibleProducts.length === 0 ? (
                   <tr><td colSpan={8} style={{ textAlign: 'center', color: '#78716c' }}>Sin productos</td></tr>
-                ) : products.map((row) => (
+                ) : visibleProducts.map((row) => (
                   <tr key={row.sku}>
                     <td>
                       <div className="pcat-image-cell">
@@ -717,74 +735,76 @@ function ProductCatalogAdmin({ token }) {
                         </div>
                       </div>
                     </td>
-                    <td>{row.sku}</td>
+                    <td className="pcat-sku">{row.sku}</td>
                     <td>
                       <input
                         value={row.name || ''}
                         onChange={(e) => onRowField(row.sku, 'name', e.target.value)}
-                        className="form-input"
+                        className="form-input pcat-name-input"
                       />
                     </td>
                     <td>
                       <textarea
                         value={row.description || ''}
                         onChange={(e) => onRowField(row.sku, 'description', e.target.value)}
-                        className="form-input"
+                        className="form-input pcat-desc-input"
                         rows={2}
                         placeholder="Uso / para qué sirve"
-                        style={{ minWidth: 220, resize: 'vertical' }}
                       />
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td className="pcat-num">
                       <input
                         type="number"
                         min="0"
                         step="0.01"
                         value={Number(row.sf ?? row.sf_price ?? 0)}
                         onChange={(e) => onRowField(row.sku, 'sf', e.target.value)}
-                        className="form-input" style={{ width: 100, textAlign: 'right' }}
+                        className="form-input pcat-price-input"
                       />
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td className="pcat-num">
                       <input
                         type="number"
                         min="0"
                         step="0.01"
                         value={Number(row.cf ?? row.cf_price ?? 0)}
                         onChange={(e) => onRowField(row.sku, 'cf', e.target.value)}
-                        className="form-input" style={{ width: 100, textAlign: 'right' }}
+                        className="form-input pcat-price-input"
                       />
                     </td>
-                    <td>
-                      <label className="form-check-inline">
+                    <td className="pcat-center">
+                      <label className="pcat-switch" title={row.is_active ? 'Activo' : 'Inactivo'}>
                         <input
                           type="checkbox"
                           checked={Boolean(row.is_active)}
                           onChange={(e) => onRowField(row.sku, 'is_active', e.target.checked)}
                         />
-                        {row.is_active ? 'Sí' : 'No'}
+                        <span className="pcat-switch-track" />
                       </label>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <div className="pcat-actions">
                         <button
-                          onClick={() => openProductionConfig(row)}
-                          disabled={saving || configLoading}
-                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#0ea5e9', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
-                        >
-                          Producción
-                        </button>
-                        <button
+                          type="button"
+                          className="pcat-action pcat-action--save"
                           onClick={() => saveProduct(row)}
                           disabled={saving}
-                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
                         >
                           Guardar
                         </button>
                         <button
+                          type="button"
+                          className="pcat-action pcat-action--config"
+                          onClick={() => openProductionConfig(row)}
+                          disabled={saving || configLoading}
+                        >
+                          Producción
+                        </button>
+                        <button
+                          type="button"
+                          className="pcat-action pcat-action--danger"
                           onClick={() => deleteProduct(row)}
                           disabled={saving || !row.is_active}
-                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
                         >
                           Desactivar
                         </button>
