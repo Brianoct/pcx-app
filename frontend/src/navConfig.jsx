@@ -95,7 +95,7 @@ export const NAV_ITEMS = [
     label: 'Kanban',
     routeAccess: ['produccion_kanban', 'admin'],
     navAccess: ['produccion_kanban'],
-    render: (ctx) => <ProductionKanban token={ctx.token} />
+    render: (ctx) => <ProductionKanban token={ctx.token} onCommissionChanged={ctx.onQuoteStatusChanged} />
   },
   {
     path: '/recepcion',
