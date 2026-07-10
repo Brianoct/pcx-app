@@ -167,6 +167,7 @@ const mapProductionKanbanCardRow = (row = {}, routeStagesBySku = null) => {
     current_stock: Number(row.current_stock || 0),
     min_stock: Number(row.min_stock || 0),
     required_qty: Number(row.required_qty || 0),
+    processed_count: Number(row.processed_count || 0),
     qty_frozen: Boolean(row.qty_frozen),
     start_process: startProcess,
     stage: safeStage,
@@ -299,7 +300,7 @@ const syncProductionKanbanFromInventory = async () => {
 
   const cardsRes = await pool.query(
     `SELECT id, sku, product_name, store_location, current_stock, min_stock, required_qty,
-            qty_frozen, start_process, stage, source, last_moved_at, created_at, updated_at
+            processed_count, qty_frozen, start_process, stage, source, last_moved_at, created_at, updated_at
      FROM production_kanban_cards
      WHERE is_active = TRUE
        AND source = 'min_stock'

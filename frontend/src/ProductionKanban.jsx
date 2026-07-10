@@ -22,17 +22,18 @@ const STAGE_ORDER = STAGES.map((s) => s.key);
 // soldado). Fall back to the full board order if it's ever missing.
 const cardRoute = (card) => (Array.isArray(card?.route) && card.route.length ? card.route : STAGE_ORDER);
 
-// Time in current stage (since the last move, or creation if never moved).
-const timeInStage = (since) => {
+// Live stopwatch since the batch entered its stage: "03:27:45" / "1d 03:27:45".
+const pad2 = (n) => String(n).padStart(2, '0');
+const stopwatchSince = (since, now) => {
   if (!since) return null;
-  const ms = Date.now() - new Date(since).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return null;
-  const minutes = Math.floor(ms / 60000);
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h ${minutes % 60} min`;
-  const days = Math.floor(hours / 24);
-  return `${days} d ${hours % 24} h`;
+  let secs = Math.floor((now - new Date(since).getTime()) / 1000);
+  if (!Number.isFinite(secs)) return null;
+  if (secs < 0) secs = 0;
+  const days = Math.floor(secs / 86400);
+  const hours = Math.floor((secs % 86400) / 3600);
+  const minutes = Math.floor((secs % 3600) / 60);
+  const seconds = secs % 60;
+  return `${days > 0 ? `${days}d ` : ''}${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
 };
 
 // One SKU in one stage = one "mother card" (the factory runs a single batch;
@@ -51,6 +52,7 @@ const groupIntoBatches = (cards) => {
         route: cardRoute(card),
         members: [],
         total_qty: 0,
+        processed: 0,
         pending_tasks: 0,
         qty_frozen: false,
         oldest_move: null
@@ -59,6 +61,7 @@ const groupIntoBatches = (cards) => {
     const batch = batches.get(key);
     batch.members.push(card);
     batch.total_qty += Number(card.required_qty || 0);
+    batch.processed += Number(card.processed_count || 0);
     batch.pending_tasks += Number(card.pending_tasks || 0);
     batch.qty_frozen = batch.qty_frozen || Boolean(card.qty_frozen);
     const since = card.last_moved_at || card.created_at;
@@ -74,7 +77,6 @@ export default function ProductionKanban({ token }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyKey, setBusyKey] = useState('');
-  const [locationFilter, setLocationFilter] = useState('all');
   const [activeStage, setActiveStage] = useState('planificacion');
   const [detailKey, setDetailKey] = useState(null); // batch key or "card:<id>"
   const [qcForm, setQcForm] = useState({ passed: '', rejected: '' });
@@ -103,39 +105,22 @@ export default function ProductionKanban({ token }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const locationOptions = useMemo(() => {
-    const options = new Set();
-    for (const card of cards) if (card?.store_location) options.add(card.store_location);
-    return ['all', ...Array.from(options).sort()];
-  }, [cards]);
-
-  // Batches are computed over ALL cards: a mother card always moves complete,
-  // even when the sede filter is hiding some of its members.
   const batches = useMemo(() => groupIntoBatches(cards), [cards]);
 
-  const batchMatchesFilter = (batch) =>
-    locationFilter === 'all' || batch.members.some((m) => m.store_location === locationFilter);
-
-  const receptionCards = useMemo(() => (
-    cards.filter((card) => card.stage === 'recepcion'
-      && (locationFilter === 'all' || card.store_location === locationFilter))
-  ), [cards, locationFilter]);
+  const receptionCards = useMemo(() => cards.filter((card) => card.stage === 'recepcion'), [cards]);
 
   const itemsByStage = useMemo(() => {
     const grouped = Object.fromEntries(STAGES.map((s) => [s.key, []]));
     for (const batch of batches.values()) {
-      if (grouped[batch.stage] && batchMatchesFilter(batch)) grouped[batch.stage].push(batch);
+      if (grouped[batch.stage]) grouped[batch.stage].push(batch);
     }
     for (const card of receptionCards) grouped.recepcion.push(card);
     return grouped;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batches, receptionCards, locationFilter]);
+  }, [batches, receptionCards]);
 
   const totalRequiredQty = useMemo(
-    () => cards
-      .filter((c) => locationFilter === 'all' || c.store_location === locationFilter)
-      .reduce((sum, c) => sum + Number(c.required_qty || 0), 0),
-    [cards, locationFilter]
+    () => cards.reduce((sum, c) => sum + Number(c.required_qty || 0), 0),
+    [cards]
   );
 
   const detailBatch = detailKey && !detailKey.startsWith('card:') ? batches.get(detailKey) || null : null;
@@ -148,6 +133,39 @@ export default function ProductionKanban({ token }) {
     setReceiveForm({ intact: '', damaged: '' });
     setActionMsg('');
   }, [detailKey]);
+
+  // Ticking clock for the sheet's stopwatch (only runs while a sheet is open).
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (!detailKey) return undefined;
+    setClock(Date.now());
+    const timer = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [detailKey]);
+
+  // Piece counter: optimistic local update (mirrors the server's fill-by-id
+  // distribution) + fire-and-forget PATCH; on failure, reload the board.
+  const adjustProgress = (batch, delta) => {
+    const target = Math.min(batch.total_qty, Math.max(0, batch.processed + delta));
+    if (target === batch.processed) return;
+    const ordered = [...batch.members].sort((a, b) => Number(a.id) - Number(b.id));
+    const shares = new Map();
+    let remaining = target;
+    for (const member of ordered) {
+      const share = Math.min(remaining, Number(member.required_qty || 0));
+      shares.set(member.id, share);
+      remaining -= share;
+    }
+    setCards((prev) => prev.map((c) => (shares.has(c.id) ? { ...c, processed_count: shares.get(c.id) } : c)));
+    apiRequest('/api/production/kanban/batch-progress', {
+      method: 'PATCH',
+      token,
+      body: { card_ids: batch.members.map((m) => m.id), delta }
+    }).catch((err) => {
+      setError(err.message || 'No se pudo registrar el avance');
+      loadBoard();
+    });
+  };
 
   // Measurement tasks for the open batch (merged across its sede cards).
   useEffect(() => {
@@ -278,7 +296,6 @@ export default function ProductionKanban({ token }) {
       <span className="prod-card-name">{batch.product_name}</span>
       <span className="prod-card-qty">
         {batch.total_qty} pzas
-        {batch.qty_frozen && <span className="prod-card-frozen" title="Cantidad fija: orden de producción">🔒</span>}
         {batch.pending_tasks > 0 && (
           <span className="prod-card-task-badge" title="Tareas de medición pendientes">
             {batch.pending_tasks} tarea{batch.pending_tasks > 1 ? 's' : ''}
@@ -306,34 +323,8 @@ export default function ProductionKanban({ token }) {
 
   return (
     <div className="container prod-page">
-      <div className="card prod-head">
-        <div className="prod-head-row">
-          <div>
-            <h2 className="prod-title">Producción</h2>
-            <p className="prod-sub">
-              Las necesidades llegan a Planificación (cantidad ajustable). Al iniciar producción la cantidad
-              se congela 🔒, calidad se registra al pasar a embalado y el stock entra al confirmar la recepción.
-            </p>
-          </div>
-          <div className="prod-head-controls">
-            <select
-              className="filter-select"
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-            >
-              {locationOptions.map((option) => (
-                <option key={option} value={option}>{option === 'all' ? 'Todas las sedes' : option}</option>
-              ))}
-            </select>
-            <button type="button" className="btn btn-secondary" onClick={loadBoard} disabled={loading}>
-              Actualizar
-            </button>
-          </div>
-        </div>
-      </div>
-
       <div className="prod-kpis">
-        <div className="prod-kpi"><span className="prod-kpi-label">Lotes en planta</span><span className="prod-kpi-value" style={{ color: '#0284c7' }}>{[...batches.values()].filter((b) => b.stage !== 'planificacion' && batchMatchesFilter(b)).length}</span></div>
+        <div className="prod-kpi"><span className="prod-kpi-label">Lotes en planta</span><span className="prod-kpi-value" style={{ color: '#0284c7' }}>{[...batches.values()].filter((b) => b.stage !== 'planificacion').length}</span></div>
         <div className="prod-kpi"><span className="prod-kpi-label">Piezas requeridas</span><span className="prod-kpi-value" style={{ color: '#f59e0b' }}>{totalRequiredQty}</span></div>
         <div className="prod-kpi"><span className="prod-kpi-label">Por recibir</span><span className="prod-kpi-value" style={{ color: '#16a34a' }}>{receptionCards.length}</span></div>
       </div>
@@ -405,45 +396,67 @@ export default function ProductionKanban({ token }) {
 
             {detailBatch && (
               <>
-                <div className="prod-sheet-facts">
-                  <div>
-                    <span className="prod-fact-label">A producir</span>
-                    <span className="prod-fact-value" style={{ color: '#b45309' }}>
-                      {detailBatch.total_qty} pzas {detailBatch.qty_frozen ? '🔒' : ''}
-                    </span>
-                  </div>
-                  {detailBatch.members.map((member) => (
-                    <div key={member.id}>
-                      <span className="prod-fact-label">{member.store_location}</span>
-                      <span className="prod-fact-value">{member.required_qty} pzas · stock {member.current_stock}</span>
+                <div className="prod-hero">
+                  <div className="prod-hero-qty">{detailBatch.total_qty}</div>
+                  <div className="prod-hero-label">piezas a producir</div>
+                  {detailBatch.members.length > 1 && (
+                    <div className="prod-sede-chips">
+                      {detailBatch.members.map((member) => (
+                        <span key={member.id} className="prod-sede-chip">
+                          {member.store_location} <strong>{member.required_qty}</strong>
+                        </span>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                  {detailBatch.members.length === 1 && (
+                    <div className="prod-sede-chips">
+                      <span className="prod-sede-chip">{detailBatch.members[0].store_location}</span>
+                    </div>
+                  )}
                 </div>
-                {detailBatch.stage === 'planificacion' ? (
+
+                {detailBatch.stage === 'planificacion' && (
                   <div className="prod-planning-note">
                     Cantidad <strong>ajustable</strong>: se recalcula con el stock hasta que inicies producción.
                   </div>
-                ) : (
-                  <div className="prod-planning-note is-frozen">
-                    🔒 Orden de producción fija: el stock ya no cambia esta cantidad.
-                  </div>
                 )}
-                {timeInStage(detailBatch.oldest_move) && (
-                  <div className="prod-stage-timer">
-                    En {STAGE_LABEL[detailBatch.stage] || detailBatch.stage} hace <strong>{timeInStage(detailBatch.oldest_move)}</strong>
+
+                {stopwatchSince(detailBatch.oldest_move, clock) && (
+                  <div className="prod-stopwatch">
+                    <span className="prod-stopwatch-label">En {STAGE_LABEL[detailBatch.stage] || detailBatch.stage}</span>
+                    <span className="prod-stopwatch-time">{stopwatchSince(detailBatch.oldest_move, clock)}</span>
                   </div>
                 )}
 
-                <div className="prod-sheet-section-label">Ruta</div>
-                <div className="prod-route">
-                  {detailBatch.route.map((step, i) => {
-                    const currentIdx = detailBatch.route.indexOf(detailBatch.stage);
-                    const state = i < currentIdx ? 'done' : i === currentIdx ? 'current' : 'todo';
-                    return (
-                      <span key={step} className={`prod-route-step is-${state}`}>{STAGE_LABEL[step] || step}</span>
-                    );
-                  })}
-                </div>
+                {detailBatch.stage !== 'planificacion' && (
+                  <div className="prod-counter">
+                    <span className="prod-counter-label">Piezas procesadas en esta etapa</span>
+                    <div className="prod-counter-controls">
+                      <button
+                        type="button"
+                        className="prod-counter-btn"
+                        aria-label="Restar una pieza"
+                        disabled={detailBatch.processed <= 0}
+                        onClick={() => adjustProgress(detailBatch, -1)}
+                      >
+                        −
+                      </button>
+                      <span className="prod-counter-display">
+                        {detailBatch.processed}
+                        <span className="prod-counter-total">/{detailBatch.total_qty}</span>
+                      </span>
+                      <button
+                        type="button"
+                        className="prod-counter-btn is-plus"
+                        aria-label="Sumar una pieza"
+                        disabled={detailBatch.processed >= detailBatch.total_qty}
+                        onClick={() => adjustProgress(detailBatch, 1)}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="prod-sheet-section-label">Mover lote a</div>
                 <div className="prod-move-chips">
@@ -521,14 +534,17 @@ export default function ProductionKanban({ token }) {
 
             {detailCard && (
               <>
-                <div className="prod-sheet-facts">
-                  <div><span className="prod-fact-label">En camino</span><span className="prod-fact-value" style={{ color: '#b45309' }}>{Number(detailCard.required_qty || 0)} pzas</span></div>
-                  <div><span className="prod-fact-label">Destino</span><span className="prod-fact-value">{detailCard.store_location}</span></div>
-                  <div><span className="prod-fact-label">Stock actual</span><span className="prod-fact-value">{Number(detailCard.current_stock || 0)}</span></div>
+                <div className="prod-hero">
+                  <div className="prod-hero-qty">{Number(detailCard.required_qty || 0)}</div>
+                  <div className="prod-hero-label">piezas en camino</div>
+                  <div className="prod-sede-chips">
+                    <span className="prod-sede-chip">→ {detailCard.store_location}</span>
+                  </div>
                 </div>
-                {timeInStage(detailCard.last_moved_at || detailCard.created_at) && (
-                  <div className="prod-stage-timer">
-                    En Recepción hace <strong>{timeInStage(detailCard.last_moved_at || detailCard.created_at)}</strong>
+                {stopwatchSince(detailCard.last_moved_at || detailCard.created_at, clock) && (
+                  <div className="prod-stopwatch">
+                    <span className="prod-stopwatch-label">En Recepción</span>
+                    <span className="prod-stopwatch-time">{stopwatchSince(detailCard.last_moved_at || detailCard.created_at, clock)}</span>
                   </div>
                 )}
                 <div className="prod-qc">
