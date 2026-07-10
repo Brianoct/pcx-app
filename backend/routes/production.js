@@ -67,7 +67,7 @@ const loadActiveCards = async (cardIds) => {
     .filter((id) => Number.isInteger(id) && id > 0))];
   if (ids.length === 0) return [];
   const result = await pool.query(
-    `SELECT id, sku, product_name, store_location, required_qty, qty_frozen, stage, start_process
+    `SELECT id, sku, product_name, store_location, required_qty, processed_count, qty_frozen, stage, start_process
      FROM production_kanban_cards
      WHERE id = ANY($1::bigint[])
        AND is_active = TRUE
@@ -91,11 +91,12 @@ const moveCardsToStage = async ({ cards, nextStage, userId }) => {
         `UPDATE production_kanban_cards
          SET stage = $2,
              qty_frozen = CASE WHEN $3 THEN TRUE ELSE qty_frozen END,
+             processed_count = CASE WHEN stage IS DISTINCT FROM $2 THEN 0 ELSE processed_count END,
              last_moved_at = NOW(),
              updated_at = NOW()
          WHERE id = $1
          RETURNING id, sku, product_name, store_location, current_stock, min_stock, required_qty,
-                   qty_frozen, start_process, stage, source, last_moved_at, created_at, updated_at`,
+                   processed_count, qty_frozen, start_process, stage, source, last_moved_at, created_at, updated_at`,
         [card.id, nextStage, leavingPlanning]
       );
       movedCards.push(updatedRes.rows[0]);
@@ -185,6 +186,56 @@ router.patch('/api/production/kanban/batch-stage', authenticateToken, requireRol
   }
 });
 
+// Batch progress counter: the operator ticks pieces as they finish them in
+// the current stage. The total lives distributed across the sede cards (each
+// capped at its own qty, filled in id order) so a batch split keeps sane
+// numbers. Clamped to [0, lote total]; stage moves reset it to 0.
+router.patch('/api/production/kanban/batch-progress', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+  try {
+    if (!(await ensureKanbanAccess(req, res))) return;
+    const delta = Number.parseInt(req.body?.delta, 10);
+    if (!Number.isInteger(delta) || delta === 0 || Math.abs(delta) > 10000) {
+      return res.status(400).json({ error: 'Ajuste inválido' });
+    }
+    const cards = await loadActiveCards(req.body?.card_ids);
+    if (cards.length === 0) return res.status(404).json({ error: 'Tarjetas no encontradas o inactivas' });
+    const skus = new Set(cards.map((card) => String(card.sku || '').toUpperCase()));
+    if (skus.size > 1) return res.status(400).json({ error: 'El avance se registra por lote de un solo producto' });
+    if (cards.some((card) => card.stage === 'planificacion')) {
+      return res.status(400).json({ error: 'El avance se registra cuando el lote ya está en producción' });
+    }
+    const totalQty = cards.reduce((sum, card) => sum + Number(card.required_qty || 0), 0);
+    const current = cards.reduce((sum, card) => sum + Number(card.processed_count || 0), 0);
+    const target = Math.min(totalQty, Math.max(0, current + delta));
+    const ordered = [...cards].sort((a, b) => Number(a.id) - Number(b.id));
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      let remaining = target;
+      for (const card of ordered) {
+        const share = Math.min(remaining, Number(card.required_qty || 0));
+        remaining -= share;
+        await client.query(
+          `UPDATE production_kanban_cards
+           SET processed_count = $2, updated_at = NOW()
+           WHERE id = $1`,
+          [card.id, share]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    res.json({ processed: target, total: totalQty });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo registrar el avance del lote' });
+  }
+});
+
 const parseCount = (value) => {
   if (value === undefined || value === null || value === '') return 0;
   const n = Number.parseInt(value, 10);
@@ -265,7 +316,7 @@ router.post('/api/production/kanban/qc-gate', authenticateToken, requireRole(['M
         if (share > 0) {
           await client.query(
             `UPDATE production_kanban_cards
-             SET required_qty = $2, stage = 'embalado', last_moved_at = NOW(), updated_at = NOW()
+             SET required_qty = $2, stage = 'embalado', processed_count = 0, last_moved_at = NOW(), updated_at = NOW()
              WHERE id = $1`,
             [card.id, share]
           );
