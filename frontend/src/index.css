@@ -5039,11 +5039,11 @@ img, video, canvas { max-width: 100%; }
 
 .prod-page { max-width: 100%; }
 
-/* KPI strip: three compact tiles, scrollable if the phone is very narrow. */
+/* KPI strip: compact tiles, wraps on narrow phones. */
 .prod-kpis {
   margin-top: 4px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -8170,3 +8170,142 @@ img, video, canvas { max-width: 100%; }
 }
 .pcat-switch input:checked + .pcat-switch-track { background: #16a34a; }
 .pcat-switch input:checked + .pcat-switch-track::after { transform: translateX(18px); }
+
+/* ── Producción: Planificación / Recepción / contadores por color ─────────── */
+
+.plan-intro { margin-bottom: 14px; }
+.plan-title { font-size: 1.3rem; font-weight: 800; margin: 0; }
+.plan-sub { color: var(--text-secondary); font-size: 0.84rem; margin: 6px 0 0; max-width: 720px; }
+
+.plan-list { display: flex; flex-direction: column; gap: 12px; }
+
+.plan-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+}
+
+.plan-item-info { min-width: 0; flex: 1 1 280px; }
+.plan-item-topline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.plan-item-name { font-size: 1.02rem; font-weight: 800; }
+.plan-item-sku { font-size: 0.74rem; color: var(--text-muted); font-weight: 600; margin-top: 2px; }
+
+.plan-badge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.plan-badge.is-none { background: var(--bg-tertiary); color: var(--text-muted); }
+.plan-badge.is-scheduled { background: rgba(2, 132, 199, 0.1); color: #0369a1; }
+.plan-badge.is-today { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+
+.plan-item-breakdown { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.plan-item-qty { font-size: 1.3rem; font-weight: 900; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.plan-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.plan-chip.is-sede { background: transparent; border: 1px dashed var(--border); color: var(--text-muted); }
+
+.plan-item-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.plan-date-field { display: flex; flex-direction: column; gap: 4px; }
+.plan-date-field span {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.plan-date-field input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.plan-btn-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.plan-btn { padding: 8px 14px; font-size: 0.8rem; }
+.plan-btn-start { background: #1c1917; border-color: #1c1917; color: #ffffff; }
+
+/* Recepción page */
+.recep-done {
+  margin-bottom: 14px;
+  background: rgba(22, 163, 74, 0.08);
+  border: 1px solid rgba(22, 163, 74, 0.35);
+  color: #15803d;
+  font-weight: 600;
+  font-size: 0.86rem;
+}
+.recep-sede { margin-bottom: 18px; }
+.recep-sede-title { font-size: 1rem; font-weight: 800; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.recep-sede-count {
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.recep-list { display: flex; flex-direction: column; gap: 10px; }
+.recep-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: 3px solid #16a34a;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+}
+.recep-item-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 220px; }
+.recep-item-name { font-weight: 800; font-size: 0.98rem; }
+.recep-item-meta { font-size: 0.78rem; color: var(--text-secondary); }
+.recep-item-form { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.recep-confirm-btn { padding: 9px 18px; font-size: 0.82rem; }
+
+/* Per-color counters (Pintado on multi-color lotes) */
+.prod-counter-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+.prod-counter-color-row:first-of-type { border-top: none; margin-top: 6px; }
+.prod-counter-color-name { font-size: 0.86rem; font-weight: 700; color: var(--text-primary); }
+.prod-counter-controls.is-compact { margin-top: 0; gap: 12px; }
+.prod-counter-btn.is-small { width: 42px; height: 42px; font-size: 1.3rem; }
+.prod-counter-display.is-small { font-size: 1.5rem; min-width: 86px; }
+.prod-counter-display.is-small .prod-counter-total { font-size: 1rem; }
+
+/* QC per color */
+.prod-qc-color-row { margin-bottom: 10px; }
+.prod-qc-color-name {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+/* Secondary sede line under the hero chips (variant lotes) */
+.prod-sede-secondary { margin-top: 8px; font-size: 0.74rem; color: var(--text-muted); font-weight: 600; }
