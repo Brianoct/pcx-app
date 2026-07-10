@@ -2,7 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { getProductionKanbanAccessScope, resolveInventoryScopeByCity } = require('../lib/inventory');
-const { PRODUCTION_KANBAN_STAGES, getRouteStagesForSku, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, replaceProductProcessSteps, syncProductionKanbanFromInventory } = require('../lib/kanban');
+const { PRODUCTION_KANBAN_STAGES, cardsShareVariantGroup, getRouteStagesForSku, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, replaceProductProcessSteps, syncProductionKanbanFromInventory } = require('../lib/kanban');
 const { validateProductSku } = require('../lib/products');
 const { getProductStructure, loadProductionSettings, saveProductStructure, saveProductionSettings } = require('../lib/productStructure');
 const { countPendingTasksByCard, getVarianceReport, listCardTasks, maybeCreateSamplingTasks, resolveTask } = require('../lib/productionSampling');
@@ -12,6 +12,35 @@ const { loadUserContext } = require('../lib/users');
 
 const router = express.Router();
 
+// Planning cards whose tentative date arrived (America/La_Paz) enter the
+// board automatically: quantity freezes and the lote moves to its first route
+// stage. Grouped by SKU so mother cards activate complete.
+const activateDueProductionCards = async (userId) => {
+  const dueRes = await pool.query(
+    `SELECT id, sku, product_name, store_location, required_qty, processed_count, qty_frozen, stage, start_process
+     FROM production_kanban_cards
+     WHERE is_active = TRUE
+       AND source = 'min_stock'
+       AND stage = 'planificacion'
+       AND planned_date IS NOT NULL
+       AND planned_date <= (NOW() AT TIME ZONE 'America/La_Paz')::date`
+  );
+  if (dueRes.rowCount === 0) return false;
+  const bySku = new Map();
+  for (const card of dueRes.rows) {
+    const sku = String(card.sku || '').toUpperCase();
+    if (!bySku.has(sku)) bySku.set(sku, []);
+    bySku.get(sku).push(card);
+  }
+  for (const [sku, cards] of bySku) {
+    const route = await getRouteStagesForSku(sku, cards[0].start_process || 'corte_laser');
+    const nextStage = route[route.indexOf('planificacion') + 1] || route[1];
+    if (!nextStage || nextStage === 'planificacion') continue;
+    await moveCardsToStage({ cards, nextStage, userId });
+  }
+  return true;
+};
+
 router.get('/api/production/kanban', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   try {
     const userContext = await loadUserContext(req.user.id);
@@ -20,7 +49,10 @@ router.get('/api/production/kanban', authenticateToken, requireRole(['Microfabri
     const kanbanScope = getProductionKanbanAccessScope(userContext, access);
     if (kanbanScope.error) return res.status(403).json({ error: kanbanScope.error });
 
-    const cards = await syncProductionKanbanFromInventory();
+    let cards = await syncProductionKanbanFromInventory();
+    if (await activateDueProductionCards(req.user.id)) {
+      cards = await syncProductionKanbanFromInventory();
+    }
     const pendingTasks = await countPendingTasksByCard(cards.map((card) => card.id));
     for (const card of cards) {
       card.pending_tasks = pendingTasks.get(card.id) || 0;
@@ -133,8 +165,7 @@ const moveCardsToStage = async ({ cards, nextStage, userId }) => {
 
 const validateStageMove = async ({ cards, nextStage }) => {
   if (cards.length === 0) return 'Tarjetas no encontradas o inactivas';
-  const skus = new Set(cards.map((card) => String(card.sku || '').toUpperCase()));
-  if (skus.size > 1) return 'Todas las tarjetas del lote deben ser del mismo producto';
+  if (!cardsShareVariantGroup(cards)) return 'Todas las tarjetas del lote deben ser del mismo producto o variantes de color del mismo';
   const first = cards[0];
   const allowedStages = await getRouteStagesForSku(first.sku, first.start_process || 'corte_laser');
   if (!allowedStages.includes(nextStage)) {
@@ -186,6 +217,39 @@ router.patch('/api/production/kanban/batch-stage', authenticateToken, requireRol
   }
 });
 
+// Tentative production date, set from the Planificación page. NULL = the
+// lote keeps accumulating indefinitely; a date = it enters the board (and
+// freezes) the day the date arrives in America/La_Paz.
+router.patch('/api/production/kanban/batch-planned-date', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+  try {
+    if (!(await ensureKanbanAccess(req, res))) return;
+    const raw = req.body?.planned_date;
+    let plannedDate = null;
+    if (raw !== null && raw !== undefined && raw !== '') {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) {
+        return res.status(400).json({ error: 'Fecha inválida. Usa formato AAAA-MM-DD' });
+      }
+      plannedDate = String(raw);
+    }
+    const cards = await loadActiveCards(req.body?.card_ids);
+    if (cards.length === 0) return res.status(404).json({ error: 'Tarjetas no encontradas o inactivas' });
+    if (!cardsShareVariantGroup(cards)) return res.status(400).json({ error: 'La fecha se asigna por lote de un solo producto o sus variantes de color' });
+    if (cards.some((card) => card.stage !== 'planificacion')) {
+      return res.status(400).json({ error: 'Solo se programan lotes que siguen en planificación' });
+    }
+    await pool.query(
+      `UPDATE production_kanban_cards
+       SET planned_date = $2, updated_at = NOW()
+       WHERE id = ANY($1::bigint[])`,
+      [cards.map((card) => card.id), plannedDate]
+    );
+    res.json({ message: plannedDate ? 'Fecha de producción asignada' : 'Fecha de producción quitada', planned_date: plannedDate });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo asignar la fecha de producción' });
+  }
+});
+
 // Batch progress counter: the operator ticks pieces as they finish them in
 // the current stage. The total lives distributed across the sede cards (each
 // capped at its own qty, filled in id order) so a batch split keeps sane
@@ -199,8 +263,7 @@ router.patch('/api/production/kanban/batch-progress', authenticateToken, require
     }
     const cards = await loadActiveCards(req.body?.card_ids);
     if (cards.length === 0) return res.status(404).json({ error: 'Tarjetas no encontradas o inactivas' });
-    const skus = new Set(cards.map((card) => String(card.sku || '').toUpperCase()));
-    if (skus.size > 1) return res.status(400).json({ error: 'El avance se registra por lote de un solo producto' });
+    if (!cardsShareVariantGroup(cards)) return res.status(400).json({ error: 'El avance se registra por lote de un solo producto o sus variantes de color' });
     if (cards.some((card) => card.stage === 'planificacion')) {
       return res.status(400).json({ error: 'El avance se registra cuando el lote ya está en producción' });
     }

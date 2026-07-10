@@ -75,6 +75,28 @@ const normalizeProductionKanbanStage = (value = '', { allowNull = false } = {}) 
 
 const isResaleStartProcess = (value = '') => normalizeText(value).replace(/\s+/g, '_') === RESALE_START_PROCESS;
 
+// Color variants: SKUs end in a color code (T9495N / T9495R / T9495AP...).
+// Cards of the same base travel the factory as ONE part and only differ at
+// Pintado. Keep in sync with COLOR_SUFFIXES in frontend/src/productionShared.js.
+const COLOR_SUFFIXES = { AM: 'Amarillo', AP: 'Azul Petroleo', PL: 'Plomo', BL: 'Blanco', N: 'Negro', R: 'Rojo', C: 'Cromo', B: 'Blanco' };
+const VARIANT_SKU_REGEX = /^([A-Z0-9]*?\d)(AM|AP|PL|BL|N|R|C|B)$/;
+
+const parseVariantSku = (sku = '') => {
+  const match = String(sku || '').trim().toUpperCase().match(VARIANT_SKU_REGEX);
+  if (!match) return null;
+  return { base: match[1], colorCode: match[2], colorLabel: COLOR_SUFFIXES[match[2]] || match[2] };
+};
+
+// One lote may span color variants (same base part) — every batch operation
+// accepts cards that are either the same SKU or siblings of one variant base.
+const cardsShareVariantGroup = (cards = []) => {
+  const skus = [...new Set(cards.map((card) => String(card.sku || '').toUpperCase()))];
+  if (skus.length <= 1) return true;
+  const variants = skus.map((sku) => parseVariantSku(sku));
+  if (variants.some((v) => !v)) return false;
+  return new Set(variants.map((v) => v.base)).size === 1;
+};
+
 const normalizeProductionStartProcess = (value = '') => {
   const stage = normalizeProductionKanbanStage(value, { allowNull: true });
   if (stage === null) return null;
@@ -173,6 +195,9 @@ const mapProductionKanbanCardRow = (row = {}, routeStagesBySku = null) => {
     stage: safeStage,
     route: validRoute,
     source: String(row.source || 'min_stock').trim() || 'min_stock',
+    planned_date: row.planned_date
+      ? (row.planned_date instanceof Date ? row.planned_date.toISOString().slice(0, 10) : String(row.planned_date).slice(0, 10))
+      : null,
     last_moved_at: row.last_moved_at || null,
     created_at: row.created_at || null,
     updated_at: row.updated_at || null
@@ -266,6 +291,10 @@ const syncProductionKanbanFromInventory = async () => {
                WHEN NOT production_kanban_cards.is_active THEN FALSE
                ELSE production_kanban_cards.qty_frozen
              END,
+             planned_date = CASE
+               WHEN NOT production_kanban_cards.is_active THEN NULL
+               ELSE production_kanban_cards.planned_date
+             END,
              is_active = TRUE,
              updated_at = NOW()`,
         [sku, productName, locationLabel, stock, minStock, requiredQty, startProcess]
@@ -300,7 +329,7 @@ const syncProductionKanbanFromInventory = async () => {
 
   const cardsRes = await pool.query(
     `SELECT id, sku, product_name, store_location, current_stock, min_stock, required_qty,
-            processed_count, qty_frozen, start_process, stage, source, last_moved_at, created_at, updated_at
+            processed_count, qty_frozen, start_process, stage, source, planned_date, last_moved_at, created_at, updated_at
      FROM production_kanban_cards
      WHERE is_active = TRUE
        AND source = 'min_stock'
@@ -326,6 +355,8 @@ const syncProductionKanbanFromInventory = async () => {
 
 module.exports = {
   PRODUCTION_KANBAN_LOCATION_FIELDS,
+  cardsShareVariantGroup,
+  parseVariantSku,
   PRODUCTION_KANBAN_ROUTE_BY_START,
   PRODUCTION_KANBAN_STAGES,
   PRODUCTION_KANBAN_START_STAGES,

@@ -14,6 +14,8 @@ const Combos = lazy(() => import('./Combos'));
 const Cupones = lazy(() => import('./Cupones'));
 const Calendar = lazy(() => import('./Calendar'));
 const ProductionKanban = lazy(() => import('./ProductionKanban'));
+const ProductionPlanning = lazy(() => import('./ProductionPlanning'));
+const ProductionReception = lazy(() => import('./ProductionReception'));
 const ExpensesPanel = lazy(() => import('./ExpensesPanel'));
 const ProjectsPanel = lazy(() => import('./ProjectsPanel'));
 const ProfilePanel = lazy(() => import('./ProfilePanel'));
@@ -82,11 +84,25 @@ export const NAV_ITEMS = [
     render: (ctx) => <ExpensesPanel token={ctx.token} user={ctx.user} role={ctx.role} />
   },
   {
+    path: '/produccion-planificacion',
+    label: 'Planificación',
+    routeAccess: ['produccion_kanban', 'admin'],
+    navAccess: ['produccion_kanban'],
+    render: (ctx) => <ProductionPlanning token={ctx.token} />
+  },
+  {
     path: '/produccion-kanban',
     label: 'Kanban',
     routeAccess: ['produccion_kanban', 'admin'],
     navAccess: ['produccion_kanban'],
     render: (ctx) => <ProductionKanban token={ctx.token} />
+  },
+  {
+    path: '/recepcion',
+    label: 'Recepción',
+    routeAccess: ['produccion_kanban', 'inventario_global', 'inventario_individual', 'admin'],
+    navAccess: ['produccion_kanban', 'inventario_global', 'inventario_individual'],
+    render: (ctx) => <ProductionReception token={ctx.token} />
   },
   {
     path: '/proyectos',
@@ -143,8 +159,8 @@ export const NAV_ITEMS = [
 const SIDEBAR_SECTIONS = [
   { key: 'principal', label: 'Principal', paths: ['/', '/calendario'] },
   { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/history'] },
-  { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/comprar'] },
-  { key: 'produccion', label: 'Producción', paths: ['/produccion-kanban'] },
+  { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion', '/comprar'] },
+  { key: 'produccion', label: 'Producción', paths: ['/produccion-planificacion', '/produccion-kanban'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/proyectos'] },
   { key: 'marketing', label: 'Marketing', paths: ['/combos', '/cupones', '/ruleta-premios'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
