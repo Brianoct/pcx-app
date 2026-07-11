@@ -1,5 +1,5 @@
 // QuoteTool.jsx
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { apiRequest } from './apiClient';
@@ -658,21 +658,33 @@ export default function QuoteTool({ token, user }) {
     assignedSellerId
   ]);
 
-  const canSave =
-    customerName.trim() &&
-    customerPhone.trim() &&
-    almacen &&
-    rows.length > 0 &&
-    rows.every(r => r.sku && r.unitPrice > 0 && r.qty > 0) &&
-    rows.every((r) => {
+  // Mirrors every canSave condition with a human explanation, so the disabled
+  // save button can say WHY instead of just ghosting (it read as a bug).
+  const saveBlockers = useMemo(() => {
+    const blockers = [];
+    if (!customerName.trim() || !customerPhone.trim()) blockers.push('Completa el nombre y celular del cliente.');
+    if (!almacen) blockers.push('Selecciona el almacén.');
+    if (rows.length === 0) blockers.push('Agrega al menos un producto.');
+    if (rows.length > 0 && !rows.every((r) => r.sku && r.unitPrice > 0 && r.qty > 0)) {
+      blockers.push('Hay líneas sin producto, precio o cantidad.');
+    }
+    for (const r of rows) {
       const availableStock = Number(r.availableStock);
-      if (!Number.isFinite(availableStock)) return true;
-      return Number(r.qty || 0) <= availableStock;
-    }) &&
-    (!isProvincia || provincia.trim()) &&
-    (isProvincia || department) &&
-    (!useAlternativeName || (alternativeName.trim() && alternativePhone.trim())) &&
-    (!requiresSellerAssignment || assignedSellerId);
+      if (!Number.isFinite(availableStock)) continue;
+      if (Number(r.qty || 0) > availableStock) {
+        blockers.push(`Stock insuficiente para ${r.skuDisplay || r.sku}: pediste ${Number(r.qty || 0)} y hay ${availableStock} en ${almacen || 'el almacén'}.`);
+      }
+    }
+    if (isProvincia && !provincia.trim()) blockers.push('Indica la provincia de envío.');
+    if (!isProvincia && !department) blockers.push('Selecciona el departamento.');
+    if (useAlternativeName && (!alternativeName.trim() || !alternativePhone.trim())) {
+      blockers.push('Completa el nombre y celular alternativos del recibidor.');
+    }
+    if (requiresSellerAssignment && !assignedSellerId) blockers.push('Asigna el vendedor.');
+    return blockers;
+  }, [customerName, customerPhone, almacen, rows, isProvincia, provincia, department, useAlternativeName, alternativeName, alternativePhone, requiresSellerAssignment, assignedSellerId]);
+
+  const canSave = saveBlockers.length === 0;
 
   const resetQuoteForm = () => {
     setRows([]);
@@ -1605,6 +1617,15 @@ export default function QuoteTool({ token, user }) {
             >
               {isSaving ? 'Guardando...' : 'Guardar y generar PDF'}
             </button>
+
+            {!canSave && (
+              <div className="quote-save-blockers">
+                <strong>Para guardar falta:</strong>
+                <ul>
+                  {saveBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}
