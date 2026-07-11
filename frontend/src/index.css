@@ -8435,3 +8435,17 @@ img, video, canvas { max-width: 100%; }
   .plan-backlog-list .plan-chip-card { width: auto; flex: 1 1 140px; }
   .plan-cal-day { min-height: 72px; }
 }
+
+/* Cotizar: explanation under the ghosted save button (why it can't save yet). */
+.quote-save-blockers {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(225, 29, 72, 0.06);
+  border: 1px dashed rgba(225, 29, 72, 0.35);
+  font-size: 0.82rem;
+  color: #9f1239;
+}
+.quote-save-blockers strong { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.quote-save-blockers ul { margin: 6px 0 0; padding-left: 18px; }
+.quote-save-blockers li { margin-top: 2px; }
