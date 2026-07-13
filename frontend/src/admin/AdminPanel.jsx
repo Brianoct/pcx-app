@@ -4,10 +4,6 @@ import UsersRolesAdmin from './UsersRolesAdmin';
 import ProductCatalogAdmin from './ProductCatalogAdmin';
 import EquipmentCatalogAdmin from './EquipmentCatalogAdmin';
 import MaterialsCatalogAdmin from './MaterialsCatalogAdmin';
-import QualityControlCommissionConfig from './QualityControlCommissionConfig';
-import QualityControlRecordsAdmin from './QualityControlRecordsAdmin';
-import CommissionConfig from './CommissionConfig';
-import PayrollPanel from './PayrollPanel';
 import ProductStructureAdmin from './ProductStructureAdmin';
 import SalesAssistant from './SalesAssistant';
 import { apiRequest } from '../apiClient';
@@ -17,12 +13,17 @@ function AdminPanel({ token, user }) {
   const navigate = useNavigate();
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiInfo, setAiInfo] = useState(null);
-  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura', 'comisiones', 'pagos'];
+  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura'];
   const tabKeys = aiEnabled ? [...baseTabKeys, 'ventas_ia'] : baseTabKeys;
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
     return tabKeys.includes(tab) ? tab : 'usuarios';
   };
+  // Old top-level tabs that now live as sub-views inside Usuarios: deep-links
+  // keep working by opening the hub on the right sub-view.
+  const legacyUserView = { roles: 'permisos', comisiones: 'comisiones', pagos: 'pagos' }[
+    new URLSearchParams(location.search).get('tab')
+  ] || null;
   const [activeTab, setActiveTab] = useState(() => resolveTab(location.search));
 
   useEffect(() => {
@@ -41,7 +42,7 @@ function AdminPanel({ token, user }) {
       key: 'usuarios',
       label: 'Usuarios',
       icon: 'U',
-      hint: 'Equipo, roles y permisos'
+      hint: 'Equipo, permisos, comisiones y pagos'
     },
     {
       key: 'productos',
@@ -66,18 +67,6 @@ function AdminPanel({ token, user }) {
       label: 'Estructura',
       icon: 'ES',
       hint: 'Ruta, materiales y costo derivado'
-    },
-    {
-      key: 'comisiones',
-      label: 'Comisiones',
-      icon: 'C',
-      hint: 'Reglas por rol y control calidad'
-    },
-    {
-      key: 'pagos',
-      label: 'Pagos',
-      icon: '$',
-      hint: 'QR y datos de pago del equipo'
     },
     ...(aiEnabled ? [{
       key: 'ventas_ia',
@@ -150,19 +139,11 @@ function AdminPanel({ token, user }) {
       </div>
 
       <div className="admin-content-shell">
-        {activeTab === 'usuarios' && <UsersRolesAdmin token={token} />}
+        {activeTab === 'usuarios' && <UsersRolesAdmin token={token} initialView={legacyUserView} />}
         {activeTab === 'productos' && <ProductCatalogAdmin token={token} />}
         {activeTab === 'equipos' && <EquipmentCatalogAdmin token={token} />}
         {activeTab === 'materiales' && <MaterialsCatalogAdmin token={token} />}
         {activeTab === 'estructura' && <ProductStructureAdmin token={token} />}
-        {activeTab === 'comisiones' && (
-          <div style={{ display: 'grid', gap: '14px' }}>
-            <CommissionConfig token={token} />
-            <QualityControlCommissionConfig token={token} />
-            <QualityControlRecordsAdmin token={token} />
-          </div>
-        )}
-        {activeTab === 'pagos' && <PayrollPanel token={token} />}
         {activeTab === 'ventas_ia' && aiEnabled && <SalesAssistant token={token} user={user} aiInfo={aiInfo} />}
       </div>
     </div>
