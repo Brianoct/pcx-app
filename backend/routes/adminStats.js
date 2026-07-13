@@ -2,9 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { answerAdminAiQuestion } = require('../lib/aiAssistant');
-const { computeQualityControlCommissionTotal, loadCommissionSettings } = require('../lib/commission');
-const { resolveInventoryScopeByCity } = require('../lib/inventory');
-const { ROLE_KEYS, normalizeRole } = require('../lib/rbac');
+const { computeTeamCommissions } = require('../lib/commissionTeam');
 const { COMPLETED_STATUSES, REPORTING_TIMEZONE, buildDateFilter, buildReportingCreatedAtExpr } = require('../lib/reporting');
 
 const router = express.Router();
@@ -24,12 +22,6 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
 
   const dateFilter = buildDateFilter(month, year, 'q', 1);
   if (dateFilter.error) return res.status(400).json({ error: dateFilter.error });
-  // Queries below use different leading params ($1 status, $2 role, etc),
-  // so they need matching filter placeholder offsets.
-  const dateFilterWithStatus = buildDateFilter(month, year, 'q', 2);
-  if (dateFilterWithStatus.error) return res.status(400).json({ error: dateFilterWithStatus.error });
-  const dateFilterWithStatusAndRole = buildDateFilter(month, year, 'q', 3);
-  if (dateFilterWithStatusAndRole.error) return res.status(400).json({ error: dateFilterWithStatusAndRole.error });
 
   try {
     // 1. Most popular products
@@ -272,151 +264,24 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
          WHERE s.redeemed_at IS NOT NULL AND ${inPeriod('s.redeemed_at')}) AS redeemed_sales_total
     `);
 
-    const activeUsersRes = await pool.query(
-      `SELECT id, email, display_name, role, city
-       FROM users
-       WHERE is_active = TRUE
-       ORDER BY display_name NULLS LAST, email ASC`
-    );
-    const activeUsers = activeUsersRes.rows || [];
-    const commissionSettings = await loadCommissionSettings();
-    const rateVentasLider = Number(commissionSettings.ventas_lider_percent || 0) / 100;
-    const rateVentasTop = Number(commissionSettings.ventas_top_percent || 0) / 100;
-    const rateVentasRegular = Number(commissionSettings.ventas_regular_percent || 0) / 100;
-    const rateAlmacen = Number(commissionSettings.almacen_percent || 0) / 100;
-    const rateMarketingLider = Number(commissionSettings.marketing_lider_percent || 0) / 100;
-
-    const allSalesRes = await pool.query(
-      `SELECT COALESCE(SUM(q.total), 0) AS total_sales
-       FROM quotes q
-       WHERE q.status = ANY($1::text[])${dateFilterWithStatus.sql}`,
-      [COMPLETED_STATUSES, ...dateFilterWithStatus.params]
-    );
-    const allSales = Number(allSalesRes.rows[0]?.total_sales || 0);
-
-    const salesRankingRes = await pool.query(
-      `SELECT
-         u.id AS user_id,
-         COALESCE(SUM(q.total), 0) AS total_sales
-       FROM users u
-       LEFT JOIN quotes q
-         ON q.user_id = u.id
-         AND q.status = ANY($1::text[])${dateFilterWithStatus.sql}
-       WHERE LOWER(u.role) IN ('ventas', 'sales', 'vendedor')
-         AND u.is_active = TRUE
-       GROUP BY u.id
-       ORDER BY total_sales DESC, u.id ASC`,
-      [COMPLETED_STATUSES, ...dateFilterWithStatus.params]
-    );
-    const topSalesUserId = Number(salesRankingRes.rows[0]?.user_id || 0) || null;
-    const salesTotalsByUserId = new Map(
-      salesRankingRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
-    );
-
-    const ownSalesByUserRes = await pool.query(
-      `SELECT
-         q.user_id,
-         COALESCE(SUM(q.total), 0) AS total_sales
-       FROM quotes q
-       WHERE q.status = ANY($1::text[])${dateFilterWithStatus.sql}
-       GROUP BY q.user_id`,
-      [COMPLETED_STATUSES, ...dateFilterWithStatus.params]
-    );
-    const ownSalesByUserId = new Map(
-      ownSalesByUserRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
-    );
-
-    const salesRoleOnlyRes = await pool.query(
-      `SELECT COALESCE(SUM(q.total), 0) AS total_sales
-       FROM quotes q
-       JOIN users u ON u.id = q.user_id
-       WHERE q.status = ANY($1::text[])
-         AND u.is_active = TRUE
-         AND LOWER(u.role) = $2${dateFilterWithStatusAndRole.sql}`,
-      [COMPLETED_STATUSES, ROLE_KEYS.ventas, ...dateFilterWithStatusAndRole.params]
-    );
-    const salesRoleOnlyTotal = Number(salesRoleOnlyRes.rows[0]?.total_sales || 0);
-
-    const warehouseSalesByUserIdRes = await pool.query(
-      `SELECT
-         u.id AS user_id,
-         COALESCE(SUM(q.total), 0) AS total_sales
-       FROM users u
-       LEFT JOIN quotes q
-         ON q.status = $1
-         AND LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '[^a-z0-9]+', '', 'g'))
-             LIKE '%' || LOWER(REGEXP_REPLACE((CASE
-               WHEN LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%santacruz%'
-                 OR LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%santacruzde%lasierra%'
-                 OR LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%scz%'
-               THEN 'Santa Cruz'
-               WHEN LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%cochabamba%'
-                 OR LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%cbba%'
-               THEN 'Cochabamba'
-               WHEN LOWER(REGEXP_REPLACE(COALESCE(u.city, ''), '[^a-z0-9]+', '', 'g')) LIKE '%lima%'
-               THEN 'Lima'
-               ELSE COALESCE(u.city, '')
-             END), '[^a-z0-9]+', '', 'g')) || '%'
-         AND q.user_id IS NOT NULL${dateFilterWithStatusAndRole.sql}
-       WHERE u.is_active = TRUE
-         AND LOWER(u.role) = $2
-       GROUP BY u.id`,
-      ['Enviado', ROLE_KEYS.almacen, ...dateFilterWithStatusAndRole.params]
-    );
-    const warehouseSalesByUserId = new Map(
-      warehouseSalesByUserIdRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
-    );
-
-    const qcCommissionResult = await computeQualityControlCommissionTotal(month, year);
-    if (qcCommissionResult?.error) {
-      return res.status(400).json({ error: qcCommissionResult.error });
+    // Per-user commissions come from the shared team calculation — the same
+    // rules as /api/commission/current and the Pagos view (single source of truth).
+    const teamCommissions = await computeTeamCommissions(month, year);
+    if (teamCommissions?.error) {
+      return res.status(400).json({ error: teamCommissions.error });
     }
-    const qcCommissionTotal = Number(qcCommissionResult?.total || 0);
-
-    const commissionByUser = activeUsers.map((userRow) => {
-      const userId = Number(userRow.id);
-      const roleNormalized = normalizeRole(userRow.role || '');
-      const label = String(userRow.display_name || '').trim() || String(userRow.email || '').trim();
-      const cityScope = resolveInventoryScopeByCity(userRow.city || '');
-      const localStore = cityScope?.canonical || userRow.city || '';
-      let commission = 0;
-
-      const ownSales = Number(ownSalesByUserId.get(userId) || 0);
-      if (
-        roleNormalized === ROLE_KEYS.admin
-        || roleNormalized === ROLE_KEYS.almacenLider
-        || roleNormalized === ROLE_KEYS.microfabrica
-        || roleNormalized === ROLE_KEYS.microfabricaLider
-      ) {
-        commission = qcCommissionTotal;
-      } else if (roleNormalized === ROLE_KEYS.marketingLider) {
-        commission = allSales * rateMarketingLider;
-      } else if (roleNormalized === ROLE_KEYS.ventasLider) {
-        commission = (salesRoleOnlyTotal + ownSales) * rateVentasLider;
-      } else if (roleNormalized === ROLE_KEYS.ventas || roleNormalized === 'sales' || roleNormalized === 'vendedor') {
-        const salesOwnTotal = Number(salesTotalsByUserId.get(userId) || ownSales);
-        const rate = topSalesUserId === userId && ownSales > 0 ? rateVentasTop : rateVentasRegular;
-        commission = salesOwnTotal * rate;
-      } else if (roleNormalized === ROLE_KEYS.almacen) {
-        const localSales = Number(warehouseSalesByUserId.get(userId) || 0);
-        commission = localSales * rateAlmacen;
-      } else if (roleNormalized === ROLE_KEYS.marketing) {
-        commission = 0;
-      } else {
-        commission = 0;
-      }
-
-      return {
-        id: userId,
-        email: String(userRow.email || '').trim(),
-        display_name: String(userRow.display_name || '').trim(),
-        user_id: userId,
-        user_label: label || 'Usuario',
-        role: String(userRow.role || '').trim() || 'Sin rol',
-        city: String(userRow.city || '').trim() || '',
-        commission: Number(commission || 0)
-      };
-    });
+    const commissionByUser = (teamCommissions.users || []).map((row) => ({
+      id: row.user_id,
+      email: row.email,
+      display_name: row.display_name,
+      user_id: row.user_id,
+      user_label: row.display_name || row.email || 'Usuario',
+      role: row.role,
+      city: row.city,
+      commission: Number(row.commission || 0),
+      source: row.source || '',
+      is_top_seller: Boolean(row.is_top_seller)
+    }));
     const totalCommissionToDate = commissionByUser.reduce((sum, row) => sum + Number(row.commission || 0), 0);
 
     res.json({

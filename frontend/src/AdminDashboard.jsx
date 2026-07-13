@@ -129,22 +129,42 @@ const normalizeText = (value = '') => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '');
 
+// Strategic default: pulse of the business first (resumen, tendencia diaria,
+// dinero por pagar), then sales health, then people/product detail, then
+// production, logistics and marketing.
 const DASHBOARD_CARD_ORDER = [
   'summary',
+  'dailySales',
+  'commissions',
   'funnel',
+  'salespeople',
+  'products',
   'customers',
   'productionQuality',
-  'ruleta',
-  'products',
-  'salespeople',
+  'warehouses',
   'locations',
   'map',
-  'dailySales',
-  'warehouses',
-  'commissions'
+  'ruleta'
 ];
 
-const DASHBOARD_CARD_STORAGE_KEY = 'pcx-dashboard-card-order-v1';
+// Accent per business domain: consistent color language across tiles.
+const DASHBOARD_CARD_ACCENTS = {
+  summary: 'accent-ventas',
+  dailySales: 'accent-ventas',
+  funnel: 'accent-ventas',
+  salespeople: 'accent-ventas',
+  products: 'accent-producto',
+  customers: 'accent-clientes',
+  productionQuality: 'accent-produccion',
+  warehouses: 'accent-almacen',
+  locations: 'accent-geo',
+  map: 'accent-geo',
+  commissions: 'accent-equipo',
+  ruleta: 'accent-marketing'
+};
+
+// v2: reset saved orders so the new strategic default applies to everyone.
+const DASHBOARD_CARD_STORAGE_KEY = 'pcx-dashboard-card-order-v2';
 
 const normalizeDashboardCardOrder = (candidateOrder) => {
   if (!Array.isArray(candidateOrder)) {
@@ -834,8 +854,8 @@ function AdminDashboard({ token }) {
               return (
                 <div key={row.rowKey} className="dashboard-commission-row">
                   <div>
-                    <strong>{displayName}</strong>
-                    <span>{row.role || 'Sin rol'}</span>
+                    <strong>{displayName}{row.is_top_seller ? ' ★' : ''}</strong>
+                    <span>{row.role || 'Sin rol'}{row.source ? ` · ${row.source}` : ''}</span>
                   </div>
                   <div>{formatBs(row.commission)}</div>
                 </div>
@@ -889,10 +909,10 @@ function AdminDashboard({ token }) {
             onDragOver: handleCardDragOver(cardId),
             onDrop: handleCardDrop(cardId),
             onDragEnd: handleCardDragEnd,
-            className: `${cardElement.props.className || ''} dashboard-draggable-card${isDragging ? ' is-dragging' : ''}${isDropTarget ? ' is-drop-target' : ''}`,
+            className: `${cardElement.props.className || ''} dashboard-draggable-card ${DASHBOARD_CARD_ACCENTS[cardId] || ''}${isDragging ? ' is-dragging' : ''}${isDropTarget ? ' is-drop-target' : ''}`,
             children: (
               <>
-                <span className="dashboard-card-drag-handle" aria-hidden="true">⋮⋮</span>
+                <span className="dashboard-card-drag-handle" title="Arrastra para mover esta tarjeta" aria-hidden="true">⠿</span>
                 {cardElement.props.children}
               </>
             )

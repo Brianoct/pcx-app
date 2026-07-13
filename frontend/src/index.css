@@ -8602,3 +8602,83 @@ img, video, canvas { max-width: 100%; }
   color: var(--text-muted);
 }
 .mejoras-records { margin-top: 4px; }
+
+/* ── Estadísticas: sistema de tiles uniforme con acentos por área ─────────── */
+/* Overrides late in the file so they win over the legacy dashboard styles. */
+
+.dashboard-grid {
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+}
+
+.dashboard-card {
+  --tile-accent: #a8a29e;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--tile-accent);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+  gap: 12px;
+}
+
+.dashboard-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  padding-right: 40px;
+}
+
+.dashboard-card h3::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tile-accent);
+  flex-shrink: 0;
+}
+
+/* Accents by business domain */
+.dashboard-card.accent-ventas { --tile-accent: #e11d48; }
+.dashboard-card.accent-producto { --tile-accent: #d97706; }
+.dashboard-card.accent-produccion { --tile-accent: #f59e0b; }
+.dashboard-card.accent-clientes { --tile-accent: #2563eb; }
+.dashboard-card.accent-almacen { --tile-accent: #0891b2; }
+.dashboard-card.accent-geo { --tile-accent: #0d9488; }
+.dashboard-card.accent-equipo { --tile-accent: #16a34a; }
+.dashboard-card.accent-marketing { --tile-accent: #8b5cf6; }
+
+/* Bar fills follow the tile's accent so each tile reads as one unit. */
+.dashboard-card .dashboard-bar-fill { background: var(--tile-accent); opacity: 0.85; border-radius: 999px; }
+.dashboard-card .dashboard-funnel-bar { background: var(--tile-accent); }
+
+/* Drag affordance: a visible pill in the corner, grab cursor on it only. */
+.dashboard-card-drag-handle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: grab;
+  user-select: none;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+.dashboard-card-drag-handle:hover { border-color: var(--tile-accent); color: var(--tile-accent); }
+.dashboard-draggable-card.is-dragging { opacity: 0.45; cursor: grabbing; }
+.dashboard-draggable-card.is-drop-target {
+  outline: 2px dashed var(--tile-accent);
+  outline-offset: 3px;
+}
+
+/* Commission rows: show the rule under the role without breaking the layout */
+.dashboard-commission-row > div:first-child span { display: block; font-size: 0.72rem; color: var(--text-muted); }
