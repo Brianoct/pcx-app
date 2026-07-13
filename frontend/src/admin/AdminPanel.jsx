@@ -1,16 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import UserManagement from './UserManagement';
+import UsersRolesAdmin from './UsersRolesAdmin';
 import ProductCatalogAdmin from './ProductCatalogAdmin';
 import EquipmentCatalogAdmin from './EquipmentCatalogAdmin';
 import MaterialsCatalogAdmin from './MaterialsCatalogAdmin';
-import TimeOffAdminPanel from './TimeOffAdminPanel';
 import QualityControlCommissionConfig from './QualityControlCommissionConfig';
 import QualityControlRecordsAdmin from './QualityControlRecordsAdmin';
 import CommissionConfig from './CommissionConfig';
 import PayrollPanel from './PayrollPanel';
-import RoleConfiguration from './RoleConfiguration';
-import ProductCostingAdmin from './ProductCostingAdmin';
 import ProductStructureAdmin from './ProductStructureAdmin';
 import SalesAssistant from './SalesAssistant';
 import { apiRequest } from '../apiClient';
@@ -20,7 +17,7 @@ function AdminPanel({ token, user }) {
   const navigate = useNavigate();
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiInfo, setAiInfo] = useState(null);
-  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura', 'costeo', 'roles', 'comisiones', 'pagos', 'calendario'];
+  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura', 'comisiones', 'pagos'];
   const tabKeys = aiEnabled ? [...baseTabKeys, 'ventas_ia'] : baseTabKeys;
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
@@ -44,13 +41,7 @@ function AdminPanel({ token, user }) {
       key: 'usuarios',
       label: 'Usuarios',
       icon: 'U',
-      hint: 'Altas, edición y estado del equipo'
-    },
-    {
-      key: 'roles',
-      label: 'Roles',
-      icon: 'R',
-      hint: 'Permisos por panel y perfil'
+      hint: 'Equipo, roles y permisos'
     },
     {
       key: 'productos',
@@ -77,12 +68,6 @@ function AdminPanel({ token, user }) {
       hint: 'Ruta, materiales y costo derivado'
     },
     {
-      key: 'costeo',
-      label: 'Costeo',
-      icon: '$',
-      hint: 'Costo por insumo y utilidad'
-    },
-    {
       key: 'comisiones',
       label: 'Comisiones',
       icon: 'C',
@@ -93,12 +78,6 @@ function AdminPanel({ token, user }) {
       label: 'Pagos',
       icon: '$',
       hint: 'QR y datos de pago del equipo'
-    },
-    {
-      key: 'calendario',
-      label: 'Calendario',
-      icon: 'K',
-      hint: 'Permisos y ausencias del equipo'
     },
     ...(aiEnabled ? [{
       key: 'ventas_ia',
@@ -171,13 +150,11 @@ function AdminPanel({ token, user }) {
       </div>
 
       <div className="admin-content-shell">
-        {activeTab === 'usuarios' && <UserManagement token={token} />}
+        {activeTab === 'usuarios' && <UsersRolesAdmin token={token} />}
         {activeTab === 'productos' && <ProductCatalogAdmin token={token} />}
         {activeTab === 'equipos' && <EquipmentCatalogAdmin token={token} />}
         {activeTab === 'materiales' && <MaterialsCatalogAdmin token={token} />}
         {activeTab === 'estructura' && <ProductStructureAdmin token={token} />}
-        {activeTab === 'costeo' && <ProductCostingAdmin token={token} />}
-        {activeTab === 'roles' && <RoleConfiguration token={token} />}
         {activeTab === 'comisiones' && (
           <div style={{ display: 'grid', gap: '14px' }}>
             <CommissionConfig token={token} />
@@ -186,7 +163,6 @@ function AdminPanel({ token, user }) {
           </div>
         )}
         {activeTab === 'pagos' && <PayrollPanel token={token} />}
-        {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}
         {activeTab === 'ventas_ia' && aiEnabled && <SalesAssistant token={token} user={user} aiInfo={aiInfo} />}
       </div>
     </div>

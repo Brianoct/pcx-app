@@ -271,7 +271,8 @@ export function canAccessPanel(accessOrRole, maybeAccessOrKey, maybeKey) {
 export const ACCESS_LABELS = [
   { key: 'cotizar', label: 'Cotizar' },
   { key: 'calendario', label: 'Calendario' },
-  { key: 'proyectos_panel', label: 'Panel Proyectos' },
+  // proyectos_panel se mantiene como clave interna por compatibilidad con el
+  // backend, pero ya no se ofrece como permiso: la página Proyectos se retiró.
   { key: 'historial_individual', label: 'Historial individual' },
   { key: 'historial_global', label: 'Historial global' },
   { key: 'rendimiento_individual', label: 'Rendimiento individual' },

@@ -8449,3 +8449,43 @@ img, video, canvas { max-width: 100%; }
 .quote-save-blockers strong { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
 .quote-save-blockers ul { margin: 6px 0 0; padding-left: 18px; }
 .quote-save-blockers li { margin-top: 2px; }
+
+/* ── Admin: sub-pestañas dentro de Usuarios (Equipo / Permisos por rol) ────── */
+.admin-subtabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.admin-subtab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  transition: border-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+}
+.admin-subtab small { font-weight: 600; font-size: 0.68rem; color: var(--text-muted); }
+.admin-subtab.is-active { border-color: #e11d48; color: var(--text-primary); box-shadow: inset 0 0 0 1px #e11d48; }
+.admin-subtab:not(.is-active):hover { border-color: #d6d3d1; }
+
+.admin-subtab-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+  padding: 9px 14px;
+  margin: 0 0 14px;
+}
+.admin-subtab-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: #e11d48;
+  font-weight: 700;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
