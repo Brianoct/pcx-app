@@ -78,8 +78,7 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
   const isAlmacen = userRoleNormalized === ROLE_KEYS.almacen;
   const isAlmacenLider = userRoleNormalized === ROLE_KEYS.almacenLider;
   const isMarketing = userRoleNormalized === ROLE_KEYS.marketing;
-  const isMicrofabricaLider = userRoleNormalized === ROLE_KEYS.microfabricaLider;
-  const isMicrofabrica = userRoleNormalized === ROLE_KEYS.microfabrica;
+  const isProduccion = userRoleNormalized === ROLE_KEYS.produccion;
 
   const allSalesDateFilter = buildDateFilter(month, year, 'q', 2);
   if (allSalesDateFilter.error) return res.status(400).json({ error: allSalesDateFilter.error });
@@ -97,8 +96,7 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
     const rateVentasRegular = Number(commissionSettings.ventas_regular_percent || 0) / 100;
     const rateAlmacen = Number(commissionSettings.almacen_percent || 0) / 100;
     const rateMarketingLider = Number(commissionSettings.marketing_lider_percent || 0) / 100;
-    const rateMicrofabrica = Number(commissionSettings.microfabrica_percent || 0) / 100;
-    const rateMicrofabricaLider = Number(commissionSettings.microfabrica_lider_percent || 0) / 100;
+    const rateProduccion = Number(commissionSettings.produccion_percent || 0) / 100;
     const rateAlmacenLider = Number(commissionSettings.almacen_lider_percent || 0) / 100;
     const rateAdmin = Number(commissionSettings.admin_percent || 0) / 100;
 
@@ -247,11 +245,8 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
       });
     }
 
-    if (isMicrofabricaLider) {
-      return percentOfAllSales(rateMicrofabricaLider, Number(commissionSettings.microfabrica_lider_percent || 0));
-    }
-    if (isMicrofabrica) {
-      return percentOfAllSales(rateMicrofabrica, Number(commissionSettings.microfabrica_percent || 0));
+    if (isProduccion) {
+      return percentOfAllSales(rateProduccion, Number(commissionSettings.produccion_percent || 0));
     }
 
     // Non-sales roles without explicit commission rule.

@@ -11,8 +11,7 @@ const COMMISSION_SETTINGS_DEFAULT = {
   marketing_lider_percent: 5,
   // Production/leadership roles earn a % of total sales (replaced the old
   // per-piece quality-control commission). 0 until the admin sets them.
-  microfabrica_percent: 0,
-  microfabrica_lider_percent: 0,
+  produccion_percent: 0,
   almacen_lider_percent: 0,
   admin_percent: 0
 };
@@ -27,8 +26,8 @@ const sanitizeCommissionSettings = (raw = {}) => {
     ventas_regular_percent: clampPercent(src.ventas_regular_percent, COMMISSION_SETTINGS_DEFAULT.ventas_regular_percent),
     almacen_percent: clampPercent(src.almacen_percent, COMMISSION_SETTINGS_DEFAULT.almacen_percent),
     marketing_lider_percent: clampPercent(src.marketing_lider_percent, COMMISSION_SETTINGS_DEFAULT.marketing_lider_percent),
-    microfabrica_percent: clampPercent(src.microfabrica_percent, COMMISSION_SETTINGS_DEFAULT.microfabrica_percent),
-    microfabrica_lider_percent: clampPercent(src.microfabrica_lider_percent, COMMISSION_SETTINGS_DEFAULT.microfabrica_lider_percent),
+    // Falls back to the short-lived microfabrica keys so a configured value survives the rename.
+    produccion_percent: clampPercent(src.produccion_percent ?? src.microfabrica_lider_percent ?? src.microfabrica_percent, COMMISSION_SETTINGS_DEFAULT.produccion_percent),
     almacen_lider_percent: clampPercent(src.almacen_lider_percent, COMMISSION_SETTINGS_DEFAULT.almacen_lider_percent),
     admin_percent: clampPercent(src.admin_percent, COMMISSION_SETTINGS_DEFAULT.admin_percent)
   };

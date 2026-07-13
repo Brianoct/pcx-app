@@ -16,8 +16,7 @@ const EXPENSE_DEPARTMENT_BY_ROLE = {
   [ROLE_KEYS.marketingLider]: 'Marketing',
   desarrollo: 'Desarrollo',
   'desarrollo lider': 'Desarrollo',
-  [ROLE_KEYS.microfabrica]: 'Microfábrica',
-  [ROLE_KEYS.microfabricaLider]: 'Microfábrica'
+  [ROLE_KEYS.produccion]: 'Producción'
 };
 
 const resolveDepartmentFromRole = (roleValue = '') => {

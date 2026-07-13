@@ -33,8 +33,9 @@ const WORK_AREA_BY_ROLE = {
   'almacen lider': 'Almacén',
   marketing: 'Marketing',
   'marketing lider': 'Marketing',
-  microfabrica: 'Microfábrica',
-  'microfabrica lider': 'Microfábrica',
+  microfabrica: 'Producción',
+  'microfabrica lider': 'Producción',
+  produccion: 'Producción',
   admin: 'Administración'
 };
 
@@ -122,7 +123,7 @@ function ExpensesPanel({ token, user, role }) {
       'Ventas',
       'Almacén',
       'Marketing',
-      'Microfábrica',
+      'Producción',
       'Desarrollo',
       'Administración',
       ...rows.map((row) => row.department).filter(Boolean)

@@ -44,7 +44,7 @@ function UsersRolesAdmin({ token, initialView }) {
       {view === 'equipo' && (
         <>
           <p className="admin-subtab-hint">
-            ¿Quieres cambiar qué paneles ve todo un rol (Ventas, Almacén, Microfábrica…)?
+            ¿Quieres cambiar qué paneles ve todo un rol (Ventas, Almacén, Producción…)?
             Hazlo una sola vez en {link('permisos', 'Permisos por rol')} en lugar de usuario
             por usuario. Cuánto gana cada rol se define en {link('comisiones', 'Comisiones')} y
             sus datos para pagarle están en {link('pagos', 'Pagos')}.
