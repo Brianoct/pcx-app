@@ -2,6 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
 const { computeQualityControlCommissionTotal, loadCommissionSettings } = require('../lib/commission');
+const { computeTeamCommissions } = require('../lib/commissionTeam');
 const { resolveInventoryScopeByCity } = require('../lib/inventory');
 const { ROLE_KEYS, normalizeRole, sanitizePanelAccess } = require('../lib/rbac');
 const { COMPLETED_STATUSES, buildDateFilter } = require('../lib/reporting');
@@ -284,6 +285,23 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Commission endpoint error:', err.stack);
     res.status(500).json({ error: 'Error interno al calcular comisión: ' + err.message });
+  }
+});
+
+// ─── Team commissions for the payroll view (admin) ──────────────────────────
+// One row per active user with their commission for the period, computed with
+// the same per-role rules as /api/commission/current.
+router.get('/api/admin/team-commissions', authenticateToken, async (req, res) => {
+  if (normalizeRole(req.user.role || '') !== ROLE_KEYS.admin) {
+    return res.status(403).json({ error: 'Solo administradores' });
+  }
+  try {
+    const result = await computeTeamCommissions(req.query.month, req.query.year);
+    if (result?.error) return res.status(400).json({ error: result.error });
+    res.json(result);
+  } catch (err) {
+    console.error('Team commissions endpoint error:', err.stack);
+    res.status(500).json({ error: 'No se pudieron calcular las comisiones del equipo' });
   }
 });
 
