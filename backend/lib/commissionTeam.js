@@ -128,6 +128,10 @@ const computeTeamCommissions = async (month, year) => {
 
     return {
       user_id: Number(u.id),
+      email: String(u.email || '').trim(),
+      display_name: String(u.display_name || '').trim(),
+      role: String(u.role || '').trim() || 'Sin rol',
+      city: String(u.city || '').trim(),
       commission: Math.round(commission * 100) / 100,
       is_top_seller: topSellerId === Number(u.id),
       source
