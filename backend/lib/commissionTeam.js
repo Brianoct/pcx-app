@@ -1,5 +1,5 @@
 const { pool } = require('../db');
-const { computeQualityControlCommissionTotal, loadCommissionSettings } = require('./commission');
+const { loadCommissionSettings } = require('./commission');
 const { resolveInventoryScopeByCity } = require('./inventory');
 const { ROLE_KEYS, normalizeRole } = require('./rbac');
 const { COMPLETED_STATUSES, buildDateFilter } = require('./reporting');
@@ -17,10 +17,10 @@ const computeTeamCommissions = async (month, year) => {
   const rateVentasRegular = Number(settings.ventas_regular_percent || 0) / 100;
   const rateAlmacen = Number(settings.almacen_percent || 0) / 100;
   const rateMarketingLider = Number(settings.marketing_lider_percent || 0) / 100;
-
-  const qcResult = await computeQualityControlCommissionTotal(month, year);
-  if (qcResult?.error) return { error: qcResult.error };
-  const qcTotal = Number(qcResult?.total || 0);
+  const rateMicrofabrica = Number(settings.microfabrica_percent || 0) / 100;
+  const rateMicrofabricaLider = Number(settings.microfabrica_lider_percent || 0) / 100;
+  const rateAlmacenLider = Number(settings.almacen_lider_percent || 0) / 100;
+  const rateAdmin = Number(settings.admin_percent || 0) / 100;
 
   const usersRes = await pool.query(
     `SELECT id, email, display_name, role, city
@@ -93,8 +93,8 @@ const computeTeamCommissions = async (month, year) => {
     let source = 'Rol sin comisión configurada';
 
     if (role === ROLE_KEYS.admin) {
-      commission = qcTotal;
-      source = 'Piezas aprobadas de control de calidad';
+      commission = allSales * rateAdmin;
+      source = `${Number(settings.admin_percent || 0)}% del total de ventas`;
     } else if (role === ROLE_KEYS.marketingLider) {
       commission = allSales * rateMarketingLider;
       source = `${Number(settings.marketing_lider_percent || 0)}% de todas las ventas`;
@@ -113,14 +113,17 @@ const computeTeamCommissions = async (month, year) => {
       commission = (almacenCities.get(label) || 0) * rateAlmacen;
       source = `${Number(settings.almacen_percent || 0)}% pedidos enviados de ${label || 'su almacén'}`;
     } else if (role === ROLE_KEYS.almacenLider) {
-      commission = qcTotal;
-      source = 'Piezas aprobadas de control de calidad';
+      commission = allSales * rateAlmacenLider;
+      source = `${Number(settings.almacen_lider_percent || 0)}% del total de ventas`;
     } else if (role === ROLE_KEYS.marketing) {
       commission = 0;
       source = 'Compensación por contrato';
-    } else if (role === ROLE_KEYS.microfabricaLider || role === ROLE_KEYS.microfabrica) {
-      commission = qcTotal;
-      source = 'Piezas aprobadas de control de calidad';
+    } else if (role === ROLE_KEYS.microfabricaLider) {
+      commission = allSales * rateMicrofabricaLider;
+      source = `${Number(settings.microfabrica_lider_percent || 0)}% del total de ventas`;
+    } else if (role === ROLE_KEYS.microfabrica) {
+      commission = allSales * rateMicrofabrica;
+      source = `${Number(settings.microfabrica_percent || 0)}% del total de ventas`;
     }
 
     return {
@@ -131,7 +134,7 @@ const computeTeamCommissions = async (month, year) => {
     };
   });
 
-  return { users: results, qc_total: qcTotal };
+  return { users: results, all_sales: Math.round(allSales * 100) / 100 };
 };
 
 module.exports = { computeTeamCommissions };

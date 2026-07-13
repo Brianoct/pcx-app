@@ -8552,3 +8552,53 @@ img, video, canvas { max-width: 100%; }
 .payroll-top-badge { margin-left: 6px; color: #f59e0b; }
 .payroll-zoom-amount { font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 8px; }
 .payroll-zoom-amount strong { color: #15803d; }
+
+/* ── Mejoras: bono mensual por estándares ─────────────────────────────────── */
+.mejoras-quality {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 18px;
+  margin-bottom: 14px;
+}
+.mejoras-quality-stat { display: flex; flex-direction: column; }
+.mejoras-quality-value { font-size: 2rem; font-weight: 900; color: #b45309; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.mejoras-quality-label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.mejoras-quality-detail { font-size: 0.84rem; color: var(--text-secondary); }
+
+.mejoras-areas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.mejoras-area {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: 3px solid #16a34a;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mejoras-area.is-pending { border-left-color: #d6d3d1; opacity: 0.85; }
+.mejoras-area-name { font-size: 1rem; font-weight: 800; }
+.mejoras-area-criterio { font-size: 0.8rem; font-weight: 700; color: #15803d; }
+.mejoras-area-criterio.is-pending { color: var(--text-muted); }
+.mejoras-area-detalle { font-size: 0.78rem; color: var(--text-secondary); }
+.mejoras-area-status {
+  margin-top: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.mejoras-records { margin-top: 4px; }

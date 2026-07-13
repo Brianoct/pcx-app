@@ -2,8 +2,6 @@ import { useState } from 'react';
 import UserManagement from './UserManagement';
 import RoleConfiguration from './RoleConfiguration';
 import CommissionConfig from './CommissionConfig';
-import QualityControlCommissionConfig from './QualityControlCommissionConfig';
-import QualityControlRecordsAdmin from './QualityControlRecordsAdmin';
 import PayrollPanel from './PayrollPanel';
 
 // Everything about people lives in one hub: the team itself, what each role
@@ -69,15 +67,12 @@ function UsersRolesAdmin({ token, initialView }) {
       {view === 'comisiones' && (
         <>
           <p className="admin-subtab-hint">
-            Reglas de comisión por rol y tarifas por pieza aprobada en control de calidad.
-            Cada persona ve su acumulado del mes en la cajita del nav. Al cierre de mes,
-            paga usando los datos de {link('pagos', 'Pagos')}.
+            Todos los porcentajes se aplican sobre ventas del mes. Cada persona ve su
+            acumulado en la cajita del nav. Al cierre de mes, paga usando los datos
+            de {link('pagos', 'Pagos')}. Los registros de control de calidad ahora viven
+            en la sección <strong>Mejoras</strong>.
           </p>
-          <div style={{ display: 'grid', gap: '14px' }}>
-            <CommissionConfig token={token} />
-            <QualityControlCommissionConfig token={token} />
-            <QualityControlRecordsAdmin token={token} />
-          </div>
+          <CommissionConfig token={token} />
         </>
       )}
 

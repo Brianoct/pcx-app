@@ -8,7 +8,11 @@ function CommissionConfig({ token }) {
     ventas_top_percent: 12,
     ventas_regular_percent: 8,
     almacen_percent: 5,
-    marketing_lider_percent: 5
+    marketing_lider_percent: 5,
+    microfabrica_percent: 0,
+    microfabrica_lider_percent: 0,
+    almacen_lider_percent: 0,
+    admin_percent: 0
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -25,7 +29,11 @@ function CommissionConfig({ token }) {
           ventas_top_percent: Number(data.ventas_top_percent ?? 12),
           ventas_regular_percent: Number(data.ventas_regular_percent ?? 8),
           almacen_percent: Number(data.almacen_percent ?? 5),
-          marketing_lider_percent: Number(data.marketing_lider_percent ?? 5)
+          marketing_lider_percent: Number(data.marketing_lider_percent ?? 5),
+          microfabrica_percent: Number(data.microfabrica_percent ?? 0),
+          microfabrica_lider_percent: Number(data.microfabrica_lider_percent ?? 0),
+          almacen_lider_percent: Number(data.almacen_lider_percent ?? 0),
+          admin_percent: Number(data.admin_percent ?? 0)
         });
       } catch (err) {
         setMessage(`Error: ${err.message}`);
@@ -69,7 +77,11 @@ function CommissionConfig({ token }) {
           ventas_top_percent: Number(data.settings?.ventas_top_percent ?? settings.ventas_top_percent),
           ventas_regular_percent: Number(data.settings?.ventas_regular_percent ?? settings.ventas_regular_percent),
           almacen_percent: Number(data.settings?.almacen_percent ?? settings.almacen_percent),
-          marketing_lider_percent: Number(data.settings?.marketing_lider_percent ?? settings.marketing_lider_percent)
+          marketing_lider_percent: Number(data.settings?.marketing_lider_percent ?? settings.marketing_lider_percent),
+          microfabrica_percent: Number(data.settings?.microfabrica_percent ?? settings.microfabrica_percent),
+          microfabrica_lider_percent: Number(data.settings?.microfabrica_lider_percent ?? settings.microfabrica_lider_percent),
+          almacen_lider_percent: Number(data.settings?.almacen_lider_percent ?? settings.almacen_lider_percent),
+          admin_percent: Number(data.settings?.admin_percent ?? settings.admin_percent)
         });
         setMessage('Configuración de comisiones guardada.');
       }
@@ -85,11 +97,15 @@ function CommissionConfig({ token }) {
   }
 
   const rows = [
-    { key: 'ventas_lider_percent', label: 'Ventas Lider (% sobre ventas de equipo + propias)' },
+    { key: 'ventas_lider_percent', label: 'Ventas Líder (% sobre ventas de equipo + propias)' },
     { key: 'ventas_top_percent', label: 'Ventas top (% sobre ventas propias)' },
     { key: 'ventas_regular_percent', label: 'Asesor de ventas (% sobre ventas propias)' },
-    { key: 'almacen_percent', label: 'Almacen (% sobre ventas del almacén local)' },
-    { key: 'marketing_lider_percent', label: 'Marketing Lider (% sobre total de ventas)' }
+    { key: 'almacen_percent', label: 'Almacén (% sobre ventas del almacén local)' },
+    { key: 'marketing_lider_percent', label: 'Marketing Líder (% sobre total de ventas)' },
+    { key: 'almacen_lider_percent', label: 'Almacén Líder (% sobre total de ventas)' },
+    { key: 'microfabrica_lider_percent', label: 'Microfábrica Líder (% sobre total de ventas)' },
+    { key: 'microfabrica_percent', label: 'Microfábrica (% sobre total de ventas)' },
+    { key: 'admin_percent', label: 'Admin (% sobre total de ventas)' }
   ];
 
   return (
