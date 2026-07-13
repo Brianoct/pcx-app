@@ -12,8 +12,6 @@ import PayrollPanel from './PayrollPanel';
 import RoleConfiguration from './RoleConfiguration';
 import ProductCostingAdmin from './ProductCostingAdmin';
 import ProductStructureAdmin from './ProductStructureAdmin';
-import WhatsAppInboxAdmin from './WhatsAppInboxAdmin';
-import AiAssistant from './AiAssistant';
 import SalesAssistant from './SalesAssistant';
 import { apiRequest } from '../apiClient';
 
@@ -22,8 +20,8 @@ function AdminPanel({ token, user }) {
   const navigate = useNavigate();
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiInfo, setAiInfo] = useState(null);
-  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura', 'costeo', 'whatsapp_inbox', 'roles', 'comisiones', 'pagos', 'calendario'];
-  const tabKeys = aiEnabled ? [...baseTabKeys, 'asistente_ia', 'ventas_ia'] : baseTabKeys;
+  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura', 'costeo', 'roles', 'comisiones', 'pagos', 'calendario'];
+  const tabKeys = aiEnabled ? [...baseTabKeys, 'ventas_ia'] : baseTabKeys;
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
     return tabKeys.includes(tab) ? tab : 'usuarios';
@@ -85,12 +83,6 @@ function AdminPanel({ token, user }) {
       hint: 'Costo por insumo y utilidad'
     },
     {
-      key: 'whatsapp_inbox',
-      label: 'WhatsApp Inbox',
-      icon: 'WA',
-      hint: 'Inbox estilo Wati con asignación'
-    },
-    {
       key: 'comisiones',
       label: 'Comisiones',
       icon: 'C',
@@ -109,11 +101,6 @@ function AdminPanel({ token, user }) {
       hint: 'Permisos y ausencias del equipo'
     },
     ...(aiEnabled ? [{
-      key: 'asistente_ia',
-      label: 'Asistente IA',
-      icon: 'IA',
-      hint: 'Pregunta sobre el negocio (beta privada)'
-    }, {
       key: 'ventas_ia',
       label: 'Ventas IA',
       icon: 'VA',
@@ -190,7 +177,6 @@ function AdminPanel({ token, user }) {
         {activeTab === 'materiales' && <MaterialsCatalogAdmin token={token} />}
         {activeTab === 'estructura' && <ProductStructureAdmin token={token} />}
         {activeTab === 'costeo' && <ProductCostingAdmin token={token} />}
-        {activeTab === 'whatsapp_inbox' && <WhatsAppInboxAdmin token={token} />}
         {activeTab === 'roles' && <RoleConfiguration token={token} />}
         {activeTab === 'comisiones' && (
           <div style={{ display: 'grid', gap: '14px' }}>
@@ -201,7 +187,6 @@ function AdminPanel({ token, user }) {
         )}
         {activeTab === 'pagos' && <PayrollPanel token={token} />}
         {activeTab === 'calendario' && <TimeOffAdminPanel token={token} />}
-        {activeTab === 'asistente_ia' && aiEnabled && <AiAssistant token={token} aiInfo={aiInfo} />}
         {activeTab === 'ventas_ia' && aiEnabled && <SalesAssistant token={token} user={user} aiInfo={aiInfo} />}
       </div>
     </div>
