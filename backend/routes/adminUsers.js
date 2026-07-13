@@ -157,6 +157,28 @@ router.patch('/api/users/:id', authenticateToken, requireRole(['admin']), async 
   }
 });
 
+// Admin password reset: sets a temporary password for a user who got locked
+// out. The user then changes it themselves in Perfil (/api/me/password). No
+// email service needed — the admin shares the temporary password directly.
+router.post('/api/users/:id/password', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const newPassword = String(req.body?.new_password || '');
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: 'La contraseña temporal debe tener al menos 6 caracteres' });
+  }
+  try {
+    const hashedPass = await bcrypt.hash(newPassword, 10);
+    const result = await pool.query(
+      'UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING email',
+      [hashedPass, req.params.id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Usuario no encontrado' });
+    res.json({ message: 'Contraseña restablecida', email: result.rows[0].email });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo restablecer la contraseña' });
+  }
+});
+
 // ─── ROLE ACCESS DEFAULTS (admin only) ──────────────────────────────────────
 router.get('/api/roles/access-defaults', authenticateToken, requireRole(['admin']), async (_req, res) => {
   try {

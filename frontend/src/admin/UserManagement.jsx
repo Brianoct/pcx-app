@@ -30,6 +30,36 @@ function UserManagement({ token }) {
     panel_access: buildAccessForUser('Ventas')
   });
   const [editModal, setEditModal] = useState(null); // { userId, email, role, city, phone, panel_access }
+  const [pwReset, setPwReset] = useState({ value: '', busy: false, done: '' });
+
+  // Clear the password-reset box whenever a different user's modal opens/closes.
+  useEffect(() => {
+    setPwReset({ value: '', busy: false, done: '' });
+  }, [editModal?.userId]);
+
+  // Readable temp password that's easy to dictate over WhatsApp (e.g. "Pcx48213").
+  const generateTempPassword = () => `Pcx${Math.floor(10000 + Math.random() * 90000)}`;
+
+  const handleResetPassword = async () => {
+    const value = String(pwReset.value || '').trim();
+    if (value.length < 6) {
+      toast.error('La contraseña temporal debe tener al menos 6 caracteres.');
+      return;
+    }
+    setPwReset((prev) => ({ ...prev, busy: true }));
+    try {
+      await apiRequest(`/api/users/${editModal.userId}/password`, {
+        method: 'POST',
+        token,
+        body: { new_password: value }
+      });
+      setPwReset({ value: '', busy: false, done: value });
+      toast.success('Contraseña temporal fijada.');
+    } catch (err) {
+      setPwReset((prev) => ({ ...prev, busy: false }));
+      toast.error(err.message || 'No se pudo restablecer la contraseña.');
+    }
+  };
 
   const refreshUsers = async () => {
     const data = await apiRequest('/api/users', { token });
@@ -611,6 +641,52 @@ function UserManagement({ token }) {
                     onChange={(e) => setEditModal({ ...editModal, city: e.target.value })}
                     className="form-input"
                   />
+                </div>
+                <div>
+                  <div style={{ border: '1px solid #fde68a', borderRadius: '10px', padding: '12px', background: '#fffbeb' }}>
+                    <div style={{ fontWeight: 700, color: '#92400e', marginBottom: '4px' }}>Restablecer contraseña</div>
+                    <div style={{ color: '#78716c', fontSize: '0.88rem', marginBottom: '10px' }}>
+                      Asigna una contraseña temporal y compártela con <strong>{editModal.email}</strong>. Al ingresar,
+                      pídele que la cambie en <strong>Perfil</strong>.
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={pwReset.value}
+                        onChange={(e) => setPwReset((prev) => ({ ...prev, value: e.target.value, done: '' }))}
+                        placeholder="Contraseña temporal (mín. 6)"
+                        className="form-input"
+                        style={{ flex: '1 1 200px' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPwReset((prev) => ({ ...prev, value: generateTempPassword(), done: '' }))}
+                        style={{ padding: '10px 14px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}
+                      >
+                        Generar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pwReset.busy || String(pwReset.value).trim().length < 6}
+                        onClick={handleResetPassword}
+                        style={{
+                          padding: '10px 14px',
+                          background: pwReset.busy || String(pwReset.value).trim().length < 6 ? '#d6d3d1' : '#b45309',
+                          color: '#fff', border: 'none', borderRadius: '8px',
+                          cursor: pwReset.busy || String(pwReset.value).trim().length < 6 ? 'default' : 'pointer',
+                          fontWeight: 700
+                        }}
+                      >
+                        {pwReset.busy ? 'Guardando…' : 'Restablecer'}
+                      </button>
+                    </div>
+                    {pwReset.done && (
+                      <div style={{ marginTop: '10px', padding: '10px 12px', borderRadius: '8px', background: '#ecfdf5', border: '1px solid #6ee7b7', color: '#065f46' }}>
+                        ✓ Contraseña temporal fijada: <strong style={{ fontSize: '1.1rem', letterSpacing: '0.02em' }}>{pwReset.done}</strong>
+                        <div style={{ fontSize: '0.86rem', marginTop: '2px' }}>Compártela con el usuario y pídele que la cambie en su Perfil al ingresar.</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <div style={{ border: '1px solid #e7e0d8', borderRadius: '10px', padding: '12px', background: '#f5f1ec' }}>
