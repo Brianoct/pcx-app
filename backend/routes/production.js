@@ -41,7 +41,7 @@ const activateDueProductionCards = async (userId) => {
   return true;
 };
 
-router.get('/api/production/kanban', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+router.get('/api/production/kanban', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   try {
     const userContext = await loadUserContext(req.user.id);
     if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
@@ -178,7 +178,7 @@ const validateStageMove = async ({ cards, nextStage }) => {
   return null;
 };
 
-router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   try {
     if (!(await ensureKanbanAccess(req, res))) return;
     const nextStage = normalizeProductionKanbanStage(req.body?.stage || '');
@@ -198,7 +198,7 @@ router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requir
 });
 
 // Mother-card move: all sede cards of the same SKU travel together.
-router.patch('/api/production/kanban/batch-stage', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+router.patch('/api/production/kanban/batch-stage', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   try {
     if (!(await ensureKanbanAccess(req, res))) return;
     const nextStage = normalizeProductionKanbanStage(req.body?.stage || '');
@@ -220,7 +220,7 @@ router.patch('/api/production/kanban/batch-stage', authenticateToken, requireRol
 // Tentative production date, set from the Planificación page. NULL = the
 // lote keeps accumulating indefinitely; a date = it enters the board (and
 // freezes) the day the date arrives in America/La_Paz.
-router.patch('/api/production/kanban/batch-planned-date', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+router.patch('/api/production/kanban/batch-planned-date', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   try {
     if (!(await ensureKanbanAccess(req, res))) return;
     const raw = req.body?.planned_date;
@@ -254,7 +254,7 @@ router.patch('/api/production/kanban/batch-planned-date', authenticateToken, req
 // the current stage. The total lives distributed across the sede cards (each
 // capped at its own qty, filled in id order) so a batch split keeps sane
 // numbers. Clamped to [0, lote total]; stage moves reset it to 0.
-router.patch('/api/production/kanban/batch-progress', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+router.patch('/api/production/kanban/batch-progress', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   try {
     if (!(await ensureKanbanAccess(req, res))) return;
     const delta = Number.parseInt(req.body?.delta, 10);
@@ -332,7 +332,7 @@ const distributeAcrossCards = (cards, amount) => {
 // its approved share and moves the batch to embalado. Fully-rejected shares
 // close their card — the next inventory sync regenerates the need.
 // Stock is NOT touched here: it enters at Recepción.
-router.post('/api/production/kanban/qc-gate', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+router.post('/api/production/kanban/qc-gate', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   try {
     if (!(await ensureKanbanAccess(req, res))) return;
     const passed = parseCount(req.body?.passed);
@@ -429,7 +429,7 @@ router.post('/api/production/kanban/qc-gate', authenticateToken, requireRole(['M
 // Warehouse reception: the end of the card's life. Only pieces confirmed
 // intact enter the sede's stock; transit damage is logged, and the next
 // inventory sync regenerates any remaining need automatically.
-router.post('/api/production/kanban/cards/:id/receive', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+router.post('/api/production/kanban/cards/:id/receive', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   try {
     if (!(await ensureKanbanAccess(req, res))) return;
     const intact = parseCount(req.body?.intact);
@@ -504,7 +504,7 @@ router.post('/api/production/kanban/cards/:id/receive', authenticateToken, requi
   }
 });
 
-router.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRole(['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+router.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   try {
     const userContext = await loadUserContext(req.user.id);
     if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
@@ -577,7 +577,7 @@ router.patch('/api/production/kanban/routes/:sku', authenticateToken, requireRol
 
 // ─── Measurement tasks (random sampling of real material usage) ──────────────
 
-const PRODUCTION_BOARD_ROLES = ['Microfabrica Lider', 'Microfabrica', 'Almacen Lider', 'Almacen', 'Admin'];
+const PRODUCTION_BOARD_ROLES = ['Produccion', 'Almacen Lider', 'Almacen', 'Admin'];
 
 router.get('/api/production/kanban/cards/:id/tasks', authenticateToken, requireRole(PRODUCTION_BOARD_ROLES), async (req, res) => {
   try {

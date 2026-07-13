@@ -9,8 +9,7 @@ function CommissionConfig({ token }) {
     ventas_regular_percent: 8,
     almacen_percent: 5,
     marketing_lider_percent: 5,
-    microfabrica_percent: 0,
-    microfabrica_lider_percent: 0,
+    produccion_percent: 0,
     almacen_lider_percent: 0,
     admin_percent: 0
   });
@@ -30,8 +29,7 @@ function CommissionConfig({ token }) {
           ventas_regular_percent: Number(data.ventas_regular_percent ?? 8),
           almacen_percent: Number(data.almacen_percent ?? 5),
           marketing_lider_percent: Number(data.marketing_lider_percent ?? 5),
-          microfabrica_percent: Number(data.microfabrica_percent ?? 0),
-          microfabrica_lider_percent: Number(data.microfabrica_lider_percent ?? 0),
+          produccion_percent: Number(data.produccion_percent ?? 0),
           almacen_lider_percent: Number(data.almacen_lider_percent ?? 0),
           admin_percent: Number(data.admin_percent ?? 0)
         });
@@ -78,8 +76,7 @@ function CommissionConfig({ token }) {
           ventas_regular_percent: Number(data.settings?.ventas_regular_percent ?? settings.ventas_regular_percent),
           almacen_percent: Number(data.settings?.almacen_percent ?? settings.almacen_percent),
           marketing_lider_percent: Number(data.settings?.marketing_lider_percent ?? settings.marketing_lider_percent),
-          microfabrica_percent: Number(data.settings?.microfabrica_percent ?? settings.microfabrica_percent),
-          microfabrica_lider_percent: Number(data.settings?.microfabrica_lider_percent ?? settings.microfabrica_lider_percent),
+          produccion_percent: Number(data.settings?.produccion_percent ?? settings.produccion_percent),
           almacen_lider_percent: Number(data.settings?.almacen_lider_percent ?? settings.almacen_lider_percent),
           admin_percent: Number(data.settings?.admin_percent ?? settings.admin_percent)
         });
@@ -103,8 +100,7 @@ function CommissionConfig({ token }) {
     { key: 'almacen_percent', label: 'Almacén (% sobre ventas del almacén local)' },
     { key: 'marketing_lider_percent', label: 'Marketing Líder (% sobre total de ventas)' },
     { key: 'almacen_lider_percent', label: 'Almacén Líder (% sobre total de ventas)' },
-    { key: 'microfabrica_lider_percent', label: 'Microfábrica Líder (% sobre total de ventas)' },
-    { key: 'microfabrica_percent', label: 'Microfábrica (% sobre total de ventas)' },
+    { key: 'produccion_percent', label: 'Producción (% sobre total de ventas)' },
     { key: 'admin_percent', label: 'Admin (% sobre total de ventas)' }
   ];
 
@@ -155,9 +151,8 @@ function CommissionConfig({ token }) {
       </div>
 
       <div style={{ color: '#78716c', fontSize: '0.92rem', lineHeight: 1.5, marginBottom: '14px' }}>
-        <div>• Almacen Lider: compensación por pieza / control de calidad (modelo contractual).</div>
         <div>• Marketing: compensación por contrato.</div>
-        <div>• Microfabrica Lider y Microfabrica: ingreso por piezas fabricadas por producto (mensual).</div>
+        <div>• Producción, Almacén Líder y Admin: porcentaje sobre el total de ventas del mes.</div>
       </div>
 
       {message && (

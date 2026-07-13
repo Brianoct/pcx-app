@@ -5,7 +5,7 @@ import { BOARD_STAGES, STAGE_LABEL, groupIntoBatches, sedeTotals, stopwatchSince
 // The production board: only factory stages. Planning lives in /produccion-planificacion
 // (cards enter here when their tentative date arrives) and reception in /recepcion.
 // `onCommissionChanged` refreshes the nav commission box: approving pieces at the
-// QC gate feeds the monthly commission of Microfábrica, Almacén Líder and Admin.
+// QC gate used to feed commissions; kept as a cheap refresh after quality runs.
 export default function ProductionKanban({ token, onCommissionChanged }) {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);

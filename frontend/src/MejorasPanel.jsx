@@ -8,8 +8,8 @@ import QualityControlRecordsAdmin from './admin/QualityControlRecordsAdmin';
 // measured from the quality-control records (which moved here from Admin).
 const AREAS = [
   {
-    key: 'microfabrica',
-    name: 'Microfábrica',
+    key: 'produccion',
+    name: 'Producción',
     criterio: 'Pocos defectos de producción',
     detalle: 'Piezas rechazadas en control de calidad sobre el total inspeccionado.'
   },

@@ -17,8 +17,7 @@ const computeTeamCommissions = async (month, year) => {
   const rateVentasRegular = Number(settings.ventas_regular_percent || 0) / 100;
   const rateAlmacen = Number(settings.almacen_percent || 0) / 100;
   const rateMarketingLider = Number(settings.marketing_lider_percent || 0) / 100;
-  const rateMicrofabrica = Number(settings.microfabrica_percent || 0) / 100;
-  const rateMicrofabricaLider = Number(settings.microfabrica_lider_percent || 0) / 100;
+  const rateProduccion = Number(settings.produccion_percent || 0) / 100;
   const rateAlmacenLider = Number(settings.almacen_lider_percent || 0) / 100;
   const rateAdmin = Number(settings.admin_percent || 0) / 100;
 
@@ -118,12 +117,9 @@ const computeTeamCommissions = async (month, year) => {
     } else if (role === ROLE_KEYS.marketing) {
       commission = 0;
       source = 'Compensación por contrato';
-    } else if (role === ROLE_KEYS.microfabricaLider) {
-      commission = allSales * rateMicrofabricaLider;
-      source = `${Number(settings.microfabrica_lider_percent || 0)}% del total de ventas`;
-    } else if (role === ROLE_KEYS.microfabrica) {
-      commission = allSales * rateMicrofabrica;
-      source = `${Number(settings.microfabrica_percent || 0)}% del total de ventas`;
+    } else if (role === ROLE_KEYS.produccion) {
+      commission = allSales * rateProduccion;
+      source = `${Number(settings.produccion_percent || 0)}% del total de ventas`;
     }
 
     return {

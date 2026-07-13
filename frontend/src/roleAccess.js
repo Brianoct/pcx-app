@@ -1,5 +1,9 @@
-export const normalizeRole = (value = '') =>
-  String(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+// 'Produccion' replaced Microfabrica / Microfabrica Lider; alias legacy names.
+export const normalizeRole = (value = '') => {
+  const normalized = String(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (normalized === 'microfabrica' || normalized === 'microfabrica lider') return 'produccion';
+  return normalized;
+};
 
 const ACCESS_TEMPLATE = {
   cotizar: false,
@@ -79,12 +83,7 @@ const ROLE_DEFAULTS = {
     marketing_combos: true,
     marketing_cupones: true
   },
-  microfabrica: {
-    calendario: true,
-    microfabrica_panel: true,
-    produccion_kanban: true
-  },
-  'microfabrica lider': {
+  produccion: {
     calendario: true,
     microfabrica_panel: true,
     produccion_kanban: true
@@ -99,8 +98,7 @@ export const ROLE_OPTIONS = [
   'Admin',
   'Almacen Lider',
   'Almacen',
-  'Microfabrica Lider',
-  'Microfabrica'
+  'Produccion'
 ];
 
 const PANEL_KEY_ALIASES = {
@@ -283,7 +281,7 @@ export const ACCESS_LABELS = [
   { key: 'inventario_individual', label: 'Inventario individual' },
   { key: 'inventario_global', label: 'Inventario global' },
   { key: 'control_calidad', label: 'Control de calidad' },
-  { key: 'microfabrica_panel', label: 'Panel Microfábrica' },
+  { key: 'microfabrica_panel', label: 'Panel Producción' },
   { key: 'produccion_kanban', label: 'Kanban Producción' },
   { key: 'gastos_panel', label: 'Panel Gastos' },
   { key: 'compras_panel', label: 'Compras (procurement)' },
@@ -297,8 +295,7 @@ export const ROLE_LABELS = [
   { role: 'Ventas Lider', key: 'ventas lider' },
   { role: 'Almacen', key: 'almacen' },
   { role: 'Almacen Lider', key: 'almacen lider' },
-  { role: 'Microfabrica Lider', key: 'microfabrica lider' },
-  { role: 'Microfabrica', key: 'microfabrica' },
+  { role: 'Produccion', key: 'produccion' },
   { role: 'Marketing', key: 'marketing' },
   { role: 'Marketing Lider', key: 'marketing lider' },
   { role: 'Admin', key: 'admin' }

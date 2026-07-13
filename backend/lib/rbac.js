@@ -7,7 +7,13 @@ const normalizeText = (value = '') =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\s+/g, ' ');
 
-const normalizeRole = (value = '') => normalizeText(value);
+// 'Produccion' replaced the old Microfabrica / Microfabrica Lider pair; the
+// alias keeps any legacy stored role working everywhere without a hard cutover.
+const normalizeRole = (value = '') => {
+  const normalized = normalizeText(value);
+  if (normalized === 'microfabrica' || normalized === 'microfabrica lider') return 'produccion';
+  return normalized;
+};
 
 const PANEL_KEYS = [
   'cotizar',
@@ -125,7 +131,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     };
   }
 
-  if (role === 'microfabrica lider' || role === 'microfabrica') {
+  if (role === 'produccion') {
     return {
       ...base,
       calendario: true,
@@ -142,8 +148,7 @@ const DEFAULT_ROLE_ACCESS = {
   'Ventas Lider': getDefaultPanelAccessForRole('Ventas Lider'),
   Almacen: getDefaultPanelAccessForRole('Almacen'),
   'Almacen Lider': getDefaultPanelAccessForRole('Almacen Lider'),
-  'Microfabrica Lider': getDefaultPanelAccessForRole('Microfabrica Lider'),
-  Microfabrica: getDefaultPanelAccessForRole('Microfabrica'),
+  Produccion: getDefaultPanelAccessForRole('Produccion'),
   Marketing: getDefaultPanelAccessForRole('Marketing'),
   'Marketing Lider': getDefaultPanelAccessForRole('Marketing Lider'),
   Admin: getDefaultPanelAccessForRole('Admin')
@@ -179,8 +184,7 @@ const ROLE_DEFAULT_ROLES = [
   'Ventas Lider',
   'Almacen',
   'Almacen Lider',
-  'Microfabrica Lider',
-  'Microfabrica',
+  'Produccion',
   'Marketing',
   'Marketing Lider',
   'Admin'
@@ -194,8 +198,7 @@ const ROLE_KEYS = {
   almacen: 'almacen',
   marketingLider: 'marketing lider',
   marketing: 'marketing',
-  microfabricaLider: 'microfabrica lider',
-  microfabrica: 'microfabrica'
+  produccion: 'produccion'
 };
 
 const mergeAccessWithDefaults = (baseRole, panelAccess) => {
