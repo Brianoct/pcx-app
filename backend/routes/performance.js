@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
-const { computeQualityControlCommissionTotal, loadCommissionSettings } = require('../lib/commission');
+const { loadCommissionSettings } = require('../lib/commission');
 const { computeTeamCommissions } = require('../lib/commissionTeam');
 const { resolveInventoryScopeByCity } = require('../lib/inventory');
 const { ROLE_KEYS, normalizeRole, sanitizePanelAccess } = require('../lib/rbac');
@@ -97,26 +97,13 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
     const rateVentasRegular = Number(commissionSettings.ventas_regular_percent || 0) / 100;
     const rateAlmacen = Number(commissionSettings.almacen_percent || 0) / 100;
     const rateMarketingLider = Number(commissionSettings.marketing_lider_percent || 0) / 100;
+    const rateMicrofabrica = Number(commissionSettings.microfabrica_percent || 0) / 100;
+    const rateMicrofabricaLider = Number(commissionSettings.microfabrica_lider_percent || 0) / 100;
+    const rateAlmacenLider = Number(commissionSettings.almacen_lider_percent || 0) / 100;
+    const rateAdmin = Number(commissionSettings.admin_percent || 0) / 100;
 
-    // Admin: muestra comisión mensual por productos manufacturados aprobados.
-    if (isAdmin) {
-      const qcCommissionResult = await computeQualityControlCommissionTotal(month, year);
-      if (qcCommissionResult?.error) {
-        return res.status(400).json({ error: qcCommissionResult.error });
-      }
-      return res.json({
-        commission: Number(qcCommissionResult?.total || 0),
-        isTopSeller: false,
-        topSellerEmail: null,
-        breakdown: {
-          role: req.user.role || 'Admin',
-          rate: 0,
-          source: 'Comisión mensual por productos manufacturados aprobados'
-        }
-      });
-    }
-
-    // Total completed sales in period (used by leader/marketing rules).
+    // Total completed sales in period. Production/leadership roles earn a %
+    // of this (the per-piece QC commission was retired).
     const allSalesRes = await pool.query(
       `SELECT COALESCE(SUM(q.total), 0) AS total_sales
        FROM quotes q
@@ -124,6 +111,21 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
       [COMPLETED_STATUSES, ...allSalesDateFilter.params]
     );
     const allSales = Number(allSalesRes.rows[0]?.total_sales || 0);
+
+    const percentOfAllSales = (rate, percentLabel) => res.json({
+      commission: allSales * rate,
+      isTopSeller: false,
+      topSellerEmail: null,
+      breakdown: {
+        role: req.user.role,
+        rate,
+        source: `${percentLabel}% del total de ventas`
+      }
+    });
+
+    if (isAdmin) {
+      return percentOfAllSales(rateAdmin, Number(commissionSettings.admin_percent || 0));
+    }
 
     if (isMarketingLider) {
       return res.json({
@@ -233,20 +235,7 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
     }
 
     if (isAlmacenLider) {
-      const qcCommissionResult = await computeQualityControlCommissionTotal(month, year);
-      if (qcCommissionResult?.error) {
-        return res.status(400).json({ error: qcCommissionResult.error });
-      }
-      return res.json({
-        commission: Number(qcCommissionResult?.total || 0),
-        isTopSeller: false,
-        topSellerEmail: null,
-        breakdown: {
-          role: req.user.role,
-          rate: 0,
-          source: 'Comisión mensual por productos manufacturados aprobados'
-        }
-      });
+      return percentOfAllSales(rateAlmacenLider, Number(commissionSettings.almacen_lider_percent || 0));
     }
 
     if (isMarketing) {
@@ -258,21 +247,11 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
       });
     }
 
-    if (isMicrofabricaLider || isMicrofabrica) {
-      const qcCommissionResult = await computeQualityControlCommissionTotal(month, year);
-      if (qcCommissionResult?.error) {
-        return res.status(400).json({ error: qcCommissionResult.error });
-      }
-      return res.json({
-        commission: Number(qcCommissionResult?.total || 0),
-        isTopSeller: false,
-        topSellerEmail: null,
-        breakdown: {
-          role: req.user.role,
-          rate: 0,
-          source: 'Comisión mensual por piezas aprobadas de Control de Calidad'
-        }
-      });
+    if (isMicrofabricaLider) {
+      return percentOfAllSales(rateMicrofabricaLider, Number(commissionSettings.microfabrica_lider_percent || 0));
+    }
+    if (isMicrofabrica) {
+      return percentOfAllSales(rateMicrofabrica, Number(commissionSettings.microfabrica_percent || 0));
     }
 
     // Non-sales roles without explicit commission rule.
