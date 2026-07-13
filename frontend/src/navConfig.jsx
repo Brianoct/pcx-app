@@ -17,7 +17,6 @@ const ProductionKanban = lazy(() => import('./ProductionKanban'));
 const ProductionPlanning = lazy(() => import('./ProductionPlanning'));
 const ProductionReception = lazy(() => import('./ProductionReception'));
 const ExpensesPanel = lazy(() => import('./ExpensesPanel'));
-const ProjectsPanel = lazy(() => import('./ProjectsPanel'));
 const ProfilePanel = lazy(() => import('./ProfilePanel'));
 const ComprasBoard = lazy(() => import('./ComprasBoard'));
 const RuletaAdmin = lazy(() => import('./RuletaAdmin'));
@@ -105,12 +104,6 @@ export const NAV_ITEMS = [
     render: (ctx) => <ProductionReception token={ctx.token} />
   },
   {
-    path: '/proyectos',
-    label: 'Proyectos',
-    routeAccess: ['proyectos_panel'],
-    render: (ctx) => <ProjectsPanel token={ctx.token} user={ctx.user} />
-  },
-  {
     path: '/combos',
     label: 'Combos',
     routeAccess: ['marketing_combos'],
@@ -161,7 +154,6 @@ const SIDEBAR_SECTIONS = [
   { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/history'] },
   { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion', '/comprar'] },
   { key: 'produccion', label: 'Producción', paths: ['/produccion-planificacion', '/produccion-kanban'] },
-  { key: 'mejoras', label: 'Mejoras', paths: ['/proyectos'] },
   { key: 'marketing', label: 'Marketing', paths: ['/combos', '/cupones', '/ruleta-premios'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
   { key: 'administracion', label: 'Administración', paths: ['/admin', '/dashboard'] }
