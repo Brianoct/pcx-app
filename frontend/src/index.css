@@ -8177,69 +8177,6 @@ img, video, canvas { max-width: 100%; }
 .plan-title { font-size: 1.3rem; font-weight: 800; margin: 0; }
 .plan-sub { color: var(--text-secondary); font-size: 0.84rem; margin: 6px 0 0; max-width: 720px; }
 
-.plan-list { display: flex; flex-direction: column; gap: 12px; }
-
-.plan-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  flex-wrap: wrap;
-}
-
-.plan-item-info { min-width: 0; flex: 1 1 280px; }
-.plan-item-topline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.plan-item-name { font-size: 1.02rem; font-weight: 800; }
-.plan-item-sku { font-size: 0.74rem; color: var(--text-muted); font-weight: 600; margin-top: 2px; }
-
-.plan-badge {
-  font-size: 0.68rem;
-  font-weight: 800;
-  padding: 3px 10px;
-  border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-.plan-badge.is-none { background: var(--bg-tertiary); color: var(--text-muted); }
-.plan-badge.is-scheduled { background: rgba(2, 132, 199, 0.1); color: #0369a1; }
-.plan-badge.is-today { background: rgba(22, 163, 74, 0.12); color: #15803d; }
-
-.plan-item-breakdown { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.plan-item-qty { font-size: 1.3rem; font-weight: 900; font-variant-numeric: tabular-nums; margin-right: 4px; }
-.plan-chip {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--bg-tertiary);
-  font-size: 0.74rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-}
-.plan-chip.is-sede { background: transparent; border: 1px dashed var(--border); color: var(--text-muted); }
-
-.plan-item-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
-.plan-date-field { display: flex; flex-direction: column; gap: 4px; }
-.plan-date-field span {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-.plan-date-field input {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 0.9rem;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-.plan-btn-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.plan-btn { padding: 8px 14px; font-size: 0.8rem; }
-.plan-btn-start { background: #1c1917; border-color: #1c1917; color: #ffffff; }
 
 /* Recepción page */
 .recep-done {
@@ -8311,22 +8248,6 @@ img, video, canvas { max-width: 100%; }
 .prod-sede-secondary { margin-top: 8px; font-size: 0.74rem; color: var(--text-muted); font-weight: 600; }
 
 /* ── Planificación: modo lista / calendario (arrastrar lotes a fechas) ─────── */
-
-.plan-intro-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
-
-.plan-modes { display: inline-flex; background: var(--bg-tertiary); border-radius: 999px; padding: 3px; flex-shrink: 0; }
-.plan-mode-btn {
-  border: none;
-  background: transparent;
-  padding: 7px 18px;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.plan-mode-btn.is-active { background: var(--bg-secondary); color: var(--text-primary); box-shadow: var(--shadow-sm); }
 
 /* Calendar layout: backlog tray + month grid */
 .plan-calendar-wrap { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -8682,3 +8603,19 @@ img, video, canvas { max-width: 100%; }
 
 /* Commission rows: show the rule under the role without breaking the layout */
 .dashboard-commission-row > div:first-child span { display: block; font-size: 0.72rem; color: var(--text-muted); }
+
+/* Botón "Iniciar ahora" dentro de la tarjetita de lote del calendario. */
+.plan-chip-start {
+  margin-top: 6px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: none;
+  background: #1c1917;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.plan-chip-start:hover { background: #b91c1c; }
+.plan-chip-start:disabled { opacity: 0.5; cursor: default; }

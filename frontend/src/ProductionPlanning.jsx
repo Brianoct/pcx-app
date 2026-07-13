@@ -7,18 +7,16 @@ const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 
 const pad = (n) => String(n).padStart(2, '0');
 const isoDate = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
 
-// Production planning: needs accumulate here (quantity follows the stock) until
-// each lote gets a tentative date. The day the date arrives (hora boliviana) the
-// lote enters the production board automatically and its quantity freezes.
-// Two views: a list with a date picker, and a calendar where you drag each
-// lote onto the day it will run.
+// Production planning: needs accumulate here (quantity follows the stock)
+// until each lote gets its date on the calendar. The day the date arrives
+// (hora boliviana) the lote enters the production board and freezes. Drag a
+// lote onto a day (or tap it, then tap the day); drag it back to the tray to
+// unschedule; ▶ starts it right now.
 export default function ProductionPlanning({ token }) {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyKey, setBusyKey] = useState('');
-  const [dateDrafts, setDateDrafts] = useState({});
-  const [viewMode, setViewMode] = useState('list');
   const [monthCursor, setMonthCursor] = useState(null); // { year, month(0-based) }
   const [draggingKey, setDraggingKey] = useState(null);
   const [selectedKey, setSelectedKey] = useState(null); // touch/click-to-place
@@ -85,6 +83,7 @@ export default function ProductionPlanning({ token }) {
     const route = batch.route || [];
     const nextStage = route[route.indexOf('planificacion') + 1];
     if (!nextStage) return;
+    if (!window.confirm(`¿Iniciar producción de ${batch.display_name} (${batch.total_qty} pzas) ahora mismo? Pasa a ${STAGE_LABEL[nextStage]} y la cantidad queda fija.`)) return;
     setBusyKey(batch.key);
     setError('');
     try {
@@ -99,12 +98,6 @@ export default function ProductionPlanning({ token }) {
     } finally {
       setBusyKey('');
     }
-  };
-
-  const dateBadge = (batch) => {
-    if (!batch.planned_date) return { label: 'Sin fecha', cls: 'is-none' };
-    if (batch.planned_date <= todayStr) return { label: 'Entra hoy', cls: 'is-today' };
-    return { label: `Programado · ${batch.planned_date}`, cls: 'is-scheduled' };
   };
 
   // ── Calendar data ──────────────────────────────────────────────────────────
@@ -160,61 +153,48 @@ export default function ProductionPlanning({ token }) {
 
   const monthLabel = monthCursor ? `${MONTHS[monthCursor.month]} ${monthCursor.year}` : '';
 
-  const renderMiniCard = (batch, { onCalendar = false } = {}) => {
-    const badge = dateBadge(batch);
-    return (
+  const renderMiniCard = (batch, { onCalendar = false } = {}) => (
+    <div
+      key={batch.key}
+      role="button"
+      tabIndex={0}
+      draggable
+      className={`plan-chip-card ${selectedKey === batch.key ? 'is-selected' : ''} ${draggingKey === batch.key ? 'is-dragging' : ''} ${busyKey === batch.key ? 'is-busy' : ''}`}
+      onDragStart={(e) => { setDraggingKey(batch.key); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', batch.key); }}
+      onDragEnd={() => setDraggingKey(null)}
+      onClick={() => setSelectedKey((prev) => (prev === batch.key ? null : batch.key))}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedKey((prev) => (prev === batch.key ? null : batch.key)); } }}
+      title={onCalendar ? 'Arrastra a otro día o al panel “Sin programar”' : 'Arrastra a un día o selecciona y toca un día'}
+    >
+      <span className="plan-chip-name">{batch.display_name}</span>
+      <span className="plan-chip-qty">{batch.total_qty} pzas</span>
+      {!onCalendar && batch.is_variant_group && (
+        <span className="plan-chip-colors">{batch.color_list.map((c) => `${c.label} ${c.qty}`).join(' · ')}</span>
+      )}
+      {!onCalendar && (
+        <span className="plan-chip-colors">{sedeTotals(batch).map((s) => `${s.sede} ${s.qty}`).join(' · ')}</span>
+      )}
       <button
-        key={batch.key}
         type="button"
-        draggable
-        className={`plan-chip-card ${selectedKey === batch.key ? 'is-selected' : ''} ${draggingKey === batch.key ? 'is-dragging' : ''} ${busyKey === batch.key ? 'is-busy' : ''}`}
-        onDragStart={(e) => { setDraggingKey(batch.key); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', batch.key); }}
-        onDragEnd={() => setDraggingKey(null)}
-        onClick={() => setSelectedKey((prev) => (prev === batch.key ? null : batch.key))}
-        title={onCalendar ? 'Arrastra a otro día o al panel “Sin programar”' : 'Arrastra a un día o selecciona y toca un día'}
+        className="plan-chip-start"
+        title="Iniciar producción ahora mismo"
+        disabled={busyKey === batch.key}
+        onClick={(e) => { e.stopPropagation(); startNow(batch); }}
       >
-        <span className="plan-chip-name">{batch.display_name}</span>
-        <span className="plan-chip-qty">{batch.total_qty} pzas</span>
-        {!onCalendar && badge.cls === 'is-none' && batch.is_variant_group && (
-          <span className="plan-chip-colors">{batch.color_list.map((c) => c.label).join(' · ')}</span>
-        )}
+        ▶ Iniciar
       </button>
-    );
-  };
+    </div>
+  );
 
   return (
     <div className="container prod-page">
       <div className="card plan-intro">
-        <div className="plan-intro-head">
-          <div>
-            <h2 className="plan-title">Planificación de producción</h2>
-            <p className="plan-sub">
-              Las necesidades se acumulan aquí y la cantidad se ajusta sola con el stock.
-              Asígnale una fecha: ese día el lote entra al tablero de producción y su cantidad
-              queda fija. Mientras tanto, sigue acumulando piezas.
-            </p>
-          </div>
-          <div className="plan-modes" role="tablist" aria-label="Vista de planificación">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === 'list'}
-              className={`plan-mode-btn ${viewMode === 'list' ? 'is-active' : ''}`}
-              onClick={() => setViewMode('list')}
-            >
-              Lista
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === 'calendar'}
-              className={`plan-mode-btn ${viewMode === 'calendar' ? 'is-active' : ''}`}
-              onClick={() => setViewMode('calendar')}
-            >
-              Calendario
-            </button>
-          </div>
-        </div>
+        <h2 className="plan-title">Planificación de producción</h2>
+        <p className="plan-sub">
+          Las necesidades se acumulan aquí y la cantidad se ajusta sola con el stock.
+          Arrastra cada lote al día en que se ejecutará: ese día entra al tablero de
+          producción y su cantidad queda fija. Mientras tanto, sigue acumulando piezas.
+        </p>
       </div>
 
       {error && <div className="card prod-error">{error}</div>}
@@ -224,77 +204,6 @@ export default function ProductionPlanning({ token }) {
       ) : planningBatches.length === 0 ? (
         <div className="card" style={{ color: '#78716c' }}>
           No hay necesidades por planificar. Cuando el stock baje del mínimo, aparecerán aquí.
-        </div>
-      ) : viewMode === 'list' ? (
-        <div className="plan-list">
-          {planningBatches.map((batch) => {
-            const badge = dateBadge(batch);
-            const draft = dateDrafts[batch.key] ?? batch.planned_date ?? '';
-            const firstStage = (batch.route || []).find((s) => s !== 'planificacion');
-            return (
-              <div key={batch.key} className="plan-item">
-                <div className="plan-item-info">
-                  <div className="plan-item-topline">
-                    <span className="plan-item-name">{batch.display_name}</span>
-                    <span className={`plan-badge ${badge.cls}`}>{badge.label}</span>
-                  </div>
-                  <div className="plan-item-sku">{batch.display_sku}</div>
-                  <div className="plan-item-breakdown">
-                    <span className="plan-item-qty">{batch.total_qty} pzas</span>
-                    {batch.is_variant_group && batch.color_list.map((c) => (
-                      <span key={c.sku} className="plan-chip">{c.label} {c.qty}</span>
-                    ))}
-                    {sedeTotals(batch).map((s) => (
-                      <span key={s.sede} className="plan-chip is-sede">{s.sede} {s.qty}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="plan-item-actions">
-                  <label className="plan-date-field">
-                    <span>Fecha tentativa</span>
-                    <input
-                      type="date"
-                      value={draft}
-                      min={todayStr}
-                      onChange={(e) => setDateDrafts((prev) => ({ ...prev, [batch.key]: e.target.value }))}
-                    />
-                  </label>
-                  <div className="plan-btn-row">
-                    <button
-                      type="button"
-                      className="btn btn-primary plan-btn"
-                      disabled={busyKey === batch.key || !draft || draft === (batch.planned_date || '')}
-                      onClick={() => setPlannedDate(batch, draft)}
-                    >
-                      Guardar fecha
-                    </button>
-                    {batch.planned_date && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary plan-btn"
-                        disabled={busyKey === batch.key}
-                        onClick={() => {
-                          setDateDrafts((prev) => ({ ...prev, [batch.key]: '' }));
-                          setPlannedDate(batch, null);
-                        }}
-                      >
-                        Quitar fecha
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="btn btn-secondary plan-btn plan-btn-start"
-                      disabled={busyKey === batch.key || !firstStage}
-                      onClick={() => startNow(batch)}
-                      title={firstStage ? `Pasa ahora mismo a ${STAGE_LABEL[firstStage]}` : undefined}
-                    >
-                      Iniciar ahora →
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
         </div>
       ) : (
         <div className="plan-calendar-wrap">
@@ -307,7 +216,8 @@ export default function ProductionPlanning({ token }) {
               Sin programar <span className="plan-backlog-count">{unscheduled.length}</span>
             </div>
             <p className="plan-backlog-hint">
-              Arrastra un lote a un día (o tócalo y luego toca el día). Suéltalo aquí para quitarle la fecha.
+              Arrastra un lote a un día (o tócalo y luego toca el día). Suéltalo aquí para
+              quitarle la fecha. ▶ lo inicia ahora mismo.
             </p>
             <div className="plan-backlog-list">
               {unscheduled.length === 0
