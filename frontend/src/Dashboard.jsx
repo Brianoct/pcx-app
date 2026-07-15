@@ -7,6 +7,7 @@ import { apiRequest } from './apiClient';
 import { canAccessPanel } from './roleAccess';
 import { NAV_ITEMS, allowsAny } from './navConfig';
 import PerformanceDashboard from './PerformanceDashboard';
+import { areaForRole, AREA_LABELS, boliviaToday, campaignIsActive, formatCampaignDate } from './campaignShared';
 
 const formatBs = (value) => `${Number(value || 0).toFixed(2).replace(/\.00$/, '')} Bs`;
 
@@ -14,6 +15,7 @@ export default function Dashboard({ token, user, role, access }) {
   const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [campaigns, setCampaigns] = useState([]);
 
   const greetingName = user?.display_name || (user?.email ? user.email.split('@')[0] : 'Bienvenido');
   const showPerformance = canAccessPanel(access, 'rendimientoGlobal') || canAccessPanel(access, 'rendimientoIndividual');
@@ -42,6 +44,35 @@ export default function Dashboard({ token, user, role, access }) {
     const intervalId = setInterval(load, 60000);
     return () => { active = false; clearInterval(intervalId); };
   }, [token]);
+
+  useEffect(() => {
+    let active = true;
+    apiRequest('/api/campaigns', { token })
+      .then((data) => { if (active) setCampaigns(Array.isArray(data?.campaigns) ? data.campaigns : []); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [token]);
+
+  // The campaign banner: announced campaigns that haven't ended yet, with the
+  // viewer's own pending responsibilities front and center.
+  const campaignBanner = useMemo(() => {
+    const today = boliviaToday();
+    const announced = campaigns
+      .filter((c) => c.status === 'anunciada' && String(c.end_date) >= today)
+      .sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)));
+    if (announced.length === 0) return null;
+    const campaign = announced[0];
+    const myArea = areaForRole(role);
+    const myTasks = myArea ? campaign.tasks.filter((t) => t.area === myArea) : [];
+    const myPending = myTasks.filter((t) => !t.done).length;
+    return {
+      campaign,
+      active: campaignIsActive(campaign, today),
+      myArea,
+      myPending,
+      myTotal: myTasks.length
+    };
+  }, [campaigns, role]);
 
   const tiles = [];
   if (overview?.quotes_today) {
@@ -116,6 +147,26 @@ export default function Dashboard({ token, user, role, access }) {
           Plan del día
         </button>
       </div>
+
+      {campaignBanner && (
+        <button type="button" className="campaign-banner" onClick={() => navigate('/campanas')}>
+          <span className="campaign-banner-icon">📣</span>
+          <span className="campaign-banner-body">
+            <span className="campaign-banner-title">
+              {campaignBanner.active ? 'Campaña en curso' : 'Próxima campaña'}: {campaignBanner.campaign.name}
+            </span>
+            <span className="campaign-banner-detail">
+              {formatCampaignDate(campaignBanner.campaign.start_date)} — {formatCampaignDate(campaignBanner.campaign.end_date)}
+              {campaignBanner.myTotal > 0 && (
+                campaignBanner.myPending > 0
+                  ? ` · ${AREA_LABELS[campaignBanner.myArea]}: ${campaignBanner.myPending} ${campaignBanner.myPending === 1 ? 'tarea pendiente' : 'tareas pendientes'}`
+                  : ` · ${AREA_LABELS[campaignBanner.myArea]}: ¡todo listo! ✓`
+              )}
+            </span>
+          </span>
+          <span className="campaign-banner-cta">Ver responsabilidades →</span>
+        </button>
+      )}
 
       {loading ? (
         <p className="dashboard-muted">Cargando resumen…</p>

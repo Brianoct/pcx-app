@@ -8619,3 +8619,182 @@ img, video, canvas { max-width: 100%; }
 }
 .plan-chip-start:hover { background: #b91c1c; }
 .plan-chip-start:disabled { opacity: 0.5; cursor: default; }
+
+/* ============ Campañas (Marketing) ============ */
+.camp-intro { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.camp-intro > div { flex: 1 1 260px; }
+
+.btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+.camp-card {
+  background: var(--bg-secondary, #fff);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.camp-card.is-active { border-color: #16a34a; box-shadow: 0 0 0 1px #16a34a33; }
+.camp-card-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.camp-card-name { font-weight: 800; font-size: 1.05rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.camp-card-dates { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+.camp-card-objective { margin: 8px 0 0; font-size: 0.88rem; color: var(--text-secondary, #444); max-width: 640px; }
+.camp-card-actions { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+
+.camp-status {
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.camp-status.is-borrador { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
+.camp-status.is-anunciada { background: #eff6ff; color: #1d4ed8; }
+.camp-status.is-activa { background: #dcfce7; color: #15803d; }
+.camp-status.is-finalizada { background: #f5f5f4; color: #78716c; }
+.camp-status.is-ready { background: #dcfce7; color: #15803d; }
+
+.camp-draft-note {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 0.8rem;
+}
+.camp-empty-tasks { margin-top: 10px; font-size: 0.85rem; color: var(--text-muted); }
+
+.camp-areas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.camp-area {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary, #fafafa);
+}
+.camp-area.is-mine { background: #fff; border-color: #93c5fd; }
+.camp-area-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.camp-area-name { font-weight: 800; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; }
+.camp-area-tag {
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.camp-area-progress { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }
+.camp-area-progress.is-done { color: #15803d; }
+.camp-area-bar { height: 5px; border-radius: 999px; background: #e5e7eb; margin: 8px 0 10px; overflow: hidden; }
+.camp-area-bar-fill { height: 100%; border-radius: 999px; background: #16a34a; transition: width 0.25s ease; }
+
+.camp-task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.camp-task-list li label { display: flex; align-items: flex-start; gap: 8px; font-size: 0.84rem; cursor: pointer; }
+.camp-task-list li label input[type='checkbox'] { margin-top: 2px; accent-color: #16a34a; }
+.camp-task-list li label input[type='checkbox']:disabled + span { cursor: default; }
+.camp-task-list li.is-done > label span { text-decoration: line-through; color: var(--text-muted); }
+.camp-task-by { display: block; margin-left: 24px; font-size: 0.68rem; color: #15803d; }
+
+.camp-finished { margin-top: 18px; }
+.camp-finished-toggle {
+  background: none;
+  border: none;
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 0;
+  margin-bottom: 8px;
+}
+.camp-finished .camp-card { opacity: 0.75; }
+
+.camp-empty { color: var(--text-muted); }
+.camp-error {
+  margin: 10px 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  font-size: 0.85rem;
+}
+.camp-delete {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+  padding: 5px 9px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.camp-delete:hover { border-color: #fca5a5; background: #fef2f2; }
+
+/* Formulario de campaña */
+.camp-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.camp-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; font-weight: 700; }
+.camp-field-wide { grid-column: 1 / -1; }
+.camp-field input, .camp-field textarea {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font: inherit;
+  font-weight: 500;
+}
+.camp-tasks-title { margin: 20px 0 2px; font-size: 0.95rem; }
+.camp-tasks-hint { margin: 0 0 10px; font-size: 0.8rem; color: var(--text-muted); }
+.camp-task-rows { display: flex; flex-direction: column; gap: 8px; }
+.camp-task-row { display: grid; grid-template-columns: 150px 1fr 34px; gap: 8px; align-items: center; }
+.camp-task-row select, .camp-task-row input {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.85rem;
+}
+.camp-task-remove {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+  height: 34px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.camp-task-remove:hover { border-color: #fca5a5; color: #b91c1c; }
+.camp-add-row { margin-top: 10px; }
+.camp-form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+@media (max-width: 640px) {
+  .camp-form-grid { grid-template-columns: 1fr; }
+  .camp-task-row { grid-template-columns: 110px 1fr 34px; }
+}
+
+/* Banner de campaña en Inicio */
+.campaign-banner {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  border: 1px solid #bfdbfe;
+  background: linear-gradient(90deg, #eff6ff, #f0fdf4);
+  border-radius: 14px;
+  padding: 13px 16px;
+  margin: 0 0 16px;
+  cursor: pointer;
+  font: inherit;
+}
+.campaign-banner:hover { border-color: #60a5fa; }
+.campaign-banner-icon { font-size: 1.5rem; }
+.campaign-banner-body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.campaign-banner-title { font-weight: 800; font-size: 0.95rem; }
+.campaign-banner-detail { font-size: 0.8rem; color: var(--text-secondary, #475569); }
+.campaign-banner-cta { font-size: 0.78rem; font-weight: 800; color: #1d4ed8; white-space: nowrap; }
+@media (max-width: 640px) {
+  .campaign-banner { flex-wrap: wrap; }
+  .campaign-banner-cta { margin-left: auto; }
+}
