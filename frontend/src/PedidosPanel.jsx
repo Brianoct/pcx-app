@@ -6,6 +6,30 @@ import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
 
+// The raw logo is RGBA; jsPDF composites its alpha into a black box on the
+// shipping label (same bug fixed in quotePdf.js). Pre-render it once onto a
+// white canvas at natural size and keep the real aspect ratio.
+let labelLogoPrepared = null;
+if (typeof window !== 'undefined') {
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      labelLogoPrepared = {
+        dataUrl: canvas.toDataURL('image/png'),
+        ratio: img.naturalWidth / img.naturalHeight
+      };
+    } catch { /* label simply renders without logo */ }
+  };
+  img.src = logo;
+}
+
 const ALERT_SOUND_PREF_KEY = 'pcx.pedidosAlertSound';
 const PEDIDOS_POLL_MS = 30000;
 
@@ -449,7 +473,13 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
       doc.roundedRect(margin, margin, contentW, pageH - margin * 2, 1.2, 1.2);
 
       // Header: logo left, order number + bulto counter right.
-      doc.addImage(logo, 'PNG', margin + 2, margin + 1.6, 14.5, 5.6);
+      if (labelLogoPrepared) {
+        const logoH = 5.6;
+        const logoW = Math.min(16, logoH * labelLogoPrepared.ratio);
+        doc.addImage(labelLogoPrepared.dataUrl, 'PNG', margin + 2, margin + 1.6, logoW, logoH);
+      } else {
+        doc.addImage(logo, 'PNG', margin + 2, margin + 1.6, 14.5, 5.6);
+      }
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8.2);
       doc.text(`PEDIDO #${quote.id}`, pageW - margin - 2, margin + 4, { align: 'right' });
