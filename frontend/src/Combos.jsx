@@ -1,10 +1,45 @@
 // src/Combos.jsx
 import { useState, useEffect, useCallback } from 'react';
 import { sortProductsByCatalogOrder } from './productCatalog';
-import { apiRequest } from './apiClient';
+import { apiRequest, API_BASE } from './apiClient';
 import { clearDraftState, useDraftState } from './useDraftState';
 import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
+
+// Combo photos are downscaled in the browser before upload, same as product
+// photos, so we ship tens of KB instead of a multi-MB phone snapshot.
+const downscaleImage = (file, { maxDim = 800, quality = 0.82 } = {}) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('No se pudo leer la imagen.'));
+    img.src = String(reader.result || '');
+  };
+  reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+  reader.readAsDataURL(file);
+});
+
+const resolveImageUrl = (rawUrl = '') => {
+  const value = String(rawUrl || '').trim();
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith('/')) return `${String(API_BASE || '').replace(/\/+$/, '')}${value}`;
+  return value;
+};
 
 function Combos({ token }) {
   const toast = useToast();
@@ -24,6 +59,7 @@ function Combos({ token }) {
   const [editingComboId, setEditingComboId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [imageBusyId, setImageBusyId] = useState(null);
 
   const fetchCombos = useCallback(async () => {
     try {
@@ -218,6 +254,40 @@ function Combos({ token }) {
     }
   };
 
+  const uploadComboImage = async (comboId, file) => {
+    if (!file) return;
+    setImageBusyId(comboId);
+    try {
+      const dataUrl = await downscaleImage(file);
+      const res = await apiRequest(`/api/combos/${comboId}/image`, {
+        method: 'POST',
+        token,
+        body: { data_url: dataUrl },
+        timeoutMs: 20000
+      });
+      setCombos((prev) => prev.map((c) => (c.id === comboId ? { ...c, image_url: res.image_url } : c)));
+      toast.success('Imagen del combo actualizada');
+    } catch (err) {
+      toast.error('Error al subir imagen: ' + err.message);
+    } finally {
+      setImageBusyId(null);
+    }
+  };
+
+  const removeComboImage = async (comboId) => {
+    if (!window.confirm('¿Quitar la imagen de este combo?')) return;
+    setImageBusyId(comboId);
+    try {
+      await apiRequest(`/api/combos/${comboId}/image`, { method: 'DELETE', token, timeoutMs: 18000 });
+      setCombos((prev) => prev.map((c) => (c.id === comboId ? { ...c, image_url: null } : c)));
+      toast.success('Imagen eliminada');
+    } catch (err) {
+      toast.error('Error al eliminar imagen: ' + err.message);
+    } finally {
+      setImageBusyId(null);
+    }
+  };
+
   const handleDeleteCombo = async (id) => {
     if (!window.confirm('¿Eliminar combo permanentemente?')) return;
 
@@ -250,6 +320,9 @@ function Combos({ token }) {
 
   if (loading) return <div style={{ textAlign: 'center', padding: '40px' }}>Cargando...</div>;
 
+  const editingCombo = editingComboId ? combos.find((c) => c.id === editingComboId) : null;
+  const editingImageUrl = resolveImageUrl(editingCombo?.image_url);
+
   return (
     <div style={{ padding: '16px' }}>
       <h2 style={{ textAlign: 'center', color: '#dc2626', marginBottom: '24px' }}>Combos</h2>
@@ -268,6 +341,50 @@ function Combos({ token }) {
           placeholder="Nombre del Combo (ej: Combo Básico 3x2)"
           style={{ width: '100%', padding: '12px', marginBottom: '16px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
         />
+
+        {editingComboId ? (
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px', padding: '12px', background: '#faf8f5', border: '1px solid #e7e0d8', borderRadius: '8px', flexWrap: 'wrap' }}>
+            <div style={{ width: '96px', height: '96px', borderRadius: '8px', overflow: 'hidden', background: '#ffffff', border: '1px solid #e7e0d8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {editingImageUrl ? (
+                <img src={editingImageUrl} alt={comboName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ color: '#a8a29e', fontSize: '0.75rem', textAlign: 'center' }}>Sin<br />imagen</span>
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <label style={{ color: '#78716c', display: 'block', marginBottom: '8px', fontWeight: 600 }}>Imagen del combo</label>
+              <p style={{ color: '#a8a29e', fontSize: '0.8rem', margin: '0 0 10px' }}>
+                Se mostrará en la vista de catálogo de Cotizar. Usa JPG, PNG o WEBP.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <label style={{ padding: '8px 14px', background: '#2563eb', color: 'white', borderRadius: '6px', cursor: imageBusyId === editingComboId ? 'wait' : 'pointer', fontSize: '0.9rem', opacity: imageBusyId === editingComboId ? 0.6 : 1 }}>
+                  {imageBusyId === editingComboId ? 'Subiendo…' : (editingImageUrl ? 'Cambiar imagen' : 'Subir imagen')}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    style={{ display: 'none' }}
+                    disabled={imageBusyId === editingComboId}
+                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadComboImage(editingComboId, f); }}
+                  />
+                </label>
+                {editingImageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => removeComboImage(editingComboId)}
+                    disabled={imageBusyId === editingComboId}
+                    style={{ padding: '8px 14px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem' }}
+                  >
+                    Quitar
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p style={{ color: '#a8a29e', fontSize: '0.85rem', margin: '-4px 0 16px' }}>
+            💡 Crea el combo primero; luego, al editarlo, podrás subir una imagen para el catálogo.
+          </p>
+        )}
 
         <div style={{ marginBottom: '16px' }}>
           <label style={{ color: '#78716c', display: 'block', marginBottom: '8px' }}>Productos del Combo</label>
@@ -408,6 +525,7 @@ function Combos({ token }) {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#ffffff' }}>
+                <th style={{ padding: '12px', textAlign: 'center', width: '64px' }}>Imagen</th>
                 <th style={{ padding: '12px', textAlign: 'left' }}>Nombre</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Precio SF</th>
                 <th style={{ padding: '12px', textAlign: 'right' }}>Precio CF</th>
@@ -417,6 +535,15 @@ function Combos({ token }) {
             <tbody>
               {combos.map(combo => (
                 <tr key={combo.id} style={{ borderBottom: '1px solid #e7e0d8' }}>
+                  <td style={{ padding: '12px', textAlign: 'center' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '6px', overflow: 'hidden', background: '#faf8f5', border: '1px solid #e7e0d8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {resolveImageUrl(combo.image_url) ? (
+                        <img src={resolveImageUrl(combo.image_url)} alt={combo.name} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ color: '#c7c0b6', fontSize: '0.6rem' }}>—</span>
+                      )}
+                    </div>
+                  </td>
                   <td style={{ padding: '12px' }}>{combo.name}</td>
                   <td style={{ padding: '12px', textAlign: 'right' }}>
                     {Number(combo.sf_price).toFixed(2)} Bs

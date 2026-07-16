@@ -1,8 +1,10 @@
+const crypto = require('crypto');
 const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { ROLE_KEYS, normalizeRole } = require('../lib/rbac');
 const { createHttpError } = require('../lib/util');
+const { decodeImageDataUrl } = require('../lib/imageAssets');
 
 const router = express.Router();
 
@@ -10,8 +12,8 @@ const router = express.Router();
 router.get('/api/combos', authenticateToken, async (req, res) => {
   try {
     const combosResult = await pool.query(`
-      SELECT 
-        c.id, c.name, c.sf_price, c.cf_price, c.created_at,
+      SELECT
+        c.id, c.name, c.sf_price, c.cf_price, c.image_url, c.created_at,
         u.email as created_by_email
       FROM combos c
       LEFT JOIN users u ON c.created_by = u.id
@@ -184,6 +186,102 @@ router.delete('/api/combos/:id', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error deleting combo:', err);
     res.status(500).json({ error: 'No se pudo eliminar combo' });
+  }
+});
+
+// ─── COMBO IMAGES (stored in DB, served via capability URL) ──────────────────
+// Same pattern as product photos: bytes live in combo_assets, combos.image_url
+// points at an unguessable capability URL that a plain <img> can load.
+
+router.post('/api/combos/:id/image', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
+  const comboId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(comboId) || comboId <= 0) {
+    return res.status(400).json({ error: 'ID inválido' });
+  }
+  try {
+    const existsRes = await pool.query('SELECT id FROM combos WHERE id = $1', [comboId]);
+    if (existsRes.rowCount === 0) return res.status(404).json({ error: 'Combo no encontrado' });
+
+    const { mime, buffer } = decodeImageDataUrl(req.body?.data_url);
+    const accessToken = crypto.randomBytes(16).toString('hex');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO combo_assets (combo_id, mime, data, access_token, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (combo_id) DO UPDATE
+         SET mime = EXCLUDED.mime, data = EXCLUDED.data, access_token = EXCLUDED.access_token, updated_at = NOW()`,
+        [comboId, mime, buffer, accessToken]
+      );
+      const imageUrl = `/api/combo-assets/${comboId}/${accessToken}`;
+      await client.query('UPDATE combos SET image_url = $2 WHERE id = $1', [comboId, imageUrl]);
+      await client.query('COMMIT');
+      res.json({ message: 'Imagen actualizada', id: comboId, image_url: imageUrl });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error('Error uploading combo image:', err);
+    res.status(500).json({ error: 'No se pudo subir la imagen' });
+  }
+});
+
+router.delete('/api/combos/:id/image', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
+  const comboId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(comboId) || comboId <= 0) {
+    return res.status(400).json({ error: 'ID inválido' });
+  }
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM combo_assets WHERE combo_id = $1', [comboId]);
+      // Only clear the pointer if it referenced our own asset.
+      await client.query(
+        "UPDATE combos SET image_url = NULL WHERE id = $1 AND image_url LIKE '/api/combo-assets/%'",
+        [comboId]
+      );
+      await client.query('COMMIT');
+      res.json({ message: 'Imagen eliminada', id: comboId });
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('Error deleting combo image:', err);
+    res.status(500).json({ error: 'No se pudo eliminar la imagen' });
+  }
+});
+
+// Public serve (no auth): the capability token in the path is the guard.
+router.get('/api/combo-assets/:id/:token', async (req, res) => {
+  try {
+    const comboId = Number.parseInt(req.params.id, 10);
+    const token = String(req.params.token || '');
+    if (!Number.isInteger(comboId) || comboId <= 0 || !/^[a-f0-9]{32}$/.test(token)) {
+      return res.status(404).end();
+    }
+    const result = await pool.query(
+      'SELECT mime, data, access_token FROM combo_assets WHERE combo_id = $1',
+      [comboId]
+    );
+    const row = result.rows[0];
+    if (!row || !crypto.timingSafeEqual(Buffer.from(String(row.access_token)), Buffer.from(token))) {
+      return res.status(404).end();
+    }
+    res.set('Content-Type', row.mime);
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(row.data);
+  } catch (err) {
+    console.error('Error serving combo image:', err);
+    res.status(404).end();
   }
 });
 
