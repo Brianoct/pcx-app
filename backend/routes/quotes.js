@@ -4,7 +4,7 @@ const { authenticateToken } = require('../lib/authMiddleware');
 const { getPedidosAccessScope } = require('../lib/inventory');
 const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, getQuoteSaveIdempotencyCacheKey, lineItemsFingerprint, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftSelectionForQuote } = require('../lib/quotes');
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
-const { findCustomerOwnerByPhone, upsertCustomerFromQuote } = require('../lib/customers');
+const { findCustomerOwnerByPhone, markCustomerWonByPhone, upsertCustomerFromQuote } = require('../lib/customers');
 const { loadUserContext, resolveUserDisplayName } = require('../lib/users');
 const { createHttpError, getUserDisplayName } = require('../lib/util');
 
@@ -650,7 +650,7 @@ router.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
     await client.query('BEGIN');
 
     const currentRes = await client.query(
-      'SELECT user_id, status, store_location, line_items, gift_sku, gift_qty FROM quotes WHERE id = $1',
+      'SELECT user_id, status, store_location, line_items, gift_sku, gift_qty, customer_phone FROM quotes WHERE id = $1',
       [req.params.id]
     );
 
@@ -687,6 +687,11 @@ router.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
     );
 
     await client.query('COMMIT');
+
+    // Venta cobrada → el trato pasa a Ganado en el Embudo (no bloqueante).
+    if (status === 'Pagado') {
+      await markCustomerWonByPhone(currentRes.rows[0].customer_phone);
+    }
 
     res.json({ message: 'Estado actualizado', status: updateRes.rows[0].status });
   } catch (err) {

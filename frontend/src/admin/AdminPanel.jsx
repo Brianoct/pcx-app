@@ -6,6 +6,7 @@ import EquipmentCatalogAdmin from './EquipmentCatalogAdmin';
 import MaterialsCatalogAdmin from './MaterialsCatalogAdmin';
 import ProductStructureAdmin from './ProductStructureAdmin';
 import SalesAssistant from './SalesAssistant';
+import PipelineBoard from '../crm/PipelineBoard';
 import { apiRequest } from '../apiClient';
 
 function AdminPanel({ token, user }) {
@@ -13,8 +14,10 @@ function AdminPanel({ token, user }) {
   const navigate = useNavigate();
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiInfo, setAiInfo] = useState(null);
-  const baseTabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura'];
-  const tabKeys = aiEnabled ? [...baseTabKeys, 'ventas_ia'] : baseTabKeys;
+  // Ventas IA siempre visible: el Embudo funciona sin IA configurada; el
+  // sub-tab de WhatsApp+IA aparece solo cuando la IA está habilitada.
+  const tabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura', 'ventas_ia'];
+  const [ventasView, setVentasView] = useState('embudo');
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
     return tabKeys.includes(tab) ? tab : 'usuarios';
@@ -68,12 +71,12 @@ function AdminPanel({ token, user }) {
       icon: 'ES',
       hint: 'Ruta, materiales y costo derivado'
     },
-    ...(aiEnabled ? [{
+    {
       key: 'ventas_ia',
       label: 'Ventas IA',
       icon: 'VA',
-      hint: 'Vende desde el inbox con ayuda de IA (beta)'
-    }] : [])
+      hint: 'Embudo de ventas y asistente con IA'
+    }
   ];
   const activeTabMeta = tabs.find((tab) => tab.key === activeTab) || tabs[0];
 
@@ -144,7 +147,30 @@ function AdminPanel({ token, user }) {
         {activeTab === 'equipos' && <EquipmentCatalogAdmin token={token} />}
         {activeTab === 'materiales' && <MaterialsCatalogAdmin token={token} />}
         {activeTab === 'estructura' && <ProductStructureAdmin token={token} />}
-        {activeTab === 'ventas_ia' && aiEnabled && <SalesAssistant token={token} user={user} aiInfo={aiInfo} />}
+        {activeTab === 'ventas_ia' && (
+          <div>
+            <div className="admin-subtabs" role="tablist" aria-label="Embudo y asistente de ventas">
+              <button
+                type="button"
+                className={`admin-subtab ${ventasView === 'embudo' ? 'is-active' : ''}`}
+                onClick={() => setVentasView('embudo')}
+              >
+                Embudo
+              </button>
+              {aiEnabled && (
+                <button
+                  type="button"
+                  className={`admin-subtab ${ventasView === 'whatsapp' ? 'is-active' : ''}`}
+                  onClick={() => setVentasView('whatsapp')}
+                >
+                  WhatsApp + IA
+                </button>
+              )}
+            </div>
+            {(ventasView === 'embudo' || !aiEnabled) && <PipelineBoard token={token} />}
+            {ventasView === 'whatsapp' && aiEnabled && <SalesAssistant token={token} user={user} aiInfo={aiInfo} />}
+          </div>
+        )}
       </div>
     </div>
   );

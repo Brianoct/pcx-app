@@ -90,6 +90,102 @@ router.get('/api/customers', authenticateToken, async (req, res) => {
   }
 });
 
+// ─── Embudo de ventas (estilo Pipedrive) ─────────────────────────────────────
+// Probabilidad de cierre por etapa: alimenta el pronóstico ponderado.
+const STAGE_PROBABILITY = { contactado: 0.10, cotizado: 0.35, negociando: 0.60 };
+const OPEN_STAGES = ['contactado', 'cotizado', 'negociando'];
+
+// Board data: every open deal, plus this month's won/lost. Registered BEFORE
+// /api/customers/:id so "pipeline" is not parsed as an id.
+router.get('/api/customers/pipeline', authenticateToken, async (req, res) => {
+  const userContext = await ensureCrmAccess(req, res);
+  if (!userContext) return;
+  try {
+    const result = await pool.query(
+      `SELECT c.*,
+              COALESCE(NULLIF(TRIM(owner.display_name), ''), split_part(owner.email, '@', 1)) AS owner_name,
+              s.open_value, s.paid_month_value, s.last_quote_at, n.last_note_at
+       FROM customers c
+       LEFT JOIN users owner ON owner.id = c.assigned_user_id
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(SUM(CASE WHEN q.status IN ('Cotizado', 'Confirmado') THEN q.total ELSE 0 END), 0) AS open_value,
+                COALESCE(SUM(CASE WHEN q.status IN ('Pagado', 'Embalado', 'Enviado')
+                                   AND (q.created_at AT TIME ZONE 'America/La_Paz') >= date_trunc('month', NOW() AT TIME ZONE 'America/La_Paz')
+                                  THEN q.total ELSE 0 END), 0) AS paid_month_value,
+                MAX(q.created_at) AS last_quote_at
+         FROM quotes q
+         WHERE ${QUOTES_BY_PHONE_JOIN}
+       ) s ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT MAX(created_at) AS last_note_at FROM customer_notes WHERE customer_id = c.id
+       ) n ON TRUE
+       WHERE c.pipeline_stage IN ('contactado', 'cotizado', 'negociando')
+          OR (c.pipeline_stage IN ('cliente', 'perdido')
+              AND (c.stage_changed_at AT TIME ZONE 'America/La_Paz') >= date_trunc('month', NOW() AT TIME ZONE 'America/La_Paz'))
+       ORDER BY (c.follow_up_at IS NOT NULL AND c.follow_up_at <= (NOW() AT TIME ZONE 'America/La_Paz')::date) DESC,
+                s.open_value DESC, c.updated_at DESC
+       LIMIT 400`
+    );
+
+    const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/La_Paz' }));
+    today.setHours(0, 0, 0, 0);
+    const cards = result.rows.map((row) => {
+      const base = buildCustomerRow(row);
+      const lastActivity = [row.stage_changed_at, row.updated_at, row.last_note_at, row.last_quote_at]
+        .filter(Boolean).map((d) => new Date(d).getTime());
+      const lastActivityAt = lastActivity.length ? new Date(Math.max(...lastActivity)) : null;
+      return {
+        id: base.id,
+        name: base.name,
+        phone: base.phone,
+        pipeline_stage: base.pipeline_stage,
+        owner_name: base.owner_name || base.assigned_vendor || null,
+        follow_up_at: base.follow_up_at,
+        follow_up_note: base.follow_up_note,
+        lost_reason: base.lost_reason,
+        open_value: Number(row.open_value || 0),
+        paid_month_value: Number(row.paid_month_value || 0),
+        days_in_stage: row.stage_changed_at
+          ? Math.max(0, Math.floor((Date.now() - new Date(row.stage_changed_at).getTime()) / 86400000))
+          : 0,
+        days_since_activity: lastActivityAt
+          ? Math.max(0, Math.floor((Date.now() - lastActivityAt.getTime()) / 86400000))
+          : null
+      };
+    });
+
+    const summary = { stages: {}, open_count: 0, open_value: 0, weighted_forecast: 0, sin_siguiente_paso: 0, vencidas: 0 };
+    for (const stage of OPEN_STAGES) summary.stages[stage] = { count: 0, value: 0, probability: STAGE_PROBABILITY[stage] };
+    let wonCount = 0; let wonValue = 0; let lostCount = 0; let lostValue = 0;
+    const todayStr = today.toISOString().slice(0, 10);
+    for (const card of cards) {
+      if (OPEN_STAGES.includes(card.pipeline_stage)) {
+        const bucket = summary.stages[card.pipeline_stage];
+        bucket.count += 1;
+        bucket.value += card.open_value;
+        summary.open_count += 1;
+        summary.open_value += card.open_value;
+        summary.weighted_forecast += card.open_value * STAGE_PROBABILITY[card.pipeline_stage];
+        if (!card.follow_up_at) summary.sin_siguiente_paso += 1;
+        else if (card.follow_up_at < todayStr) summary.vencidas += 1;
+      } else if (card.pipeline_stage === 'cliente') {
+        wonCount += 1; wonValue += card.paid_month_value || card.open_value;
+      } else if (card.pipeline_stage === 'perdido') {
+        lostCount += 1; lostValue += card.open_value;
+      }
+    }
+    summary.won_month = { count: wonCount, value: wonValue };
+    summary.lost_month = { count: lostCount, value: lostValue };
+    summary.win_rate = (wonCount + lostCount) > 0 ? wonCount / (wonCount + lostCount) : null;
+    summary.weighted_forecast = Math.round(summary.weighted_forecast);
+
+    res.json({ cards, summary, probabilities: STAGE_PROBABILITY });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar el embudo' });
+  }
+});
+
 router.get('/api/customers/:id', authenticateToken, async (req, res) => {
   const userContext = await ensureCrmAccess(req, res);
   if (!userContext) return;
@@ -180,6 +276,7 @@ const parseCustomerPayload = (body = {}, { partial = false } = {}) => {
     out.follow_up_at = raw;
   }
   if (has('follow_up_note')) out.follow_up_note = trimOrNull(body.follow_up_note, 300);
+  if (has('lost_reason')) out.lost_reason = trimOrNull(body.lost_reason, 200);
   if (has('assigned_user_id')) {
     if (body.assigned_user_id === null || body.assigned_user_id === '') {
       out.assigned_user_id = null;
@@ -244,6 +341,14 @@ router.patch('/api/customers/:id', authenticateToken, async (req, res) => {
     for (const key of keys) {
       values.push(data[key]);
       sets.push(`${key} = $${values.length}`);
+      // Track when the deal entered its current stage (rot alerts + win rate),
+      // and clear the lost reason when it leaves Perdido.
+      if (key === 'pipeline_stage') {
+        sets.push(`stage_changed_at = CASE WHEN customers.pipeline_stage IS DISTINCT FROM $${values.length} THEN NOW() ELSE customers.stage_changed_at END`);
+        if (data.pipeline_stage !== 'perdido' && !Object.prototype.hasOwnProperty.call(data, 'lost_reason')) {
+          sets.push(`lost_reason = CASE WHEN $${values.length} = 'perdido' THEN customers.lost_reason ELSE NULL END`);
+        }
+      }
     }
     values.push(customerId);
     const result = await pool.query(
