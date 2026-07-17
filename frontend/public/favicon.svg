@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- PCX brand mark: the X from the logo — red stroke behind, white stroke in
+       front — on the brand's black tile. Designed to read at 16px. -->
+  <rect width="64" height="64" rx="14" fill="#161412"/>
+  <!-- red stroke: bottom-left to top-right (shows as two wedges, like the logo) -->
+  <polygon points="39,12 51,12 25,52 13,52" fill="#e8130b"/>
+  <!-- dark-red facet on the top wedge, echoing the logo's two-tone X -->
+  <polygon points="39,12 51,12 45.5,20.5" fill="#9b0d07"/>
+  <!-- white stroke: top-left to bottom-right, crossing in front -->
+  <polygon points="13,12 25,12 51,52 39,52" fill="#ffffff"/>
+</svg>
