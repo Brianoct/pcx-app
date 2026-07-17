@@ -6,6 +6,7 @@ const { ROLE_KEYS, normalizeRole } = require('../lib/rbac');
 const router = express.Router();
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TASK_TYPES = ['tarea', '3s', 'kaizen'];
 
 const userDisplayName = (row) =>
   String(row.display_name || '').trim() || String(row.email || '').split('@')[0] || 'Usuario';
@@ -17,6 +18,7 @@ const buildTaskRow = (row) => ({
   start_minute: Number(row.start_minute),
   end_minute: Number(row.end_minute),
   title: row.title,
+  task_type: TASK_TYPES.includes(row.task_type) ? row.task_type : 'tarea',
   is_done: Boolean(row.is_done)
 });
 
@@ -36,6 +38,11 @@ const parseTaskFields = (body, { partial = false } = {}) => {
     }
     out.start_minute = start;
     out.end_minute = end;
+  }
+  if (has('task_type')) {
+    const type = String(body.task_type || '').trim().toLowerCase();
+    if (!TASK_TYPES.includes(type)) return { error: 'Tipo de tarea inválido' };
+    out.task_type = type;
   }
   if (has('is_done')) out.is_done = Boolean(body.is_done);
   return { fields: out };
@@ -86,9 +93,9 @@ router.post('/api/day-plan', authenticateToken, async (req, res) => {
   if (start_minute === undefined) return res.status(400).json({ error: 'Horario requerido' });
   try {
     const result = await pool.query(
-      `INSERT INTO day_plan_tasks (user_id, task_date, start_minute, end_minute, title)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [req.user.id, date, start_minute, end_minute, title]
+      `INSERT INTO day_plan_tasks (user_id, task_date, start_minute, end_minute, title, task_type)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [req.user.id, date, start_minute, end_minute, title, parsed.fields.task_type || 'tarea']
     );
     res.status(201).json({ task: buildTaskRow(result.rows[0]) });
   } catch (err) {
