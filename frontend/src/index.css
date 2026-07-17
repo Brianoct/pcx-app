@@ -8798,3 +8798,87 @@ img, video, canvas { max-width: 100%; }
   .campaign-banner { flex-wrap: wrap; }
   .campaign-banner-cta { margin-left: auto; }
 }
+
+/* ============ Plan del día: tipos de tarea (3S / Kaizen) + hover ============ */
+
+/* ✓/✕ solo al pasar el mouse — en pantallas táctiles quedan siempre visibles
+   porque ahí no existe hover. */
+@media (hover: hover) and (pointer: fine) {
+  .dayplan-task .dayplan-task-actions {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+  }
+  .dayplan-task:hover .dayplan-task-actions,
+  .dayplan-task:focus-within .dayplan-task-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.dayplan-task-toprow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* Lean 3S: mismo look ámbar rayado para TODO el equipo. */
+.dayplan-task.type-3s {
+  background: repeating-linear-gradient(135deg, #d97706 0 12px, #b45309 12px 24px);
+  border-left: 4px solid #78350f;
+}
+
+/* Kaizen: mismo look violeta rayado para TODO el equipo. */
+.dayplan-task.type-kaizen {
+  background: repeating-linear-gradient(135deg, #7c3aed 0 12px, #6d28d9 12px 24px);
+  border-left: 4px solid #4c1d95;
+}
+
+.dayplan-task-badge {
+  flex-shrink: 0;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+}
+.dayplan-task-badge.is-3s { color: #92400e; }
+.dayplan-task-badge.is-kaizen { color: #5b21b6; }
+
+/* Selector de tipo en la barra de agregar: se tiñe según lo elegido. */
+.dayplan-type-select.is-3s { background: #fef3c7; border-color: #d97706; color: #92400e; font-weight: 700; }
+.dayplan-type-select.is-kaizen { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; font-weight: 700; }
+
+/* Leyenda en la barra de resumen. */
+.dayplan-legend { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.dayplan-legend-chip {
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #ffffff;
+}
+.dayplan-legend-chip.is-3s { background: repeating-linear-gradient(135deg, #d97706 0 8px, #b45309 8px 16px); }
+.dayplan-legend-chip.is-kaizen { background: repeating-linear-gradient(135deg, #7c3aed 0 8px, #6d28d9 8px 16px); }
+.dayplan-legend-note { font-size: 0.72rem; color: var(--text-muted); }
+
+/* Indicadores por persona en el encabezado de su columna: gris = le falta,
+   a color = ya la planificó. */
+.dayplan-col-sub { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+.dayplan-col-lean { display: inline-flex; gap: 3px; flex-shrink: 0; }
+.dayplan-lean-dot {
+  font-size: 0.66rem;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 6px;
+  filter: grayscale(1);
+  opacity: 0.35;
+}
+.dayplan-lean-dot.ok { filter: none; opacity: 1; background: rgba(16, 185, 129, 0.16); }
+
+@media (max-width: 640px) {
+  .dayplan-legend-note { display: none; }
+}

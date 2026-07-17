@@ -15,6 +15,14 @@ const USER_COLORS = [
   '#f97316', '#84cc16', '#6366f1', '#14b8a6', '#e11d48', '#0ea5e9'
 ];
 
+// Meeting categories: regular work keeps the person's color; Lean 3S and
+// Kaizen use ONE fixed look for the whole team so they jump out on the board.
+const TASK_TYPE_META = {
+  tarea: { label: 'Tarea normal' },
+  '3s': { label: 'Lean 3S', icon: '🧹', badge: '3S' },
+  kaizen: { label: 'Kaizen (mejora)', icon: '💡', badge: 'KAIZEN' }
+};
+
 const pad2 = (n) => String(n).padStart(2, '0');
 const toDateText = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const minuteLabel = (minute) => `${pad2(Math.floor(minute / 60))}:${pad2(minute % 60)}`;
@@ -43,6 +51,7 @@ export default function Calendar({ token, user }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
+  const [taskType, setTaskType] = useState('tarea');
   const [startMinute, setStartMinute] = useState(8 * 60);
   const [endMinute, setEndMinute] = useState(9 * 60);
   const [saving, setSaving] = useState(false);
@@ -88,10 +97,11 @@ export default function Calendar({ token, user }) {
       const data = await apiRequest('/api/day-plan', {
         method: 'POST',
         token,
-        body: { date, title: title.trim(), start_minute: startMinute, end_minute: endMinute }
+        body: { date, title: title.trim(), start_minute: startMinute, end_minute: endMinute, task_type: taskType }
       });
       setTasks((prev) => [...prev, data.task]);
       setTitle('');
+      setTaskType('tarea');
       // Chain the next entry right after this one — fast logging in the meeting.
       const duration = endMinute - startMinute;
       const nextStart = Math.min(endMinute, DAY_END - 30);
@@ -192,6 +202,18 @@ export default function Calendar({ token, user }) {
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') addTask(); }}
         />
+        <select
+          className={`dayplan-type-select ${taskType !== 'tarea' ? `is-${taskType}` : ''}`}
+          value={taskType}
+          onChange={(e) => setTaskType(e.target.value)}
+          title="Tipo de tarea"
+        >
+          {Object.entries(TASK_TYPE_META).map(([value, meta]) => (
+            <option key={value} value={value}>
+              {meta.icon ? `${meta.icon} ${meta.label}` : meta.label}
+            </option>
+          ))}
+        </select>
         <select value={startMinute} onChange={(e) => {
           const v = Number(e.target.value);
           setStartMinute(v);
@@ -216,7 +238,11 @@ export default function Calendar({ token, user }) {
         <span><strong>{planned}</strong>/{team.length} con plan</span>
         <span><strong>{tasks.length}</strong> tareas</span>
         <span><strong>{doneCount}</strong> hechas</span>
-        <span className="dayplan-meta-hint">Toca ✓ en tus tareas al completarlas</span>
+        <span className="dayplan-legend">
+          <span className="dayplan-legend-chip is-3s">🧹 3S</span>
+          <span className="dayplan-legend-chip is-kaizen">💡 Kaizen</span>
+          <span className="dayplan-legend-note">1 de cada una por persona, cada día</span>
+        </span>
       </div>
 
       {loading ? (
@@ -234,12 +260,20 @@ export default function Calendar({ token, user }) {
             const color = colorByUserId.get(member.id) || USER_COLORS[0];
             const isMine = member.id === myId;
             const memberDone = memberTasks.filter((t) => t.is_done).length;
+            const has3s = memberTasks.some((t) => t.task_type === '3s');
+            const hasKaizen = memberTasks.some((t) => t.task_type === 'kaizen');
             return (
               <div key={member.id} className={`dayplan-col ${isMine ? 'is-mine' : ''}`}>
                 <div className="dayplan-col-head" style={{ borderTopColor: color }}>
                   <span className="dayplan-col-name">{member.name}{isMine ? ' (yo)' : ''}</span>
-                  <span className={`dayplan-col-count ${memberTasks.length === 0 ? 'is-empty' : ''}`}>
-                    {memberTasks.length === 0 ? 'por planificar' : `${memberDone}/${memberTasks.length} ✓`}
+                  <span className="dayplan-col-sub">
+                    <span className={`dayplan-col-count ${memberTasks.length === 0 ? 'is-empty' : ''}`}>
+                      {memberTasks.length === 0 ? 'por planificar' : `${memberDone}/${memberTasks.length} ✓`}
+                    </span>
+                    <span className="dayplan-col-lean">
+                      <span className={`dayplan-lean-dot ${has3s ? 'ok' : ''}`} title={has3s ? '3S planificada' : 'Falta su 3S de hoy'}>🧹</span>
+                      <span className={`dayplan-lean-dot ${hasKaizen ? 'ok' : ''}`} title={hasKaizen ? 'Kaizen planificado' : 'Falta su Kaizen de hoy'}>💡</span>
+                    </span>
                   </span>
                 </div>
                 <div className="dayplan-col-body" style={{ height: boardHeight }}>
@@ -253,20 +287,29 @@ export default function Calendar({ token, user }) {
                     const top = Math.max(0, ((task.start_minute - DAY_START) / 60) * HOUR_PX);
                     const height = Math.max(24, ((Math.min(task.end_minute, DAY_END) - Math.max(task.start_minute, DAY_START)) / 60) * HOUR_PX - 3);
                     const width = 100 / task.laneCount;
+                    const type = TASK_TYPE_META[task.task_type] ? task.task_type : 'tarea';
+                    const typeMeta = TASK_TYPE_META[type];
                     return (
                       <div
                         key={task.id}
-                        className={`dayplan-task ${task.is_done ? 'is-done' : ''}`}
+                        className={`dayplan-task ${task.is_done ? 'is-done' : ''} ${type !== 'tarea' ? `type-${type}` : ''}`}
                         style={{
                           top,
                           height,
                           left: `${task.lane * width}%`,
                           width: `calc(${width}% - 4px)`,
-                          background: color
+                          // Regular tasks wear the person's color; 3S/Kaizen use
+                          // the fixed team-wide look from CSS.
+                          background: type === 'tarea' ? color : undefined
                         }}
-                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${task.title}`}
+                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}`}
                       >
-                        <span className="dayplan-task-time">{minuteLabel(task.start_minute)}–{minuteLabel(task.end_minute)}</span>
+                        <span className="dayplan-task-toprow">
+                          <span className="dayplan-task-time">{minuteLabel(task.start_minute)}–{minuteLabel(task.end_minute)}</span>
+                          {type !== 'tarea' && (
+                            <span className={`dayplan-task-badge is-${type}`}>{typeMeta.icon} {typeMeta.badge}</span>
+                          )}
+                        </span>
                         <span className="dayplan-task-title">{task.title}</span>
                         {isMine && (
                           <span className="dayplan-task-actions">
