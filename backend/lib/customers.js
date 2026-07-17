@@ -1,7 +1,7 @@
 const { pool } = require('../db');
 const { createHttpError } = require('./util');
 
-const CUSTOMER_PIPELINE_STAGES = ['contactado', 'cotizado', 'negociando', 'cliente', 'inactivo'];
+const CUSTOMER_PIPELINE_STAGES = ['contactado', 'cotizado', 'negociando', 'cliente', 'inactivo', 'perdido'];
 
 const normalizeCustomerPhone = (value = '') => String(value || '').replace(/\D/g, '');
 
@@ -44,6 +44,8 @@ const buildCustomerRow = (row = {}) => ({
   follow_up_at: formatDateOnly(row.follow_up_at),
   follow_up_note: row.follow_up_note || null,
   assigned_vendor: row.assigned_vendor || null,
+  lost_reason: row.lost_reason || null,
+  stage_changed_at: row.stage_changed_at || null,
   assigned_user_id: row.assigned_user_id !== null && row.assigned_user_id !== undefined ? Number(row.assigned_user_id) : null,
   owner_name: row.owner_name !== undefined ? (row.owner_name || null) : undefined,
   created_at: row.created_at || null,
@@ -126,8 +128,26 @@ const findCustomerOwnerByPhone = async (phone, db = pool) => {
   };
 };
 
+// Quote paid → the customer becomes a won deal on the Embudo. Never throws
+// (same contract as upsertCustomerFromQuote: CRM must not block a sale).
+const markCustomerWonByPhone = async (phone) => {
+  try {
+    const digits = normalizeCustomerPhone(phone);
+    if (!digits) return;
+    await pool.query(
+      `UPDATE customers
+       SET pipeline_stage = 'cliente', lost_reason = NULL, stage_changed_at = NOW(), updated_at = NOW()
+       WHERE phone_normalized = $1 AND pipeline_stage <> 'cliente'`,
+      [digits]
+    );
+  } catch (err) {
+    console.warn('CRM: no se pudo marcar el trato como ganado (no bloqueante):', err.message);
+  }
+};
+
 module.exports = {
   CUSTOMER_PIPELINE_STAGES,
+  markCustomerWonByPhone,
   buildCustomerRow,
   findCustomerOwnerByPhone,
   normalizeCustomerPhone,

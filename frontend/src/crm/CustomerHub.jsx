@@ -8,7 +8,8 @@ const PIPELINE_STAGES = [
   { value: 'contactado', label: 'Contactado' },
   { value: 'cotizado', label: 'Cotizado' },
   { value: 'negociando', label: 'Negociando' },
-  { value: 'cliente', label: 'Cliente' },
+  { value: 'cliente', label: 'Ganado (cliente)' },
+  { value: 'perdido', label: 'Perdido' },
   { value: 'inactivo', label: 'Inactivo' }
 ];
 const STAGE_LABEL = Object.fromEntries(PIPELINE_STAGES.map((s) => [s.value, s.label]));
