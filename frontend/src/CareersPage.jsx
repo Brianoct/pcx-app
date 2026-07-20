@@ -5,7 +5,8 @@ import { Link } from 'react-router-dom';
 import { apiRequest } from './apiClient';
 import logo from './assets/logo.png';
 
-const WHATSAPP_NUMBER = '59169618264';
+// Las postulaciones van directo al WhatsApp de Brian (no al de ventas).
+const WHATSAPP_NUMBER = '59167405778';
 
 export default function CareersPage() {
   const [postings, setPostings] = useState(null);
