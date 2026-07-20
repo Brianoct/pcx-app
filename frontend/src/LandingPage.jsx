@@ -29,7 +29,10 @@ export default function LandingPage() {
     <div className="landing">
       <header className="landing-top">
         <img src={logo} alt="PCX" className="landing-logo" />
-        <Link to="/login" className="landing-login">Ingresar</Link>
+        <nav className="landing-nav">
+          <Link to="/contacto" className="landing-login">Contacto</Link>
+          <Link to="/login" className="landing-login">Ingresar</Link>
+        </nav>
       </header>
 
       <main className="landing-hero">

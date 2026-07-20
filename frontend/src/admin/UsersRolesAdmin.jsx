@@ -3,15 +3,17 @@ import UserManagement from './UserManagement';
 import RoleConfiguration from './RoleConfiguration';
 import CommissionConfig from './CommissionConfig';
 import PayrollPanel from './PayrollPanel';
+import CareersAdmin from './CareersAdmin';
 
 // Everything about people lives in one hub: the team itself, what each role
-// can see, how commissions are earned, and how each person gets paid at the
-// end of the month. Four focused sub-views instead of four top-level tabs.
+// can see, how commissions are earned, how each person gets paid at the end
+// of the month, and the job postings to grow the team.
 const VIEWS = [
   { key: 'equipo', label: 'Equipo', hint: 'Altas, edición y estado' },
   { key: 'permisos', label: 'Permisos por rol', hint: 'Qué paneles ve cada rol' },
   { key: 'comisiones', label: 'Comisiones', hint: 'Reglas y control de calidad' },
-  { key: 'pagos', label: 'Pagos', hint: 'QR para el cierre de mes' }
+  { key: 'pagos', label: 'Pagos', hint: 'QR para el cierre de mes' },
+  { key: 'convocatorias', label: 'Convocatorias', hint: 'Puestos en la página pública' }
 ];
 
 function UsersRolesAdmin({ token, initialView }) {
@@ -83,6 +85,17 @@ function UsersRolesAdmin({ token, initialView }) {
             Las reglas que definen cuánto le toca a cada rol están en {link('comisiones', 'Comisiones')}.
           </p>
           <PayrollPanel token={token} />
+        </>
+      )}
+
+      {view === 'convocatorias' && (
+        <>
+          <p className="admin-subtab-hint">
+            Los puestos que publiques aquí aparecen en la página pública{' '}
+            <strong>Trabaja con nosotros</strong> (enlazada desde Contacto en el sitio
+            principal). Los interesados postulan por WhatsApp.
+          </p>
+          <CareersAdmin token={token} />
         </>
       )}
     </div>
