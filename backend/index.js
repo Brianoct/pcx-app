@@ -30,6 +30,7 @@ const routers = [
   require('./routes/customers'),
   require('./routes/wheel'),
   require('./routes/campaigns'),
+  require('./routes/careers'),
   require('./routes/dayplan'),
   require('./routes/overview')
 ];
