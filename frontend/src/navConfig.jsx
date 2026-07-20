@@ -22,6 +22,7 @@ const ProfilePanel = lazy(() => import('./ProfilePanel'));
 const ComprasBoard = lazy(() => import('./ComprasBoard'));
 const RuletaAdmin = lazy(() => import('./RuletaAdmin'));
 const CampaignsPanel = lazy(() => import('./CampaignsPanel'));
+const ForjaPanel = lazy(() => import('./ForjaPanel'));
 
 /**
  * Single source of truth for every internal destination.
@@ -149,6 +150,12 @@ export const NAV_ITEMS = [
     render: (ctx) => <ProfilePanel token={ctx.token} user={ctx.user} onUserUpdated={ctx.onUserUpdated} />
   },
   {
+    path: '/forja',
+    label: 'La Forja',
+    routeAccess: ['admin'],
+    render: (ctx) => <ForjaPanel token={ctx.token} />
+  },
+  {
     path: '/admin',
     label: 'Admin',
     routeAccess: ['admin'],
@@ -172,6 +179,7 @@ const SIDEBAR_SECTIONS = [
   { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras'] },
   { key: 'marketing', label: 'Marketing', paths: ['/campanas', '/combos', '/cupones', '/ruleta-premios'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
+  { key: 'forja', label: 'Élite', paths: ['/forja'] },
   { key: 'administracion', label: 'Administración', paths: ['/admin', '/dashboard'] }
 ];
 

@@ -9118,3 +9118,291 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 @media (max-width: 640px) {
   .careers-form-grid { grid-template-columns: 1fr; }
 }
+
+/* ============ LA FORJA — programa de élite (identidad militar) ============ */
+.forja-page {
+  --forja-bg: #191b12;
+  --forja-panel: #22251733;
+  --forja-card: #24281a;
+  --forja-border: #3c4128;
+  --forja-text: #e8e6d5;
+  --forja-muted: #9a9c84;
+  --forja-gold: #e3b341;
+  --forja-green: #8a9a5b;
+  --forja-red: #d94f4f;
+  background: var(--forja-bg);
+  background-image: repeating-linear-gradient(135deg, transparent 0 34px, rgba(227, 179, 65, 0.025) 34px 68px);
+  color: var(--forja-text);
+  padding: 26px 28px 50px;
+  min-height: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.forja-loading, .forja-muted { color: var(--forja-muted); }
+.forja-empty { text-align: center; padding: 40px 0; }
+
+.forja-hero { border-left: 5px solid var(--forja-gold); padding-left: 18px; margin-bottom: 22px; }
+.forja-eyebrow {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.28em;
+  color: var(--forja-gold);
+}
+.forja-title {
+  margin: 4px 0 2px;
+  font-size: clamp(2rem, 5vw, 2.9rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: var(--forja-text);
+}
+.forja-sub { margin: 0; color: var(--forja-muted); font-size: 0.9rem; letter-spacing: 0.04em; }
+
+.forja-tabs { display: flex; gap: 8px; margin: 20px 0 16px; }
+.forja-tab {
+  background: transparent;
+  border: 1px solid var(--forja-border);
+  color: var(--forja-muted);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  padding: 9px 18px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.forja-tab.is-active { background: var(--forja-gold); border-color: var(--forja-gold); color: #191b12; }
+
+.forja-stats { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; margin-bottom: 18px; }
+.forja-stat {
+  border: 1px solid var(--forja-border);
+  border-radius: 6px;
+  padding: 10px 18px;
+  min-width: 120px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.forja-stat b { display: block; font-size: 1.5rem; font-weight: 900; }
+.forja-stat span { font-size: 0.6rem; font-weight: 900; letter-spacing: 0.18em; color: var(--forja-muted); }
+.forja-stat.is-gold b { color: var(--forja-gold); }
+.forja-stat.is-baja b { color: var(--forja-red); }
+.forja-enlist-btn { margin-left: auto; align-self: center; }
+
+.forja-btn {
+  background: transparent;
+  border: 1px solid var(--forja-border);
+  color: var(--forja-text);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  font-size: 0.74rem;
+  padding: 9px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.forja-btn:hover { border-color: var(--forja-gold); }
+.forja-btn.is-gold { background: var(--forja-gold); border-color: var(--forja-gold); color: #191b12; }
+.forja-btn.is-gold:hover { background: #f0c45c; }
+.forja-btn.is-danger { border-color: #7a3030; color: var(--forja-red); }
+.forja-btn.is-danger:hover { border-color: var(--forja-red); }
+.forja-btn.is-small { padding: 6px 12px; font-size: 0.66rem; }
+.forja-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Alta de candidato / formulario de desafío */
+.forja-enlist {
+  border: 1px solid var(--forja-border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 18px 20px;
+  margin-bottom: 20px;
+}
+.forja-section-title {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: var(--forja-gold);
+}
+.forja-enlist-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.forja-enlist-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 0.66rem; font-weight: 900; letter-spacing: 0.1em; color: var(--forja-muted); }
+.forja-enlist-grid label.is-wide { grid-column: 1 / -1; }
+.forja-enlist-grid input, .forja-enlist-grid select, .forja-enlist-grid textarea {
+  background: #14160d;
+  border: 1px solid var(--forja-border);
+  border-radius: 4px;
+  color: var(--forja-text);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 0.88rem;
+}
+.forja-enlist-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+
+/* Roster: tarjetas tipo placa */
+.forja-roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.forja-card {
+  display: flex;
+  gap: 14px;
+  text-align: left;
+  background: var(--forja-card);
+  border: 1px solid var(--forja-border);
+  border-radius: 8px;
+  padding: 14px;
+  cursor: pointer;
+  color: var(--forja-text);
+  font: inherit;
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+.forja-card:hover { border-color: var(--forja-gold); transform: translateY(-2px); }
+.forja-card.is-baja { opacity: 0.55; }
+.forja-card.is-graduado { border-color: #6b5a23; }
+.forja-card-number {
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--forja-gold);
+  line-height: 1;
+  min-width: 66px;
+  text-align: center;
+  border-right: 1px dashed var(--forja-border);
+  padding-right: 12px;
+  align-self: center;
+}
+.forja-card-body { flex: 1; min-width: 0; }
+.forja-card-name { font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.9rem; }
+.forja-card-meta { font-size: 0.68rem; color: var(--forja-muted); letter-spacing: 0.08em; margin-top: 2px; }
+.forja-card-bar { height: 4px; background: #14160d; border-radius: 999px; margin: 8px 0; overflow: hidden; }
+.forja-card-bar > div { height: 100%; background: var(--forja-green); border-radius: 999px; }
+.forja-card-foot { display: flex; justify-content: space-between; align-items: center; }
+.forja-card-avg { font-weight: 900; font-size: 1rem; }
+.forja-card-avg.is-high { color: var(--forja-green); }
+.forja-card-avg.is-mid { color: var(--forja-gold); }
+.forja-card-avg.is-low { color: var(--forja-red); }
+.forja-card-note {
+  margin-top: 7px;
+  font-size: 0.7rem;
+  color: var(--forja-muted);
+  font-style: italic;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.forja-status {
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 3px;
+}
+.forja-status.is-activo { background: rgba(138, 154, 91, 0.2); color: var(--forja-green); border: 1px solid rgba(138, 154, 91, 0.5); }
+.forja-status.is-graduado { background: rgba(227, 179, 65, 0.15); color: var(--forja-gold); border: 1px solid rgba(227, 179, 65, 0.5); }
+.forja-status.is-baja { background: rgba(217, 79, 79, 0.15); color: var(--forja-red); border: 1px solid rgba(217, 79, 79, 0.45); }
+
+/* Ficha del candidato */
+.forja-back {
+  background: none;
+  border: none;
+  color: var(--forja-muted);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  padding: 0 0 14px;
+  font-size: 0.78rem;
+}
+.forja-back:hover { color: var(--forja-gold); }
+.forja-detail-head {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  border: 1px solid var(--forja-border);
+  border-left: 5px solid var(--forja-gold);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 18px 22px;
+  flex-wrap: wrap;
+}
+.forja-detail-number { font-size: 3.6rem; font-weight: 900; color: var(--forja-gold); line-height: 1; }
+.forja-detail-info { flex: 1; min-width: 220px; }
+.forja-detail-name { margin: 0; font-size: 1.4rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: var(--forja-text); }
+.forja-detail-meta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 6px; font-size: 0.74rem; color: var(--forja-muted); }
+.forja-week-chip { color: var(--forja-gold); font-weight: 900; letter-spacing: 0.12em; }
+.forja-detail-objective { margin: 8px 0 0; font-size: 0.82rem; color: var(--forja-text); }
+.forja-detail-score { text-align: center; }
+.forja-avg { display: block; font-size: 2.4rem; font-weight: 900; }
+.forja-avg.is-high { color: var(--forja-green); }
+.forja-avg.is-mid { color: var(--forja-gold); }
+.forja-avg.is-low { color: var(--forja-red); }
+.forja-detail-score small { font-size: 0.58rem; font-weight: 900; letter-spacing: 0.14em; color: var(--forja-muted); }
+.forja-detail-actions { display: flex; gap: 10px; margin: 14px 0 20px; flex-wrap: wrap; }
+
+.forja-detail-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .forja-detail-grid { grid-template-columns: 1fr; } }
+
+.forja-week { border: 1px solid var(--forja-border); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; background: rgba(0, 0, 0, 0.18); }
+.forja-week.is-current { border-color: var(--forja-gold); }
+.forja-week-label { font-size: 0.66rem; font-weight: 900; letter-spacing: 0.22em; color: var(--forja-muted); margin-bottom: 10px; display: flex; gap: 12px; align-items: center; }
+.forja-week.is-current .forja-week-label { color: var(--forja-gold); }
+.forja-now { color: var(--forja-green); letter-spacing: 0.1em; }
+
+.forja-challenge {
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-top: 1px dashed var(--forja-border);
+  flex-wrap: wrap;
+}
+.forja-challenge:first-of-type { border-top: none; }
+.forja-challenge-info { flex: 1; min-width: 220px; }
+.forja-challenge-title { font-weight: 800; font-size: 0.88rem; }
+.forja-challenge-desc { font-size: 0.76rem; color: var(--forja-muted); margin-top: 2px; }
+.forja-challenge-graded { font-size: 0.68rem; color: var(--forja-green); margin-top: 4px; }
+.forja-grade { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.forja-score-input {
+  width: 72px;
+  background: #14160d;
+  border: 1px solid var(--forja-border);
+  border-radius: 4px;
+  color: var(--forja-text);
+  padding: 8px 10px;
+  font-weight: 900;
+  font-size: 0.95rem;
+  text-align: center;
+}
+.forja-score-input.is-high { border-color: var(--forja-green); color: var(--forja-green); }
+.forja-score-input.is-mid { border-color: var(--forja-gold); color: var(--forja-gold); }
+.forja-score-input.is-low { border-color: var(--forja-red); color: var(--forja-red); }
+.forja-comment-input {
+  width: 200px;
+  background: #14160d;
+  border: 1px solid var(--forja-border);
+  border-radius: 4px;
+  color: var(--forja-text);
+  padding: 8px 10px;
+  font-size: 0.78rem;
+}
+
+.forja-log { border: 1px solid var(--forja-border); border-radius: 8px; background: rgba(0, 0, 0, 0.18); padding: 14px 16px; }
+.forja-log-add { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 12px; }
+.forja-log-add textarea {
+  flex: 1;
+  background: #14160d;
+  border: 1px solid var(--forja-border);
+  border-radius: 4px;
+  color: var(--forja-text);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.82rem;
+  resize: vertical;
+}
+.forja-log-list { list-style: none; margin: 0; padding: 0; }
+.forja-log-list li { border-top: 1px dashed var(--forja-border); padding: 8px 0; }
+.forja-log-date { display: block; font-size: 0.62rem; font-weight: 900; letter-spacing: 0.12em; color: var(--forja-gold); text-transform: uppercase; }
+.forja-log-text { font-size: 0.82rem; }
+
+.forja-plan-head { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+  .forja-page { padding: 18px 14px 40px; }
+  .forja-enlist-grid { grid-template-columns: 1fr; }
+  .forja-comment-input { width: 100%; }
+}
