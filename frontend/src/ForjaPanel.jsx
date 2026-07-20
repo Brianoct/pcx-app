@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { useToast } from './ui/toastContext';
 
-// LA FORJA — programa de entrenamiento de élite PCX (6 semanas). Sección
+// LA MONTAÑA — programa de entrenamiento de élite PCX (6 semanas). Sección
 // separada del negocio del día a día, con identidad propia (estilo militar).
 // Candidatos con número tipo dorsal, desafíos por semana calificados 0-100 y
 // bitácora de instrucción por candidato.
@@ -59,7 +59,7 @@ export default function ForjaPanel({ token }) {
         setCandidates(Array.isArray(cand?.candidates) ? cand.candidates : []);
         setChallenges(Array.isArray(chal?.challenges) ? chal.challenges : []);
       })
-      .catch((err) => toast.error(err.message || 'No se pudo cargar La Forja'))
+      .catch((err) => toast.error(err.message || 'No se pudo cargar La Montaña'))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -95,7 +95,7 @@ export default function ForjaPanel({ token }) {
     setSaving(true);
     try {
       await apiRequest('/api/training/candidates', { method: 'POST', token, body: enlisting });
-      toast.success(`N° ${pad2(enlisting.number)} enlistado. Bienvenido a La Forja.`);
+      toast.success(`N° ${pad2(enlisting.number)} enlistado. Bienvenido a La Montaña.`);
       setEnlisting(null);
       load();
     } catch (err) {
@@ -190,7 +190,7 @@ export default function ForjaPanel({ token }) {
     }
   };
 
-  if (loading) return <div className="forja-page"><p className="forja-loading">Cargando La Forja…</p></div>;
+  if (loading) return <div className="forja-page"><p className="forja-loading">Cargando La Montaña…</p></div>;
 
   // ─── Detail view ───────────────────────────────────────────────────────────
   if (selectedId && detail) {
@@ -325,7 +325,7 @@ export default function ForjaPanel({ token }) {
     <div className="forja-page">
       <div className="forja-hero">
         <p className="forja-eyebrow">PROGRAMA DE ÉLITE PCX · CLASIFICADO</p>
-        <h2 className="forja-title">LA FORJA</h2>
+        <h2 className="forja-title">LA MONTAÑA</h2>
         <p className="forja-sub">6 semanas. Desafíos reales. Solo los mejores se quedan.</p>
       </div>
 

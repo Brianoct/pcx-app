@@ -2,7 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 
-// La Forja: programa de entrenamiento de élite. Todo es de acceso admin —
+// La Montaña: programa de entrenamiento de élite. Todo es de acceso admin —
 // vive aparte del negocio del día a día.
 const router = express.Router();
 const adminOnly = [authenticateToken, requireRole(['admin'])];
