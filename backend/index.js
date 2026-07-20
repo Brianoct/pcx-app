@@ -31,6 +31,7 @@ const routers = [
   require('./routes/wheel'),
   require('./routes/campaigns'),
   require('./routes/careers'),
+  require('./routes/training'),
   require('./routes/dayplan'),
   require('./routes/overview')
 ];
