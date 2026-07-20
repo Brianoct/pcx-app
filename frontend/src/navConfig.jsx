@@ -150,8 +150,8 @@ export const NAV_ITEMS = [
     render: (ctx) => <ProfilePanel token={ctx.token} user={ctx.user} onUserUpdated={ctx.onUserUpdated} />
   },
   {
-    path: '/forja',
-    label: 'La Forja',
+    path: '/montana',
+    label: 'La Montaña',
     routeAccess: ['admin'],
     render: (ctx) => <ForjaPanel token={ctx.token} />
   },
@@ -179,7 +179,7 @@ const SIDEBAR_SECTIONS = [
   { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras'] },
   { key: 'marketing', label: 'Marketing', paths: ['/campanas', '/combos', '/cupones', '/ruleta-premios'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
-  { key: 'forja', label: 'Élite', paths: ['/forja'] },
+  { key: 'forja', label: 'Élite', paths: ['/montana'] },
   { key: 'administracion', label: 'Administración', paths: ['/admin', '/dashboard'] }
 ];
 
