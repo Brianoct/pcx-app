@@ -27,7 +27,7 @@ export default function Dashboard({ token, user, role, access }) {
 
   const quickLinks = useMemo(() => (
     NAV_ITEMS
-      .filter((item) => item.path !== '/' && item.path !== '/perfil')
+      .filter((item) => item.path !== '/' && item.path !== '/perfil' && !item.hidden)
       .filter((item) => allowsAny(access, item.navAccess || item.routeAccess))
       .map((item) => ({ to: item.path, label: item.label }))
   ), [access]);

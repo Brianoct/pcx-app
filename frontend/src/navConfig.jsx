@@ -153,6 +153,9 @@ export const NAV_ITEMS = [
     path: '/montana',
     label: 'La Montaña',
     routeAccess: ['admin'],
+    // Hidden on purpose: no aparece en ningún menú (reuniones con pantalla
+    // compartida). Se entra escribiendo la URL /#/montana directamente.
+    hidden: true,
     render: (ctx) => <ForjaPanel token={ctx.token} />
   },
   {
@@ -179,7 +182,6 @@ const SIDEBAR_SECTIONS = [
   { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras'] },
   { key: 'marketing', label: 'Marketing', paths: ['/campanas', '/combos', '/cupones', '/ruleta-premios'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
-  { key: 'forja', label: 'Élite', paths: ['/montana'] },
   { key: 'administracion', label: 'Administración', paths: ['/admin', '/dashboard'] }
 ];
 
@@ -194,7 +196,7 @@ export function getSidebarSections(access) {
       label: section.label,
       items: section.paths
         .map((path) => byPath.get(path))
-        .filter((item) => item && allowsAny(access, item.navAccess || item.routeAccess))
+        .filter((item) => item && !item.hidden && allowsAny(access, item.navAccess || item.routeAccess))
         .map(({ path, label }) => ({ to: path, label }))
     }))
     .filter((section) => section.items.length > 0);
