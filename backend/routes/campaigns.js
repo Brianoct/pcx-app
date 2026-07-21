@@ -271,4 +271,90 @@ router.patch('/api/campaigns/tasks/:taskId/done', authenticateToken, async (req,
   }
 });
 
+// ─── Eventos del calendario de Marketing ─────────────────────────────────────
+// Además de campañas y lives, Marketing anota sus propios eventos (sesiones
+// de fotos, ferias, entregas de artes). Todos los ven; edita Marketing/Admin.
+
+const parseEvent = (body = {}) => {
+  const title = String(body.title || '').trim().slice(0, 160);
+  if (!title) return { error: 'El título es obligatorio' };
+  if (!isValidDate(body.event_date)) return { error: 'Fecha inválida (AAAA-MM-DD)' };
+  let eventTime = null;
+  if (body.event_time !== undefined && body.event_time !== null && String(body.event_time).trim() !== '') {
+    eventTime = String(body.event_time).trim().slice(0, 5);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(eventTime)) return { error: 'Hora inválida (HH:MM)' };
+  }
+  return { title, event_date: body.event_date, event_time: eventTime, note: String(body.note || '').trim().slice(0, 1000) };
+};
+
+router.get('/api/marketing-events', authenticateToken, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT e.id, e.title, e.event_date::text AS event_date, e.event_time, e.note,
+              COALESCE(NULLIF(TRIM(u.display_name), ''), split_part(u.email, '@', 1)) AS author
+       FROM marketing_events e
+       LEFT JOIN users u ON u.id = e.created_by
+       WHERE e.event_date >= (NOW() AT TIME ZONE 'America/La_Paz')::date - INTERVAL '12 months'
+       ORDER BY e.event_date, e.event_time NULLS LAST, e.id`
+    );
+    res.json({
+      events: result.rows.map((row) => ({
+        id: Number(row.id),
+        title: row.title,
+        event_date: String(row.event_date).slice(0, 10),
+        event_time: row.event_time ? String(row.event_time).slice(0, 5) : null,
+        note: row.note || '',
+        author: row.author || null
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron cargar los eventos' });
+  }
+});
+
+router.post('/api/marketing-events', authenticateToken, requireRole(EDIT_ROLES), async (req, res) => {
+  const parsed = parseEvent(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  try {
+    const result = await pool.query(
+      `INSERT INTO marketing_events (title, event_date, event_time, note, created_by)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [parsed.title, parsed.event_date, parsed.event_time, parsed.note, req.user.id]
+    );
+    res.status(201).json({ message: 'Evento creado', id: Number(result.rows[0].id) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo crear el evento' });
+  }
+});
+
+router.put('/api/marketing-events/:id', authenticateToken, requireRole(EDIT_ROLES), async (req, res) => {
+  const parsed = parseEvent(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  try {
+    const result = await pool.query(
+      `UPDATE marketing_events SET title = $2, event_date = $3, event_time = $4, note = $5, updated_at = NOW()
+       WHERE id = $1 RETURNING id`,
+      [req.params.id, parsed.title, parsed.event_date, parsed.event_time, parsed.note]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Evento no encontrado' });
+    res.json({ message: 'Evento actualizado' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo actualizar el evento' });
+  }
+});
+
+router.delete('/api/marketing-events/:id', authenticateToken, requireRole(EDIT_ROLES), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM marketing_events WHERE id = $1 RETURNING id', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Evento no encontrado' });
+    res.json({ message: 'Evento eliminado' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo eliminar el evento' });
+  }
+});
+
 module.exports = router;

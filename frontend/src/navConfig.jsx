@@ -22,6 +22,7 @@ const ProfilePanel = lazy(() => import('./ProfilePanel'));
 const ComprasBoard = lazy(() => import('./ComprasBoard'));
 const CampaignsPanel = lazy(() => import('./CampaignsPanel'));
 const LivePanel = lazy(() => import('./LivePanel'));
+const MarketingCalendar = lazy(() => import('./MarketingCalendar'));
 const ForjaPanel = lazy(() => import('./ForjaPanel'));
 
 /**
@@ -138,6 +139,12 @@ export const NAV_ITEMS = [
     render: (ctx) => <LivePanel token={ctx.token} role={ctx.role} />
   },
   {
+    path: '/marketing-calendario',
+    label: 'Calendario',
+    routeAccess: null,
+    render: (ctx) => <MarketingCalendar token={ctx.token} role={ctx.role} />
+  },
+  {
     path: '/calendario',
     label: 'Plan del día',
     routeAccess: ['calendario', 'admin'],
@@ -177,12 +184,12 @@ export const NAV_ITEMS = [
 const SIDEBAR_SECTIONS = [
   { key: 'principal', label: 'Principal', paths: ['/', '/calendario'] },
   { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/history'] },
-  { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion', '/comprar'] },
+  { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion'] },
   { key: 'produccion', label: 'Producción', paths: ['/produccion-planificacion', '/produccion-kanban'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras'] },
-  { key: 'marketing', label: 'Marketing', paths: ['/campanas', '/live', '/combos', '/cupones'] },
+  { key: 'marketing', label: 'Marketing', paths: ['/marketing-calendario', '/campanas', '/live', '/combos', '/cupones'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
-  { key: 'administracion', label: 'Administración', paths: ['/admin', '/dashboard'] }
+  { key: 'administracion', label: 'Administración', paths: ['/comprar', '/admin', '/dashboard'] }
 ];
 
 export const allowsAny = (access, keys) =>
