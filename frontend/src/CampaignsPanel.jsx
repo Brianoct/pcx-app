@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
+import InvestmentBox from './InvestmentBox';
 import {
   CAMPAIGN_AREAS, AREA_LABELS, areaForRole, canEditCampaigns, canTickAnyArea,
   boliviaToday, campaignIsActive, formatCampaignDate
@@ -13,6 +14,7 @@ const emptyForm = () => ({
   id: null,
   name: '',
   objective: '',
+  expected_return: '',
   start_date: '',
   end_date: '',
   tasks: CAMPAIGN_AREAS.map((area) => ({ id: null, area, title: '' }))
@@ -33,6 +35,7 @@ export default function CampaignsPanel({ token, role }) {
   const [formError, setFormError] = useState('');
   const [showFinished, setShowFinished] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState(null);
+  const [investmentById, setInvestmentById] = useState({});
 
   const canEdit = canEditCampaigns(role);
   const tickAny = canTickAnyArea(role);
@@ -53,6 +56,21 @@ export default function CampaignsPanel({ token, role }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Inversión por campaña — solo la ven quienes pueden editar.
+  const loadInvestment = useCallback(() => {
+    if (!canEdit) return;
+    apiRequest('/api/campaigns/investment', { token })
+      .then((data) => {
+        const map = {};
+        for (const item of data?.items || []) map[item.id] = item;
+        setInvestmentById(map);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, canEdit]);
+
+  useEffect(() => { loadInvestment(); }, [loadInvestment]);
+
   const { current, finished } = useMemo(() => {
     const cur = [];
     const fin = [];
@@ -68,6 +86,7 @@ export default function CampaignsPanel({ token, role }) {
       id: campaign.id,
       name: campaign.name,
       objective: campaign.objective || '',
+      expected_return: campaign.expected_return ?? '',
       start_date: campaign.start_date,
       end_date: campaign.end_date,
       tasks: campaign.tasks.map((t) => ({ id: t.id, area: t.area, title: t.title }))
@@ -82,6 +101,7 @@ export default function CampaignsPanel({ token, role }) {
       const payload = {
         name: form.name,
         objective: form.objective,
+        expected_return: form.expected_return === '' ? null : Number(form.expected_return),
         start_date: form.start_date,
         end_date: form.end_date,
         tasks: form.tasks.filter((t) => t.title.trim())
@@ -177,6 +197,14 @@ export default function CampaignsPanel({ token, role }) {
                 value={form.objective}
                 placeholder="Ej. Impulsar la línea Armonía con 20% de descuento y sorteos en tienda."
                 onChange={(e) => setForm({ ...form, objective: e.target.value })}
+              />
+            </label>
+            <label className="camp-field">
+              <span>Retorno esperado (Bs)</span>
+              <input
+                type="number" min="0" step="1" value={form.expected_return}
+                placeholder="El camino claro al retorno"
+                onChange={(e) => setForm({ ...form, expected_return: e.target.value })}
               />
             </label>
           </div>
@@ -353,6 +381,15 @@ export default function CampaignsPanel({ token, role }) {
             );
           })}
         </div>
+
+        {canEdit && (
+          <InvestmentBox
+            token={token}
+            campaignId={campaign.id}
+            investment={investmentById[campaign.id]}
+            onChanged={loadInvestment}
+          />
+        )}
       </div>
     );
   };

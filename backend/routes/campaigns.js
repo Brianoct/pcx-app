@@ -61,6 +61,7 @@ const loadCampaigns = async () => {
     status: row.status,
     kind: row.kind || 'campana',
     live_time: row.live_time ? String(row.live_time).slice(0, 5) : null,
+    expected_return: row.expected_return === null || row.expected_return === undefined ? null : Number(row.expected_return),
     created_by: String(row.created_by_name || row.created_by_email || '').trim() || null,
     created_at: row.created_at,
     tasks: tasksByCampaign.get(Number(row.id)) || []
@@ -100,9 +101,14 @@ const validateCampaignBody = (body = {}) => {
     liveTime = String(body.live_time).trim().slice(0, 5);
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(liveTime)) return { error: 'Hora inválida (HH:MM)' };
   }
+  let expectedReturn = null;
+  if (body.expected_return !== undefined && body.expected_return !== null && String(body.expected_return).trim() !== '') {
+    expectedReturn = Number(body.expected_return);
+    if (!Number.isFinite(expectedReturn) || expectedReturn < 0) return { error: 'Retorno esperado inválido' };
+  }
   const { tasks, error } = sanitizeTasks(body.tasks);
   if (error) return { error };
-  return { name, objective, start_date: body.start_date, end_date: body.end_date, kind, live_time: liveTime, tasks };
+  return { name, objective, start_date: body.start_date, end_date: body.end_date, kind, live_time: liveTime, expected_return: expectedReturn, tasks };
 };
 
 // Everyone logged in can see campaigns — the whole point is company-wide
@@ -123,10 +129,10 @@ router.post('/api/campaigns', authenticateToken, requireRole(EDIT_ROLES), async 
   try {
     await client.query('BEGIN');
     const campaignRes = await client.query(
-      `INSERT INTO marketing_campaigns (name, objective, start_date, end_date, status, kind, live_time, created_by)
-       VALUES ($1, $2, $3, $4, 'borrador', $5, $6, $7)
+      `INSERT INTO marketing_campaigns (name, objective, start_date, end_date, status, kind, live_time, expected_return, created_by)
+       VALUES ($1, $2, $3, $4, 'borrador', $5, $6, $7, $8)
        RETURNING id`,
-      [parsed.name, parsed.objective, parsed.start_date, parsed.end_date, parsed.kind, parsed.live_time, req.user.id]
+      [parsed.name, parsed.objective, parsed.start_date, parsed.end_date, parsed.kind, parsed.live_time, parsed.expected_return, req.user.id]
     );
     const campaignId = campaignRes.rows[0].id;
     for (let i = 0; i < parsed.tasks.length; i++) {
@@ -159,10 +165,10 @@ router.put('/api/campaigns/:id', authenticateToken, requireRole(EDIT_ROLES), asy
     await client.query('BEGIN');
     const updated = await client.query(
       `UPDATE marketing_campaigns
-       SET name = $2, objective = $3, start_date = $4, end_date = $5, live_time = $6, updated_at = NOW()
+       SET name = $2, objective = $3, start_date = $4, end_date = $5, live_time = $6, expected_return = $7, updated_at = NOW()
        WHERE id = $1
        RETURNING id`,
-      [campaignId, parsed.name, parsed.objective, parsed.start_date, parsed.end_date, parsed.live_time]
+      [campaignId, parsed.name, parsed.objective, parsed.start_date, parsed.end_date, parsed.live_time, parsed.expected_return]
     );
     if (updated.rowCount === 0) {
       await client.query('ROLLBACK');
@@ -268,6 +274,146 @@ router.patch('/api/campaigns/tasks/:taskId/done', authenticateToken, async (req,
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo actualizar la tarea' });
+  }
+});
+
+// ─── Piloto de Inversión (no es un presupuesto) ──────────────────────────────
+// Cada campaña/live registra su inversión y declara un retorno esperado.
+// El retorno REAL se mide: ventas de la ventana vs. línea base (promedio
+// diario de los 30 días previos) → ventas extra y múltiplo.
+
+const PAID_STATUSES = ['Pagado', 'Embalado', 'Enviado'];
+const LIVE_WINDOW_DAYS = 3; // día del live + 2 días de cola de pedidos
+
+router.post('/api/campaigns/:id/costs', authenticateToken, requireRole(EDIT_ROLES), async (req, res) => {
+  const campaignId = Number.parseInt(req.params.id, 10);
+  const concept = String(req.body?.concept || '').trim().slice(0, 160);
+  const amount = Number(req.body?.amount);
+  if (!Number.isInteger(campaignId) || campaignId <= 0) return res.status(400).json({ error: 'ID inválido' });
+  if (!concept) return res.status(400).json({ error: 'El concepto es obligatorio' });
+  if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ error: 'Monto inválido' });
+  try {
+    const result = await pool.query(
+      `INSERT INTO campaign_costs (campaign_id, concept, amount, created_by)
+       VALUES ($1, $2, $3, $4) RETURNING id`,
+      [campaignId, concept, amount, req.user.id]
+    );
+    res.status(201).json({ message: 'Inversión registrada', id: Number(result.rows[0].id) });
+  } catch (err) {
+    if (err?.code === '23503') return res.status(404).json({ error: 'Campaña no encontrada' });
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo registrar la inversión' });
+  }
+});
+
+router.delete('/api/campaigns/costs/:costId', authenticateToken, requireRole(EDIT_ROLES), async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM campaign_costs WHERE id = $1 RETURNING id', [req.params.costId]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Ítem no encontrado' });
+    res.json({ message: 'Ítem eliminado' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo eliminar' });
+  }
+});
+
+// Resumen de inversión y retorno por campaña/live. Solo Marketing/Admin.
+router.get('/api/campaigns/investment', authenticateToken, requireRole(EDIT_ROLES), async (_req, res) => {
+  try {
+    const campRes = await pool.query(
+      `SELECT id, name, kind, status, start_date::text AS start_date, end_date::text AS end_date,
+              live_time, expected_return
+       FROM marketing_campaigns
+       ORDER BY start_date DESC, id DESC
+       LIMIT 60`
+    );
+    const costsRes = await pool.query(
+      `SELECT cc.id, cc.campaign_id, cc.concept, cc.amount
+       FROM campaign_costs cc ORDER BY cc.created_at, cc.id`
+    );
+    const costsByCampaign = new Map();
+    for (const row of costsRes.rows) {
+      const key = Number(row.campaign_id);
+      if (!costsByCampaign.has(key)) costsByCampaign.set(key, []);
+      costsByCampaign.get(key).push({ id: Number(row.id), concept: row.concept, amount: Number(row.amount) });
+    }
+
+    const todayRes = await pool.query("SELECT (NOW() AT TIME ZONE 'America/La_Paz')::date::text AS today");
+    const today = todayRes.rows[0].today;
+
+    const items = await Promise.all(campRes.rows.map(async (camp) => {
+      const isLive = camp.kind === 'live';
+      const windowStart = camp.start_date;
+      const windowEnd = isLive
+        ? (await pool.query("SELECT ($1::date + ($2 - 1) * INTERVAL '1 day')::date::text AS d", [camp.start_date, LIVE_WINDOW_DAYS])).rows[0].d
+        : camp.end_date;
+
+      const [windowRes, baselineRes] = await Promise.all([
+        pool.query(
+          `SELECT COALESCE(SUM(total), 0) AS sales, COUNT(*)::int AS orders
+           FROM quotes
+           WHERE status = ANY($3)
+             AND (created_at AT TIME ZONE 'America/La_Paz')::date BETWEEN $1::date AND $2::date`,
+          [windowStart, windowEnd, PAID_STATUSES]
+        ),
+        pool.query(
+          `SELECT COALESCE(SUM(total), 0) / 30.0 AS daily_avg
+           FROM quotes
+           WHERE status = ANY($2)
+             AND (created_at AT TIME ZONE 'America/La_Paz')::date BETWEEN ($1::date - 30) AND ($1::date - 1)`,
+          [windowStart, PAID_STATUSES]
+        )
+      ]);
+
+      const costs = costsByCampaign.get(Number(camp.id)) || [];
+      const invested = costs.reduce((sum, c) => sum + c.amount, 0);
+      const windowDaysRes = await pool.query('SELECT ($2::date - $1::date + 1) AS days', [windowStart, windowEnd]);
+      const windowDays = Number(windowDaysRes.rows[0].days);
+      const windowSales = Number(windowRes.rows[0].sales);
+      const baselineDaily = Number(baselineRes.rows[0].daily_avg);
+      const baselineSales = Math.round(baselineDaily * windowDays * 100) / 100;
+      const extra = Math.round((windowSales - baselineSales) * 100) / 100;
+      const phase = windowStart > today ? 'pendiente' : (windowEnd >= today ? 'en_curso' : 'cerrada');
+
+      return {
+        id: Number(camp.id),
+        name: camp.name,
+        kind: camp.kind || 'campana',
+        status: camp.status,
+        start_date: camp.start_date,
+        end_date: camp.end_date,
+        live_time: camp.live_time ? String(camp.live_time).slice(0, 5) : null,
+        window_end: windowEnd,
+        window_days: windowDays,
+        phase,
+        costs,
+        invested: Math.round(invested * 100) / 100,
+        expected_return: camp.expected_return === null ? null : Number(camp.expected_return),
+        window_sales: windowSales,
+        window_orders: Number(windowRes.rows[0].orders),
+        baseline_sales: baselineSales,
+        extra_sales: extra,
+        multiple: invested > 0 && phase !== 'pendiente' ? Math.round((extra / invested) * 10) / 10 : null
+      };
+    }));
+
+    const totals = items.reduce((acc, item) => {
+      acc.invested += item.invested;
+      if (item.phase !== 'pendiente') acc.extra += Math.max(0, item.extra_sales) * (item.invested > 0 ? 1 : 0);
+      return acc;
+    }, { invested: 0, extra: 0 });
+
+    res.json({
+      items,
+      totals: {
+        invested: Math.round(totals.invested * 100) / 100,
+        extra_sales: Math.round(totals.extra * 100) / 100,
+        multiple: totals.invested > 0 ? Math.round((totals.extra / totals.invested) * 10) / 10 : null
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar el resumen de inversión' });
   }
 });
 
