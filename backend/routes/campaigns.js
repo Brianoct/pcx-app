@@ -25,7 +25,8 @@ const isValidDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
 const loadCampaigns = async () => {
   const campaignsRes = await pool.query(
     `SELECT c.id, c.name, c.objective, c.start_date::text AS start_date, c.end_date::text AS end_date,
-            c.status, c.created_at, u.display_name AS created_by_name, u.email AS created_by_email
+            c.status, c.kind, c.live_time::text AS live_time, c.created_at,
+            u.display_name AS created_by_name, u.email AS created_by_email
      FROM marketing_campaigns c
      LEFT JOIN users u ON u.id = c.created_by
      ORDER BY c.start_date DESC, c.id DESC`
@@ -58,6 +59,8 @@ const loadCampaigns = async () => {
     start_date: row.start_date,
     end_date: row.end_date,
     status: row.status,
+    kind: row.kind || 'campana',
+    live_time: row.live_time ? String(row.live_time).slice(0, 5) : null,
     created_by: String(row.created_by_name || row.created_by_email || '').trim() || null,
     created_at: row.created_at,
     tasks: tasksByCampaign.get(Number(row.id)) || []
@@ -90,9 +93,16 @@ const validateCampaignBody = (body = {}) => {
   if (String(body.end_date) < String(body.start_date)) {
     return { error: 'La fecha de fin no puede ser anterior al inicio' };
   }
+  const kind = String(body.kind || 'campana').trim().toLowerCase();
+  if (!['campana', 'live'].includes(kind)) return { error: 'Tipo inválido' };
+  let liveTime = null;
+  if (body.live_time !== undefined && body.live_time !== null && String(body.live_time).trim() !== '') {
+    liveTime = String(body.live_time).trim().slice(0, 5);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(liveTime)) return { error: 'Hora inválida (HH:MM)' };
+  }
   const { tasks, error } = sanitizeTasks(body.tasks);
   if (error) return { error };
-  return { name, objective, start_date: body.start_date, end_date: body.end_date, tasks };
+  return { name, objective, start_date: body.start_date, end_date: body.end_date, kind, live_time: liveTime, tasks };
 };
 
 // Everyone logged in can see campaigns — the whole point is company-wide
@@ -113,10 +123,10 @@ router.post('/api/campaigns', authenticateToken, requireRole(EDIT_ROLES), async 
   try {
     await client.query('BEGIN');
     const campaignRes = await client.query(
-      `INSERT INTO marketing_campaigns (name, objective, start_date, end_date, status, created_by)
-       VALUES ($1, $2, $3, $4, 'borrador', $5)
+      `INSERT INTO marketing_campaigns (name, objective, start_date, end_date, status, kind, live_time, created_by)
+       VALUES ($1, $2, $3, $4, 'borrador', $5, $6, $7)
        RETURNING id`,
-      [parsed.name, parsed.objective, parsed.start_date, parsed.end_date, req.user.id]
+      [parsed.name, parsed.objective, parsed.start_date, parsed.end_date, parsed.kind, parsed.live_time, req.user.id]
     );
     const campaignId = campaignRes.rows[0].id;
     for (let i = 0; i < parsed.tasks.length; i++) {
@@ -149,10 +159,10 @@ router.put('/api/campaigns/:id', authenticateToken, requireRole(EDIT_ROLES), asy
     await client.query('BEGIN');
     const updated = await client.query(
       `UPDATE marketing_campaigns
-       SET name = $2, objective = $3, start_date = $4, end_date = $5, updated_at = NOW()
+       SET name = $2, objective = $3, start_date = $4, end_date = $5, live_time = $6, updated_at = NOW()
        WHERE id = $1
        RETURNING id`,
-      [campaignId, parsed.name, parsed.objective, parsed.start_date, parsed.end_date]
+      [campaignId, parsed.name, parsed.objective, parsed.start_date, parsed.end_date, parsed.live_time]
     );
     if (updated.rowCount === 0) {
       await client.query('ROLLBACK');

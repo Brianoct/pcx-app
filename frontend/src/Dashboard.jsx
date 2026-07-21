@@ -53,13 +53,15 @@ export default function Dashboard({ token, user, role, access }) {
     return () => { active = false; };
   }, [token]);
 
-  // The campaign banner: announced campaigns that haven't ended yet, with the
-  // viewer's own pending responsibilities front and center.
+  // The campaign banner: announced campaigns AND TikTok lives that haven't
+  // ended yet, with the viewer's own pending responsibilities front and center.
   const campaignBanner = useMemo(() => {
     const today = boliviaToday();
+    // Un live de HOY manda sobre una campaña en curso; después, lo más próximo.
+    const urgency = (c) => (c.kind === 'live' && c.start_date === today ? 0 : 1);
     const announced = campaigns
       .filter((c) => c.status === 'anunciada' && String(c.end_date) >= today)
-      .sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)));
+      .sort((a, b) => urgency(a) - urgency(b) || String(a.start_date).localeCompare(String(b.start_date)));
     if (announced.length === 0) return null;
     const campaign = announced[0];
     const myArea = areaForRole(role);
@@ -149,14 +151,24 @@ export default function Dashboard({ token, user, role, access }) {
       </div>
 
       {campaignBanner && (
-        <button type="button" className="campaign-banner" onClick={() => navigate('/campanas')}>
-          <span className="campaign-banner-icon">📣</span>
+        <button
+          type="button"
+          className={`campaign-banner ${campaignBanner.campaign.kind === 'live' ? 'is-live' : ''}`}
+          onClick={() => navigate(campaignBanner.campaign.kind === 'live' ? '/live' : '/campanas')}
+        >
+          <span className="campaign-banner-icon">
+            {campaignBanner.campaign.kind === 'live' ? '🔴' : '📣'}
+          </span>
           <span className="campaign-banner-body">
             <span className="campaign-banner-title">
-              {campaignBanner.active ? 'Campaña en curso' : 'Próxima campaña'}: {campaignBanner.campaign.name}
+              {campaignBanner.campaign.kind === 'live'
+                ? `Live TikTok${campaignBanner.campaign.start_date === boliviaToday() ? ' HOY' : ''}: ${campaignBanner.campaign.name}`
+                : `${campaignBanner.active ? 'Campaña en curso' : 'Próxima campaña'}: ${campaignBanner.campaign.name}`}
             </span>
             <span className="campaign-banner-detail">
-              {formatCampaignDate(campaignBanner.campaign.start_date)} — {formatCampaignDate(campaignBanner.campaign.end_date)}
+              {campaignBanner.campaign.kind === 'live'
+                ? `${formatCampaignDate(campaignBanner.campaign.start_date)}${campaignBanner.campaign.live_time ? ` · ${campaignBanner.campaign.live_time}` : ''}`
+                : `${formatCampaignDate(campaignBanner.campaign.start_date)} — ${formatCampaignDate(campaignBanner.campaign.end_date)}`}
               {campaignBanner.myTotal > 0 && (
                 campaignBanner.myPending > 0
                   ? ` · ${AREA_LABELS[campaignBanner.myArea]}: ${campaignBanner.myPending} ${campaignBanner.myPending === 1 ? 'tarea pendiente' : 'tareas pendientes'}`
