@@ -8783,3 +8783,83 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   .forja-enlist-grid { grid-template-columns: 1fr; }
   .forja-comment-input { width: 100%; }
 }
+
+/* ============ Live (TikTok) ============ */
+.live-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fe2c55;
+  box-shadow: 0 0 0 3px rgba(254, 44, 85, 0.25);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(254, 44, 85, 0.25); }
+  50% { box-shadow: 0 0 0 7px rgba(254, 44, 85, 0.08); }
+}
+.live-intro .plan-title { display: flex; align-items: center; gap: 10px; }
+.live-form-title { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
+
+.live-card {
+  background: #1c1a1e;
+  color: #f4f2f5;
+  border: 1px solid #35313a;
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.live-card.is-today { border-color: #fe2c55; box-shadow: 0 0 0 1px rgba(254, 44, 85, 0.35); }
+.live-card-head { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.live-when {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid #35313a;
+  border-radius: 10px;
+  padding: 8px 14px;
+  background: #131117;
+  min-width: 84px;
+}
+.live-when-date { font-weight: 900; font-size: 0.85rem; text-transform: uppercase; }
+.live-when-time { font-size: 1.15rem; font-weight: 900; color: #25f4ee; }
+.live-card-main { flex: 1; min-width: 220px; }
+.live-card-name { font-weight: 800; font-size: 1.02rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fe2c55;
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.live-badge .live-dot { background: #fff; box-shadow: none; animation: none; width: 7px; height: 7px; }
+.live-card-objective { margin: 6px 0 0; font-size: 0.85rem; color: #b9b3bf; max-width: 640px; }
+
+/* Las tarjetas de área dentro del live conservan su look claro para que los
+   checklists se lean igual que en Campañas. */
+.live-card .camp-area { background: #262229; border-color: #3a3540; color: #f4f2f5; }
+.live-card .camp-area.is-mine { background: #2c2732; border-color: #25f4ee; }
+.live-card .camp-area-name { color: #f4f2f5; }
+.live-card .camp-area-progress { color: #b9b3bf; }
+.live-card .camp-area-progress.is-done { color: #25f4ee; }
+.live-card .camp-area-bar { background: #131117; }
+.live-card .camp-area-bar-fill { background: #25f4ee; }
+.live-card .camp-task-list li.is-done > label span { color: #8f8996; }
+.live-card .camp-task-by { color: #25f4ee; }
+.live-card .camp-area-tag { background: rgba(37, 244, 238, 0.15); color: #25f4ee; }
+.live-card .camp-draft-note { background: #2b2417; border-color: #6b5a23; color: #e3b341; }
+
+/* Banner de Inicio en modo live */
+.campaign-banner.is-live {
+  background: #1c1a1e;
+  border-color: #fe2c55;
+}
+.campaign-banner.is-live .campaign-banner-title { color: #f4f2f5; }
+.campaign-banner.is-live .campaign-banner-detail { color: #b9b3bf; }
+.campaign-banner.is-live .campaign-banner-cta { color: #25f4ee; }
+.campaign-banner.is-live:hover { border-color: #25f4ee; }

@@ -42,7 +42,9 @@ export default function CampaignsPanel({ token, role }) {
   const load = useCallback(() => {
     apiRequest('/api/campaigns', { token })
       .then((data) => {
-        setCampaigns(Array.isArray(data?.campaigns) ? data.campaigns : []);
+        const all = Array.isArray(data?.campaigns) ? data.campaigns : [];
+        // Los TikTok Lives (kind='live') tienen su propia página.
+        setCampaigns(all.filter((c) => c.kind !== 'live'));
         setError('');
       })
       .catch((err) => setError(err.message || 'No se pudieron cargar las campañas'))

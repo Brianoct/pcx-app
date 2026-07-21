@@ -60,6 +60,9 @@ function Combos({ token }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [imageBusyId, setImageBusyId] = useState(null);
+  // Imagen elegida al CREAR el combo: se guarda local (dataURL) y se sube
+  // apenas el combo existe (el endpoint de imagen necesita el id).
+  const [pendingImage, setPendingImage] = useState(null);
 
   const fetchCombos = useCallback(async () => {
     try {
@@ -179,6 +182,7 @@ function Combos({ token }) {
     setComboPriceSf(0);
     setComboPriceCf(0);
     setEditingComboId(null);
+    setPendingImage(null);
   };
 
   const handleStartEditCombo = (combo) => {
@@ -233,24 +237,51 @@ function Combos({ token }) {
           comboId: editingComboId || null
         }
       });
+      if (pendingImage) {
+        toast.info('Sin conexión: el combo quedó en cola; sube la imagen cuando vuelva la conexión (Editar).');
+      }
       resetForm();
       toast.info(`Sin conexión: ${isEditing ? 'edición' : 'creación'} de combo en cola para sincronizar.`);
       return;
     }
 
     try {
-      await apiRequest(endpoint, {
+      const saved = await apiRequest(endpoint, {
         method,
         token,
         body: payload,
         timeoutMs: 18000
       });
 
+      // Imagen elegida durante la creación: se sube apenas existe el id.
+      const newComboId = isEditing ? editingComboId : saved?.id;
+      if (!isEditing && pendingImage && newComboId) {
+        try {
+          await apiRequest(`/api/combos/${newComboId}/image`, {
+            method: 'POST',
+            token,
+            body: { data_url: pendingImage },
+            timeoutMs: 20000
+          });
+        } catch (imgErr) {
+          toast.error('El combo se creó, pero la imagen no se pudo subir: ' + imgErr.message);
+        }
+      }
+
       toast.success(isEditing ? 'Combo actualizado correctamente' : 'Combo creado correctamente');
       resetForm();
       fetchCombos();
     } catch (err) {
       toast.error('Error: ' + err.message);
+    }
+  };
+
+  const pickPendingImage = async (file) => {
+    if (!file) return;
+    try {
+      setPendingImage(await downscaleImage(file));
+    } catch (err) {
+      toast.error(err.message || 'No se pudo leer la imagen');
     }
   };
 
@@ -381,9 +412,41 @@ function Combos({ token }) {
             </div>
           </div>
         ) : (
-          <p style={{ color: '#a8a29e', fontSize: '0.85rem', margin: '-4px 0 16px' }}>
-            💡 Crea el combo primero; luego, al editarlo, podrás subir una imagen para el catálogo.
-          </p>
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px', padding: '12px', background: '#faf8f5', border: '1px solid #e7e0d8', borderRadius: '8px', flexWrap: 'wrap' }}>
+            <div style={{ width: '96px', height: '96px', borderRadius: '8px', overflow: 'hidden', background: '#ffffff', border: '1px solid #e7e0d8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {pendingImage ? (
+                <img src={pendingImage} alt="Imagen del combo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ color: '#a8a29e', fontSize: '0.75rem', textAlign: 'center' }}>Sin<br />imagen</span>
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <label style={{ color: '#78716c', display: 'block', marginBottom: '8px', fontWeight: 600 }}>Imagen del combo (opcional)</label>
+              <p style={{ color: '#a8a29e', fontSize: '0.8rem', margin: '0 0 10px' }}>
+                Se mostrará en la vista de catálogo de Cotizar. Se sube al crear el combo; también puedes cambiarla después con Editar.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <label style={{ padding: '8px 14px', background: '#2563eb', color: 'white', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem' }}>
+                  {pendingImage ? 'Cambiar imagen' : 'Elegir imagen'}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) pickPendingImage(f); }}
+                  />
+                </label>
+                {pendingImage && (
+                  <button
+                    type="button"
+                    onClick={() => setPendingImage(null)}
+                    style={{ padding: '8px 14px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem' }}
+                  >
+                    Quitar
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         )}
 
         <div style={{ marginBottom: '16px' }}>
