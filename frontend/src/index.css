@@ -8863,3 +8863,106 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 .campaign-banner.is-live .campaign-banner-detail { color: #b9b3bf; }
 .campaign-banner.is-live .campaign-banner-cta { color: #25f4ee; }
 .campaign-banner.is-live:hover { border-color: #25f4ee; }
+
+/* ============ Calendario de Marketing ============ */
+.mkcal-legend { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.mkcal-chip { font-size: 0.7rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; }
+.mkcal-chip.is-campana { background: #fef3c7; color: #92400e; }
+.mkcal-chip.is-live { background: #1c1a1e; color: #fe2c55; }
+.mkcal-chip.is-evento { background: #e0e7ff; color: #4338ca; }
+
+.mkcal-nav { display: flex; align-items: center; gap: 14px; margin: 14px 0 10px; }
+.mkcal-month { margin: 0; font-size: 1.05rem; min-width: 170px; text-align: center; }
+
+.mkcal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px;
+}
+.mkcal-weekday {
+  text-align: center;
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 4px 0 6px;
+}
+.mkcal-cell {
+  min-height: 92px;
+  border: 1px solid #f0ebe4;
+  border-radius: 8px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+}
+.mkcal-cell[role='button'] { cursor: pointer; }
+.mkcal-cell[role='button']:hover { border-color: #d6cec2; }
+.mkcal-cell.is-empty { border-color: transparent; background: transparent; }
+.mkcal-cell.is-today { border-color: #dc2626; box-shadow: inset 0 0 0 1px #dc2626; }
+.mkcal-daynum { font-size: 0.7rem; font-weight: 800; color: var(--text-muted); }
+.mkcal-cell.is-today .mkcal-daynum { color: #dc2626; }
+
+.mkcal-item {
+  border: none;
+  text-align: left;
+  font-size: 0.64rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  width: 100%;
+  font-family: inherit;
+}
+.mkcal-item.is-campana { background: #fef3c7; color: #92400e; }
+.mkcal-item.is-campana:hover { background: #fde68a; }
+.mkcal-item.is-live { background: #1c1a1e; color: #f4f2f5; }
+.mkcal-item.is-live:hover { background: #2b2830; }
+.mkcal-item.is-evento { background: #e0e7ff; color: #4338ca; }
+.mkcal-item.is-evento:hover { background: #c7d2fe; }
+.mkcal-item.is-draft { opacity: 0.55; }
+.mkcal-live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fe2c55;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.mkcal-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 15, 12, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 16px;
+}
+.mkcal-modal {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 20px 22px;
+  width: min(520px, 100%);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+.mkcal-modal h3 { margin: 0 0 12px; }
+.mkcal-detail-line { margin: 4px 0; font-size: 0.88rem; color: var(--text-muted); }
+.mkcal-detail-note { margin: 10px 0; font-size: 0.92rem; white-space: pre-line; }
+
+@media (max-width: 700px) {
+  .mkcal-cell { min-height: 64px; }
+  .mkcal-item { font-size: 0.56rem; }
+}
