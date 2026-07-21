@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
+import InvestmentBox from './InvestmentBox';
 import {
   CAMPAIGN_AREAS, AREA_LABELS, areaForRole, canEditCampaigns, canTickAnyArea,
   boliviaToday, formatCampaignDate
@@ -13,6 +14,7 @@ const emptyForm = () => ({
   id: null,
   name: '',
   objective: '',
+  expected_return: '',
   date: '',
   live_time: '20:00',
   tasks: [
@@ -37,6 +39,7 @@ export default function LivePanel({ token, role }) {
   const [formError, setFormError] = useState('');
   const [showFinished, setShowFinished] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState(null);
+  const [investmentById, setInvestmentById] = useState({});
 
   const canEdit = canEditCampaigns(role);
   const tickAny = canTickAnyArea(role);
@@ -56,6 +59,20 @@ export default function LivePanel({ token, role }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const loadInvestment = useCallback(() => {
+    if (!canEdit) return;
+    apiRequest('/api/campaigns/investment', { token })
+      .then((data) => {
+        const map = {};
+        for (const item of data?.items || []) map[item.id] = item;
+        setInvestmentById(map);
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, canEdit]);
+
+  useEffect(() => { loadInvestment(); }, [loadInvestment]);
+
   const { upcoming, finished } = useMemo(() => {
     const up = [];
     const fin = [];
@@ -71,6 +88,7 @@ export default function LivePanel({ token, role }) {
       id: live.id,
       name: live.name,
       objective: live.objective || '',
+      expected_return: live.expected_return ?? '',
       date: live.start_date,
       live_time: live.live_time || '20:00',
       tasks: live.tasks.map((t) => ({ id: t.id, area: t.area, title: t.title }))
@@ -89,6 +107,7 @@ export default function LivePanel({ token, role }) {
         end_date: form.date,
         kind: 'live',
         live_time: form.live_time || null,
+        expected_return: form.expected_return === '' ? null : Number(form.expected_return),
         tasks: form.tasks.filter((t) => t.title.trim())
       };
       if (form.id) {
@@ -179,6 +198,14 @@ export default function LivePanel({ token, role }) {
                 rows={2} value={form.objective}
                 placeholder="Ej. Demostración de tableros en vivo, 10% de descuento con el código LIVE10."
                 onChange={(e) => setForm({ ...form, objective: e.target.value })}
+              />
+            </label>
+            <label className="camp-field">
+              <span>Retorno esperado (Bs)</span>
+              <input
+                type="number" min="0" step="1" value={form.expected_return}
+                placeholder="El camino claro al retorno"
+                onChange={(e) => setForm({ ...form, expected_return: e.target.value })}
               />
             </label>
           </div>
@@ -333,6 +360,15 @@ export default function LivePanel({ token, role }) {
             );
           })}
         </div>
+
+        {canEdit && (
+          <InvestmentBox
+            token={token}
+            campaignId={live.id}
+            investment={investmentById[live.id]}
+            onChanged={loadInvestment}
+          />
+        )}
       </div>
     );
   };

@@ -8966,3 +8966,77 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   .mkcal-cell { min-height: 64px; }
   .mkcal-item { font-size: 0.56rem; }
 }
+
+/* ============ Inversión (piloto Marketing) ============ */
+.invbox {
+  margin-top: 14px;
+  border: 1px dashed #d6cec2;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fdfcf9;
+}
+.invbox-head { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8rem; color: #57534e; }
+.invbox-title strong { color: #047857; }
+.invbox-expected strong { color: #1d4ed8; }
+.invbox-items { list-style: none; margin: 8px 0 0; padding: 0; }
+.invbox-items li { display: flex; gap: 8px; align-items: center; font-size: 0.78rem; padding: 3px 0; border-bottom: 1px dotted #eee7dd; }
+.invbox-items li > span:first-child { flex: 1; min-width: 0; }
+.invbox-amount { font-weight: 800; white-space: nowrap; }
+.invbox-items button {
+  border: none; background: none; color: #b8b0a4; cursor: pointer; font-size: 0.75rem; padding: 2px 4px;
+}
+.invbox-items button:hover { color: #b91c1c; }
+.invbox-add { display: flex; gap: 6px; margin-top: 8px; }
+.invbox-add input[type='text'] { flex: 1; min-width: 0; }
+.invbox-add input { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font: inherit; font-size: 0.8rem; }
+.invbox-add input[type='number'] { width: 90px; }
+.invbox-add button {
+  border: 1px solid var(--border); background: #fff; border-radius: 8px; width: 34px; cursor: pointer; font-weight: 900;
+}
+.invbox-add button:hover:not(:disabled) { border-color: #047857; color: #047857; }
+.invbox-add button:disabled { opacity: 0.4; cursor: default; }
+.invbox-error { margin-top: 6px; font-size: 0.75rem; color: #b91c1c; }
+
+/* Los lives (tarjeta oscura) necesitan el invbox legible */
+.live-card .invbox { background: #262229; border-color: #3a3540; }
+.live-card .invbox-head { color: #b9b3bf; }
+.live-card .invbox-title strong { color: #25f4ee; }
+.live-card .invbox-expected strong { color: #7dd3fc; }
+.live-card .invbox-items li { border-bottom-color: #3a3540; }
+.live-card .invbox-add input { background: #131117; border-color: #3a3540; color: #f4f2f5; }
+.live-card .invbox-add button { background: #131117; border-color: #3a3540; color: #f4f2f5; }
+
+/* Página Inversión */
+.inv-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.inv-card-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.inv-card-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.inv-kind { font-size: 0.68rem; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: #fef3c7; color: #92400e; }
+.inv-kind.is-live { background: #1c1a1e; color: #fe2c55; }
+.inv-name {
+  border: none; background: none; font: inherit; font-weight: 800; font-size: 1rem; cursor: pointer; padding: 0; color: inherit;
+}
+.inv-name:hover { color: #dc2626; }
+.inv-phase { font-size: 0.64rem; font-weight: 800; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; }
+.inv-phase.is-pendiente { background: #f1f5f9; color: #64748b; }
+.inv-phase.is-encurso { background: #dcfce7; color: #15803d; }
+.inv-phase.is-cerrada { background: #f5f5f4; color: #78716c; }
+.inv-dates { font-size: 0.76rem; color: var(--text-muted); }
+
+.inv-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 12px; }
+.inv-metric { border: 1px solid #f0ebe4; border-radius: 10px; padding: 8px 12px; }
+.inv-metric span { display: block; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.inv-metric b { font-size: 0.95rem; }
+.inv-metric small { display: block; font-size: 0.66rem; color: var(--text-muted); }
+.inv-metric .is-good-text, .inv-metric b.is-good-text { color: #047857; }
+.inv-multiple.is-good { border-color: #86efac; background: #f0fdf4; }
+.inv-multiple.is-good b { color: #15803d; font-size: 1.2rem; }
+.inv-multiple.is-mid { border-color: #fde68a; background: #fffbeb; }
+.inv-multiple.is-mid b { color: #b45309; font-size: 1.2rem; }
+.inv-multiple.is-bad { border-color: #fecaca; background: #fef2f2; }
+.inv-multiple.is-bad b { color: #b91c1c; font-size: 1.2rem; }
