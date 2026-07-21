@@ -253,17 +253,6 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
         AND EXTRACT(YEAR FROM timezone('${REPORTING_TIMEZONE}', moved_at)) = ${targetYear}
     `);
 
-    // ── Ruleta ROI: activity in the period + Bs sold on redeemed prizes ──────
-    const wheelRoiRes = await pool.query(`
-      SELECT
-        (SELECT COUNT(*)::int FROM wheel_spins s WHERE ${inPeriod('s.created_at')}) AS links_created,
-        (SELECT COUNT(*)::int FROM wheel_spins s WHERE s.spun_at IS NOT NULL AND ${inPeriod('s.spun_at')}) AS spins_done,
-        (SELECT COUNT(*)::int FROM wheel_spins s WHERE s.redeemed_at IS NOT NULL AND ${inPeriod('s.redeemed_at')}) AS prizes_redeemed,
-        (SELECT COALESCE(SUM(q.total), 0)
-         FROM wheel_spins s JOIN quotes q ON q.id = s.redeemed_quote_id
-         WHERE s.redeemed_at IS NOT NULL AND ${inPeriod('s.redeemed_at')}) AS redeemed_sales_total
-    `);
-
     // Per-user commissions come from the shared team calculation — the same
     // rules as /api/commission/current and the Pagos view (single source of truth).
     const teamCommissions = await computeTeamCommissions(month, year);
@@ -323,12 +312,6 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
         qc_rejected: Number(qcPeriodRes.rows[0]?.qc_rejected || 0),
         received: Number(receptionPeriodRes.rows[0]?.received || 0),
         damaged: Number(receptionPeriodRes.rows[0]?.damaged || 0)
-      },
-      wheelRoi: {
-        links_created: Number(wheelRoiRes.rows[0]?.links_created || 0),
-        spins_done: Number(wheelRoiRes.rows[0]?.spins_done || 0),
-        prizes_redeemed: Number(wheelRoiRes.rows[0]?.prizes_redeemed || 0),
-        redeemed_sales_total: Number(wheelRoiRes.rows[0]?.redeemed_sales_total || 0)
       }
     });
   } catch (err) {

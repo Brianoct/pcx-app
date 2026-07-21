@@ -156,8 +156,8 @@ const resolveGiftSelectionForQuote = async (client, giftSelection, giftNameLegac
     if (!giftProduct.is_active) {
       throw createHttpError(400, 'El producto de regalo seleccionado está inactivo');
     }
-    // Any active product qualifies as gift: the regalo field is filled only
-    // by the ruleta, and marketing picks the prize from the full catalog.
+    // Legacy: gifts came from the retired prize wheel. The fields stay so
+    // historical quotes keep their regalo (pedidos checklist, stock deduct).
     return {
       gift_name: String(giftProduct.name || '').trim() || normalizedGift.name || null,
       gift_sku: String(giftProduct.sku || '').trim().toUpperCase(),

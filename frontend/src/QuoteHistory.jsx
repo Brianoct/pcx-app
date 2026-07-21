@@ -862,9 +862,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         seller_user_id: editingQuote.seller_user_id ? Number(editingQuote.seller_user_id) : null,
         venta_type: editingQuote.venta_type || 'sf',
         discount_percent: Number(editingQuote.discount_percent || 0),
-        // Gift fields deliberately NOT sent: the regalo comes from the
-        // ruleta and must survive later edits untouched (the backend
-        // preserves gift when the fields are absent).
+        // Gift fields deliberately NOT sent: regalos of historical quotes
+        // (from the retired prize wheel) must survive edits untouched (the
+        // backend preserves gift when the fields are absent).
         rows: (Array.isArray(editingQuote.line_items) ? editingQuote.line_items : []).map((row) => ({
           sku: String(row.sku || '').toUpperCase(),
           qty: Number.parseInt(row.qty, 10) || 1,
@@ -1668,14 +1668,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                 />
               </label>
               <label>
-                Regalo (ruleta)
+                Regalo (histórico)
                 <input
                   type="text"
                   value={editingQuote.gift_sku
                     ? `${availableProducts.find((item) => String(item.sku || '').toUpperCase() === String(editingQuote.gift_sku).toUpperCase())?.name || editingQuote.gift_sku} (x${Math.max(1, Number.parseInt(editingQuote.gift_qty, 10) || 1)})`
                     : 'Sin regalo'}
                   disabled
-                  title="El regalo viene de la ruleta de premios y se conserva al editar"
+                  title="Regalo histórico de esta cotización; se conserva al editar"
                 />
               </label>
               <label style={{ display: 'none' }}>
