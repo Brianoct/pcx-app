@@ -10,7 +10,6 @@ import './index.css';
 
 const PublicCustomerMenu = lazy(() => import('./PublicCustomerMenu'));
 const ComprasScan = lazy(() => import('./ComprasScan'));
-const WheelSpin = lazy(() => import('./WheelSpin'));
 const LandingPage = lazy(() => import('./LandingPage'));
 const ContactPage = lazy(() => import('./ContactPage'));
 const CareersPage = lazy(() => import('./CareersPage'));
@@ -51,7 +50,6 @@ function App() {
           <Routes>
             <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
             <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
-            <Route path="/ruleta/:spinToken" element={<WheelSpin />} />
             <Route path="/contacto" element={<ContactPage />} />
             <Route path="/carreras" element={<CareersPage />} />
             {/* Visitors land on the splash page; the team enters via the
@@ -101,7 +99,6 @@ function App() {
               <Route path="/comprar/scan/:token" element={<ComprasScan token={token} />} />
               <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
               <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
-              <Route path="/ruleta/:spinToken" element={<WheelSpin />} />
               <Route path="/contacto" element={<ContactPage />} />
               <Route path="/carreras" element={<CareersPage />} />
               <Route path="*" element={<Navigate to={defaultPath} replace />} />

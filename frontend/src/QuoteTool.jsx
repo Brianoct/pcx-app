@@ -17,7 +17,6 @@ const clampNumber = (value, min, max) => {
   return Math.min(max, Math.max(min, numeric));
 };
 
-const DEFAULT_GIFT_QTY = 1;
 
 const ALMACEN_OPTIONS = ['Cochabamba', 'Lima', 'Santa Cruz'];
 
@@ -39,7 +38,6 @@ export default function QuoteTool({ token, user }) {
   const [discountInput, setDiscountInput] = useState(0);
   const [coupons, setCoupons] = useState([]);
   const [selectedCouponCode, setSelectedCouponCode] = useState('');
-  const [selectedGiftSku, setSelectedGiftSku] = useState('');
   const [useAlternativeName, setUseAlternativeName] = useState(false);
   const [alternativeName, setAlternativeName] = useState('');
   const [alternativePhone, setAlternativePhone] = useState('');
@@ -77,82 +75,6 @@ export default function QuoteTool({ token, user }) {
     return () => { active = false; };
   }, [token, crmOpen]);
 
-  // Ruleta: whenever the phone identifies a customer with an unused wheel
-  // prize, surface it so the seller applies it to this quote.
-  const [wheelPrize, setWheelPrize] = useState(null);
-  const [wheelDialog, setWheelDialog] = useState(null); // { url?, existing?, error?, spun? }
-  const [wheelBusy, setWheelBusy] = useState(false);
-  useEffect(() => {
-    const digits = String(customerPhone || '').replace(/\D/g, '');
-    if (digits.length < 7) { setWheelPrize(null); return undefined; }
-    let active = true;
-    const timer = setTimeout(() => {
-      apiRequest(`/api/wheel/prize?phone=${encodeURIComponent(digits)}`, { token })
-        .then((data) => { if (active) setWheelPrize(data?.prize || null); })
-        .catch(() => { if (active) setWheelPrize(null); });
-    }, 400);
-    return () => { active = false; clearTimeout(timer); };
-  }, [token, customerPhone]);
-
-  // The prize lands in the REAL quote fields: a discount prize fills the
-  // descuento section, a gift prize fills the Regalo field (which is
-  // ruleta-only now) and flows to the pedidos checklist like any regalo.
-  useEffect(() => {
-    if (!wheelPrize) return;
-    if (wheelPrize.prize_type === 'discount' && Number(wheelPrize.prize_percent) > 0) {
-      setDiscountMode('percent');
-      setDiscountInput(Number(wheelPrize.prize_percent));
-    } else if (wheelPrize.prize_type === 'gift' && wheelPrize.prize_gift_sku) {
-      const optionA = String(wheelPrize.prize_gift_sku).trim().toUpperCase();
-      const optionB = String(wheelPrize.prize_gift_sku_2 || '').trim().toUpperCase();
-      if (optionB) {
-        // Two options (Acero vs Armonía): the seller chooses in the banner.
-        // Keep an already-made choice; otherwise leave empty until they pick.
-        setSelectedGiftSku((prev) => (prev === optionA || prev === optionB ? prev : ''));
-      } else {
-        setSelectedGiftSku(optionA);
-      }
-    }
-  }, [wheelPrize]);
-
-  const buildWheelUrl = (spinToken) =>
-    `${window.location.origin}${window.location.pathname}#/ruleta/${spinToken}`;
-
-  const createWheelLink = async () => {
-    const digits = String(customerPhone || '').replace(/\D/g, '');
-    if (digits.length < 7) {
-      toast.error('Escribe primero el teléfono del cliente para generar su giro.');
-      return;
-    }
-    setWheelBusy(true);
-    try {
-      const data = await apiRequest('/api/wheel/spins', {
-        method: 'POST',
-        token,
-        body: { customer_name: customerName, customer_phone: customerPhone }
-      });
-      setWheelDialog({ url: buildWheelUrl(data.spin.token), existing: Boolean(data.existing) });
-    } catch (err) {
-      if (err?.payload?.spin?.prize_label) {
-        setWheelDialog({ spun: true, error: err.message });
-      } else {
-        toast.error(err.message || 'No se pudo generar el giro');
-      }
-    } finally {
-      setWheelBusy(false);
-    }
-  };
-
-  const redeemWheelPrize = async () => {
-    if (!wheelPrize?.id) return;
-    try {
-      await apiRequest(`/api/wheel/spins/${wheelPrize.id}/redeem`, { method: 'POST', token });
-      toast.success('Premio marcado como usado');
-      setWheelPrize(null);
-    } catch (err) {
-      toast.error(err.message || 'No se pudo marcar el premio');
-    }
-  };
   const [isProvincia, setIsProvincia] = useState(false);
   const [almacen, setAlmacen] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
@@ -194,27 +116,6 @@ export default function QuoteTool({ token, user }) {
     }
     return sku || name || 'Producto';
   };
-  // Any catalog product can arrive as a ruleta gift; the list is display-only
-  // (the field is locked) so it simply mirrors the full catalog.
-  const giftOptions = products
-    .map((product) => {
-      const sku = String(product?.sku || '').trim().toUpperCase();
-      const name = String(product?.name || '').trim() || sku;
-      return {
-        sku,
-        name,
-        label: formatSkuNameLabel(sku, name)
-      };
-    });
-  const selectedGiftProduct = giftOptions.find((giftProduct) => giftProduct.sku === selectedGiftSku) || null;
-  useEffect(() => {
-    if (!selectedGiftSku) return;
-    const isStillEligible = giftOptions.some((giftProduct) => giftProduct.sku === selectedGiftSku);
-    if (!isStillEligible) {
-      setSelectedGiftSku('');
-    }
-  }, [giftOptions, selectedGiftSku]);
-
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', onResize);
@@ -569,19 +470,6 @@ export default function QuoteTool({ token, user }) {
     if (typeof values.shippingNotes === 'string') setShippingNotes(values.shippingNotes);
     if (typeof values.assignedSellerId === 'string') setAssignedSellerId(values.assignedSellerId);
     if (typeof values.selectedCouponCode === 'string') setSelectedCouponCode(values.selectedCouponCode);
-    if (typeof values.selectedGiftSku === 'string') {
-      setSelectedGiftSku(String(values.selectedGiftSku || '').trim().toUpperCase());
-    } else if (typeof values.selectedGiftLabel === 'string') {
-      const legacyGiftLabel = String(values.selectedGiftLabel || '').trim().toLowerCase();
-      if (legacyGiftLabel) {
-        const matchedGift = products.find((product) => (
-          String(product?.name || '').trim().toLowerCase() === legacyGiftLabel
-        ));
-        if (matchedGift?.sku) {
-          setSelectedGiftSku(String(matchedGift.sku).trim().toUpperCase());
-        }
-      }
-    }
     setDraftNotice('Se recuperó un borrador local.');
   }, [draftStorageKey, draft]);
 
@@ -624,7 +512,6 @@ export default function QuoteTool({ token, user }) {
         discountMode,
         discountInput,
         selectedCouponCode,
-        selectedGiftSku,
         useAlternativeName,
         alternativeName,
         alternativePhone,
@@ -644,7 +531,6 @@ export default function QuoteTool({ token, user }) {
     discountMode,
     discountInput,
     selectedCouponCode,
-    selectedGiftSku,
     products,
     useAlternativeName,
     alternativeName,
@@ -693,7 +579,6 @@ export default function QuoteTool({ token, user }) {
     setDiscountMode('percent');
     setDiscountInput(0);
     setSelectedCouponCode('');
-    setSelectedGiftSku('');
     setUseAlternativeName(false);
     setAlternativeName('');
     setAlternativePhone('');
@@ -803,9 +688,6 @@ export default function QuoteTool({ token, user }) {
       venta_type: ventaType,
       discount_percent: discountPercentForStorage,
       coupon_code: selectedCouponCode || null,
-      gift_name: selectedGiftProduct?.name || null,
-      gift_sku: selectedGiftProduct?.sku || null,
-      gift_qty: selectedGiftProduct ? DEFAULT_GIFT_QTY : 0,
       seller_user_id: requiresSellerAssignment ? Number(assignedSellerId) : null,
       rows: rowsWithDisplay,
       subtotal,
@@ -856,17 +738,6 @@ export default function QuoteTool({ token, user }) {
       // Cartera: the backend may have credited the sale to the customer's rep.
       if (savedData?.assigned_to) {
         toast.info(`Cliente de cartera: la venta se asignó a ${savedData.assigned_to}.`);
-      }
-      // The wheel prize was applied to this quote — consume it so it can't
-      // be used on a second one. Fire-and-forget: a hiccup here must not
-      // interrupt the sale.
-      if (wheelPrize?.id) {
-        apiRequest(`/api/wheel/spins/${wheelPrize.id}/redeem`, {
-          method: 'POST',
-          token,
-          body: { quote_id: quoteNumber }
-        }).catch(() => {});
-        setWheelPrize(null);
       }
       const dateParts = currentDateTime?.split(', ') || [];
       const dateText = dateParts.length > 1 ? dateParts.slice(1).join(', ') : currentDateTime;
@@ -1019,93 +890,12 @@ export default function QuoteTool({ token, user }) {
           <div className="quote-client-head">
             <h3 className="quote-section-title">1. Cliente</h3>
             <span className="crm-quote-hint">Escribe el nombre y elige un cliente guardado.</span>
-            <button
-              type="button"
-              className="btn btn-secondary crm-open-btn quote-wheel-btn"
-              onClick={createWheelLink}
-              disabled={wheelBusy}
-              title="Generar enlace de la ruleta de premios para este cliente"
-            >
-              🎡 Ruleta
-            </button>
             <button type="button" className="btn btn-secondary crm-open-btn" onClick={() => setCrmOpen(true)}>
               Clientes
               {crmFollowUpsDue > 0 && <span className="crm-due-badge">{crmFollowUpsDue}</span>}
             </button>
           </div>
 
-          {wheelPrize && (
-            <div className={`quote-wheel-prize ${wheelPrize.is_top_prize ? 'is-top' : ''}`}>
-              <span className="quote-wheel-prize-text">
-                🎡 {wheelPrize.is_top_prize ? '🏆 PREMIO MAYOR de la ruleta' : 'Premio de la ruleta'}:{' '}
-                <strong>{wheelPrize.prize_label}</strong>
-                {wheelPrize.prize_type === 'discount' && <em className="quote-wheel-applied"> · aplicado al descuento ✓</em>}
-                {wheelPrize.prize_type === 'gift' && !wheelPrize.prize_gift_sku_2 && (
-                  <em className="quote-wheel-applied"> · cargado como regalo ✓</em>
-                )}
-              </span>
-              {wheelPrize.prize_type === 'gift' && wheelPrize.prize_gift_sku_2 && (
-                <span className="quote-wheel-choice">
-                  <em>El cliente elige:</em>
-                  {[wheelPrize.prize_gift_sku, wheelPrize.prize_gift_sku_2].map((sku) => {
-                    const normalized = String(sku).trim().toUpperCase();
-                    const option = giftOptions.find((giftProduct) => giftProduct.sku === normalized);
-                    const isChosen = selectedGiftSku === normalized;
-                    return (
-                      <button
-                        key={normalized}
-                        type="button"
-                        className={`quote-wheel-option ${isChosen ? 'is-chosen' : ''}`}
-                        onClick={() => setSelectedGiftSku(normalized)}
-                      >
-                        {isChosen ? '✓ ' : ''}{option?.label || normalized}
-                      </button>
-                    );
-                  })}
-                  {!selectedGiftSku && <em className="quote-wheel-choose-hint">← elige una opción</em>}
-                </span>
-              )}
-              <button type="button" className="quote-wheel-redeem" onClick={redeemWheelPrize}>
-                Marcar usado
-              </button>
-            </div>
-          )}
-
-          {wheelDialog && (
-            <div className="quote-wheel-dialog">
-              {wheelDialog.spun ? (
-                <span className="quote-wheel-dialog-text">{wheelDialog.error}</span>
-              ) : (
-                <>
-                  <span className="quote-wheel-dialog-text">
-                    {wheelDialog.existing ? 'Este cliente ya tenía un giro pendiente:' : 'Enlace de giro listo:'}{' '}
-                    <code>{wheelDialog.url}</code>
-                  </span>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => {
-                      navigator.clipboard?.writeText(wheelDialog.url).then(
-                        () => toast.success('Enlace copiado'),
-                        () => toast.error('No se pudo copiar')
-                      );
-                    }}
-                  >
-                    Copiar
-                  </button>
-                  <a
-                    className="btn btn-primary quote-wheel-wa"
-                    href={`https://wa.me/${(() => { const d = String(customerPhone || '').replace(/\D/g, ''); return d.startsWith('591') ? d : `591${d}`; })()}?text=${encodeURIComponent(`🎡 ¡Tienes un giro de nuestra ruleta de premios! Gira aquí: ${wheelDialog.url}`)}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Enviar por WhatsApp
-                  </a>
-                </>
-              )}
-              <button type="button" className="quote-wheel-dialog-close" onClick={() => setWheelDialog(null)} aria-label="Cerrar">✕</button>
-            </div>
-          )}
           <div className="quote-client-grid">
             <div>
               <label className="form-label">Cliente</label>
@@ -1221,21 +1011,6 @@ export default function QuoteTool({ token, user }) {
                   <option key={coupon.id} value={coupon.code}>
                     {coupon.code} ({coupon.discount_percent}% · hasta {coupon.valid_until})
                   </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="form-label">Regalo (premio de ruleta)</label>
-              <select
-                value={selectedGiftSku}
-                className="form-select quote-gift-locked"
-                disabled
-                title="El regalo se llena automáticamente cuando el cliente gana uno en la ruleta"
-              >
-                <option value="">Sin regalo — lo llena la ruleta</option>
-                {giftOptions.map((giftProduct) => (
-                  <option key={giftProduct.sku} value={giftProduct.sku}>{giftProduct.label}</option>
                 ))}
               </select>
             </div>

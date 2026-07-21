@@ -143,8 +143,7 @@ const DASHBOARD_CARD_ORDER = [
   'productionQuality',
   'warehouses',
   'locations',
-  'map',
-  'ruleta'
+  'map'
 ];
 
 // Accent per business domain: consistent color language across tiles.
@@ -159,8 +158,7 @@ const DASHBOARD_CARD_ACCENTS = {
   warehouses: 'accent-almacen',
   locations: 'accent-geo',
   map: 'accent-geo',
-  commissions: 'accent-equipo',
-  ruleta: 'accent-marketing'
+  commissions: 'accent-equipo'
 };
 
 // v2: reset saved orders so the new strategic default applies to everyone.
@@ -343,7 +341,6 @@ function AdminDashboard({ token }) {
   const customerMix = stats.customerMix || null;
   const topCustomers = Array.isArray(stats.topCustomers) ? stats.topCustomers : [];
   const productionQuality = stats.productionQuality || null;
-  const wheelRoi = stats.wheelRoi || null;
   const mixTotal = customerMix ? Number(customerMix.new_total) + Number(customerMix.repeat_total) : 0;
   const repeatPct = mixTotal > 0 ? (Number(customerMix.repeat_total) / mixTotal) * 100 : 0;
   const qcTotal = productionQuality ? productionQuality.qc_passed + productionQuality.qc_rejected : 0;
@@ -586,21 +583,6 @@ function AdminDashboard({ token }) {
                 {receptionTotal > 0 ? ` (${((productionQuality.damaged / receptionTotal) * 100).toFixed(1)}%)` : ''}
               </strong>
             </div>
-          </div>
-        )}
-      </section>
-    ),
-    ruleta: (
-      <section className="dashboard-card">
-        <h3>Ruleta de premios · ROI</h3>
-        {!wheelRoi || wheelRoi.links_created + wheelRoi.spins_done + wheelRoi.prizes_redeemed === 0 ? (
-          <p className="dashboard-empty">Sin actividad de la ruleta este periodo</p>
-        ) : (
-          <div className="dashboard-mini-kpis dashboard-mini-kpis-grid">
-            <div><span>Enlaces enviados</span><strong>{wheelRoi.links_created}</strong></div>
-            <div><span>Giros realizados</span><strong>{wheelRoi.spins_done}</strong></div>
-            <div><span>Premios canjeados</span><strong>{wheelRoi.prizes_redeemed}</strong></div>
-            <div><span>Bs vendidos con premio</span><strong className="is-good">{formatBs(wheelRoi.redeemed_sales_total)}</strong></div>
           </div>
         )}
       </section>
