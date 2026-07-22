@@ -48,7 +48,9 @@ const getInventoryAccessScope = (userContext, access) => {
 
 const getProductionKanbanAccessScope = (userContext, access) => {
   const isAdmin = normalizeRole(userContext?.role || '') === ROLE_KEYS.admin;
-  const hasKanbanAccess = Boolean(access?.produccion_kanban) || isAdmin;
+  // recepcion_panel también lee el tablero: la página Recepción (almacén)
+  // necesita ver las tarjetas en etapa 'recepcion' para recibirlas.
+  const hasKanbanAccess = Boolean(access?.produccion_kanban) || Boolean(access?.recepcion_panel) || isAdmin;
   if (!hasKanbanAccess) {
     return { error: 'No tienes permiso para Kanban de producción' };
   }

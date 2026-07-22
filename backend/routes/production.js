@@ -429,7 +429,7 @@ router.post('/api/production/kanban/qc-gate', authenticateToken, requireRole(['P
 // Warehouse reception: the end of the card's life. Only pieces confirmed
 // intact enter the sede's stock; transit damage is logged, and the next
 // inventory sync regenerates any remaining need automatically.
-router.post('/api/production/kanban/cards/:id/receive', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+router.post('/api/production/kanban/cards/:id/receive', authenticateToken, requireRole(['Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   try {
     if (!(await ensureKanbanAccess(req, res))) return;
     const intact = parseCount(req.body?.intact);

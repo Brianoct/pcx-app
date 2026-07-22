@@ -104,8 +104,8 @@ export const NAV_ITEMS = [
   {
     path: '/recepcion',
     label: 'Recepción',
-    routeAccess: ['produccion_kanban', 'inventario_global', 'inventario_individual', 'admin'],
-    navAccess: ['produccion_kanban', 'inventario_global', 'inventario_individual'],
+    routeAccess: ['recepcion_panel', 'admin'],
+    navAccess: ['recepcion_panel'],
     render: (ctx) => <ProductionReception token={ctx.token} />
   },
   {
