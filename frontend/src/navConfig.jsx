@@ -130,25 +130,25 @@ export const NAV_ITEMS = [
   {
     path: '/campanas',
     label: 'Campañas',
-    routeAccess: null,
+    routeAccess: ['campanas_live', 'admin'],
     render: (ctx) => <CampaignsPanel token={ctx.token} user={ctx.user} role={ctx.role} />
   },
   {
     path: '/live',
     label: 'Live',
-    routeAccess: null,
+    routeAccess: ['campanas_live', 'admin'],
     render: (ctx) => <LivePanel token={ctx.token} role={ctx.role} />
   },
   {
     path: '/marketing-calendario',
     label: 'Calendario',
-    routeAccess: null,
+    routeAccess: ['marketing_calendario', 'admin'],
     render: (ctx) => <MarketingCalendar token={ctx.token} role={ctx.role} />
   },
   {
     path: '/marketing-inversion',
     label: 'Inversión',
-    routeAccess: ['marketing_combos', 'admin'],
+    routeAccess: ['marketing_inversion', 'admin'],
     render: (ctx) => <InversionPanel token={ctx.token} />
   },
   {
