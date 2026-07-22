@@ -29,6 +29,7 @@ const PANEL_KEYS = [
   'inventario_individual',
   'inventario_global',
   'control_calidad',
+  'recepcion_panel',
   'microfabrica_panel',
   'produccion_kanban',
   'gastos_panel',
@@ -57,6 +58,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     inventario_individual: false,
     inventario_global: false,
     control_calidad: false,
+    recepcion_panel: false,
     microfabrica_panel: false,
     produccion_kanban: false,
     gastos_panel: false,
@@ -104,7 +106,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       calendario: true,
       pedidos_individual: true,
       inventario_individual: true,
-      produccion_kanban: true
+      recepcion_panel: true
     };
   }
 
@@ -116,7 +118,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       pedidos_global: true,
       inventario_global: true,
       control_calidad: true,
-      produccion_kanban: true,
+      recepcion_panel: true,
       compras_panel: true
     };
   }

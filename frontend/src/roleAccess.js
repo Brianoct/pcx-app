@@ -19,6 +19,7 @@ const ACCESS_TEMPLATE = {
   inventario_individual: false,
   inventario_global: false,
   control_calidad: false,
+  recepcion_panel: false,
   microfabrica_panel: false,
   produccion_kanban: false,
   gastos_panel: false,
@@ -60,6 +61,7 @@ const ROLE_DEFAULTS = {
     marketing_cupones: true,
     marketing_calendario: true,
     marketing_inversion: true,
+    recepcion_panel: true,
     admin: true
   },
   almacen: {
@@ -67,7 +69,7 @@ const ROLE_DEFAULTS = {
     calendario: true,
     pedidos_individual: true,
     inventario_individual: true,
-    produccion_kanban: true
+    recepcion_panel: true
   },
   'almacen lider': {
     cotizar: true,
@@ -75,7 +77,7 @@ const ROLE_DEFAULTS = {
     pedidos_global: true,
     inventario_global: true,
     control_calidad: true,
-    produccion_kanban: true,
+    recepcion_panel: true,
     compras_panel: true
   },
   marketing: {
@@ -221,6 +223,10 @@ const PANEL_KEY_ALIASES = {
   marketingcupones: 'marketing_cupones',
   cupones: 'marketing_cupones',
   marketingCupones: 'marketing_cupones',
+  recepcion_panel: 'recepcion_panel',
+  recepcionpanel: 'recepcion_panel',
+  recepcion: 'recepcion_panel',
+  reception: 'recepcion_panel',
   campanas_live: 'campanas_live',
   campanaslive: 'campanas_live',
   campanas: 'campanas_live',
@@ -311,13 +317,14 @@ export const ACCESS_GROUPS = [
       { key: 'pedidos_global', label: 'Pedidos (todas las ciudades)' },
       { key: 'inventario_individual', label: 'Inventario (su ciudad)' },
       { key: 'inventario_global', label: 'Inventario (todas las ciudades)' },
+      { key: 'recepcion_panel', label: 'Recepción de lotes (daños en tránsito)' },
       { key: 'control_calidad', label: 'Registros de control de calidad' }
     ]
   },
   {
     label: 'Producción',
     keys: [
-      { key: 'produccion_kanban', label: 'Planificación, Kanban y Recepción' },
+      { key: 'produccion_kanban', label: 'Planificación y Kanban' },
       { key: 'microfabrica_panel', label: 'Aprobar control de calidad (Kanban)' }
     ]
   },
