@@ -129,6 +129,19 @@ const normalizeText = (value = '') => String(value || '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '');
 
+// Real swatch per color code so the color-mix bars read at a glance. Keep the
+// codes in sync with COLOR_SUFFIXES (backend/lib/kanban.js · productionShared.js).
+const COLOR_SWATCH = {
+  AM: '#facc15', // Amarillo
+  AP: '#0e7490', // Azul Petroleo
+  PL: '#6b7280', // Plomo
+  BL: '#e5e7eb', // Blanco
+  N: '#1f2937',  // Negro
+  R: '#dc2626',  // Rojo
+  C: '#cbd5e1',  // Cromo
+  B: '#e5e7eb'   // Blanco
+};
+
 // Strategic default: pulse of the business first (resumen, tendencia diaria,
 // dinero por pagar), then sales health, then people/product detail, then
 // production, logistics and marketing.
@@ -139,6 +152,7 @@ const DASHBOARD_CARD_ORDER = [
   'funnel',
   'salespeople',
   'products',
+  'colorSales',
   'customers',
   'productionQuality',
   'warehouses',
@@ -153,6 +167,7 @@ const DASHBOARD_CARD_ACCENTS = {
   funnel: 'accent-ventas',
   salespeople: 'accent-ventas',
   products: 'accent-producto',
+  colorSales: 'accent-producto',
   customers: 'accent-clientes',
   productionQuality: 'accent-produccion',
   warehouses: 'accent-almacen',
@@ -340,6 +355,7 @@ function AdminDashboard({ token }) {
 
   const customerMix = stats.customerMix || null;
   const topCustomers = Array.isArray(stats.topCustomers) ? stats.topCustomers : [];
+  const colorSales = Array.isArray(stats.colorSales) ? stats.colorSales : [];
   const productionQuality = stats.productionQuality || null;
   const mixTotal = customerMix ? Number(customerMix.new_total) + Number(customerMix.repeat_total) : 0;
   const repeatPct = mixTotal > 0 ? (Number(customerMix.repeat_total) / mixTotal) * 100 : 0;
@@ -606,6 +622,52 @@ function AdminDashboard({ token }) {
                     />
                   </div>
                   <div className="dashboard-bar-value">{totalQuantity}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    ),
+    colorSales: (
+      <section className="dashboard-card">
+        <h3>Colores más vendidos · T6195 y T9495</h3>
+        {colorSales.every((group) => group.total === 0) ? (
+          <p className="dashboard-empty">Sin ventas de estos productos este periodo</p>
+        ) : (
+          <div className="dashboard-color-groups">
+            {colorSales.map((group) => {
+              const groupMax = Math.max(...group.colors.map((c) => Number(c.qty || 0)), 1);
+              return (
+                <div key={group.base} className="dashboard-color-group">
+                  <div className="dashboard-color-group-head">
+                    <strong>{group.name}</strong>
+                    <span>{group.base} · {group.total} vendidos</span>
+                  </div>
+                  {group.total === 0 ? (
+                    <p className="dashboard-empty">Sin ventas este periodo</p>
+                  ) : (
+                    <div className="dashboard-bars">
+                      {group.colors.map((color) => (
+                        <div key={color.code} className="dashboard-bar-row">
+                          <div className="dashboard-bar-label">
+                            <span
+                              className="dashboard-color-dot"
+                              style={{ background: COLOR_SWATCH[color.code] || '#cbd5e1' }}
+                            />
+                            {color.label}
+                          </div>
+                          <div className="dashboard-bar-track">
+                            <div
+                              className="dashboard-bar-fill"
+                              style={{ width: `${Math.min(100, (Number(color.qty || 0) / groupMax) * 100)}%` }}
+                            />
+                          </div>
+                          <div className="dashboard-bar-value">{color.qty}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
