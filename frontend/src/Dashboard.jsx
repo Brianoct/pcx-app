@@ -150,7 +150,7 @@ export default function Dashboard({ token, user, role, access }) {
         </button>
       </div>
 
-      {campaignBanner && (
+      {campaignBanner && allowsAny(access, ['campanas_live', 'admin']) && (
         <button
           type="button"
           className={`campaign-banner ${campaignBanner.campaign.kind === 'live' ? 'is-live' : ''}`}

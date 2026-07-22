@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ACCESS_LABELS, buildAccessForUser, ROLE_OPTIONS } from '../roleAccess';
+import { ACCESS_GROUPS, buildAccessForUser, ROLE_OPTIONS } from '../roleAccess';
 import { apiRequest } from '../apiClient';
 import { useOutbox } from '../OutboxProvider';
 import { useToast } from '../ui/toastContext';
@@ -437,27 +437,36 @@ function UserManagement({ token }) {
           <div style={{ marginTop: '18px' }}>
             <h4 style={{ marginBottom: '10px', color: '#292524' }}>Acceso por panel</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
-              {ACCESS_LABELS.map((field) => (
-                <label
-                  key={field.key}
-                  style={{
-                    display: 'flex',
-                    gap: '9px',
-                    alignItems: 'center',
-                    color: '#292524',
-                    border: '1px solid #e7e0d8',
-                    borderRadius: '10px',
-                    padding: '10px 12px',
-                    background: '#f5f1ec'
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={Boolean(newUser.panel_access?.[field.key])}
-                    onChange={() => handleNewAccessToggle(field.key)}
-                  />
-                  {field.label}
-                </label>
+              {ACCESS_GROUPS.map((group) => (
+                <div key={group.label} style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ fontSize: '0.66rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#a8a29e', margin: '2px 0 6px' }}>
+                    {group.label}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
+                    {group.keys.map((field) => (
+                      <label
+                        key={field.key}
+                        style={{
+                          display: 'flex',
+                          gap: '9px',
+                          alignItems: 'center',
+                          color: '#292524',
+                          border: '1px solid #e7e0d8',
+                          borderRadius: '10px',
+                          padding: '10px 12px',
+                          background: '#f5f1ec'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(newUser.panel_access?.[field.key])}
+                          onChange={() => handleNewAccessToggle(field.key)}
+                        />
+                        {field.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -712,28 +721,37 @@ function UserManagement({ token }) {
                     </button>
                     {editModal.showPanelOverride && (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
-                        {ACCESS_LABELS.map((field) => (
-                          <label
-                            key={field.key}
-                            style={{
-                              display: 'flex',
-                              gap: '9px',
-                              alignItems: 'center',
-                              color: '#292524',
-                              border: '1px solid #e7e0d8',
-                              borderRadius: '10px',
-                              padding: '10px 12px',
-                              background: '#ffffff'
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={Boolean(editModal.panel_access?.[field.key])}
-                              onChange={() => handleEditAccessToggle(field.key)}
-                            />
-                            {field.label}
-                          </label>
-                        ))}
+                        {ACCESS_GROUPS.map((group) => (
+                <div key={group.label} style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ fontSize: '0.66rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#a8a29e', margin: '2px 0 6px' }}>
+                    {group.label}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
+                    {group.keys.map((field) => (
+                      <label
+                        key={field.key}
+                        style={{
+                          display: 'flex',
+                          gap: '9px',
+                          alignItems: 'center',
+                          color: '#292524',
+                          border: '1px solid #e7e0d8',
+                          borderRadius: '10px',
+                          padding: '10px 12px',
+                          background: '#ffffff'
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(editModal.panel_access?.[field.key])}
+                          onChange={() => handleEditAccessToggle(field.key)}
+                        />
+                        {field.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
                       </div>
                     )}
                   </div>

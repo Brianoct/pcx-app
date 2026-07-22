@@ -35,6 +35,9 @@ const PANEL_KEYS = [
   'compras_panel',
   'marketing_combos',
   'marketing_cupones',
+  'campanas_live',
+  'marketing_calendario',
+  'marketing_inversion',
   'admin'
 ];
 
@@ -60,6 +63,11 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     compras_panel: false,
     marketing_combos: false,
     marketing_cupones: false,
+    // Campañas y Live son herramientas de comunicación a todo el equipo:
+    // encendidas por defecto para todos los roles.
+    campanas_live: true,
+    marketing_calendario: false,
+    marketing_inversion: false,
     admin: false
   };
 
@@ -118,7 +126,9 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       ...base,
       calendario: true,
       marketing_combos: true,
-      marketing_cupones: true
+      marketing_cupones: true,
+      marketing_calendario: true,
+      marketing_inversion: true
     };
   }
 
@@ -127,7 +137,9 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       ...base,
       calendario: true,
       marketing_combos: true,
-      marketing_cupones: true
+      marketing_cupones: true,
+      marketing_calendario: true,
+      marketing_inversion: true
     };
   }
 

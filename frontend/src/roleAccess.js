@@ -25,6 +25,9 @@ const ACCESS_TEMPLATE = {
   compras_panel: false,
   marketing_combos: false,
   marketing_cupones: false,
+  campanas_live: true,
+  marketing_calendario: false,
+  marketing_inversion: false,
   admin: false
 };
 
@@ -55,6 +58,8 @@ const ROLE_DEFAULTS = {
     compras_panel: true,
     marketing_combos: true,
     marketing_cupones: true,
+    marketing_calendario: true,
+    marketing_inversion: true,
     admin: true
   },
   almacen: {
@@ -76,12 +81,16 @@ const ROLE_DEFAULTS = {
   marketing: {
     calendario: true,
     marketing_combos: true,
-    marketing_cupones: true
+    marketing_cupones: true,
+    marketing_calendario: true,
+    marketing_inversion: true
   },
   'marketing lider': {
     calendario: true,
     marketing_combos: true,
-    marketing_cupones: true
+    marketing_cupones: true,
+    marketing_calendario: true,
+    marketing_inversion: true
   },
   produccion: {
     calendario: true,
@@ -212,6 +221,15 @@ const PANEL_KEY_ALIASES = {
   marketingcupones: 'marketing_cupones',
   cupones: 'marketing_cupones',
   marketingCupones: 'marketing_cupones',
+  campanas_live: 'campanas_live',
+  campanaslive: 'campanas_live',
+  campanas: 'campanas_live',
+  live: 'campanas_live',
+  marketing_calendario: 'marketing_calendario',
+  marketingcalendario: 'marketing_calendario',
+  marketing_inversion: 'marketing_inversion',
+  marketinginversion: 'marketing_inversion',
+  inversion: 'marketing_inversion',
   admin: 'admin'
 };
 
@@ -266,29 +284,76 @@ export function canAccessPanel(accessOrRole, maybeAccessOrKey, maybeKey) {
   return Boolean(access?.[canonical]);
 }
 
-export const ACCESS_LABELS = [
-  { key: 'cotizar', label: 'Cotizar' },
-  { key: 'calendario', label: 'Calendario' },
-  // La clave interna sigue siendo proyectos_panel (compatibilidad backend);
-  // hoy da acceso a la sección Mejoras (bono mensual por estándares).
-  { key: 'proyectos_panel', label: 'Mejoras (bono por estándares)' },
-  { key: 'historial_individual', label: 'Historial individual' },
-  { key: 'historial_global', label: 'Historial global' },
-  { key: 'rendimiento_individual', label: 'Rendimiento individual' },
-  { key: 'rendimiento_global', label: 'Rendimiento global' },
-  { key: 'pedidos_individual', label: 'Pedidos individual' },
-  { key: 'pedidos_global', label: 'Pedidos global' },
-  { key: 'inventario_individual', label: 'Inventario individual' },
-  { key: 'inventario_global', label: 'Inventario global' },
-  { key: 'control_calidad', label: 'Control de calidad' },
-  { key: 'microfabrica_panel', label: 'Panel Producción' },
-  { key: 'produccion_kanban', label: 'Kanban Producción' },
-  { key: 'gastos_panel', label: 'Panel Gastos' },
-  { key: 'compras_panel', label: 'Compras (procurement)' },
-  { key: 'marketing_combos', label: 'Combos (Marketing)' },
-  { key: 'marketing_cupones', label: 'Cupones (Marketing)' },
-  { key: 'admin', label: 'Panel Admin' }
+// Permisos agrupados igual que el menú lateral: la persona que asigna
+// permisos piensa en secciones, no en una lista plana.
+export const ACCESS_GROUPS = [
+  {
+    label: 'Principal',
+    keys: [
+      { key: 'calendario', label: 'Plan del día' }
+    ]
+  },
+  {
+    label: 'Ventas',
+    keys: [
+      { key: 'cotizar', label: 'Cotizar' },
+      { key: 'menu_cliente', label: 'Catálogo para clientes (enlace)' },
+      { key: 'historial_individual', label: 'Historial (solo lo suyo)' },
+      { key: 'historial_global', label: 'Historial (todo el equipo)' },
+      { key: 'rendimiento_individual', label: 'Rendimiento (solo lo suyo)' },
+      { key: 'rendimiento_global', label: 'Rendimiento (todo el equipo)' }
+    ]
+  },
+  {
+    label: 'Almacén',
+    keys: [
+      { key: 'pedidos_individual', label: 'Pedidos (su ciudad)' },
+      { key: 'pedidos_global', label: 'Pedidos (todas las ciudades)' },
+      { key: 'inventario_individual', label: 'Inventario (su ciudad)' },
+      { key: 'inventario_global', label: 'Inventario (todas las ciudades)' },
+      { key: 'control_calidad', label: 'Registros de control de calidad' }
+    ]
+  },
+  {
+    label: 'Producción',
+    keys: [
+      { key: 'produccion_kanban', label: 'Planificación, Kanban y Recepción' },
+      { key: 'microfabrica_panel', label: 'Aprobar control de calidad (Kanban)' }
+    ]
+  },
+  {
+    label: 'Mejoras',
+    keys: [
+      { key: 'proyectos_panel', label: 'Mejoras (bono por estándares)' }
+    ]
+  },
+  {
+    label: 'Marketing',
+    keys: [
+      { key: 'campanas_live', label: 'Campañas y Live (ver y marcar su área)' },
+      { key: 'marketing_calendario', label: 'Calendario de Marketing' },
+      { key: 'marketing_inversion', label: 'Inversión (costos y retorno)' },
+      { key: 'marketing_combos', label: 'Combos' },
+      { key: 'marketing_cupones', label: 'Cupones' }
+    ]
+  },
+  {
+    label: 'Finanzas',
+    keys: [
+      { key: 'gastos_panel', label: 'Gastos' }
+    ]
+  },
+  {
+    label: 'Administración',
+    keys: [
+      { key: 'compras_panel', label: 'Compras' },
+      { key: 'admin', label: 'Panel Admin y Estadísticas' }
+    ]
+  }
 ];
+
+// Lista plana (compatibilidad con pantallas que iteran todos los permisos).
+export const ACCESS_LABELS = ACCESS_GROUPS.flatMap((group) => group.keys);
 
 export const ROLE_LABELS = [
   { role: 'Ventas', key: 'ventas' },

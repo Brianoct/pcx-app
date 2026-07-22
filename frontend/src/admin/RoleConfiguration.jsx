@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ACCESS_LABELS } from '../roleAccess';
+import { ACCESS_GROUPS } from '../roleAccess';
 import { apiRequest } from '../apiClient';
 import { useOutbox } from '../OutboxProvider';
 function RoleConfiguration({ token }) {
@@ -164,33 +164,47 @@ function RoleConfiguration({ token }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
-            {ACCESS_LABELS.map((field) => {
-              const activeRow = rows.find((row) => row.role === selectedRole);
-              return (
-                <label
-                  key={`${selectedRole}-${field.key}`}
-                  style={{
-                    display: 'flex',
-                    gap: '8px',
-                    alignItems: 'center',
-                    color: '#57534e',
-                    border: '1px solid #e7e0d8',
-                    borderRadius: '8px',
-                    padding: '8px 10px',
-                    background: 'rgba(255,255,255,0.7)'
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={Boolean(activeRow?.panel_access?.[field.key])}
-                    onChange={() => toggleRoleAccess(selectedRole, field.key)}
-                  />
-                  {field.label}
-                </label>
-              );
-            })}
-          </div>
+          {ACCESS_GROUPS.map((group) => {
+            const activeRow = rows.find((row) => row.role === selectedRole);
+            return (
+              <div key={group.label} style={{ marginBottom: '14px' }}>
+                <div style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  color: '#a8a29e',
+                  margin: '0 0 6px 2px'
+                }}>
+                  {group.label}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '8px' }}>
+                  {group.keys.map((field) => (
+                    <label
+                      key={`${selectedRole}-${field.key}`}
+                      style={{
+                        display: 'flex',
+                        gap: '8px',
+                        alignItems: 'center',
+                        color: '#57534e',
+                        border: '1px solid #e7e0d8',
+                        borderRadius: '8px',
+                        padding: '8px 10px',
+                        background: 'rgba(255,255,255,0.7)'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(activeRow?.panel_access?.[field.key])}
+                        onChange={() => toggleRoleAccess(selectedRole, field.key)}
+                      />
+                      {field.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
 
           <div style={{ marginTop: '10px', color: '#78716c', fontSize: '0.9rem' }}>
             Consejo: activa <strong>Aplicar a usuarios existentes</strong> si quieres que el cambio impacte inmediatamente a todo el equipo de ese rol.
