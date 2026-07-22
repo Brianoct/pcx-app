@@ -3,9 +3,25 @@ const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { answerAdminAiQuestion } = require('../lib/aiAssistant');
 const { computeTeamCommissions } = require('../lib/commissionTeam');
+const { parseVariantSku } = require('../lib/kanban');
 const { COMPLETED_STATUSES, REPORTING_TIMEZONE, buildDateFilter, buildReportingCreatedAtExpr } = require('../lib/reporting');
 
 const router = express.Router();
+
+// Bases whose color mix Brian wants to watch on Estadísticas. Add more here to
+// track their color breakdown too — the response builds one section per base.
+const COLOR_TRACKED_BASES = ['T6195', 'T9495'];
+
+// "Tablero 94x95 Negro" -> "Tablero 94x95" (drop the trailing color word so the
+// section header reads as the product, not a specific color).
+const stripColorWord = (name = '', colorLabel = '') => {
+  const trimmed = String(name || '').trim();
+  if (!colorLabel) return trimmed;
+  const lower = trimmed.toLowerCase();
+  const suffix = String(colorLabel).toLowerCase();
+  if (lower.endsWith(suffix)) return trimmed.slice(0, trimmed.length - colorLabel.length).trim();
+  return trimmed;
+};
 
 // ─── ADMIN DASHBOARD STATISTICS ─────────────────────────────────────────────
 router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async (req, res) => {
@@ -38,6 +54,49 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
       ORDER BY total_quantity DESC
       LIMIT 10
     `, dateFilter.params);
+
+    // 1b. Color mix for the tracked bases (T6195, T9495): which color sells most.
+    // Pull each variant SKU's paid quantity, then fold by base + color in JS so
+    // we reuse the exact same variant-parsing rules as the production board.
+    const colorMixRes = await pool.query(`
+      SELECT
+        UPPER(TRIM(li->>'sku')) AS sku,
+        (array_agg(li->>'displayName'))[1] AS name,
+        SUM(CAST(li->>'qty' AS INTEGER)) AS total_quantity
+      FROM quotes q,
+      LATERAL jsonb_array_elements(q.line_items) li
+      WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+        ${dateFilter.sql}
+      GROUP BY UPPER(TRIM(li->>'sku'))
+    `, dateFilter.params);
+
+    const colorMixByBase = new Map(
+      COLOR_TRACKED_BASES.map((base) => [base, { base, name: '', total: 0, colors: new Map() }])
+    );
+    for (const row of colorMixRes.rows) {
+      const variant = parseVariantSku(row.sku);
+      if (!variant) continue;
+      const bucket = colorMixByBase.get(variant.base);
+      if (!bucket) continue;
+      const qty = Number(row.total_quantity || 0);
+      if (!bucket.name) bucket.name = stripColorWord(row.name, variant.colorLabel);
+      bucket.total += qty;
+      const existing = bucket.colors.get(variant.colorCode);
+      if (existing) {
+        existing.qty += qty;
+      } else {
+        bucket.colors.set(variant.colorCode, { code: variant.colorCode, label: variant.colorLabel, qty });
+      }
+    }
+    const colorSales = COLOR_TRACKED_BASES.map((base) => {
+      const bucket = colorMixByBase.get(base);
+      return {
+        base,
+        name: bucket.name || base,
+        total: bucket.total,
+        colors: [...bucket.colors.values()].sort((a, b) => b.qty - a.qty)
+      };
+    });
 
     // 2. Top salespeople
     const salesRes = await pool.query(`
@@ -275,6 +334,7 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
 
     res.json({
       popularProducts: popularRes.rows,
+      colorSales,
       topSalespeople: salesRes.rows,
       topLocations: locRes.rows,
       topWarehouses: whRes.rows,
