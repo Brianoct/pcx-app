@@ -11,7 +11,6 @@ const AdminPanel = lazy(() => import('./admin/AdminPanel'));
 const InventoryPanel = lazy(() => import('./InventoryPanel'));
 const PedidosPanel = lazy(() => import('./PedidosPanel'));
 const Combos = lazy(() => import('./Combos'));
-const Cupones = lazy(() => import('./Cupones'));
 const Calendar = lazy(() => import('./Calendar'));
 const ProductionKanban = lazy(() => import('./ProductionKanban'));
 const ProductionPlanning = lazy(() => import('./ProductionPlanning'));
@@ -123,12 +122,6 @@ export const NAV_ITEMS = [
     render: (ctx) => <Combos token={ctx.token} />
   },
   {
-    path: '/cupones',
-    label: 'Cupones',
-    routeAccess: ['marketing_cupones'],
-    render: (ctx) => <Cupones token={ctx.token} />
-  },
-  {
     path: '/campanas',
     label: 'Campañas',
     routeAccess: ['campanas_live', 'admin'],
@@ -201,7 +194,7 @@ const SIDEBAR_SECTIONS = [
   { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion'] },
   { key: 'produccion', label: 'Producción', paths: ['/produccion-planificacion', '/produccion-kanban'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras'] },
-  { key: 'marketing', label: 'Marketing', paths: ['/marketing-calendario', '/campanas', '/live', '/promos', '/marketing-inversion', '/combos', '/cupones'] },
+  { key: 'marketing', label: 'Marketing', paths: ['/marketing-calendario', '/campanas', '/live', '/promos', '/marketing-inversion', '/combos'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
   { key: 'administracion', label: 'Administración', paths: ['/comprar', '/admin', '/dashboard'] }
 ];

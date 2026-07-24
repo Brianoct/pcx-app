@@ -25,7 +25,6 @@ const ACCESS_TEMPLATE = {
   gastos_panel: false,
   compras_panel: false,
   marketing_combos: false,
-  marketing_cupones: false,
   campanas_live: true,
   marketing_calendario: false,
   marketing_inversion: false,
@@ -59,7 +58,6 @@ const ROLE_DEFAULTS = {
     gastos_panel: true,
     compras_panel: true,
     marketing_combos: true,
-    marketing_cupones: true,
     marketing_calendario: true,
     marketing_inversion: true,
     marketing_promos: true,
@@ -85,7 +83,6 @@ const ROLE_DEFAULTS = {
   marketing: {
     calendario: true,
     marketing_combos: true,
-    marketing_cupones: true,
     marketing_calendario: true,
     marketing_inversion: true,
     marketing_promos: true
@@ -93,7 +90,6 @@ const ROLE_DEFAULTS = {
   'marketing lider': {
     calendario: true,
     marketing_combos: true,
-    marketing_cupones: true,
     marketing_calendario: true,
     marketing_inversion: true,
     marketing_promos: true
@@ -223,10 +219,6 @@ const PANEL_KEY_ALIASES = {
   marketingcombos: 'marketing_combos',
   combos: 'marketing_combos',
   marketingCombos: 'marketing_combos',
-  marketing_cupones: 'marketing_cupones',
-  marketingcupones: 'marketing_cupones',
-  cupones: 'marketing_cupones',
-  marketingCupones: 'marketing_cupones',
   recepcion_panel: 'recepcion_panel',
   recepcionpanel: 'recepcion_panel',
   recepcion: 'recepcion_panel',
@@ -347,9 +339,8 @@ export const ACCESS_GROUPS = [
       { key: 'campanas_live', label: 'Campañas y Live (ver y marcar su área)' },
       { key: 'marketing_calendario', label: 'Calendario de Marketing' },
       { key: 'marketing_inversion', label: 'Inversión (costos y retorno)' },
-      { key: 'marketing_promos', label: 'Promos (toolchest de ventas)' },
-      { key: 'marketing_combos', label: 'Combos' },
-      { key: 'marketing_cupones', label: 'Cupones' }
+      { key: 'marketing_promos', label: 'Promos (envío gratis, sorteo, cupones)' },
+      { key: 'marketing_combos', label: 'Combos' }
     ]
   },
   {

@@ -355,6 +355,26 @@ export function generateModernQuotePdf({
         promoY + 16.2
       );
       promoY += 22;
+    } else if (promo.tool === 'cupon') {
+      doc.setFillColor(239, 246, 255);
+      doc.setDrawColor(29, 78, 216);
+      doc.roundedRect(left, promoY, promoW, 19, 2, 2, 'FD');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(29, 78, 216);
+      doc.text(`CUPÓN ${Number(promo.discount_percent || 0)}% · PRÓXIMA COMPRA`, left + 4, promoY + 5.8);
+      doc.setFontSize(11);
+      doc.setTextColor(...TEXT_DARK);
+      doc.text(`Tu código: ${promo.code || ''}`, left + 4, promoY + 11.4);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(120, 113, 108);
+      doc.text(
+        `Se activa al pagar este pedido · válido ${Number(promo.validity_days || 30)} días desde el pago`,
+        left + 4,
+        promoY + 16.2
+      );
+      promoY += 22;
     }
   });
 

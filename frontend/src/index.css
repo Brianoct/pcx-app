@@ -9217,3 +9217,36 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   font-size: 0.72rem;
 }
 .promo-quote-chip.is-paid { background: #dcfce7; color: #15803d; }
+
+/* Cupón del cliente en Cotizar */
+.quote-coupon-chip {
+  border: 1px dashed #1d4ed8;
+  background: rgba(239, 246, 255, 0.85);
+  color: #1e40af;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.quote-coupon-chip.is-applied { border-style: solid; background: rgba(219, 234, 254, 0.9); }
+.quote-coupon-btn {
+  border: 1px solid #1d4ed8;
+  background: #1d4ed8;
+  color: #fff;
+  border-radius: 7px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.quote-coupon-chip.is-applied .quote-coupon-btn { background: #fff; color: #1d4ed8; }
+.promo-mini-btn { padding: 4px 9px !important; font-size: 0.74rem !important; white-space: nowrap; }
+.quote-promo-chip.is-cupon {
+  border-color: #1d4ed8;
+  background: rgba(239, 246, 255, 0.85);
+  color: #1e40af;
+}
