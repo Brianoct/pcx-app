@@ -175,9 +175,21 @@
   },
   {
     "method": "GET",
-    "path": "/api/cupones",
+    "path": "/api/promos",
     "status": 200,
-    "shape": "array"
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/promos",
+    "status": 403,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/promos/active",
+    "status": 200,
+    "shape": "object"
   },
   {
     "method": "GET",
@@ -289,15 +301,15 @@
   },
   {
     "method": "POST",
-    "path": "/api/cupones",
+    "path": "/api/promos",
     "status": 201,
     "shape": "object"
   },
   {
     "method": "GET",
-    "path": "/api/cupones",
+    "path": "/api/promos/active",
     "status": 200,
-    "shape": "array"
+    "shape": "object"
   },
   {
     "method": "POST",
