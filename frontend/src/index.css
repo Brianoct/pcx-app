@@ -951,6 +951,39 @@ button, .btn {
   flex-wrap: wrap;
 }
 
+/* Promos activas del toolchest: aviso al vendedor dentro de Cotizar */
+.quote-promo-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.quote-promo-chip {
+  border: 1px dashed #047857;
+  background: rgba(236, 253, 245, 0.75);
+  color: #065f46;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.quote-promo-chip.is-sorteo {
+  border-color: #b45309;
+  background: rgba(255, 251, 235, 0.85);
+  color: #92400e;
+}
+
+.quote-promo-chip.is-earned {
+  border-style: solid;
+  box-shadow: 0 0 0 1px rgba(4, 120, 87, 0.15);
+}
+
+.quote-promo-chip.is-sorteo.is-earned {
+  box-shadow: 0 0 0 1px rgba(180, 83, 9, 0.18);
+}
+
 .quote-sale-type-group {
   display: inline-flex;
   background: #ffffff;
@@ -9076,3 +9109,111 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 .inv-multiple.is-mid b { color: #b45309; font-size: 1.2rem; }
 .inv-multiple.is-bad { border-color: #fecaca; background: #fef2f2; }
 .inv-multiple.is-bad b { color: #b91c1c; font-size: 1.2rem; }
+
+/* ── Promos: caja de herramientas de marketing ── */
+.promo-toolbar { margin: 12px 0; display: flex; justify-content: flex-end; }
+.promo-notice {
+  margin: 10px 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #15803d;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.promo-form { padding: 16px; margin-bottom: 14px; }
+.promo-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.promo-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.promo-form-grid input,
+.promo-form-grid select {
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e7e0d8;
+  background: #fff;
+  color: #292524;
+  font-size: 0.9rem;
+}
+.promo-list { display: grid; gap: 14px; }
+.promo-card { padding: 16px; border-left: 4px solid #e7e0d8; }
+.promo-card.is-active { border-left-color: #047857; }
+.promo-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.promo-card-title { display: flex; gap: 10px; align-items: center; }
+.promo-card-icon { font-size: 1.5rem; }
+.promo-card-title strong { display: block; font-size: 1.02rem; }
+.promo-card-kind { display: block; font-size: 0.76rem; color: var(--text-muted); }
+.promo-status {
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.promo-status.is-on { background: #dcfce7; color: #15803d; }
+.promo-status.is-off { background: #f1f5f9; color: #64748b; }
+.promo-card-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.promo-winner {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 0.88rem;
+}
+.promo-card-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.promo-card-actions .btn { padding: 8px 14px; font-size: 0.85rem; }
+.btn.btn-outline {
+  background: #fff;
+  border: 1px solid #e7e0d8;
+  color: #44403c;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.btn.btn-outline:hover { border-color: #d6d3d1; background: #fafaf9; }
+.promo-draw-btn { border-color: #fcd34d !important; background: #fffbeb !important; color: #92400e !important; }
+.promo-draw-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.promo-delete-btn:hover { border-color: #fca5a5 !important; background: #fef2f2 !important; color: #b91c1c !important; }
+.promo-registry { margin-top: 12px; overflow-x: auto; }
+.promo-registry-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+.promo-registry-table th {
+  text-align: left;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid #e7e0d8;
+}
+.promo-registry-table td { padding: 7px 8px; border-bottom: 1px solid #f0ebe4; vertical-align: top; }
+.promo-registry-table tr.is-winner td { background: #fffbeb; }
+.promo-quote-chip {
+  display: inline-block;
+  margin: 1px 4px 1px 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.72rem;
+}
+.promo-quote-chip.is-paid { background: #dcfce7; color: #15803d; }

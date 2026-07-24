@@ -47,6 +47,9 @@ export default function QuoteTool({ token, user }) {
   const [provincia, setProvincia] = useState('');
   const [crmOpen, setCrmOpen] = useState(false);
   const [crmFollowUpsDue, setCrmFollowUpsDue] = useState(0);
+  // Toolchest de marketing: promos activas hoy (envío gratis, sorteo...).
+  // El servidor decide qué aplica al guardar; esto es el aviso para el vendedor.
+  const [activePromos, setActivePromos] = useState([]);
 
   // Picking a customer (from autocomplete or the hub) fills the quote form —
   // the whole point: never re-type customer data.
@@ -66,6 +69,14 @@ export default function QuoteTool({ token, user }) {
     if (customer.assigned_user_id) setAssignedSellerId(String(customer.assigned_user_id));
     if (ALMACEN_OPTIONS.includes(customer.last_store_location)) setAlmacen(customer.last_store_location);
   };
+
+  useEffect(() => {
+    let active = true;
+    apiRequest('/api/promos/active', { token })
+      .then((data) => { if (active) setActivePromos(Array.isArray(data?.promos) ? data.promos : []); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [token]);
 
   useEffect(() => {
     let active = true;
@@ -751,6 +762,12 @@ export default function QuoteTool({ token, user }) {
       if (savedData?.assigned_to) {
         toast.info(`Cliente de cartera: la venta se asignó a ${savedData.assigned_to}.`);
       }
+      // Promos aplicadas por el servidor (snapshot): van a la proforma tal cual.
+      const savedPromos = Array.isArray(savedData?.promos) ? savedData.promos : [];
+      const sorteoPromo = savedPromos.find((promo) => promo.tool === 'sorteo');
+      if (sorteoPromo?.code) {
+        toast.info(`🎟️ Sorteo: código ${sorteoPromo.code} (${sorteoPromo.tickets} ticket${sorteoPromo.tickets > 1 ? 's' : ''}) impreso en la proforma.`);
+      }
       const dateParts = currentDateTime?.split(', ') || [];
       const dateText = dateParts.length > 1 ? dateParts.slice(1).join(', ') : currentDateTime;
       const safeCustomerName = String(customerName || 'sin_nombre').trim().replace(/\s+/g, '_');
@@ -776,7 +793,8 @@ export default function QuoteTool({ token, user }) {
         subtotal,
         discountPercent: effectiveDiscountPercent,
         discountAmount: discountAmountApplied,
-        total
+        total,
+        promos: savedPromos
       });
 
       if (whatsappConversationId && pdfDoc) {
@@ -1075,6 +1093,44 @@ export default function QuoteTool({ token, user }) {
       {(
         <div className="card quote-products-card">
           <h3 className="quote-section-title">2. Productos</h3>
+          {activePromos.length > 0 && (
+            <div className="quote-promo-chips">
+              {activePromos.map((promo) => {
+                const config = promo.config || {};
+                const minTotal = Number(config.min_total || 0);
+                const reachesMin = minTotal <= 0 || total >= minTotal;
+                if (promo.tool === 'envio_gratis') {
+                  return (
+                    <div key={promo.id} className={`quote-promo-chip ${reachesMin ? 'is-earned' : ''}`}>
+                      🚚 <strong>{promo.name}</strong>
+                      {minTotal > 0 && ` · desde ${minTotal} Bs`}
+                      {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
+                      {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
+                      {reachesMin && total > 0 && ' ✓'}
+                    </div>
+                  );
+                }
+                if (promo.tool === 'sorteo') {
+                  const perTicket = Number(config.bs_per_ticket || 0);
+                  const cap = Math.max(1, Number(config.max_tickets || 5));
+                  const earned = !reachesMin || total <= 0
+                    ? 0
+                    : (perTicket > 0 ? Math.max(1, Math.min(cap, Math.floor(total / perTicket))) : 1);
+                  return (
+                    <div key={promo.id} className={`quote-promo-chip is-sorteo ${earned > 0 ? 'is-earned' : ''}`}>
+                      🎟️ <strong>{promo.name}</strong>
+                      {minTotal > 0 && ` · participa desde ${minTotal} Bs`}
+                      {perTicket > 0 && ` · 1 ticket por cada ${perTicket} Bs`}
+                      {earned > 0
+                        ? ` — este pedido gana ${earned} ticket${earned > 1 ? 's' : ''} 🎉`
+                        : (minTotal > 0 && total > 0 ? ` — faltan ${(minTotal - total).toFixed(0)} Bs` : '')}
+                    </div>
+                  );
+                }
+                return null;
+              })}
+            </div>
+          )}
           <div className="quote-products-toolbar">
             <div className="quote-sale-type-group">
               <button

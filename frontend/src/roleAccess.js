@@ -29,6 +29,7 @@ const ACCESS_TEMPLATE = {
   campanas_live: true,
   marketing_calendario: false,
   marketing_inversion: false,
+  marketing_promos: false,
   admin: false
 };
 
@@ -61,6 +62,7 @@ const ROLE_DEFAULTS = {
     marketing_cupones: true,
     marketing_calendario: true,
     marketing_inversion: true,
+    marketing_promos: true,
     recepcion_panel: true,
     admin: true
   },
@@ -85,14 +87,16 @@ const ROLE_DEFAULTS = {
     marketing_combos: true,
     marketing_cupones: true,
     marketing_calendario: true,
-    marketing_inversion: true
+    marketing_inversion: true,
+    marketing_promos: true
   },
   'marketing lider': {
     calendario: true,
     marketing_combos: true,
     marketing_cupones: true,
     marketing_calendario: true,
-    marketing_inversion: true
+    marketing_inversion: true,
+    marketing_promos: true
   },
   produccion: {
     calendario: true,
@@ -236,6 +240,9 @@ const PANEL_KEY_ALIASES = {
   marketing_inversion: 'marketing_inversion',
   marketinginversion: 'marketing_inversion',
   inversion: 'marketing_inversion',
+  marketing_promos: 'marketing_promos',
+  marketingpromos: 'marketing_promos',
+  promos: 'marketing_promos',
   admin: 'admin'
 };
 
@@ -340,6 +347,7 @@ export const ACCESS_GROUPS = [
       { key: 'campanas_live', label: 'Campañas y Live (ver y marcar su área)' },
       { key: 'marketing_calendario', label: 'Calendario de Marketing' },
       { key: 'marketing_inversion', label: 'Inversión (costos y retorno)' },
+      { key: 'marketing_promos', label: 'Promos (toolchest de ventas)' },
       { key: 'marketing_combos', label: 'Combos' },
       { key: 'marketing_cupones', label: 'Cupones' }
     ]

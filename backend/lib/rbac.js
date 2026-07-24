@@ -39,6 +39,7 @@ const PANEL_KEYS = [
   'campanas_live',
   'marketing_calendario',
   'marketing_inversion',
+  'marketing_promos',
   'admin'
 ];
 
@@ -70,6 +71,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     campanas_live: true,
     marketing_calendario: false,
     marketing_inversion: false,
+    marketing_promos: false,
     admin: false
   };
 
@@ -130,7 +132,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       marketing_combos: true,
       marketing_cupones: true,
       marketing_calendario: true,
-      marketing_inversion: true
+      marketing_inversion: true,
+      marketing_promos: true
     };
   }
 
@@ -141,7 +144,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       marketing_combos: true,
       marketing_cupones: true,
       marketing_calendario: true,
-      marketing_inversion: true
+      marketing_inversion: true,
+      marketing_promos: true
     };
   }
 
