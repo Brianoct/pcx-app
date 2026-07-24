@@ -9250,3 +9250,74 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   background: rgba(239, 246, 255, 0.85);
   color: #1e40af;
 }
+
+/* ── Resumen de la mañana (analista nocturno) ── */
+.morning-brief-card {
+  background: linear-gradient(135deg, #fff8f1 0%, #ffffff 60%);
+  border: 1px solid #fde4cf;
+  border-left: 5px solid #ff7f30;
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.morning-brief-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.morning-brief-eyebrow {
+  margin: 0 0 2px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b45309;
+}
+.morning-brief-headline {
+  margin: 0;
+  font-size: 1.15rem;
+  color: #292524;
+  line-height: 1.25;
+}
+.morning-brief-btn { padding: 9px 16px; font-size: 0.85rem; white-space: nowrap; }
+.morning-brief-empty { margin: 12px 0 0; color: #78716c; font-size: 0.9rem; }
+.morning-brief-flags {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+.morning-brief-flag {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  background: #faf8f6;
+  border: 1px solid #f0ebe4;
+}
+.morning-brief-flag.is-alta { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.morning-brief-flag.is-media { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.morning-brief-flag.is-buena { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+.morning-brief-flag.is-info { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.morning-brief-flag-icon { font-size: 0.8rem; line-height: 1.6; }
+.morning-brief-body { margin-top: 12px; }
+.morning-brief-body p { margin: 0 0 4px; font-size: 0.92rem; color: #44403c; line-height: 1.4; }
+.morning-brief-gap { height: 8px; }
+.morning-brief-foot {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f0ebe4;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 0.74rem;
+  color: #a8a29e;
+}
+.morning-brief-hint { color: #b45309; }

@@ -3,6 +3,7 @@ import { useState, useEffect, cloneElement } from 'react';
 import { apiRequest } from './apiClient';
 import boliviaAdminMapSvg from './assets/bolivia-admin1.svg?raw';
 import { useToast } from './ui/toastContext';
+import MorningBrief from './MorningBrief';
 
 const BOLIVIA_DEPARTMENT_MAP = {
   'la paz': 'La Paz',
@@ -918,6 +919,8 @@ function AdminDashboard({ token }) {
           Dashboard
         </p>
       </div>
+
+      <MorningBrief token={token} />
 
       <section className="dashboard-filter-card">
         <h3>Panel de Estadísticas</h3>
