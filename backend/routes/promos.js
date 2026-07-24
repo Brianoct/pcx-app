@@ -31,6 +31,12 @@ const sanitizeConfig = (tool, rawConfig = {}) => {
     const cap = Number.parseInt(rawConfig.max_tickets, 10);
     if (Number.isInteger(cap) && cap >= 1 && cap <= 100) config.max_tickets = cap;
   }
+  if (tool === 'cupon') {
+    const discount = Number.parseInt(rawConfig.discount_percent, 10);
+    if (Number.isInteger(discount) && discount >= 1 && discount <= 100) config.discount_percent = discount;
+    const validity = Number.parseInt(rawConfig.validity_days, 10);
+    if (Number.isInteger(validity) && validity >= 1 && validity <= 365) config.validity_days = validity;
+  }
   return config;
 };
 
@@ -49,6 +55,40 @@ router.get('/api/promos/active', authenticateToken, async (_req, res) => {
   } catch (err) {
     console.error('Error cargando promos activas:', err);
     res.status(500).json({ error: 'No se pudieron cargar promociones activas' });
+  }
+});
+
+// ─── Cupón vigente de un cliente (para Cotizar) ─────────────────────────────
+// El vendedor escribe el teléfono y Cotizar le avisa si ese cliente tiene un
+// cupón activo para canjear en esta compra.
+router.get('/api/promos/coupon-for-customer', authenticateToken, async (req, res) => {
+  const phone = String(req.query.phone || '').replace(/\D/g, '');
+  if (!phone || phone.length < 6) return res.json({ coupon: null });
+  try {
+    const result = await pool.query(
+      `SELECT pc.code, pc.meta, pt.name
+       FROM promo_codes pc
+       JOIN promo_tools pt ON pt.id = pc.tool_id
+       WHERE pt.tool = 'cupon' AND pc.customer_phone = $1 AND pc.status = 'valida'
+         AND (pc.meta->>'expires_on' IS NULL
+              OR pc.meta->>'expires_on' >= (NOW() AT TIME ZONE 'America/La_Paz')::date::text)
+       ORDER BY pc.updated_at DESC
+       LIMIT 1`,
+      [phone]
+    );
+    if (result.rowCount === 0) return res.json({ coupon: null });
+    const row = result.rows[0];
+    res.json({
+      coupon: {
+        code: row.code,
+        name: row.name,
+        discount_percent: Number(row.meta?.discount_percent || 0),
+        expires_on: row.meta?.expires_on || null
+      }
+    });
+  } catch (err) {
+    console.error('Error buscando cupón del cliente:', err);
+    res.status(500).json({ error: 'No se pudo buscar el cupón del cliente' });
   }
 });
 
@@ -179,6 +219,7 @@ router.get('/api/promos/:id/codes', authenticateToken, requireRole(VIEW_ROLES), 
   try {
     const codesRes = await pool.query(
       `SELECT pc.id, pc.code, pc.customer_phone, pc.customer_name, pc.tickets, pc.status, pc.created_at,
+              pc.meta, pc.redeemed_quote_id, pc.redeemed_at,
               COALESCE(json_agg(json_build_object(
                 'quote_id', pcq.quote_id,
                 'quote_total', pcq.quote_total,
@@ -264,6 +305,53 @@ router.post('/api/promos/:id/draw', authenticateToken, requireRole(MANAGE_ROLES)
     await client.query('ROLLBACK');
     console.error('Error en sorteo:', err);
     res.status(500).json({ error: 'No se pudo realizar el sorteo' });
+  } finally {
+    client.release();
+  }
+});
+
+// ─── Registrar ganador manual (sorteo en vivo por TikTok) ───────────────────
+// El sorteo físico se hace con los tickets impresos frente a cámara; aquí solo
+// se REGISTRA el resultado para que quede en el sistema igual que el sorteo
+// automático.
+router.patch('/api/promos/:id/winner', authenticateToken, requireRole(MANAGE_ROLES), async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const codeId = Number.parseInt(req.body?.code_id, 10);
+  if (!Number.isInteger(id) || !Number.isInteger(codeId)) {
+    return res.status(400).json({ error: 'ID inválido' });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const toolRes = await client.query('SELECT id, tool FROM promo_tools WHERE id = $1 FOR UPDATE', [id]);
+    if (toolRes.rowCount === 0 || toolRes.rows[0].tool !== 'sorteo') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Sorteo no encontrado' });
+    }
+    const codeRes = await client.query(
+      'SELECT id, code, customer_name, customer_phone, tickets FROM promo_codes WHERE id = $1 AND tool_id = $2',
+      [codeId, id]
+    );
+    if (codeRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Código no encontrado en este sorteo' });
+    }
+    if (Number(codeRes.rows[0].tickets || 0) <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Ese código no tiene tickets pagados: no puede ganar' });
+    }
+    await client.query("UPDATE promo_codes SET status = 'valida' WHERE tool_id = $1 AND status = 'ganadora'", [id]);
+    await client.query("UPDATE promo_codes SET status = 'ganadora', updated_at = NOW() WHERE id = $1", [codeId]);
+    await client.query(
+      'UPDATE promo_tools SET winner_code_id = $1, drawn_at = NOW(), updated_at = NOW() WHERE id = $2',
+      [codeId, id]
+    );
+    await client.query('COMMIT');
+    res.json({ message: 'Ganador registrado', winner: codeRes.rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error registrando ganador:', err);
+    res.status(500).json({ error: 'No se pudo registrar el ganador' });
   } finally {
     client.release();
   }

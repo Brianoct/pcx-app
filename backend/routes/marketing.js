@@ -285,58 +285,8 @@ router.get('/api/combo-assets/:id/:token', async (req, res) => {
   }
 });
 
-// ─── CUPONES ────────────────────────────────────────────────────────────────
-
-// GET all coupons
-router.get('/api/cupones', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT id, code, discount_percent, valid_until, created_at FROM cupones ORDER BY created_at DESC'
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Error fetching cupones:', err);
-    res.status(500).json({ error: 'No se pudieron cargar cupones' });
-  }
-});
-
-// POST create new coupon
-router.post('/api/cupones', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
-  const { code, discount_percent, valid_until } = req.body;
-
-  if (!code || !discount_percent || !valid_until) {
-    return res.status(400).json({ error: 'Faltan campos requeridos: code, discount_percent, valid_until' });
-  }
-
-  try {
-    const result = await pool.query(
-      'INSERT INTO cupones (code, discount_percent, valid_until, created_by) VALUES ($1, $2, $3, $4) RETURNING id',
-      [code.toUpperCase(), discount_percent, valid_until, req.user.id]
-    );
-    res.status(201).json({ id: result.rows[0].id, message: 'Cupón creado' });
-  } catch (err) {
-    console.error('Error creating cupón:', err);
-    if (err.code === '23505') {
-      return res.status(409).json({ error: 'El código ya existe' });
-    }
-    res.status(500).json({ error: 'Error al crear cupón' });
-  }
-});
-
-// DELETE coupon
-router.delete('/api/cupones/:id', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const result = await pool.query('DELETE FROM cupones WHERE id = $1', [id]);
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Cupón no encontrado' });
-    }
-    res.json({ message: 'Cupón eliminado' });
-  } catch (err) {
-    console.error('Error deleting cupón:', err);
-    res.status(500).json({ error: 'Error al eliminar cupón' });
-  }
-});
+// Cupones: la sección vieja de códigos globales se reemplazó por la
+// herramienta "cupon" del motor de promos (routes/promos.js) — códigos
+// personales por cliente, con canje rastreado.
 
 module.exports = router;

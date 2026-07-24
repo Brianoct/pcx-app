@@ -70,7 +70,9 @@ const battery = [
   ['GET', '/api/admin/materiales', admin],
   // marketing
   ['GET', '/api/combos', admin],
-  ['GET', '/api/cupones', admin],
+  ['GET', '/api/promos', admin],
+  ['GET', '/api/promos', ventas],          // expect 403 (solo marketing/admin)
+  ['GET', '/api/promos/active', ventas],
   // performance
   ['GET', '/api/performance', admin],
   ['GET', '/api/commission/current?month=6&year=2026', ventas],
@@ -97,8 +99,8 @@ const battery = [
   ['GET', '/api/quotes', null],            // expect 401
   ['GET', '/api/users', null],             // expect 401
   // writes (safe, reversible)
-  ['POST', '/api/cupones', admin, { code: 'SMOKE10', discount_percent: 10, valid_until: '2027-01-01' }],
-  ['GET', '/api/cupones', admin],
+  ['POST', '/api/promos', admin, { tool: 'envio_gratis', name: 'Smoke envío gratis', active: false, config: { min_total: 100 } }],
+  ['GET', '/api/promos/active', admin],
   ['POST', '/api/quotes', ventas, {
     customer_name: 'Smoke Test', customer_phone: '70000001', department: 'Santa Cruz',
     almacen: 'Santa Cruz', venta_type: 'sf', items: [], total: 0, subtotal: 0

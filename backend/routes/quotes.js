@@ -5,7 +5,7 @@ const { getPedidosAccessScope } = require('../lib/inventory');
 const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, getQuoteSaveIdempotencyCacheKey, lineItemsFingerprint, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftSelectionForQuote } = require('../lib/quotes');
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { findCustomerOwnerByPhone, markCustomerWonByPhone, upsertCustomerFromQuote } = require('../lib/customers');
-const { applyPromosToNewQuote, refreshCodeAggregate, syncPromoTicketsForQuote } = require('../lib/promos');
+const { applyPromosToNewQuote, refreshCodeAggregate, syncPromoTicketsForQuote, validateCouponForRedemption } = require('../lib/promos');
 const { loadUserContext, resolveUserDisplayName } = require('../lib/users');
 const { createHttpError, getUserDisplayName } = require('../lib/util');
 
@@ -216,6 +216,18 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       gift_name
     );
 
+    // Cupón personal (motor de promos): validar servidor-side que existe, es
+    // de ESTE cliente, está activo y no venció. El % sale del cupón, no del
+    // cliente HTTP — nadie inventa descuentos desde el navegador.
+    let couponDiscountForStorage = 0;
+    if (coupon_code) {
+      const couponCheck = await validateCouponForRedemption(client, coupon_code, customer_phone);
+      if (!couponCheck.ok) {
+        throw createHttpError(400, couponCheck.error || 'Cupón inválido');
+      }
+      couponDiscountForStorage = couponCheck.discount_percent;
+    }
+
     const quoteResult = await client.query(
       `INSERT INTO quotes (
         user_id, customer_name, customer_phone, department, provincia, shipping_notes,
@@ -237,7 +249,7 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
         venta_type,
         discountPercentValue,
         coupon_code ? String(coupon_code).trim().toUpperCase() : null,
-        Number.isFinite(Number(coupon_discount_percent)) ? Number(coupon_discount_percent) : 0,
+        couponDiscountForStorage,
         giftSelection.gift_name,
         giftSelection.gift_sku,
         giftSelection.gift_qty,
@@ -283,6 +295,12 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       vendor: vendorDisplayName,
       userId: req.user.id
     });
+
+    // Si la cotización nace ya cobrada (o trae cupón), dejar el canje y los
+    // tickets al día de inmediato (no bloqueante).
+    if (coupon_code || FINALIZED_QUOTE_STATUSES.includes(normalizedStatus)) {
+      await syncPromoTicketsForQuote(quoteId);
+    }
 
     const responseBody = {
       id: quoteId,
@@ -945,6 +963,15 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     if (hasCouponDiscountField) {
       const requestedCouponDiscount = Number(coupon_discount_percent);
       nextCouponDiscount = Number.isFinite(requestedCouponDiscount) ? requestedCouponDiscount : 0;
+    }
+    // Cupón NUEVO en la edición: misma validación servidor-side que al crear
+    // (los códigos legacy que ya estaban en la cotización no se tocan).
+    if (nextCouponCode && nextCouponCode !== currentCouponCode) {
+      const couponCheck = await validateCouponForRedemption(client, nextCouponCode, customer_phone);
+      if (!couponCheck.ok) {
+        throw createHttpError(400, couponCheck.error || 'Cupón inválido');
+      }
+      nextCouponDiscount = couponCheck.discount_percent;
     }
     if (!nextCouponCode) {
       nextCouponDiscount = 0;

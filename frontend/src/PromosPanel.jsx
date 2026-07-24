@@ -4,11 +4,73 @@
 // Herramientas de hoy: Envío gratis y Sorteo (tickets ponderados por compra).
 // La lista crecerá y se podará según resultados — por eso todo es config, no código.
 import { useCallback, useEffect, useState } from 'react';
+import jsPDF from 'jspdf';
 import { apiRequest } from './apiClient';
 
 const TOOL_META = {
   envio_gratis: { icon: '🚚', label: 'Envío gratis' },
-  sorteo: { icon: '🎟️', label: 'Sorteo' }
+  sorteo: { icon: '🎟️', label: 'Sorteo' },
+  cupon: { icon: '🎫', label: 'Cupón próxima compra' }
+};
+
+// Tickets físicos para el sorteo en vivo (TikTok): un talón recortable por
+// ticket PAGADO — el código con 4 tickets sale 4 veces en la urna, igual que
+// en el sorteo automático ponderado.
+const printSorteoTickets = (tool, codes) => {
+  const slips = [];
+  codes
+    .filter((code) => Number(code.tickets || 0) > 0)
+    .forEach((code) => {
+      for (let n = 1; n <= Number(code.tickets); n += 1) {
+        slips.push({ ...code, slipNumber: n });
+      }
+    });
+  if (slips.length === 0) return 0;
+
+  const doc = new jsPDF();
+  const cols = 2;
+  const rows = 7;
+  const colW = 92;
+  const rowH = 38;
+  const marginX = 9;
+  const marginY = 11;
+  const perPage = cols * rows;
+
+  slips.forEach((slip, idx) => {
+    const pos = idx % perPage;
+    if (idx > 0 && pos === 0) doc.addPage();
+    const x = marginX + (pos % cols) * (colW + 6);
+    const y = marginY + Math.floor(pos / cols) * rowH;
+
+    doc.setDrawColor(180, 83, 9);
+    doc.setLineDashPattern([1.6, 1.4], 0);
+    doc.roundedRect(x, y, colW, rowH - 5, 2, 2, 'D');
+    doc.setLineDashPattern([], 0);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(180, 83, 9);
+    doc.text(String(tool.name || 'SORTEO').toUpperCase(), x + 5, y + 7);
+
+    doc.setFontSize(17);
+    doc.setTextColor(30, 41, 59);
+    doc.text(String(slip.code || ''), x + 5, y + 16.5);
+    doc.setFontSize(9);
+    doc.setTextColor(120, 113, 108);
+    doc.text(`Ticket ${slip.slipNumber} de ${slip.tickets}`, x + colW - 5, y + 16.5, { align: 'right' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.setTextColor(68, 64, 60);
+    doc.text(String(slip.customer_name || 'Cliente'), x + 5, y + 23.5);
+    doc.setFontSize(8.5);
+    doc.setTextColor(120, 113, 108);
+    doc.text(`Tel: ${slip.customer_phone || ''}`, x + 5, y + 28.5);
+  });
+
+  const safeName = String(tool.name || 'sorteo').trim().replace(/\s+/g, '_');
+  doc.save(`tickets_${safeName}.pdf`);
+  return slips.length;
 };
 
 const money = (value) => `${Math.round(Number(value || 0)).toLocaleString('es-BO')} Bs`;
@@ -40,7 +102,22 @@ const configSummary = (tool) => {
       parts.push('1 ticket por cliente');
     }
   }
+  if (tool.tool === 'cupon') {
+    parts.push(`${Number(config.discount_percent || 0)}% dcto en la próxima compra`);
+    parts.push(`válido ${Number(config.validity_days || 30)} días desde el pago`);
+  }
   return parts.join(' · ');
+};
+
+const couponStatusLabel = (code) => {
+  if (code.status === 'canjeada') {
+    return `✓ Canjeado${code.redeemed_quote_id ? ` en #${code.redeemed_quote_id}` : ''}`;
+  }
+  if (code.status === 'valida') {
+    const expires = code.meta?.expires_on;
+    return `Activo${expires ? ` · vence ${formatDate(expires)}` : ''}`;
+  }
+  return 'Pendiente de pago';
 };
 
 const EMPTY_FORM = {
@@ -51,7 +128,9 @@ const EMPTY_FORM = {
   campaign_id: '',
   min_total: '',
   bs_per_ticket: '',
-  max_tickets: '5'
+  max_tickets: '5',
+  discount_percent: '10',
+  validity_days: '30'
 };
 
 export default function PromosPanel({ token, role }) {
@@ -96,6 +175,10 @@ export default function PromosPanel({ token, role }) {
       if (form.tool === 'sorteo') {
         if (form.bs_per_ticket !== '') config.bs_per_ticket = Number(form.bs_per_ticket);
         if (form.max_tickets !== '') config.max_tickets = Number(form.max_tickets);
+      }
+      if (form.tool === 'cupon') {
+        config.discount_percent = Number(form.discount_percent || 10);
+        config.validity_days = Number(form.validity_days || 30);
       }
       await apiRequest('/api/promos', {
         method: 'POST',
@@ -155,6 +238,36 @@ export default function PromosPanel({ token, role }) {
     }
   };
 
+  // Sorteo en vivo (TikTok): el ganador se saca a mano de la urna con los
+  // tickets impresos; aquí solo se registra el resultado en el sistema.
+  const markWinner = async (tool, code) => {
+    if (!window.confirm(`Registrar a ${code.customer_name || code.code} (${code.code}) como ganador del sorteo "${tool.name}". ¿Confirmar?`)) return;
+    setError('');
+    try {
+      await apiRequest(`/api/promos/${tool.id}/winner`, { method: 'PATCH', token, body: { code_id: code.id } });
+      setNotice(`🏆 Ganador registrado: ${code.customer_name || 'cliente'} (${code.code}).`);
+      load();
+      const codes = await apiRequest(`/api/promos/${tool.id}/codes`, { token });
+      setCodesByTool((prev) => ({ ...prev, [tool.id]: Array.isArray(codes?.codes) ? codes.codes : [] }));
+    } catch (err) {
+      setError(err.message || 'No se pudo registrar el ganador');
+    }
+  };
+
+  const printTickets = async (tool) => {
+    setError('');
+    try {
+      const data = await apiRequest(`/api/promos/${tool.id}/codes`, { token });
+      const codes = Array.isArray(data?.codes) ? data.codes : [];
+      const printed = printSorteoTickets(tool, codes);
+      setNotice(printed > 0
+        ? `${printed} ticket${printed > 1 ? 's' : ''} listos para imprimir y recortar (solo compras pagadas).`
+        : 'Aún no hay tickets pagados para imprimir.');
+    } catch (err) {
+      setError(err.message || 'No se pudieron generar los tickets');
+    }
+  };
+
   const runDraw = async (tool) => {
     if (!window.confirm(`Realizar el sorteo de "${tool.name}" ahora. El ganador se elige al azar ponderado por tickets pagados. ¿Continuar?`)) return;
     setDrawingId(tool.id);
@@ -208,6 +321,7 @@ export default function PromosPanel({ token, role }) {
               <select value={form.tool} onChange={setField('tool')}>
                 <option value="envio_gratis">🚚 Envío gratis</option>
                 <option value="sorteo">🎟️ Sorteo</option>
+                <option value="cupon">🎫 Cupón próxima compra</option>
               </select>
             </label>
             <label>
@@ -240,7 +354,7 @@ export default function PromosPanel({ token, role }) {
               <input type="date" value={form.ends_on} onChange={setField('ends_on')} />
             </label>
             <label>
-              Compra mínima (Bs{form.tool === 'sorteo' ? ', para participar' : ', 0 = siempre'})
+              Compra mínima (Bs{form.tool === 'sorteo' ? ', para participar' : form.tool === 'cupon' ? ', para ganar el cupón' : ', 0 = siempre'})
               <input type="number" min="0" step="1" placeholder="0" value={form.min_total} onChange={setField('min_total')} />
             </label>
             {form.tool === 'sorteo' && (
@@ -252,6 +366,18 @@ export default function PromosPanel({ token, role }) {
                 <label>
                   Máximo de tickets por compra
                   <input type="number" min="1" max="100" step="1" value={form.max_tickets} onChange={setField('max_tickets')} />
+                </label>
+              </>
+            )}
+            {form.tool === 'cupon' && (
+              <>
+                <label>
+                  Descuento del cupón (%)
+                  <input type="number" min="1" max="100" step="1" value={form.discount_percent} onChange={setField('discount_percent')} />
+                </label>
+                <label>
+                  Vigencia (días desde el pago)
+                  <input type="number" min="1" max="365" step="1" value={form.validity_days} onChange={setField('validity_days')} />
                 </label>
               </>
             )}
@@ -294,6 +420,9 @@ export default function PromosPanel({ token, role }) {
                   {tool.tool === 'sorteo' && (
                     <span>🎟️ {tool.codes_count || 0} clientes · {tool.valid_tickets || 0} tickets pagados</span>
                   )}
+                  {tool.tool === 'cupon' && (
+                    <span>🎫 {tool.codes_count || 0} cupones emitidos</span>
+                  )}
                 </div>
 
                 {tool.tool === 'sorteo' && tool.winner_code && (
@@ -313,9 +442,20 @@ export default function PromosPanel({ token, role }) {
                       {tool.active ? 'Desactivar' : 'Activar'}
                     </button>
                   )}
-                  {tool.tool === 'sorteo' && (
+                  {(tool.tool === 'sorteo' || tool.tool === 'cupon') && (
                     <button type="button" className="btn btn-outline" onClick={() => toggleRegistry(tool)}>
                       {expandedId === tool.id ? 'Ocultar registro' : 'Ver registro de códigos'}
+                    </button>
+                  )}
+                  {tool.tool === 'sorteo' && (
+                    <button
+                      type="button"
+                      className="btn btn-outline"
+                      disabled={Number(tool.valid_tickets || 0) === 0}
+                      title={Number(tool.valid_tickets || 0) === 0 ? 'Aún no hay tickets pagados' : 'Un talón recortable por ticket pagado, para la urna del live'}
+                      onClick={() => printTickets(tool)}
+                    >
+                      🖨️ Imprimir tickets
                     </button>
                   )}
                   {tool.tool === 'sorteo' && canManage && (
@@ -323,10 +463,10 @@ export default function PromosPanel({ token, role }) {
                       type="button"
                       className="btn btn-outline promo-draw-btn"
                       disabled={drawingId === tool.id || Number(tool.valid_tickets || 0) === 0}
-                      title={Number(tool.valid_tickets || 0) === 0 ? 'Aún no hay tickets pagados' : ''}
+                      title={Number(tool.valid_tickets || 0) === 0 ? 'Aún no hay tickets pagados' : 'Sorteo automático ponderado (alternativa al sorteo en vivo)'}
                       onClick={() => runDraw(tool)}
                     >
-                      {drawingId === tool.id ? 'Sorteando…' : '🎲 Realizar sorteo'}
+                      {drawingId === tool.id ? 'Sorteando…' : '🎲 Sorteo automático'}
                     </button>
                   )}
                   {canManage && (
@@ -336,14 +476,17 @@ export default function PromosPanel({ token, role }) {
                   )}
                 </div>
 
-                {tool.tool === 'sorteo' && expandedId === tool.id && (
+                {(tool.tool === 'sorteo' || tool.tool === 'cupon') && expandedId === tool.id && (
                   <div className="promo-registry">
                     {codes.length === 0 ? (
                       <p className="dashboard-muted">Sin códigos todavía: se generan solos cuando una cotización alcanza el mínimo.</p>
-                    ) : (
+                    ) : tool.tool === 'sorteo' ? (
                       <table className="promo-registry-table">
                         <thead>
-                          <tr><th>Código</th><th>Cliente</th><th>Teléfono</th><th>Tickets pagados</th><th>Compras</th><th>Estado</th></tr>
+                          <tr>
+                            <th>Código</th><th>Cliente</th><th>Teléfono</th><th>Tickets pagados</th><th>Compras</th><th>Estado</th>
+                            {canManage && <th></th>}
+                          </tr>
                         </thead>
                         <tbody>
                           {codes.map((code) => (
@@ -362,6 +505,44 @@ export default function PromosPanel({ token, role }) {
                               <td>
                                 {code.status === 'ganadora' ? '🏆 Ganadora' : code.status === 'valida' ? '✓ Válida' : 'Pendiente de pago'}
                               </td>
+                              {canManage && (
+                                <td>
+                                  {code.status !== 'ganadora' && Number(code.tickets || 0) > 0 && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline promo-mini-btn"
+                                      title="Registrar el ganador sacado en el sorteo en vivo"
+                                      onClick={() => markWinner(tool, code)}
+                                    >
+                                      🏆 Marcar ganador
+                                    </button>
+                                  )}
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <table className="promo-registry-table">
+                        <thead>
+                          <tr><th>Cupón</th><th>Cliente</th><th>Teléfono</th><th>Descuento</th><th>Compra que lo ganó</th><th>Estado</th></tr>
+                        </thead>
+                        <tbody>
+                          {codes.map((code) => (
+                            <tr key={code.id} className={code.status === 'canjeada' ? 'is-winner' : ''}>
+                              <td><strong>{code.code}</strong></td>
+                              <td>{code.customer_name || '—'}</td>
+                              <td>{code.customer_phone}</td>
+                              <td>{Number(code.meta?.discount_percent || 0)}%</td>
+                              <td>
+                                {(code.quotes || []).map((quote) => (
+                                  <span key={quote.quote_id} className={`promo-quote-chip ${quote.paid ? 'is-paid' : ''}`}>
+                                    #{quote.quote_id} · {money(quote.quote_total)}{quote.paid ? ' · pagada' : ' · sin pagar'}
+                                  </span>
+                                ))}
+                              </td>
+                              <td>{couponStatusLabel(code)}</td>
                             </tr>
                           ))}
                         </tbody>

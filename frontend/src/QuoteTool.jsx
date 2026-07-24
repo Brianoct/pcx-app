@@ -36,7 +36,7 @@ export default function QuoteTool({ token, user }) {
   const [ventaType, setVentaType] = useState('sf');
   const [discountMode, setDiscountMode] = useState('percent');
   const [discountInput, setDiscountInput] = useState(0);
-  const [coupons, setCoupons] = useState([]);
+  const [customerCoupon, setCustomerCoupon] = useState(null);
   const [selectedCouponCode, setSelectedCouponCode] = useState('');
   const [useAlternativeName, setUseAlternativeName] = useState(false);
   const [alternativeName, setAlternativeName] = useState('');
@@ -195,39 +195,22 @@ export default function QuoteTool({ token, user }) {
     fetchSalesUsers();
   }, [token, requiresSellerAssignment]);
 
+  // Cupón personal del cliente (motor de promos): al escribir el teléfono,
+  // Cotizar avisa si ese cliente tiene un cupón activo para canjear.
   useEffect(() => {
-    if (!token) return;
-    const fetchCoupons = async () => {
-      try {
-        const data = await apiRequest('/api/cupones', { token });
-        const now = new Date();
-        now.setHours(0, 0, 0, 0);
-        const activeCoupons = (Array.isArray(data) ? data : [])
-          .filter((coupon) => {
-            const rawDate = String(coupon?.valid_until || '').trim();
-            if (!rawDate) return false;
-            const isoDateMatch = rawDate.match(/^(\d{4}-\d{2}-\d{2})/);
-            const parsed = isoDateMatch?.[1]
-              ? new Date(`${isoDateMatch[1]}T00:00:00`)
-              : new Date(rawDate);
-            if (Number.isNaN(parsed.getTime())) return false;
-            parsed.setHours(0, 0, 0, 0);
-            return parsed >= now;
-          })
-          .sort((a, b) => String(a.valid_until || '').localeCompare(String(b.valid_until || '')));
-        setCoupons(activeCoupons);
-        setSelectedCouponCode((prev) => {
-          if (!prev) return prev;
-          const stillAvailable = activeCoupons.some((coupon) => String(coupon.code || '').toUpperCase() === String(prev).toUpperCase());
-          return stillAvailable ? prev : '';
-        });
-      } catch (err) {
-        console.error('Error fetching cupones activos:', err);
-        setCoupons([]);
-      }
-    };
-    fetchCoupons();
-  }, [token]);
+    const digits = String(customerPhone || '').replace(/\D/g, '');
+    if (!token || digits.length < 7) {
+      setCustomerCoupon(null);
+      return undefined;
+    }
+    let active = true;
+    const timer = setTimeout(() => {
+      apiRequest(`/api/promos/coupon-for-customer?phone=${encodeURIComponent(digits)}`, { token })
+        .then((data) => { if (active) setCustomerCoupon(data?.coupon || null); })
+        .catch(() => { if (active) setCustomerCoupon(null); });
+    }, 400);
+    return () => { active = false; clearTimeout(timer); };
+  }, [token, customerPhone]);
 
   const allItems = [
     ...products.map((p) => ({ ...p, displayName: p.name })),
@@ -768,6 +751,10 @@ export default function QuoteTool({ token, user }) {
       if (sorteoPromo?.code) {
         toast.info(`🎟️ Sorteo: código ${sorteoPromo.code} (${sorteoPromo.tickets} ticket${sorteoPromo.tickets > 1 ? 's' : ''}) impreso en la proforma.`);
       }
+      const cuponPromo = savedPromos.find((promo) => promo.tool === 'cupon');
+      if (cuponPromo?.code) {
+        toast.info(`🎫 Cupón ${cuponPromo.code} (${cuponPromo.discount_percent}%) para la próxima compra, impreso en la proforma.`);
+      }
       const dateParts = currentDateTime?.split(', ') || [];
       const dateText = dateParts.length > 1 ? dateParts.slice(1).join(', ') : currentDateTime;
       const safeCustomerName = String(customerName || 'sin_nombre').trim().replace(/\s+/g, '_');
@@ -1029,21 +1016,45 @@ export default function QuoteTool({ token, user }) {
               </div>
             )}
 
-            <div>
-              <label className="form-label">Cupón marketing</label>
-              <select
-                value={selectedCouponCode}
-                onChange={(e) => setSelectedCouponCode(e.target.value)}
-                className="form-select"
-              >
-                <option value="">Sin cupón</option>
-                {coupons.map((coupon) => (
-                  <option key={coupon.id} value={coupon.code}>
-                    {coupon.code} ({coupon.discount_percent}% · hasta {coupon.valid_until})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {(customerCoupon || selectedCouponCode) && (
+              <div>
+                <label className="form-label">Cupón del cliente</label>
+                {selectedCouponCode ? (
+                  <div className="quote-coupon-chip is-applied">
+                    🎫 <strong>{selectedCouponCode}</strong> aplicado
+                    {customerCoupon?.code === selectedCouponCode && customerCoupon?.discount_percent
+                      ? ` (${customerCoupon.discount_percent}% dcto)` : ''}
+                    <button
+                      type="button"
+                      className="quote-coupon-btn"
+                      onClick={() => {
+                        setSelectedCouponCode('');
+                        setDiscountMode('percent');
+                        setDiscountInput(0);
+                      }}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ) : (
+                  <div className="quote-coupon-chip">
+                    🎫 Este cliente tiene el cupón <strong>{customerCoupon.code}</strong> ({customerCoupon.discount_percent}% dcto
+                    {customerCoupon.expires_on ? ` · vence ${customerCoupon.expires_on.split('-').reverse().join('/')}` : ''})
+                    <button
+                      type="button"
+                      className="quote-coupon-btn"
+                      onClick={() => {
+                        setSelectedCouponCode(customerCoupon.code);
+                        setDiscountMode('percent');
+                        setDiscountInput(Number(customerCoupon.discount_percent || 0));
+                      }}
+                    >
+                      Aplicar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div>
               <label className="form-label">Notas de envío (opcional)</label>
@@ -1105,6 +1116,17 @@ export default function QuoteTool({ token, user }) {
                       🚚 <strong>{promo.name}</strong>
                       {minTotal > 0 && ` · desde ${minTotal} Bs`}
                       {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
+                      {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
+                      {reachesMin && total > 0 && ' ✓'}
+                    </div>
+                  );
+                }
+                if (promo.tool === 'cupon') {
+                  return (
+                    <div key={promo.id} className={`quote-promo-chip is-cupon ${reachesMin && total > 0 ? 'is-earned' : ''}`}>
+                      🎫 <strong>{promo.name}</strong>
+                      {` · esta compra gana un cupón del ${Number(config.discount_percent || 0)}% para la próxima`}
+                      {minTotal > 0 && ` (desde ${minTotal} Bs)`}
                       {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
                       {reachesMin && total > 0 && ' ✓'}
                     </div>

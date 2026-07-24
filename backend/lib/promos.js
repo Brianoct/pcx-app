@@ -9,7 +9,7 @@
 const crypto = require('crypto');
 const { pool } = require('../db');
 
-const PROMO_TOOL_TYPES = ['envio_gratis', 'sorteo'];
+const PROMO_TOOL_TYPES = ['envio_gratis', 'sorteo', 'cupon'];
 const PAID_QUOTE_STATUSES = ['Pagado', 'Embalado', 'Enviado'];
 const QUOTE_VALIDITY_DAYS = 7; // "Cotización válida por 7 días" en la proforma
 
@@ -50,29 +50,29 @@ const promoValidUntil = (endsOn) => {
   return String(endsOn) < validityStr ? String(endsOn) : validityStr;
 };
 
-const generateSorteoCode = () => {
+const generatePromoCode = (prefix) => {
   // Sin caracteres ambiguos (0/O, 1/I/L) para dictarlo por teléfono sin errores.
   const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let suffix = '';
   for (let i = 0; i < 5; i += 1) {
     suffix += alphabet[crypto.randomInt(alphabet.length)];
   }
-  return `PCX-${suffix}`;
+  return `${prefix}-${suffix}`;
 };
 
 // Un código por cliente y herramienta, resuelto atómicamente: dos vendedores
 // cotizando al mismo cliente a la vez reciben el MISMO código.
-const getOrCreateSorteoCode = async (client, toolId, customerPhone, customerName) => {
+const getOrCreatePromoCode = async (client, toolId, customerPhone, customerName, prefix, meta = null) => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const code = generateSorteoCode();
+    const code = generatePromoCode(prefix);
     try {
       const res = await client.query(
-        `INSERT INTO promo_codes (tool_id, code, customer_phone, customer_name)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO promo_codes (tool_id, code, customer_phone, customer_name, meta)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (tool_id, customer_phone)
          DO UPDATE SET customer_name = COALESCE(EXCLUDED.customer_name, promo_codes.customer_name), updated_at = NOW()
-         RETURNING id, code`,
-        [toolId, code, customerPhone, customerName || null]
+         RETURNING id, code, status, meta`,
+        [toolId, code, customerPhone, customerName || null, JSON.stringify(meta || {})]
       );
       return res.rows[0];
     } catch (err) {
@@ -81,7 +81,7 @@ const getOrCreateSorteoCode = async (client, toolId, customerPhone, customerName
       throw err;
     }
   }
-  throw new Error('No se pudo generar un código de sorteo único');
+  throw new Error('No se pudo generar un código único');
 };
 
 // Total del código = suma de tickets de sus cotizaciones COBRADAS. No pisa el
@@ -103,6 +103,78 @@ const refreshCodeAggregate = async (client, codeId) => {
      WHERE pc.id = $1`,
     [codeId]
   );
+};
+
+// Cupón: se ACTIVA cuando la compra que lo generó se cobra. En ese momento se
+// fija la fecha de vencimiento (pago + validity_days). Nunca pisa 'canjeada'.
+const refreshCouponAggregate = async (client, codeId) => {
+  const res = await client.query(
+    `SELECT pc.id, pc.status, pc.meta,
+            EXISTS (SELECT 1 FROM promo_code_quotes q WHERE q.code_id = pc.id AND q.paid) AS any_paid
+     FROM promo_codes pc WHERE pc.id = $1`,
+    [codeId]
+  );
+  if (res.rowCount === 0) return;
+  const row = res.rows[0];
+  if (row.status === 'canjeada') return;
+  const meta = row.meta || {};
+  if (row.any_paid) {
+    if (!meta.expires_on) {
+      const validityDays = Math.max(1, Number(meta.validity_days || 30));
+      const todayRes = await client.query(
+        `SELECT ((NOW() AT TIME ZONE 'America/La_Paz')::date + $1::int)::text AS expires_on`,
+        [validityDays]
+      );
+      meta.expires_on = todayRes.rows[0].expires_on;
+    }
+    await client.query(
+      "UPDATE promo_codes SET status = 'valida', meta = $1, updated_at = NOW() WHERE id = $2",
+      [JSON.stringify(meta), codeId]
+    );
+  } else {
+    await client.query(
+      "UPDATE promo_codes SET status = 'pendiente', updated_at = NOW() WHERE id = $1",
+      [codeId]
+    );
+  }
+};
+
+// ¿Puede este cliente canjear este cupón en esta compra? Devuelve el motivo
+// exacto cuando no — el vendedor se lo explica al cliente en el momento.
+const validateCouponForRedemption = async (client, code, customerPhone) => {
+  const normalizedCode = String(code || '').trim().toUpperCase();
+  if (!normalizedCode) return { ok: false, error: 'Cupón vacío' };
+  const res = await client.query(
+    `SELECT pc.id, pc.code, pc.customer_phone, pc.status, pc.meta, pc.redeemed_quote_id
+     FROM promo_codes pc
+     JOIN promo_tools pt ON pt.id = pc.tool_id
+     WHERE pt.tool = 'cupon' AND UPPER(pc.code) = $1`,
+    [normalizedCode]
+  );
+  if (res.rowCount === 0) return { ok: false, error: 'El cupón no existe' };
+  const coupon = res.rows[0];
+  const phone = normalizePromoPhone(customerPhone);
+  if (!phone || coupon.customer_phone !== phone) {
+    return { ok: false, error: 'El cupón pertenece a otro cliente' };
+  }
+  if (coupon.status === 'canjeada') return { ok: false, error: 'El cupón ya fue usado' };
+  if (coupon.status !== 'valida') {
+    return { ok: false, error: 'El cupón aún no está activo: falta pagar la compra que lo generó' };
+  }
+  const meta = coupon.meta || {};
+  if (meta.expires_on) {
+    const todayRes = await client.query("SELECT (NOW() AT TIME ZONE 'America/La_Paz')::date::text AS today");
+    if (String(meta.expires_on) < todayRes.rows[0].today) {
+      return { ok: false, error: `El cupón venció el ${meta.expires_on}` };
+    }
+  }
+  return {
+    ok: true,
+    id: coupon.id,
+    code: coupon.code,
+    discount_percent: Number(meta.discount_percent || 0),
+    expires_on: meta.expires_on || null
+  };
 };
 
 // Al guardar una cotización: construye el snapshot para la proforma y registra
@@ -129,7 +201,7 @@ const applyPromosToNewQuote = async (client, { quoteId, total, status, customerP
       const phone = normalizePromoPhone(customerPhone);
       const quoteTickets = ticketsForTotal(config, amount);
       if (!phone || quoteTickets <= 0) continue;
-      const codeRow = await getOrCreateSorteoCode(client, tool.id, phone, customerName);
+      const codeRow = await getOrCreatePromoCode(client, tool.id, phone, customerName, 'PCX');
       await client.query(
         `INSERT INTO promo_code_quotes (code_id, quote_id, quote_total, tickets, paid)
          VALUES ($1, $2, $3, $4, $5)
@@ -146,6 +218,37 @@ const applyPromosToNewQuote = async (client, { quoteId, total, status, customerP
         min_total: Number(config.min_total || 0),
         ends_on: tool.ends_on || null
       });
+    } else if (tool.tool === 'cupon') {
+      // Esta compra GANA un cupón para la siguiente. Un cupón por cliente:
+      // si ya tiene uno sin canjear, la nueva compra lo respalda (misma promesa).
+      const phone = normalizePromoPhone(customerPhone);
+      const minTotal = Number(config.min_total || 0);
+      if (!phone || amount <= 0 || amount < minTotal) continue;
+      const discountPercent = Number(config.discount_percent || 0);
+      if (discountPercent <= 0) continue;
+      const validityDays = Math.max(1, Number(config.validity_days || 30));
+      const codeRow = await getOrCreatePromoCode(client, tool.id, phone, customerName, 'CUP', {
+        discount_percent: discountPercent,
+        validity_days: validityDays
+      });
+      if (codeRow.status === 'canjeada') continue; // ya usó el suyo
+      await client.query(
+        `INSERT INTO promo_code_quotes (code_id, quote_id, quote_total, tickets, paid)
+         VALUES ($1, $2, $3, 0, $4)
+         ON CONFLICT (code_id, quote_id)
+         DO UPDATE SET quote_total = EXCLUDED.quote_total, paid = EXCLUDED.paid`,
+        [codeRow.id, quoteId, amount, PAID_QUOTE_STATUSES.includes(status)]
+      );
+      await refreshCouponAggregate(client, codeRow.id);
+      const storedMeta = codeRow.meta || {};
+      snapshot.push({
+        tool: 'cupon',
+        name: tool.name,
+        code: codeRow.code,
+        discount_percent: Number(storedMeta.discount_percent || discountPercent),
+        validity_days: Number(storedMeta.validity_days || validityDays),
+        min_total: minTotal
+      });
     }
   }
   return snapshot;
@@ -155,11 +258,13 @@ const applyPromosToNewQuote = async (client, { quoteId, total, status, customerP
 // cotización y refrescar sus códigos. No bloqueante (los errores solo se loguean).
 const syncPromoTicketsForQuote = async (quoteId) => {
   try {
-    const quoteRes = await pool.query('SELECT id, total, status FROM quotes WHERE id = $1', [quoteId]);
+    const quoteRes = await pool.query('SELECT id, total, status, coupon_code FROM quotes WHERE id = $1', [quoteId]);
     if (quoteRes.rowCount === 0) return;
     const quote = quoteRes.rows[0];
+    const isPaid = PAID_QUOTE_STATUSES.includes(quote.status);
+
     const backingRes = await pool.query(
-      `SELECT pcq.id, pcq.code_id, pt.config
+      `SELECT pcq.id, pcq.code_id, pt.tool, pt.config
        FROM promo_code_quotes pcq
        JOIN promo_codes pc ON pc.id = pcq.code_id
        JOIN promo_tools pt ON pt.id = pc.tool_id
@@ -167,12 +272,45 @@ const syncPromoTicketsForQuote = async (quoteId) => {
       [quoteId]
     );
     for (const row of backingRes.rows) {
-      const quoteTickets = ticketsForTotal(row.config || {}, quote.total);
+      const quoteTickets = row.tool === 'sorteo' ? ticketsForTotal(row.config || {}, quote.total) : 0;
       await pool.query(
         'UPDATE promo_code_quotes SET quote_total = $1, tickets = $2, paid = $3 WHERE id = $4',
-        [Number(quote.total || 0), quoteTickets, PAID_QUOTE_STATUSES.includes(quote.status), row.id]
+        [Number(quote.total || 0), quoteTickets, isPaid, row.id]
       );
-      await refreshCodeAggregate(pool, row.code_id);
+      if (row.tool === 'cupon') {
+        await refreshCouponAggregate(pool, row.code_id);
+      } else {
+        await refreshCodeAggregate(pool, row.code_id);
+      }
+    }
+
+    // Canje de cupón: se concreta cuando la compra que lo usa se COBRA.
+    // Si esa compra retrocede (o se re-edita sin el cupón), el canje se revierte.
+    const revertRes = await pool.query(
+      `SELECT pc.id, pc.code FROM promo_codes pc
+       JOIN promo_tools pt ON pt.id = pc.tool_id
+       WHERE pt.tool = 'cupon' AND pc.redeemed_quote_id = $1`,
+      [quoteId]
+    );
+    const currentCouponCode = String(quote.coupon_code || '').trim().toUpperCase();
+    for (const redeemed of revertRes.rows) {
+      if (!isPaid || redeemed.code.toUpperCase() !== currentCouponCode) {
+        await pool.query(
+          "UPDATE promo_codes SET redeemed_quote_id = NULL, redeemed_at = NULL, status = 'pendiente', updated_at = NOW() WHERE id = $1",
+          [redeemed.id]
+        );
+        await refreshCouponAggregate(pool, redeemed.id);
+      }
+    }
+    if (isPaid && currentCouponCode) {
+      await pool.query(
+        `UPDATE promo_codes pc SET
+           redeemed_quote_id = $1, redeemed_at = NOW(), status = 'canjeada', updated_at = NOW()
+         FROM promo_tools pt
+         WHERE pt.id = pc.tool_id AND pt.tool = 'cupon'
+           AND UPPER(pc.code) = $2 AND pc.status = 'valida' AND pc.redeemed_quote_id IS NULL`,
+        [quoteId, currentCouponCode]
+      );
     }
   } catch (err) {
     console.error('No se pudieron sincronizar tickets de promo para la cotización', quoteId, err);
@@ -187,6 +325,8 @@ module.exports = {
   normalizePromoPhone,
   promoValidUntil,
   refreshCodeAggregate,
+  refreshCouponAggregate,
   syncPromoTicketsForQuote,
-  ticketsForTotal
+  ticketsForTotal,
+  validateCouponForRedemption
 };
