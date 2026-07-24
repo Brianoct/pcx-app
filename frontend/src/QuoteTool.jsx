@@ -234,6 +234,15 @@ export default function QuoteTool({ token, user }) {
   ];
 
   const findItem = (sku) => allItems.find(item => item.sku === sku);
+  // Single source for line pricing: respects the Con/Sin Factura toggle and
+  // falls back to the other price only when the chosen one doesn't exist
+  // (same rules as the edit flow in QuoteHistory).
+  const unitPriceFor = (item) => {
+    if (!item) return 0;
+    return ventaType === 'cf'
+      ? Number(item.cf ?? item.sf ?? 0)
+      : Number(item.sf ?? item.cf ?? 0);
+  };
   const getProductNameBySku = (skuValue = '') => {
     const normalizedSku = String(skuValue || '').trim().toUpperCase();
     if (!normalizedSku) return '';
@@ -295,13 +304,16 @@ export default function QuoteTool({ token, user }) {
         : await fetchStock(selectedSku, almacen);
     }
 
-    setRows(rows.map(row =>
+    const unitPrice = unitPriceFor(item);
+    // Functional update: the awaits above mean `rows` may be stale by now
+    // (e.g. the seller already picked a product on another line).
+    setRows(prev => prev.map(row =>
       row.id === rowId ? {
         ...row,
         sku: selectedSku,
         skuDisplay: item ? item.displayName : selectedSku,
-        unitPrice: item ? Number(item.sf || item.cf || 0) : 0,
-        lineTotal: item ? Number(item.sf || item.cf || 0) * (row.qty || 0) : 0,
+        unitPrice,
+        lineTotal: unitPrice * (row.qty || 0),
         availableStock,
         isCombo: item?.isCombo || false,
         comboItems: item?.isCombo ? item.items : undefined
@@ -356,7 +368,7 @@ export default function QuoteTool({ token, user }) {
 
     const item = findItem(normalizedSku);
     if (!item) return;
-    const unitPrice = ventaType === 'sf' ? Number(item.sf || 0) : Number(item.cf || 0);
+    const unitPrice = unitPriceFor(item);
     const newRow = {
       id: Date.now(),
       sku: normalizedSku,
@@ -419,7 +431,7 @@ export default function QuoteTool({ token, user }) {
       if (!row.sku) return row;
       const item = findItem(row.sku);
       if (!item) return row;
-      const newPrice = ventaType === 'sf' ? Number(item.sf || 0) : Number(item.cf || 0);
+      const newPrice = unitPriceFor(item);
       return { ...row, unitPrice: newPrice, lineTotal: newPrice * (row.qty || 0) };
     }));
   }, [ventaType]);
