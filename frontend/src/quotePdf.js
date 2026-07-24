@@ -74,6 +74,7 @@ export function generateModernQuotePdf({
   discountPercent = 0,
   discountAmount,
   total = 0,
+  promos = [],
   autoSave = true
 }) {
   const doc = new jsPDF();
@@ -306,7 +307,58 @@ export function generateModernQuotePdf({
   doc.text(`${toMoney(total)} Bs`, right - 6, summaryY + 4, { align: 'right' });
   summaryY += 10;
 
-  const footerY = Math.max(summaryY + 12, pageH - 16);
+  // Promos del toolchest (snapshot del servidor): impresas a la izquierda del
+  // resumen, con el corte visto por el cliente. Sin emojis: helvetica no los trae.
+  const promoList = Array.isArray(promos) ? promos.filter((p) => p && p.tool) : [];
+  let promoY = rowY + 6;
+  const promoW = summaryX - left - 6;
+  const toDdMm = (iso) => {
+    const parts = String(iso || '').slice(0, 10).split('-');
+    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : '';
+  };
+  promoList.forEach((promo) => {
+    if (promo.tool === 'envio_gratis') {
+      doc.setFillColor(236, 253, 245);
+      doc.setDrawColor(4, 120, 87);
+      doc.roundedRect(left, promoY, promoW, 14, 2, 2, 'FD');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(4, 120, 87);
+      doc.text('ENVÍO GRATIS', left + 4, promoY + 5.8);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(6, 95, 70);
+      doc.text(
+        `${promo.name || 'Promoción de envío'} · válido hasta el ${toDdMm(promo.valid_until)}`,
+        left + 4,
+        promoY + 10.8
+      );
+      promoY += 17;
+    } else if (promo.tool === 'sorteo') {
+      doc.setFillColor(255, 251, 235);
+      doc.setDrawColor(180, 83, 9);
+      doc.roundedRect(left, promoY, promoW, 19, 2, 2, 'FD');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(180, 83, 9);
+      doc.text(String(promo.name || 'SORTEO').toUpperCase(), left + 4, promoY + 5.8);
+      doc.setFontSize(11);
+      doc.setTextColor(...TEXT_DARK);
+      const ticketsLabel = Number(promo.tickets || 0) > 1 ? ` (${promo.tickets} tickets)` : '';
+      doc.text(`Tu código: ${promo.code || ''}${ticketsLabel}`, left + 4, promoY + 11.4);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(120, 113, 108);
+      doc.text(
+        `Participas al pagar tu pedido${promo.ends_on ? ` · sorteo válido hasta el ${toDdMm(promo.ends_on)}` : ''}`,
+        left + 4,
+        promoY + 16.2
+      );
+      promoY += 22;
+    }
+  });
+
+  const footerY = Math.max(summaryY + 12, promoY + 8, pageH - 16);
   doc.setDrawColor(...BORDER_SOFT);
   doc.setLineWidth(0.4);
   doc.line(left, footerY - 5, right, footerY - 5);

@@ -531,7 +531,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       subtotal,
       discountPercent,
       discountAmount,
-      total: Number(quote.total || 0)
+      total: Number(quote.total || 0),
+      promos: Array.isArray(quote.promos) ? quote.promos : []
     });
   };
 

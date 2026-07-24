@@ -5,6 +5,7 @@ const { getPedidosAccessScope } = require('../lib/inventory');
 const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, getQuoteSaveIdempotencyCacheKey, lineItemsFingerprint, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftSelectionForQuote } = require('../lib/quotes');
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { findCustomerOwnerByPhone, markCustomerWonByPhone, upsertCustomerFromQuote } = require('../lib/customers');
+const { applyPromosToNewQuote, refreshCodeAggregate, syncPromoTicketsForQuote } = require('../lib/promos');
 const { loadUserContext, resolveUserDisplayName } = require('../lib/users');
 const { createHttpError, getUserDisplayName } = require('../lib/util');
 
@@ -249,6 +250,20 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
 
     const quoteId = quoteResult.rows[0].id;
 
+    // Promos activas del toolchest: snapshot para la proforma + código de
+    // sorteo si la compra califica. Dentro de la transacción: si el guardado
+    // falla, no queda ningún código huérfano.
+    const promoSnapshot = await applyPromosToNewQuote(client, {
+      quoteId,
+      total: totalValue,
+      status: normalizedStatus,
+      customerPhone: customer_phone,
+      customerName: customer_name
+    });
+    if (promoSnapshot.length > 0) {
+      await client.query('UPDATE quotes SET promos = $1 WHERE id = $2', [JSON.stringify(promoSnapshot), quoteId]);
+    }
+
     // Only deduct stock if initial status is finalized.
     if (FINALIZED_QUOTE_STATUSES.includes(normalizedStatus)) {
       await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay, {
@@ -274,7 +289,8 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       message: carteraOwnerName
         ? `Cotización guardada y asignada a ${carteraOwnerName} (cliente de su cartera)`
         : 'Cotización guardada',
-      assigned_to: carteraOwnerName
+      assigned_to: carteraOwnerName,
+      promos: promoSnapshot
     };
     if (idempotencyCacheKey) {
       quoteSaveIdempotencyCache.set(idempotencyCacheKey, {
@@ -330,7 +346,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
-                      q.gift_name, q.gift_sku, q.gift_qty,
+                      q.gift_name, q.gift_sku, q.gift_qty, q.promos,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -342,7 +358,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
-                      q.gift_name, q.gift_sku, q.gift_qty,
+                      q.gift_name, q.gift_sku, q.gift_qty, q.promos,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -355,7 +371,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
-                      q.gift_name, q.gift_sku, q.gift_qty,
+                      q.gift_name, q.gift_sku, q.gift_qty, q.promos,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -693,6 +709,9 @@ router.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
       await markCustomerWonByPhone(currentRes.rows[0].customer_phone);
     }
 
+    // Tickets de sorteo: solo cotizaciones cobradas cuentan (no bloqueante).
+    await syncPromoTicketsForQuote(req.params.id);
+
     res.json({ message: 'Estado actualizado', status: updateRes.rows[0].status });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1009,6 +1028,9 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
       userId: req.user.id
     });
 
+    // El total pudo cambiar: recalcular tickets de sorteo (no bloqueante).
+    await syncPromoTicketsForQuote(quoteId);
+
     return res.json({ message: 'Cotización actualizada', id: quoteId });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1054,7 +1076,16 @@ router.delete('/api/quotes/:id', authenticateToken, async (req, res) => {
       );
     }
 
+    // El CASCADE borra los respaldos de sorteo: refrescar los códigos afectados
+    // para que sus tickets no queden contando una cotización eliminada.
+    const affectedCodesRes = await client.query(
+      'SELECT DISTINCT code_id FROM promo_code_quotes WHERE quote_id = $1',
+      [quoteId]
+    );
     await client.query('DELETE FROM quotes WHERE id = $1', [quoteId]);
+    for (const row of affectedCodesRes.rows) {
+      await refreshCodeAggregate(client, row.code_id);
+    }
     await client.query('COMMIT');
     return res.json({ message: 'Cotización eliminada', id: quoteId });
   } catch (err) {

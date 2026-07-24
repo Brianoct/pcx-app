@@ -29,6 +29,7 @@ const routers = [
   require('./routes/profile'),
   require('./routes/customers'),
   require('./routes/campaigns'),
+  require('./routes/promos'),
   require('./routes/careers'),
   require('./routes/training'),
   require('./routes/dayplan'),
