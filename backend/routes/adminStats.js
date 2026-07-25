@@ -40,17 +40,20 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
   if (dateFilter.error) return res.status(400).json({ error: dateFilter.error });
 
   try {
-    // 1. Most popular products
+    // 1. Most popular products. Agrupado SOLO por SKU normalizado: el
+    // displayName guardado en line_items cambió de formato con el tiempo
+    // ("Caja Negro" vs "C15N - Caja Negro"), y agrupar por nombre partía el
+    // mismo producto en dos filas. Se muestra el nombre más reciente.
     const popularRes = await pool.query(`
-      SELECT 
-        li->>'sku' as sku,
-        li->>'displayName' as name,
+      SELECT
+        UPPER(TRIM(li->>'sku')) as sku,
+        (array_agg(li->>'displayName' ORDER BY q.created_at DESC))[1] as name,
         SUM(CAST(li->>'qty' AS INTEGER)) as total_quantity
       FROM quotes q,
       LATERAL jsonb_array_elements(q.line_items) li
       WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
         ${dateFilter.sql}
-      GROUP BY sku, name
+      GROUP BY UPPER(TRIM(li->>'sku'))
       ORDER BY total_quantity DESC
       LIMIT 10
     `, dateFilter.params);
