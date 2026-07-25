@@ -175,6 +175,18 @@
   },
   {
     "method": "GET",
+    "path": "/api/admin/geo/summary",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/geo/summary",
+    "status": 403,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
     "path": "/api/combos",
     "status": 200,
     "shape": "array"
