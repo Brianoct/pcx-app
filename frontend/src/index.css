@@ -6210,12 +6210,14 @@ img, video, canvas { max-width: 100%; }
 .inv-page { max-width: 1180px; }
 .inv-view-note { text-align: center; color: var(--text-muted); margin-bottom: 12px; font-size: 0.88rem; }
 
+/* Las píldoras de sede viven DENTRO del toolbar sticky: al hacer scroll,
+   sede + búsqueda + acciones se quedan juntas arriba (un solo scroll). */
 .inv-city-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  justify-content: center;
-  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
 }
 .inv-city-pill {
   min-height: 38px;
@@ -6236,7 +6238,7 @@ img, video, canvas { max-width: 100%; }
 
 .inv-toolbar {
   position: sticky;
-  top: 64px;
+  top: 0;
   z-index: 20;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -6352,18 +6354,19 @@ img, video, canvas { max-width: 100%; }
 .inv-input-min { color: #b45309; }
 .inv-input-max { color: #2563eb; }
 
-/* Desktop table */
+/* Desktop table: sin scroll interno — la página es el único scroll y la
+   cabecera de columnas se pega justo debajo del toolbar (--inv-th-top la
+   calcula InventoryPanel según la altura real del toolbar). */
 .inv-table-wrap {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
-  overflow: auto;
-  max-height: 72vh;
+  overflow: visible;
 }
 .inv-table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .inv-th {
   position: sticky;
-  top: 0;
+  top: var(--inv-th-top, 220px);
   z-index: 5;
   background: var(--bg-secondary);
   padding: 10px 12px;
@@ -6376,6 +6379,8 @@ img, video, canvas { max-width: 100%; }
   border-bottom: 2px solid var(--border);
   white-space: nowrap;
 }
+.inv-th:first-child { border-top-left-radius: var(--radius-md); }
+.inv-th:last-child { border-top-right-radius: var(--radius-md); }
 .inv-th-product { text-align: left; min-width: 190px; }
 .inv-th-caption {
   display: block;
@@ -6447,8 +6452,13 @@ img, video, canvas { max-width: 100%; }
 }
 .inv-m-fields .inv-input { width: 100%; min-height: 44px; }
 
+/* Tablets: la tabla puede ser más ancha que la pantalla — scroll horizontal
+   dentro del contenedor (la cabecera deja de pegarse, único caso). */
+@media (max-width: 1120px) {
+  .inv-table-wrap { overflow-x: auto; }
+}
+
 @media (max-width: 640px) {
-  .inv-toolbar { top: 58px; }
   .inv-toolbar-actions { margin-left: 0; width: 100%; }
   .inv-toolbar-actions .btn { flex: 1 1 0; }
 }
