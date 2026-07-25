@@ -5214,6 +5214,7 @@ img, video, canvas { max-width: 100%; }
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
 }
+.prod-col-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .prod-col-name {
   font-size: 0.8rem;
   font-weight: 800;
@@ -5221,6 +5222,11 @@ img, video, canvas { max-width: 100%; }
   letter-spacing: 0.03em;
   color: var(--text-primary);
 }
+/* Carga de la estación: piezas y la espera más vieja de la columna. */
+.prod-col-load { font-size: 0.68rem; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+.prod-col.is-bottleneck .prod-col-head { background: rgba(245, 158, 11, 0.12); }
+.prod-col.is-bottleneck .prod-col-name { color: #b45309; }
+.prod-col.is-bottleneck .prod-col-load { color: #b45309; }
 .prod-col-count {
   display: inline-flex;
   align-items: center;
@@ -5234,6 +5240,7 @@ img, video, canvas { max-width: 100%; }
   background: var(--brand-tint);
   color: var(--accent-warm);
 }
+.prod-col-count.is-zero { background: var(--bg-tertiary); color: var(--text-muted); }
 .prod-col-body {
   display: flex;
   flex-direction: column;
@@ -5248,33 +5255,78 @@ img, video, canvas { max-width: 100%; }
   padding: 14px 6px;
 }
 
-/* Minimal card: name + qty (+ sede when viewing all). Tap → detail sheet. */
+/* La tarjeta responde: qué es, cuánto avanzó, cuánto espera, hay problema.
+   Tap en la tarjeta → ficha; los botones +/− registran avance sin abrirla. */
 .prod-card {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
+  align-items: stretch;
+  gap: 5px;
   width: 100%;
   text-align: left;
   padding: 11px 12px;
-  min-height: 48px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-left: 3px solid var(--accent-warm);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.06);
   cursor: pointer;
 }
-.prod-card:active:not(:disabled) { transform: translateY(1px); }
+.prod-card:active { transform: translateY(1px); }
+.prod-card.is-busy { opacity: 0.6; pointer-events: none; }
+/* Envejecimiento: blanco → ámbar (24h) → naranja (48h) → rojo (72h). */
+.prod-card.is-age-1 { border-left-color: #f59e0b; background: #fffdf5; }
+.prod-card.is-age-2 { border-left-color: #ea580c; background: #fff9f2; }
+.prod-card.is-age-3 { border-left-color: #dc2626; background: #fff6f5; }
+/* Columnas angostas (8 a lo ancho): nombre y chip apilados para que el
+   nombre use todo el ancho y no se parta letra por letra. */
+.prod-card-top { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .prod-card-name {
+  width: 100%;
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
-.prod-card-qty { font-size: 0.8rem; font-weight: 700; color: var(--warning); }
+.prod-card-health {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.prod-card-health.is-risk { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+.prod-card-health.is-late { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
 .prod-card-sede { font-size: 0.72rem; color: var(--text-muted); }
+.prod-card-progress { display: flex; align-items: center; gap: 8px; }
+.prod-card-bar { flex: 1; height: 7px; border-radius: 999px; background: var(--bg-tertiary); overflow: hidden; }
+.prod-card-fill { height: 100%; border-radius: 999px; background: #f59e0b; transition: width 0.2s ease; }
+.prod-card-fill.is-done { background: #16a34a; }
+.prod-card-count { font-size: 0.76rem; font-weight: 800; color: var(--text-primary); white-space: nowrap; }
+.prod-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+/* Botones grandes, aptos para guantes; no abren la ficha. */
+.prod-card-counter { display: flex; gap: 6px; }
+.prod-card-counter button {
+  min-width: 40px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.prod-card-counter button.is-plus { background: rgba(22, 163, 74, 0.1); border-color: rgba(22, 163, 74, 0.4); color: #15803d; }
+.prod-card-counter button:disabled { opacity: 0.35; cursor: default; }
+.prod-card-percolor { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); }
+.prod-card-meta { display: inline-flex; align-items: center; gap: 8px; }
+.prod-card-wait { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+.prod-card.is-age-2 .prod-card-wait, .prod-card.is-age-3 .prod-card-wait { color: #b45309; }
 
 /* ── Landscape / tablet+ : full board, all 8 columns, hide the pill nav ────── */
 @media (orientation: landscape) and (max-width: 1024px), (min-width: 720px) {
