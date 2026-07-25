@@ -34,12 +34,16 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
     const jobs = {};
 
     if (canQuotes) {
+      // Ventana de dos días para dar contexto: el número de hoy junto al de
+      // ayer ("↑ 3 vs ayer" dice más que el número solo).
       jobs.quotesToday = pool.query(
-        `SELECT COUNT(*)::int AS quotes_count,
-                COALESCE(SUM(total), 0) AS quotes_total,
-                COUNT(*) FILTER (WHERE status IN ('Pagado', 'Embalado', 'Enviado'))::int AS sold_count
+        `SELECT COUNT(*) FILTER (WHERE ${BO_DATE('created_at')} = ${BO_TODAY})::int AS quotes_count,
+                COALESCE(SUM(total) FILTER (WHERE ${BO_DATE('created_at')} = ${BO_TODAY}), 0) AS quotes_total,
+                COUNT(*) FILTER (WHERE ${BO_DATE('created_at')} = ${BO_TODAY} AND status IN ('Pagado', 'Embalado', 'Enviado'))::int AS sold_count,
+                COALESCE(SUM(total) FILTER (WHERE ${BO_DATE('created_at')} = ${BO_TODAY} AND status IN ('Pagado', 'Embalado', 'Enviado')), 0) AS sold_total,
+                COUNT(*) FILTER (WHERE ${BO_DATE('created_at')} = ${BO_TODAY} - 1)::int AS yesterday_count
          FROM quotes
-         WHERE ${BO_DATE('created_at')} = ${BO_TODAY} ${seesTeamQuotes ? '' : 'AND user_id = $1'}`,
+         WHERE ${BO_DATE('created_at')} >= ${BO_TODAY} - 1 ${seesTeamQuotes ? '' : 'AND user_id = $1'}`,
         seesTeamQuotes ? [] : [req.user.id]
       );
     }
@@ -60,7 +64,13 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
     }
     if (canInventory) {
       jobs.stockAlerts = pool.query(
-        `SELECT COUNT(*)::int AS alerts FROM products
+        `SELECT COUNT(*)::int AS alerts,
+                COUNT(*) FILTER (WHERE
+                  (min_stock_cochabamba > 0 AND stock_cochabamba <= 0) OR
+                  (min_stock_santacruz > 0 AND stock_santacruz <= 0) OR
+                  (min_stock_lima > 0 AND stock_lima <= 0)
+                )::int AS sin_stock
+         FROM products
          WHERE is_active = TRUE AND (
            (min_stock_cochabamba > 0 AND stock_cochabamba < min_stock_cochabamba) OR
            (min_stock_santacruz > 0 AND stock_santacruz < min_stock_santacruz) OR
@@ -73,6 +83,16 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
         `SELECT COUNT(*)::int AS active_cards,
                 COUNT(*) FILTER (WHERE stage = 'recepcion')::int AS por_recibir
          FROM production_kanban_cards WHERE is_active = TRUE`
+      );
+      // Timeline de la fábrica: cuántos lotes hay en cada etapa y cuántos
+      // llevan +48h sin moverse (el cuello de botella salta a la vista).
+      jobs.productionStages = pool.query(
+        `SELECT stage, COUNT(*)::int AS count,
+                COUNT(*) FILTER (WHERE stage NOT IN ('planificacion', 'recepcion')
+                  AND last_moved_at < NOW() - INTERVAL '48 hours')::int AS stuck
+         FROM production_kanban_cards
+         WHERE is_active = TRUE AND stage <> 'planificacion'
+         GROUP BY stage`
       );
     }
     if (canCrm) {
@@ -89,6 +109,12 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
     jobs.myDay = pool.query(
       `SELECT COUNT(*)::int AS tasks, COUNT(*) FILTER (WHERE is_done)::int AS done
        FROM day_plan_tasks WHERE user_id = $1 AND task_date = ${BO_TODAY}`,
+      [req.user.id]
+    );
+    jobs.myDayItems = pool.query(
+      `SELECT id, title, is_done, start_minute FROM day_plan_tasks
+       WHERE user_id = $1 AND task_date = ${BO_TODAY}
+       ORDER BY start_minute ASC LIMIT 6`,
       [req.user.id]
     );
     jobs.teamDay = pool.query(
@@ -110,6 +136,8 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
         count: Number(data.quotesToday.rows[0].quotes_count),
         total: Number(data.quotesToday.rows[0].quotes_total),
         sold_count: Number(data.quotesToday.rows[0].sold_count),
+        sold_total: Number(data.quotesToday.rows[0].sold_total),
+        yesterday_count: Number(data.quotesToday.rows[0].yesterday_count),
         scope: seesTeamQuotes ? 'team' : 'own'
       } : null,
       pipeline: data.pipeline ? data.pipeline.rows[0] : null,
@@ -120,10 +148,16 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
         total: Number(row.total)
       })) : null,
       stock_alerts: data.stockAlerts ? Number(data.stockAlerts.rows[0].alerts) : null,
+      stock_sin_stock: data.stockAlerts ? Number(data.stockAlerts.rows[0].sin_stock) : null,
       production: data.production ? {
         active_cards: Number(data.production.rows[0].active_cards),
         por_recibir: Number(data.production.rows[0].por_recibir)
       } : null,
+      production_stages: data.productionStages ? data.productionStages.rows.map((row) => ({
+        stage: row.stage,
+        count: Number(row.count),
+        stuck: Number(row.stuck)
+      })) : null,
       crm_due: data.crmDue ? Number(data.crmDue.rows[0].due) : null,
       crm_due_list: data.crmDueList ? data.crmDueList.rows.map((row) => ({
         id: Number(row.id),
@@ -133,7 +167,13 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
       })) : null,
       my_day: {
         tasks: Number(data.myDay.rows[0].tasks),
-        done: Number(data.myDay.rows[0].done)
+        done: Number(data.myDay.rows[0].done),
+        items: data.myDayItems.rows.map((row) => ({
+          id: Number(row.id),
+          title: row.title,
+          done: Boolean(row.is_done),
+          start_minute: Number(row.start_minute)
+        }))
       },
       team_day: data.teamDay.rows.map((row) => ({
         user_id: Number(row.id),
