@@ -35,9 +35,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
   const [busyKey, setBusyKey] = useState('');
   const [activeStage, setActiveStage] = useState('corte_laser');
   const [detailKey, setDetailKey] = useState(null);
-  const [qcForm, setQcForm] = useState({});
-  const [actionMsg, setActionMsg] = useState('');
-  const [actionSaving, setActionSaving] = useState(false);
+  const [notice, setNotice] = useState('');
   const [sheetTasks, setSheetTasks] = useState([]);
   const [taskInputs, setTaskInputs] = useState({});
   const [taskBusyId, setTaskBusyId] = useState(null);
@@ -113,10 +111,12 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     return { stats, bottleneck };
   }, [itemsByStage, boardClock]);
 
+  // Aviso fugaz cuando un lote avanza solo (p. ej. al completar el conteo).
   useEffect(() => {
-    setQcForm({});
-    setActionMsg('');
-  }, [detailKey]);
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(''), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   // Ticking clock for the sheet's stopwatch (only runs while a sheet is open).
   const [clock, setClock] = useState(() => Date.now());
@@ -165,10 +165,63 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     }
   };
 
+  const nextStageOfBatch = (batch) => {
+    const route = batch?.route || [];
+    const idx = route.indexOf(batch.stage);
+    return idx >= 0 && idx < route.length - 1 ? route[idx + 1] : null;
+  };
+
+  // Etapa anterior en la ruta (sin volver a planificación): el camino de
+  // regreso cuando se avanzó por error o hay retrabajo.
+  const prevStageOfBatch = (batch) => {
+    const route = batch?.route || [];
+    const idx = route.indexOf(batch.stage);
+    const prev = idx > 0 ? route[idx - 1] : null;
+    return prev && prev !== 'planificacion' ? prev : null;
+  };
+
+  // Completar la etapa: el conteo es la verdad. Hacia Embalado pasa por la
+  // puerta de calidad con todas las piezas aprobadas (contarlas ES aprobarlas);
+  // hacia cualquier otra etapa es un movimiento normal de la ruta.
+  const completeStage = async (batch, targetStage) => {
+    const next = targetStage || nextStageOfBatch(batch);
+    if (!batch || !next) return;
+    setBusyKey(batch.key);
+    setError('');
+    try {
+      if (next === 'embalado') {
+        for (const color of batch.color_list) {
+          await apiRequest('/api/production/kanban/qc-gate', {
+            method: 'POST',
+            token,
+            body: { card_ids: color.members.map((m) => m.id), passed: color.qty, rejected: 0 }
+          });
+        }
+        // Approved pieces feed the monthly QC commission — refresh the nav box.
+        if (typeof onCommissionChanged === 'function') onCommissionChanged();
+      } else {
+        await apiRequest('/api/production/kanban/batch-stage', {
+          method: 'PATCH',
+          token,
+          body: { card_ids: batch.members.map((m) => m.id), stage: next }
+        });
+      }
+      setDetailKey(null);
+      setNotice(`${batch.display_name} → ${STAGE_LABEL[next] || next} ✓`);
+      await loadBoard();
+    } catch (err) {
+      setError(err.message || 'No se pudo mover el lote');
+      await loadBoard();
+    } finally {
+      setBusyKey('');
+    }
+  };
+
   // Piece counter: optimistic local update (mirrors the server's fill-by-id
-  // distribution) + fire-and-forget PATCH; on failure, reload the board.
-  // `scope` is either the whole batch or one color of it.
-  const adjustProgress = (scopeMembers, scopeProcessed, scopeTotal, delta) => {
+  // distribution); on failure, reload the board. `scope` is either the whole
+  // batch or one color of it. Al completar el total del lote, avanza solo a
+  // la siguiente etapa (después de que el avance quede guardado).
+  const adjustProgress = (batch, scopeMembers, scopeProcessed, scopeTotal, delta) => {
     const target = Math.min(scopeTotal, Math.max(0, scopeProcessed + delta));
     if (target === scopeProcessed) return;
     const ordered = [...scopeMembers].sort((a, b) => Number(a.id) - Number(b.id));
@@ -180,84 +233,19 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
       remaining -= share;
     }
     setCards((prev) => prev.map((c) => (shares.has(c.id) ? { ...c, processed_count: shares.get(c.id) } : c)));
-    apiRequest('/api/production/kanban/batch-progress', {
+    const request = apiRequest('/api/production/kanban/batch-progress', {
       method: 'PATCH',
       token,
       body: { card_ids: scopeMembers.map((m) => m.id), delta }
-    }).catch((err) => {
+    });
+    const batchProcessedAfter = batch.processed + (target - scopeProcessed);
+    if (delta > 0 && batchProcessedAfter >= batch.total_qty && nextStageOfBatch(batch)) {
+      request.then(() => completeStage(batch)).catch(() => {});
+    }
+    request.catch((err) => {
       setError(err.message || 'No se pudo registrar el avance');
       loadBoard();
     });
-  };
-
-  const moveBatch = async (batch, nextStage) => {
-    if (!batch || !nextStage || batch.stage === nextStage) return;
-    setBusyKey(batch.key);
-    setError('');
-    setActionMsg('');
-    try {
-      await apiRequest('/api/production/kanban/batch-stage', {
-        method: 'PATCH',
-        token,
-        body: { card_ids: batch.members.map((m) => m.id), stage: nextStage }
-      });
-      setDetailKey(null);
-      await loadBoard();
-    } catch (err) {
-      if (err?.payload?.code === 'qc_gate_required') {
-        setActionMsg('Registra el control de calidad para pasar a embalado (abajo).');
-      } else {
-        setError(err.message || 'No se pudo mover el lote');
-      }
-    } finally {
-      setBusyKey('');
-    }
-  };
-
-  // QC gate: one submit per color (the backend records quality per SKU), all
-  // colors of the lote in one go. Single-color lotes keep the simple form.
-  const submitQcGate = async (batch) => {
-    const rows = batch.color_list.map((color) => ({
-      color,
-      passed: Number.parseInt(qcForm[color.sku]?.passed, 10) || 0,
-      rejected: Number.parseInt(qcForm[color.sku]?.rejected, 10) || 0
-    }));
-    if (rows.every((r) => r.passed <= 0 && r.rejected <= 0)) {
-      setActionMsg('Ingresa al menos una pieza aprobada o rechazada.');
-      return;
-    }
-    const overQty = rows.find((r) => r.passed > r.color.qty);
-    if (overQty) {
-      setActionMsg(`Aprobadas de ${overQty.color.label} (${overQty.passed}) no puede superar sus piezas (${overQty.color.qty}).`);
-      return;
-    }
-    setActionSaving(true);
-    setActionMsg('');
-    try {
-      for (const row of rows) {
-        if (row.passed <= 0 && row.rejected <= 0) continue;
-        await apiRequest('/api/production/kanban/qc-gate', {
-          method: 'POST',
-          token,
-          body: { card_ids: row.color.members.map((m) => m.id), passed: row.passed, rejected: row.rejected }
-        });
-      }
-      // Approved pieces feed the monthly QC commission — refresh the nav box.
-      if (typeof onCommissionChanged === 'function') onCommissionChanged();
-      setDetailKey(null);
-      await loadBoard();
-    } catch (err) {
-      setActionMsg(err.message || 'No se pudo registrar el control de calidad');
-      await loadBoard();
-    } finally {
-      setActionSaving(false);
-    }
-  };
-
-  const nextStageOfBatch = (batch) => {
-    const route = batch?.route || [];
-    const idx = route.indexOf(batch.stage);
-    return idx >= 0 && idx < route.length - 1 ? route[idx + 1] : null;
   };
 
   // La tarjeta responde las cuatro preguntas sin abrirla: qué es, cuánto
@@ -307,7 +295,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                 type="button"
                 aria-label={`Restar una pieza de ${batch.display_name}`}
                 disabled={batch.processed <= 0}
-                onClick={() => adjustProgress(batch.members, batch.processed, batch.total_qty, -1)}
+                onClick={() => adjustProgress(batch, batch.members, batch.processed, batch.total_qty, -1)}
               >
                 −
               </button>
@@ -316,7 +304,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                 className="is-plus"
                 aria-label={`Sumar una pieza de ${batch.display_name}`}
                 disabled={batch.processed >= batch.total_qty}
-                onClick={() => adjustProgress(batch.members, batch.processed, batch.total_qty, 1)}
+                onClick={() => adjustProgress(batch, batch.members, batch.processed, batch.total_qty, 1)}
               >
                 +
               </button>
@@ -345,6 +333,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
       </div>
 
       {error && <div className="card prod-error">{error}</div>}
+      {notice && <div className="prod-notice">{notice}</div>}
 
       {loading ? (
         <div className="card" style={{ color: '#78716c' }}>Cargando producción…</div>
@@ -463,7 +452,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                         className="prod-counter-btn is-small"
                         aria-label={`Restar una pieza de ${color.label}`}
                         disabled={color.processed <= 0}
-                        onClick={() => adjustProgress(color.members, color.processed, color.qty, -1)}
+                        onClick={() => adjustProgress(detailBatch, color.members, color.processed, color.qty, -1)}
                       >
                         −
                       </button>
@@ -476,7 +465,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                         className="prod-counter-btn is-small is-plus"
                         aria-label={`Sumar una pieza de ${color.label}`}
                         disabled={color.processed >= color.qty}
-                        onClick={() => adjustProgress(color.members, color.processed, color.qty, 1)}
+                        onClick={() => adjustProgress(detailBatch, color.members, color.processed, color.qty, 1)}
                       >
                         +
                       </button>
@@ -493,7 +482,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                     className="prod-counter-btn"
                     aria-label="Restar una pieza"
                     disabled={detailBatch.processed <= 0}
-                    onClick={() => adjustProgress(detailBatch.members, detailBatch.processed, detailBatch.total_qty, -1)}
+                    onClick={() => adjustProgress(detailBatch, detailBatch.members, detailBatch.processed, detailBatch.total_qty, -1)}
                   >
                     −
                   </button>
@@ -506,7 +495,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                     className="prod-counter-btn is-plus"
                     aria-label="Sumar una pieza"
                     disabled={detailBatch.processed >= detailBatch.total_qty}
-                    onClick={() => adjustProgress(detailBatch.members, detailBatch.processed, detailBatch.total_qty, 1)}
+                    onClick={() => adjustProgress(detailBatch, detailBatch.members, detailBatch.processed, detailBatch.total_qty, 1)}
                   >
                     +
                   </button>
@@ -514,82 +503,27 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
               </div>
             )}
 
-            <div className="prod-sheet-section-label">Mover lote a</div>
-            <div className="prod-move-chips">
-              {detailBatch.route.filter((step) => step !== 'planificacion').map((step) => {
-                const isCurrent = detailBatch.stage === step;
-                return (
-                  <button
-                    key={step}
-                    type="button"
-                    className={`prod-move-chip ${isCurrent ? 'is-current' : ''}`}
-                    disabled={isCurrent || busyKey === detailBatch.key || step === 'embalado'}
-                    title={step === 'embalado' ? 'A embalado se pasa registrando el control de calidad' : undefined}
-                    onClick={() => moveBatch(detailBatch, step)}
-                  >
-                    {STAGE_LABEL[step] || step}
-                  </button>
-                );
-              })}
-            </div>
-
-            {nextStageOfBatch(detailBatch) && nextStageOfBatch(detailBatch) !== 'embalado' && (
+            {/* La ruta la conoce el software: al completar el conteo el lote
+                avanza solo. Aquí quedan el atajo manual y el camino de regreso. */}
+            {nextStageOfBatch(detailBatch) && (
               <button
                 type="button"
                 className="btn btn-primary prod-advance-btn"
                 disabled={busyKey === detailBatch.key}
-                onClick={() => moveBatch(detailBatch, nextStageOfBatch(detailBatch))}
+                onClick={() => completeStage(detailBatch)}
               >
                 Avanzar a {STAGE_LABEL[nextStageOfBatch(detailBatch)]}
               </button>
             )}
-
-            {/* The quality stop: inspecting is what moves the batch into embalado.
-                Multi-color lotes inspect per color (quality records live per SKU). */}
-            {nextStageOfBatch(detailBatch) === 'embalado' && (
-              <div className="prod-qc">
-                <div className="prod-sheet-section-label">Control de calidad → Embalado</div>
-                <p className="prod-qc-note">
-                  Inspecciona el lote ({detailBatch.total_qty} pzas). Solo las aprobadas pasan a embalado;
-                  las rechazadas se registran y la necesidad se regenera sola.
-                </p>
-                {detailBatch.color_list.map((color) => (
-                  <div key={color.sku} className={detailBatch.is_variant_group ? 'prod-qc-color-row' : ''}>
-                    {detailBatch.is_variant_group && (
-                      <span className="prod-qc-color-name">{color.label} · {color.qty} pzas</span>
-                    )}
-                    <div className="prod-qc-fields">
-                      <label className="prod-qc-field">
-                        <span className="prod-qc-field-label">Aprobadas</span>
-                        <input
-                          type="number" min="0" inputMode="numeric" className="prod-qc-input"
-                          value={qcForm[color.sku]?.passed ?? ''}
-                          onChange={(e) => setQcForm((prev) => ({ ...prev, [color.sku]: { ...prev[color.sku], passed: e.target.value } }))}
-                          placeholder={String(color.qty)}
-                        />
-                      </label>
-                      <label className="prod-qc-field">
-                        <span className="prod-qc-field-label">Rechazadas</span>
-                        <input
-                          type="number" min="0" inputMode="numeric" className="prod-qc-input"
-                          value={qcForm[color.sku]?.rejected ?? ''}
-                          onChange={(e) => setQcForm((prev) => ({ ...prev, [color.sku]: { ...prev[color.sku], rejected: e.target.value } }))}
-                          placeholder="0"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                ))}
-                {actionMsg && <div className="prod-qc-msg">{actionMsg}</div>}
-                <button
-                  type="button"
-                  className="btn btn-primary prod-qc-btn"
-                  disabled={actionSaving}
-                  onClick={() => submitQcGate(detailBatch)}
-                >
-                  {actionSaving ? 'Guardando…' : 'Registrar calidad y pasar a embalado'}
-                </button>
-              </div>
+            {prevStageOfBatch(detailBatch) && (
+              <button
+                type="button"
+                className="prod-back-btn"
+                disabled={busyKey === detailBatch.key}
+                onClick={() => completeStage(detailBatch, prevStageOfBatch(detailBatch))}
+              >
+                ← Devolver a {STAGE_LABEL[prevStageOfBatch(detailBatch)]}
+              </button>
             )}
 
             {sheetTasks.length > 0 && (

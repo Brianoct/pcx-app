@@ -5214,6 +5214,32 @@ img, video, canvas { max-width: 100%; }
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
 }
+/* Aviso fugaz: "Lote → Etapa ✓" cuando un lote avanza solo. */
+.prod-notice {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+/* Camino de regreso: discreto, para errores o retrabajo. */
+.prod-back-btn {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 42px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.prod-back-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
 .prod-col-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .prod-col-name {
   font-size: 0.8rem;
