@@ -2,6 +2,28 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { BOARD_STAGES, STAGE_LABEL, groupIntoBatches, sedeTotals, stopwatchSince } from './productionShared';
 
+const hoursSince = (since, now) => {
+  if (!since) return null;
+  const h = (now - new Date(since).getTime()) / 3600000;
+  return Number.isFinite(h) ? Math.max(0, h) : null;
+};
+
+// Envejecimiento visual: cuanto más espera un lote en su etapa, más se nota.
+const ageClass = (h) => {
+  if (h == null) return '';
+  if (h >= 72) return 'is-age-3';
+  if (h >= 48) return 'is-age-2';
+  if (h >= 24) return 'is-age-1';
+  return '';
+};
+
+const waitLabel = (h) => {
+  if (h == null) return null;
+  if (h < 1) return '<1h';
+  if (h < 24) return `${Math.floor(h)}h`;
+  return `${Math.floor(h / 24)}d ${Math.floor(h % 24)}h`;
+};
+
 // The production board: only factory stages. Planning lives in /produccion-planificacion
 // (cards enter here when their tentative date arrives) and reception in /recepcion.
 // `onCommissionChanged` refreshes the nav commission box: approving pieces at the
@@ -60,6 +82,36 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
   const planningCount = useMemo(() => cards.filter((c) => c.stage === 'planificacion').length, [cards]);
 
   const detailBatch = detailKey ? batches.get(detailKey) || null : null;
+
+  // Reloj lento del tablero: alcanza para envejecer tarjetas y esperas por
+  // columna sin re-renderizar cada segundo.
+  const [boardClock, setBoardClock] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setBoardClock(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Carga por columna: lotes, piezas y la espera más vieja. La columna con
+  // más piezas (habiendo alguna) es el cuello de botella.
+  const colStats = useMemo(() => {
+    const stats = {};
+    for (const stage of BOARD_STAGES) {
+      const items = itemsByStage[stage.key] || [];
+      stats[stage.key] = {
+        lots: items.length,
+        pieces: items.reduce((sum, b) => sum + b.total_qty, 0),
+        oldest: items.reduce((max, b) => {
+          const h = hoursSince(b.oldest_move, boardClock);
+          return h != null && h > max ? h : max;
+        }, 0)
+      };
+    }
+    const maxPieces = Math.max(...Object.values(stats).map((s) => s.pieces), 0);
+    const bottleneck = maxPieces > 0
+      ? Object.keys(stats).find((key) => stats[key].pieces === maxPieces)
+      : null;
+    return { stats, bottleneck };
+  }, [itemsByStage, boardClock]);
 
   useEffect(() => {
     setQcForm({});
@@ -208,30 +260,80 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     return idx >= 0 && idx < route.length - 1 ? route[idx + 1] : null;
   };
 
-  const renderBatchCard = (batch) => (
-    <button
-      key={batch.key}
-      type="button"
-      className="prod-card"
-      onClick={() => setDetailKey(batch.key)}
-      disabled={busyKey === batch.key}
-    >
-      <span className="prod-card-name">{batch.display_name}</span>
-      <span className="prod-card-qty">
-        {batch.total_qty} pzas
-        {batch.pending_tasks > 0 && (
-          <span className="prod-card-task-badge" title="Tareas de medición pendientes">
-            {batch.pending_tasks} tarea{batch.pending_tasks > 1 ? 's' : ''}
+  // La tarjeta responde las cuatro preguntas sin abrirla: qué es, cuánto
+  // avanzó (barra + contador en la tarjeta), cuánto lleva esperando (tinte +
+  // reloj) y si hay problema (chip En riesgo / Atrasado).
+  const renderBatchCard = (batch) => {
+    const waitHours = hoursSince(batch.oldest_move, boardClock);
+    const pct = batch.total_qty > 0 ? Math.round((batch.processed / batch.total_qty) * 100) : 0;
+    // En Pintado un lote multicolor se cuenta por color (dentro de la ficha);
+    // el contador de tarjeta solo aplica cuando el conteo es del lote entero.
+    const countsPerColor = batch.is_variant_group && batch.stage === 'pintado';
+    const open = () => setDetailKey(batch.key);
+    return (
+      <div
+        key={batch.key}
+        role="button"
+        tabIndex={0}
+        className={`prod-card ${ageClass(waitHours)} ${busyKey === batch.key ? 'is-busy' : ''}`}
+        onClick={open}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+      >
+        <div className="prod-card-top">
+          <span className="prod-card-name">{batch.display_name}</span>
+          {waitHours >= 24 && (
+            <span className={`prod-card-health ${waitHours >= 48 ? 'is-late' : 'is-risk'}`}>
+              {waitHours >= 48 ? 'Atrasado' : 'En riesgo'}
+            </span>
+          )}
+        </div>
+        <span className="prod-card-sede">
+          {batch.is_variant_group
+            ? batch.color_list.map((c) => `${c.label} ${c.qty}`).join(' · ')
+            : sedeTotals(batch).map((s) => `${s.sede} ${s.qty}`).join(' · ')}
+        </span>
+        <div className="prod-card-progress">
+          <div className="prod-card-bar">
+            <div className={`prod-card-fill ${pct >= 100 ? 'is-done' : ''}`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className="prod-card-count">{batch.processed}/{batch.total_qty}</span>
+        </div>
+        <div className="prod-card-foot">
+          {countsPerColor ? (
+            <span className="prod-card-percolor">conteo por color →</span>
+          ) : (
+            <div className="prod-card-counter" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                aria-label={`Restar una pieza de ${batch.display_name}`}
+                disabled={batch.processed <= 0}
+                onClick={() => adjustProgress(batch.members, batch.processed, batch.total_qty, -1)}
+              >
+                −
+              </button>
+              <button
+                type="button"
+                className="is-plus"
+                aria-label={`Sumar una pieza de ${batch.display_name}`}
+                disabled={batch.processed >= batch.total_qty}
+                onClick={() => adjustProgress(batch.members, batch.processed, batch.total_qty, 1)}
+              >
+                +
+              </button>
+            </div>
+          )}
+          <span className="prod-card-meta">
+            {batch.pending_tasks > 0 && (
+              <span className="prod-card-task-badge" title="Tareas de medición pendientes">
+                {batch.pending_tasks} tarea{batch.pending_tasks > 1 ? 's' : ''}
+              </span>
+            )}
+            {waitLabel(waitHours) && <span className="prod-card-wait">⏱ {waitLabel(waitHours)}</span>}
           </span>
-        )}
-      </span>
-      <span className="prod-card-sede">
-        {batch.is_variant_group
-          ? batch.color_list.map((c) => `${c.label} ${c.qty}`).join(' · ')
-          : sedeTotals(batch).map((s) => `${s.sede} ${s.qty}`).join(' · ')}
-      </span>
-    </button>
-  );
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="container prod-page">
@@ -270,18 +372,28 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
           <div className="prod-columns">
             {BOARD_STAGES.map((stage) => {
               const items = itemsByStage[stage.key] || [];
+              const stats = colStats.stats[stage.key];
+              const isBottleneck = colStats.bottleneck === stage.key;
               return (
                 <section
                   key={stage.key}
-                  className={`prod-col ${activeStage === stage.key ? 'is-active' : ''}`}
+                  className={`prod-col ${activeStage === stage.key ? 'is-active' : ''} ${isBottleneck ? 'is-bottleneck' : ''}`}
                 >
                   <header className="prod-col-head">
-                    <span className="prod-col-name">{stage.label}</span>
-                    <span className="prod-col-count">{items.length}</span>
+                    <div className="prod-col-title">
+                      <span className="prod-col-name">{stage.label}</span>
+                      {stats.lots > 0 && (
+                        <span className="prod-col-load">
+                          {stats.pieces} pzas
+                          {stats.oldest >= 1 && ` · ⏱ ${waitLabel(stats.oldest)}`}
+                        </span>
+                      )}
+                    </div>
+                    <span className={`prod-col-count ${items.length === 0 ? 'is-zero' : ''}`}>{items.length}</span>
                   </header>
                   <div className="prod-col-body">
                     {items.map((batch) => renderBatchCard(batch))}
-                    {items.length === 0 && <div className="prod-col-empty">Sin tarjetas</div>}
+                    {items.length === 0 && <div className="prod-col-empty">Sin lotes</div>}
                   </div>
                 </section>
               );
