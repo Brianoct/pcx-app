@@ -201,10 +201,6 @@ export default function PipelineBoard({ token }) {
         })}
       </div>
 
-      <p className="pipe-hint">
-        Arrastra una tarjeta para cambiarla de etapa · toca una tarjeta para ver su ficha, notas y siguiente paso.
-        Al marcar un pedido como <strong>Pagado</strong>, el trato pasa a <strong>Ganado</strong> solo.
-      </p>
 
       <CustomerHub
         token={token}

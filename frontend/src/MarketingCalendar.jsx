@@ -147,10 +147,6 @@ export default function MarketingCalendar({ token, role }) {
       <div className="card plan-intro camp-intro">
         <div>
           <h2 className="plan-title">Calendario de Marketing</h2>
-          <p className="plan-sub">
-            Campañas, lives y eventos del equipo en un solo mes.
-            {canEdit ? ' Toca un día para agregar un evento; toca un item para abrirlo.' : ' Toca un item para ver sus detalles.'}
-          </p>
         </div>
         <div className="mkcal-legend">
           <span className="mkcal-chip is-campana">Campaña</span>
@@ -199,12 +195,6 @@ export default function MarketingCalendar({ token, role }) {
         })}
       </div>
 
-      {canEdit && (
-        <p className="pipe-hint">
-          Las campañas se editan en <strong>Campañas</strong> y los lives en <strong>Live</strong> —
-          aquí se abren con un toque. Los eventos ◆ son solo del calendario.
-        </p>
-      )}
 
       {eventForm && (
         <div className="mkcal-modal-backdrop" onClick={() => setEventForm(null)}>

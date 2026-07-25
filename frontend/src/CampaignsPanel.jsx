@@ -167,10 +167,6 @@ export default function CampaignsPanel({ token, role }) {
       <div className="container prod-page">
         <div className="card camp-form">
           <h2 className="plan-title">{form.id ? 'Editar campaña' : 'Nueva campaña'}</h2>
-          <p className="plan-sub">
-            Define la campaña y lo que cada área debe tener listo. Al <strong>anunciarla</strong>,
-            todo el equipo la verá en su Inicio con sus responsabilidades.
-          </p>
           <div className="camp-form-grid">
             <label className="camp-field camp-field-wide">
               <span>Nombre de la campaña</span>
@@ -399,11 +395,9 @@ export default function CampaignsPanel({ token, role }) {
       <div className="card plan-intro camp-intro">
         <div>
           <h2 className="plan-title">Campañas</h2>
-          <p className="plan-sub">
-            {canEdit
-              ? 'Organiza cada campaña y comunica a todas las áreas qué deben tener listo.'
-              : `Aquí ves las campañas del negocio y las responsabilidades de tu área${myArea ? ` (${AREA_LABELS[myArea]})` : ''}. Marca lo tuyo cuando esté listo.`}
-          </p>
+          {!canEdit && myArea && (
+            <p className="plan-sub">Tu área: {AREA_LABELS[myArea]}</p>
+          )}
         </div>
         {canEdit && (
           <button type="button" className="btn btn-primary" onClick={openCreate}>

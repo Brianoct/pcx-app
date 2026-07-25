@@ -106,9 +106,6 @@ function AdminPanel({ token, user }) {
         <div>
           <p className="admin-hero-eyebrow">Administración PCX</p>
           <h2 className="admin-hero-title">Centro de control</h2>
-          <p className="admin-hero-subtitle">
-            Gestiona usuarios, permisos, catálogo y comisiones desde una sola vista clara.
-          </p>
         </div>
         <div className="admin-active-section-badge">
           <span>Sección activa</span>
