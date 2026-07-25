@@ -169,6 +169,12 @@
   },
   {
     "method": "GET",
+    "path": "/api/geo/search",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
     "path": "/api/combos",
     "status": 200,
     "shape": "array"

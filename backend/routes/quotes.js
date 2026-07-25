@@ -6,6 +6,7 @@ const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { findCustomerOwnerByPhone, markCustomerWonByPhone, upsertCustomerFromQuote } = require('../lib/customers');
 const { applyPromosToNewQuote, refreshCodeAggregate, syncPromoTicketsForQuote, validateCouponForRedemption } = require('../lib/promos');
+const { resolveGeoDestination } = require('../lib/geo');
 const { loadUserContext, resolveUserDisplayName } = require('../lib/users');
 const { createHttpError, getUserDisplayName } = require('../lib/util');
 
@@ -23,7 +24,7 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
   }
 
   const quoteRes = await client.query(
-    `SELECT id, user_id, customer_name, customer_phone, department, provincia, shipping_notes,
+    `SELECT id, user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes,
             alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
             coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, payment_method, payment_cash_bs,
             line_items, subtotal, total, status
@@ -84,6 +85,8 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
     customer_phone,
     department,
     provincia,
+    ciudad,
+    dest_geo_id,
     shipping_notes,
     alternative_name,
     alternative_phone,
@@ -228,19 +231,36 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       couponDiscountForStorage = couponCheck.discount_percent;
     }
 
+    // Destino canónico: si viene dest_geo_id, el catálogo manda — los campos
+    // departamento/provincia/ciudad salen de ahí, no del navegador. Sin id
+    // (ruta de escape o cliente legacy) se respetan los campos sueltos.
+    let destino = {
+      department: department || null,
+      provincia: provincia || null,
+      ciudad: String(ciudad || '').trim().slice(0, 80) || null,
+      dest_geo_id: null
+    };
+    if (dest_geo_id) {
+      const geo = await resolveGeoDestination(dest_geo_id);
+      if (!geo) throw createHttpError(400, 'Destino de envío inválido');
+      destino = { department: geo.departamento, provincia: geo.provincia, ciudad: geo.municipio, dest_geo_id: geo.id };
+    }
+
     const quoteResult = await client.query(
       `INSERT INTO quotes (
-        user_id, customer_name, customer_phone, department, provincia, shipping_notes,
+        user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes,
         alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
         coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, line_items, subtotal, total, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW())
       RETURNING id`,
       [
         quoteOwnerId,
         customer_name,
         customer_phone,
-        department || null,
-        provincia || null,
+        destino.department,
+        destino.provincia,
+        destino.ciudad,
+        destino.dest_geo_id,
         shipping_notes || null,
         alternative_name || null,
         alternative_phone || null,
@@ -290,8 +310,8 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
     await upsertCustomerFromQuote({
       name: customer_name,
       phone: customer_phone,
-      department,
-      provincia,
+      department: destino.department,
+      provincia: destino.provincia,
       vendor: vendorDisplayName,
       userId: req.user.id
     });
@@ -364,7 +384,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
-                      q.gift_name, q.gift_sku, q.gift_qty, q.promos,
+                      q.gift_name, q.gift_sku, q.gift_qty, q.promos, q.ciudad, q.dest_geo_id,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -376,7 +396,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
-                      q.gift_name, q.gift_sku, q.gift_qty, q.promos,
+                      q.gift_name, q.gift_sku, q.gift_qty, q.promos, q.ciudad, q.dest_geo_id,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -389,7 +409,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
-                      q.gift_name, q.gift_sku, q.gift_qty, q.promos,
+                      q.gift_name, q.gift_sku, q.gift_qty, q.promos, q.ciudad, q.dest_geo_id,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -835,6 +855,8 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     customer_phone,
     department,
     provincia,
+    ciudad,
+    dest_geo_id,
     shipping_notes,
     alternative_name,
     alternative_phone,
@@ -964,6 +986,30 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
       const requestedCouponDiscount = Number(coupon_discount_percent);
       nextCouponDiscount = Number.isFinite(requestedCouponDiscount) ? requestedCouponDiscount : 0;
     }
+    // Destino en edición. Reglas:
+    //  - dest_geo_id presente → el catálogo manda (igual que al crear).
+    //  - clientes legacy (ej. Historial) que solo mandan department/provincia:
+    //    si NO los cambiaron, se PRESERVA el destino canónico guardado; si los
+    //    cambiaron a mano, se respeta el cambio y se limpia el canónico.
+    const sentDepartment = hasBodyField('department') ? (department || null) : currentQuote.department;
+    const sentProvincia = hasBodyField('provincia') ? (provincia || null) : currentQuote.provincia;
+    const legacyDestChanged = sentDepartment !== currentQuote.department || sentProvincia !== currentQuote.provincia;
+    let destinoEdit = {
+      department: sentDepartment,
+      provincia: sentProvincia,
+      ciudad: hasBodyField('ciudad')
+        ? (String(ciudad || '').trim().slice(0, 80) || null)
+        : (legacyDestChanged ? null : (currentQuote.ciudad || null)),
+      dest_geo_id: legacyDestChanged || hasBodyField('ciudad') || hasBodyField('dest_geo_id')
+        ? null
+        : (currentQuote.dest_geo_id || null)
+    };
+    if (dest_geo_id) {
+      const geoEdit = await resolveGeoDestination(dest_geo_id);
+      if (!geoEdit) throw createHttpError(400, 'Destino de envío inválido');
+      destinoEdit = { department: geoEdit.departamento, provincia: geoEdit.provincia, ciudad: geoEdit.municipio, dest_geo_id: geoEdit.id };
+    }
+
     // Cupón NUEVO en la edición: misma validación servidor-side que al crear
     // (los códigos legacy que ya estaban en la cotización no se tocan).
     if (nextCouponCode && nextCouponCode !== currentCouponCode) {
@@ -1016,13 +1062,15 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
            line_items = $18,
            subtotal = $19,
            total = $20,
-           status = $21
+           status = $21,
+           ciudad = $23,
+           dest_geo_id = $24
       WHERE id = $22`,
       [
         customer_name,
         customer_phone,
-        department || null,
-        provincia || null,
+        destinoEdit.department,
+        destinoEdit.provincia,
         shipping_notes || null,
         alternative_name || null,
         alternative_phone || null,
@@ -1040,7 +1088,9 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         subtotalValue,
         totalValue,
         normalizedStatus,
-        quoteId
+        quoteId,
+        destinoEdit.ciudad,
+        destinoEdit.dest_geo_id
       ]
     );
     await client.query('COMMIT');
@@ -1049,8 +1099,8 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     await upsertCustomerFromQuote({
       name: customer_name,
       phone: customer_phone,
-      department,
-      provincia,
+      department: destinoEdit.department,
+      provincia: destinoEdit.provincia,
       vendor: nextVendorName,
       userId: req.user.id
     });

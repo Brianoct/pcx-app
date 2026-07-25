@@ -115,18 +115,35 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
       LIMIT 10
     `, dateFilter.params);
 
-    // 3. Top locations (departamento/provincia)
+    // 3. Ranking jerárquico de destinos: departamento → ciudades. Antes se
+    // mezclaban provincias y departamentos como si fueran el mismo nivel; ahora
+    // el rollup es por departamento canónico con sus ciudades adentro. Las
+    // cotizaciones viejas sin departamento caen en "Sin clasificar" (se
+    // resuelven con el backfill de la fase 2 del catálogo geográfico).
     const locRes = await pool.query(`
-      SELECT 
-        COALESCE(q.provincia, q.department, 'Sin ubicación') as location,
-        COUNT(*) as order_count,
-        SUM(q.total) as total_sales
+      SELECT
+        COALESCE(NULLIF(TRIM(q.department), ''), 'Sin clasificar') AS department,
+        COALESCE(NULLIF(TRIM(q.ciudad), ''), NULLIF(TRIM(q.provincia), ''), 'Sin detalle') AS ciudad,
+        COUNT(*) AS order_count,
+        SUM(q.total) AS total_sales
       FROM quotes q
       WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
         ${dateFilter.sql}
-      GROUP BY location
-      ORDER BY total_sales DESC
+      GROUP BY 1, 2
     `, dateFilter.params);
+    const locByDept = new Map();
+    for (const row of locRes.rows) {
+      if (!locByDept.has(row.department)) {
+        locByDept.set(row.department, { location: row.department, order_count: 0, total_sales: 0, cities: [] });
+      }
+      const dept = locByDept.get(row.department);
+      dept.order_count += Number(row.order_count || 0);
+      dept.total_sales += Number(row.total_sales || 0);
+      dept.cities.push({ ciudad: row.ciudad, order_count: Number(row.order_count || 0), total_sales: Number(row.total_sales || 0) });
+    }
+    const topLocations = [...locByDept.values()]
+      .sort((a, b) => b.total_sales - a.total_sales)
+      .map((dept) => ({ ...dept, cities: dept.cities.sort((a, b) => b.total_sales - a.total_sales).slice(0, 5) }));
 
     // 4. Top almacenes by traffic (order count)
     const whRes = await pool.query(`
@@ -338,8 +355,8 @@ router.get('/api/admin/stats', authenticateToken, requireRole(['admin']), async 
     res.json({
       popularProducts: popularRes.rows,
       colorSales,
+      topLocations,
       topSalespeople: salesRes.rows,
-      topLocations: locRes.rows,
       topWarehouses: whRes.rows,
       salesByDepartment: departmentSalesRes.rows,
       dailySalesSeries,

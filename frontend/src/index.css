@@ -9321,3 +9321,109 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   color: #a8a29e;
 }
 .morning-brief-hint { color: #b45309; }
+
+/* ── Destino de envío canónico (Cotizar) ── */
+.quote-dest-toggle {
+  border: none;
+  background: none;
+  color: #1d4ed8;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+.quote-dest-search { position: relative; }
+.quote-dest-results {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #e7e0d8;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.quote-dest-results li button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.quote-dest-results li button:hover { background: #fff8f1; }
+.quote-dest-results li button strong { font-size: 0.9rem; color: #292524; }
+.quote-dest-results li button span { font-size: 0.74rem; color: #78716c; }
+.quote-dest-empty {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px dashed #e7e0d8;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 0.8rem;
+  color: #78716c;
+}
+.quote-dest-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 0.88rem;
+  line-height: 1.3;
+  min-height: 42px;
+}
+.quote-dest-clear {
+  border: none;
+  background: none;
+  color: #166534;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.quote-dest-fallback { display: grid; gap: 8px; }
+
+/* ── Ranking Destinos jerárquico (Estadísticas) ── */
+.dashboard-geo-list { display: grid; gap: 12px; }
+.dashboard-geo-dept {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.dashboard-geo-dept span { color: #78716c; font-size: 0.8rem; }
+.dashboard-geo-cities {
+  list-style: none;
+  margin: 5px 0 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid #f0ebe4;
+  display: grid;
+  gap: 3px;
+}
+.dashboard-geo-cities li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: #57534e;
+}
+.dashboard-geo-cities li span:last-child { color: #a8a29e; }
