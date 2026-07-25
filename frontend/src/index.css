@@ -908,12 +908,15 @@ button, .btn {
   margin-left: auto;
 }
 
-/* Label row with a small toggle on the right (Departamento ⇄ Provincia). */
+/* Label row with a small toggle on the right (Departamento ⇄ Provincia).
+   min-height igual a la altura de un .form-label de una línea para que los
+   inputs de la grilla de Cliente queden todos a la misma altura. */
 .quote-label-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-height: 23px;
 }
 
 .quote-inline-toggle {
@@ -9323,6 +9326,8 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 .morning-brief-hint { color: #b45309; }
 
 /* ── Destino de envío canónico (Cotizar) ── */
+/* min-height: 0 anula el alto mínimo global de botones (48px) que empujaba
+   el input de destino más abajo que los demás campos de la grilla. */
 .quote-dest-toggle {
   border: none;
   background: none;
@@ -9331,6 +9336,8 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   font-weight: 700;
   cursor: pointer;
   padding: 0;
+  white-space: nowrap;
+  min-height: 0;
 }
 .quote-dest-search { position: relative; }
 .quote-dest-results {
@@ -9399,6 +9406,7 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   font-size: 0.9rem;
   cursor: pointer;
   padding: 2px 6px;
+  min-height: 0;
 }
 .quote-dest-fallback { display: grid; gap: 8px; }
 

@@ -1524,7 +1524,7 @@ export default function PublicCustomerMenu() {
               {isProvincia ? (
                 <input
                   type="text"
-                  maxLength={26}
+                  maxLength={80}
                   placeholder="Provincia"
                   value={provincia}
                   onChange={(e) => setProvincia(e.target.value)}
