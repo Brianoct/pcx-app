@@ -70,6 +70,8 @@ const battery = [
   ['GET', '/api/admin/materiales', admin],
   // geo (catálogo de destinos)
   ['GET', '/api/geo/search?q=quillacollo', ventas],
+  ['GET', '/api/admin/geo/summary', admin],
+  ['GET', '/api/admin/geo/summary', ventas], // expect 403 (solo admin)
   // marketing
   ['GET', '/api/combos', admin],
   ['GET', '/api/promos', admin],

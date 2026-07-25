@@ -62,8 +62,8 @@ export default function QuoteTool({ token, user }) {
   // the whole point: never re-type customer data.
   const applyCustomer = (customer) => {
     if (!customer) return;
-    setCustomerName(String(customer.name || '').slice(0, 26));
-    setCustomerPhone(String(customer.phone || '').slice(0, 26));
+    setCustomerName(String(customer.name || '').slice(0, 80));
+    setCustomerPhone(String(customer.phone || '').slice(0, 40));
     // Destino: intenta matchear lo guardado contra el catalogo; si hay un
     // unico resultado se auto-selecciona (cliente recurrente = cero clics).
     const savedDest = String(customer.provincia || '').trim();
@@ -538,8 +538,8 @@ export default function QuoteTool({ token, user }) {
     if (!raw) return;
     try {
       const prefill = JSON.parse(raw);
-      if (prefill?.customerName) setCustomerName(String(prefill.customerName).slice(0, 26));
-      if (prefill?.customerPhone) setCustomerPhone(String(prefill.customerPhone).slice(0, 26));
+      if (prefill?.customerName) setCustomerName(String(prefill.customerName).slice(0, 80));
+      if (prefill?.customerPhone) setCustomerPhone(String(prefill.customerPhone).slice(0, 40));
       if (prefill?.conversationId) setWhatsappConversationId(Number(prefill.conversationId));
     } catch {
       // malformed prefill; start the quote empty
@@ -971,12 +971,12 @@ export default function QuoteTool({ token, user }) {
                 value={customerName}
                 onChange={setCustomerName}
                 onPick={applyCustomer}
-                placeholder="Nombre (máx 26)"
-                maxLength={26}
+                placeholder="Nombre del cliente"
+                maxLength={80}
                 className="form-input"
               />
-              {customerName.length >= 23 && (
-                <div className="form-counter limit">{customerName.length}/26</div>
+              {customerName.length >= 70 && (
+                <div className="form-counter limit">{customerName.length}/80</div>
               )}
             </div>
 
@@ -984,14 +984,14 @@ export default function QuoteTool({ token, user }) {
               <label className="form-label">Teléfono</label>
               <input
                 type="tel"
-                maxLength={26}
+                maxLength={40}
                 placeholder="Ej: 77778888"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 className="form-input"
               />
-              {customerPhone.length >= 23 && (
-                <div className="form-counter limit">{customerPhone.length}/26</div>
+              {customerPhone.length >= 36 && (
+                <div className="form-counter limit">{customerPhone.length}/40</div>
               )}
             </div>
 
@@ -1170,14 +1170,14 @@ export default function QuoteTool({ token, user }) {
               <label className="form-label">Notas de envío (opcional)</label>
               <input
                 type="text"
-                maxLength={26}
+                maxLength={120}
                 placeholder="Instrucciones, referencias..."
                 value={shippingNotes}
                 onChange={(e) => setShippingNotes(e.target.value)}
                 className="form-input"
               />
-              {shippingNotes.length >= 23 && (
-                <div className="form-counter limit">{shippingNotes.length}/26</div>
+              {shippingNotes.length >= 110 && (
+                <div className="form-counter limit">{shippingNotes.length}/120</div>
               )}
             </div>
 
@@ -1190,7 +1190,7 @@ export default function QuoteTool({ token, user }) {
                 <div className="quote-altname-inputs">
                   <input
                     type="text"
-                    maxLength={26}
+                    maxLength={80}
                     placeholder="Nombre alternativo para envío"
                     value={alternativeName}
                     onChange={(e) => setAlternativeName(e.target.value)}
@@ -1198,7 +1198,7 @@ export default function QuoteTool({ token, user }) {
                   />
                   <input
                     type="tel"
-                    maxLength={26}
+                    maxLength={40}
                     placeholder="Teléfono alternativo para envío"
                     value={alternativePhone}
                     onChange={(e) => setAlternativePhone(e.target.value)}

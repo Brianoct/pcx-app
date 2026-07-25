@@ -5,6 +5,7 @@ import ProductCatalogAdmin from './ProductCatalogAdmin';
 import EquipmentCatalogAdmin from './EquipmentCatalogAdmin';
 import MaterialsCatalogAdmin from './MaterialsCatalogAdmin';
 import ProductStructureAdmin from './ProductStructureAdmin';
+import GeoDestinosAdmin from './GeoDestinosAdmin';
 import SalesAssistant from './SalesAssistant';
 import PipelineBoard from '../crm/PipelineBoard';
 import { apiRequest } from '../apiClient';
@@ -16,7 +17,7 @@ function AdminPanel({ token, user }) {
   const [aiInfo, setAiInfo] = useState(null);
   // Ventas IA siempre visible: el Embudo funciona sin IA configurada; el
   // sub-tab de WhatsApp+IA aparece solo cuando la IA está habilitada.
-  const tabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura', 'ventas_ia'];
+  const tabKeys = ['usuarios', 'productos', 'equipos', 'materiales', 'estructura', 'destinos', 'ventas_ia'];
   const [ventasView, setVentasView] = useState('embudo');
   const resolveTab = (searchText = '') => {
     const tab = new URLSearchParams(searchText).get('tab');
@@ -70,6 +71,12 @@ function AdminPanel({ token, user }) {
       label: 'Estructura',
       icon: 'ES',
       hint: 'Ruta, materiales y costo derivado'
+    },
+    {
+      key: 'destinos',
+      label: 'Destinos',
+      icon: 'DS',
+      hint: 'Clasificación de destinos de envío'
     },
     {
       key: 'ventas_ia',
@@ -147,6 +154,7 @@ function AdminPanel({ token, user }) {
         {activeTab === 'equipos' && <EquipmentCatalogAdmin token={token} />}
         {activeTab === 'materiales' && <MaterialsCatalogAdmin token={token} />}
         {activeTab === 'estructura' && <ProductStructureAdmin token={token} />}
+        {activeTab === 'destinos' && <GeoDestinosAdmin token={token} />}
         {activeTab === 'ventas_ia' && (
           <div>
             <div className="admin-subtabs" role="tablist" aria-label="Embudo y asistente de ventas">
