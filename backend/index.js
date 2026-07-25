@@ -3,6 +3,7 @@ require('dotenv').config();
 const { app, httpServer, errorHandler } = require('./app');
 const { pool } = require('./db');
 const { runMigrations } = require('./scripts/migrate');
+const { syncGeoCatalog } = require('./lib/geo');
 const { initWhatsAppInboxWebSocketGateway } = require('./lib/whatsapp');
 
 // Mount order matters where path patterns overlap:
@@ -34,7 +35,8 @@ const routers = [
   require('./routes/careers'),
   require('./routes/training'),
   require('./routes/dayplan'),
-  require('./routes/overview')
+  require('./routes/overview'),
+  require('./routes/geo')
 ];
 
 for (const router of routers) {
@@ -45,6 +47,7 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 4000;
 const startServer = async () => {
   await runMigrations(pool);
+  await syncGeoCatalog();
   initWhatsAppInboxWebSocketGateway(httpServer);
   httpServer.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

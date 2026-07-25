@@ -524,6 +524,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       sourceText: quote.store_location ? `Despacho: ${quote.store_location}` : 'Origen no especificado',
       department: quote.department,
       provincia: quote.provincia,
+      ciudad: quote.ciudad,
       shippingNotes: quote.shipping_notes,
       alternativeName: quote.alternative_name,
       alternativePhone: quote.alternative_phone,

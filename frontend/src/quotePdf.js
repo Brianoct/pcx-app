@@ -66,6 +66,7 @@ export function generateModernQuotePdf({
   cityText,
   department,
   provincia,
+  ciudad,
   shippingNotes,
   alternativeName,
   alternativePhone,
@@ -157,7 +158,10 @@ export function generateModernQuotePdf({
     chipX += chipW + 4;
   });
 
-  const locationText = provincia ? `Provincia: ${provincia}` : `Departamento: ${department || '—'}`;
+  // Destino canonico: "Quillacollo, Cochabamba". Legacy: provincia o departamento.
+  const locationText = ciudad
+    ? `${ciudad}, ${department || provincia || '—'}`
+    : (provincia ? `Provincia: ${provincia}` : `Departamento: ${department || '—'}`);
   const dispatchSourceText = storeLocation ? `Almacén: ${storeLocation}` : (cityText || '—');
 
   let cursorY = chipY + 8;

@@ -44,7 +44,14 @@ export default function QuoteTool({ token, user }) {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [department, setDepartment] = useState('');
-  const [provincia, setProvincia] = useState('');
+  // Destino canonico (catalogo geografico): {id, municipio, provincia, departamento}.
+  const [destino, setDestino] = useState(null);
+  const [destQuery, setDestQuery] = useState('');
+  const [destResults, setDestResults] = useState([]);
+  const [destOpen, setDestOpen] = useState(false);
+  // Ruta de escape: destino no listado -> texto libre + departamento manual.
+  const [destFallback, setDestFallback] = useState(false);
+  const [fallbackCiudad, setFallbackCiudad] = useState('');
   const [crmOpen, setCrmOpen] = useState(false);
   const [crmFollowUpsDue, setCrmFollowUpsDue] = useState(0);
   // Toolchest de marketing: promos activas hoy (envío gratis, sorteo...).
@@ -57,18 +64,51 @@ export default function QuoteTool({ token, user }) {
     if (!customer) return;
     setCustomerName(String(customer.name || '').slice(0, 26));
     setCustomerPhone(String(customer.phone || '').slice(0, 26));
-    if (customer.provincia) {
-      setProvincia(customer.provincia);
-      setIsProvincia(true);
+    // Destino: intenta matchear lo guardado contra el catalogo; si hay un
+    // unico resultado se auto-selecciona (cliente recurrente = cero clics).
+    const savedDest = String(customer.provincia || '').trim();
+    if (savedDest) {
+      apiRequest(`/api/geo/search?q=${encodeURIComponent(savedDest)}`, { token })
+        .then((data) => {
+          const results = Array.isArray(data?.results) ? data.results : [];
+          if (results.length === 1) {
+            setDestino(results[0]);
+            setDestFallback(false);
+            setDestQuery('');
+          } else {
+            setDestQuery(savedDest);
+          }
+        })
+        .catch(() => setDestQuery(savedDest));
     } else if (customer.department) {
+      setDestFallback(true);
       setDepartment(customer.department);
-      setIsProvincia(false);
     }
     // Cartera: preselect the rep who owns this customer and repeat the
     // almacén of their last quote — the seller only confirms.
     if (customer.assigned_user_id) setAssignedSellerId(String(customer.assigned_user_id));
     if (ALMACEN_OPTIONS.includes(customer.last_store_location)) setAlmacen(customer.last_store_location);
   };
+
+  // Typeahead de destinos (250ms de debounce; minimo 2 letras).
+  useEffect(() => {
+    const q = destQuery.trim();
+    if (!token || destino || q.length < 2) {
+      setDestResults([]);
+      return undefined;
+    }
+    let active = true;
+    const timer = setTimeout(() => {
+      apiRequest(`/api/geo/search?q=${encodeURIComponent(q)}`, { token })
+        .then((data) => {
+          if (!active) return;
+          setDestResults(Array.isArray(data?.results) ? data.results : []);
+          setDestOpen(true);
+        })
+        .catch(() => { if (active) setDestResults([]); });
+    }, 250);
+    return () => { active = false; clearTimeout(timer); };
+  }, [token, destQuery, destino]);
 
   useEffect(() => {
     let active = true;
@@ -86,7 +126,6 @@ export default function QuoteTool({ token, user }) {
     return () => { active = false; };
   }, [token, crmOpen]);
 
-  const [isProvincia, setIsProvincia] = useState(false);
   const [almacen, setAlmacen] = useState('');
   const [shippingNotes, setShippingNotes] = useState('');
   const [currentDateTime, setCurrentDateTime] = useState('');
@@ -470,8 +509,10 @@ export default function QuoteTool({ token, user }) {
     if (typeof values.customerName === 'string') setCustomerName(values.customerName);
     if (typeof values.customerPhone === 'string') setCustomerPhone(values.customerPhone);
     if (typeof values.department === 'string') setDepartment(values.department);
-    if (typeof values.provincia === 'string') setProvincia(values.provincia);
-    if (typeof values.isProvincia === 'boolean') setIsProvincia(values.isProvincia);
+    if (values.destino && values.destino.id) setDestino(values.destino);
+    if (typeof values.destQuery === 'string') setDestQuery(values.destQuery);
+    if (typeof values.destFallback === 'boolean') setDestFallback(values.destFallback);
+    if (typeof values.fallbackCiudad === 'string') setFallbackCiudad(values.fallbackCiudad);
     if (typeof values.almacen === 'string') setAlmacen(values.almacen);
     if (typeof values.shippingNotes === 'string') setShippingNotes(values.shippingNotes);
     if (typeof values.assignedSellerId === 'string') setAssignedSellerId(values.assignedSellerId);
@@ -507,7 +548,7 @@ export default function QuoteTool({ token, user }) {
 
   useEffect(() => {
     const hasContent =
-      Boolean(customerName || customerPhone || department || provincia || shippingNotes || alternativeName || alternativePhone)
+      Boolean(customerName || customerPhone || department || destino || destQuery || fallbackCiudad || shippingNotes || alternativeName || alternativePhone)
       || rows.some((r) => r?.sku || Number(r?.qty || 0) > 0);
 
     setDraft({
@@ -524,8 +565,10 @@ export default function QuoteTool({ token, user }) {
         customerName,
         customerPhone,
         department,
-        provincia,
-        isProvincia,
+        destino,
+        destQuery,
+        destFallback,
+        fallbackCiudad,
         almacen,
         shippingNotes,
         assignedSellerId
@@ -544,8 +587,10 @@ export default function QuoteTool({ token, user }) {
     customerName,
     customerPhone,
     department,
-    provincia,
-    isProvincia,
+    destino,
+    destQuery,
+    destFallback,
+    fallbackCiudad,
     almacen,
     shippingNotes,
     assignedSellerId
@@ -568,14 +613,14 @@ export default function QuoteTool({ token, user }) {
         blockers.push(`Stock insuficiente para ${r.skuDisplay || r.sku}: pediste ${Number(r.qty || 0)} y hay ${availableStock} en ${almacen || 'el almacén'}.`);
       }
     }
-    if (isProvincia && !provincia.trim()) blockers.push('Indica la provincia de envío.');
-    if (!isProvincia && !department) blockers.push('Selecciona el departamento.');
+    if (!destino && !destFallback) blockers.push('Selecciona el destino de envío.');
+    if (destFallback && !department) blockers.push('Selecciona el departamento del destino.');
     if (useAlternativeName && (!alternativeName.trim() || !alternativePhone.trim())) {
       blockers.push('Completa el nombre y celular alternativos del recibidor.');
     }
     if (requiresSellerAssignment && !assignedSellerId) blockers.push('Asigna el vendedor.');
     return blockers;
-  }, [customerName, customerPhone, almacen, rows, isProvincia, provincia, department, useAlternativeName, alternativeName, alternativePhone, requiresSellerAssignment, assignedSellerId]);
+  }, [customerName, customerPhone, almacen, rows, destino, destFallback, department, useAlternativeName, alternativeName, alternativePhone, requiresSellerAssignment, assignedSellerId]);
 
   const canSave = saveBlockers.length === 0;
 
@@ -591,8 +636,10 @@ export default function QuoteTool({ token, user }) {
     setCustomerName('');
     setCustomerPhone('');
     setDepartment('');
-    setProvincia('');
-    setIsProvincia(false);
+    setDestino(null);
+    setDestQuery('');
+    setDestFallback(false);
+    setFallbackCiudad('');
     setAlmacen('');
     setShippingNotes('');
     if (requiresSellerAssignment && Array.isArray(salesUsers) && salesUsers.length > 0) {
@@ -684,8 +731,10 @@ export default function QuoteTool({ token, user }) {
     const payload = {
       customer_name: customerName,
       customer_phone: customerPhone,
-      department: isProvincia ? null : department,
-      provincia: isProvincia ? provincia : null,
+      department: destino ? destino.departamento : (destFallback ? department : null),
+      provincia: destino ? destino.provincia : null,
+      ciudad: destino ? destino.municipio : (fallbackCiudad.trim() || null),
+      dest_geo_id: destino ? destino.id : null,
       shipping_notes: shippingNotes,
       alternative_name: useAlternativeName ? alternativeName.trim() : null,
       alternative_phone: useAlternativeName ? alternativePhone.trim() : null,
@@ -771,8 +820,9 @@ export default function QuoteTool({ token, user }) {
         vendorName: requiresSellerAssignment ? assignedSellerName : vendedorName,
         storeLocation: almacen,
         dateText,
-        department: isProvincia ? null : department,
-        provincia: isProvincia ? provincia : null,
+        department: destino ? destino.departamento : (destFallback ? department : null),
+        provincia: destino ? destino.provincia : null,
+        ciudad: destino ? destino.municipio : (fallbackCiudad.trim() || null),
         shippingNotes,
         alternativeName: useAlternativeName ? alternativeName.trim() : null,
         alternativePhone: useAlternativeName ? alternativePhone.trim() : null,
@@ -947,38 +997,98 @@ export default function QuoteTool({ token, user }) {
 
             <div>
               <div className="form-label quote-label-row">
-                <span>{isProvincia ? 'Provincia' : 'Departamento'}</span>
-                <label className="quote-inline-toggle">
-                  <input type="checkbox" checked={isProvincia} onChange={(e) => setIsProvincia(e.target.checked)} />
-                  Es provincia
-                </label>
-              </div>
-              {isProvincia ? (
-                <input
-                  type="text"
-                  maxLength={26}
-                  placeholder="Provincia (máx 26)"
-                  value={provincia}
-                  onChange={(e) => setProvincia(e.target.value)}
-                  className="form-input"
-                />
-              ) : (
-                <select
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="form-select"
+                <span>Destino de envío</span>
+                <button
+                  type="button"
+                  className="quote-dest-toggle"
+                  onClick={() => {
+                    setDestFallback((prev) => !prev);
+                    setDestino(null);
+                    setDestQuery('');
+                    setDestOpen(false);
+                  }}
                 >
-                  <option value="" disabled>Departamento</option>
-                  <option value="Beni">Beni</option>
-                  <option value="Chuquisaca">Chuquisaca</option>
-                  <option value="Cochabamba">Cochabamba</option>
-                  <option value="La Paz">La Paz</option>
-                  <option value="Oruro">Oruro</option>
-                  <option value="Pando">Pando</option>
-                  <option value="Potosí">Potosí</option>
-                  <option value="Santa Cruz">Santa Cruz</option>
-                  <option value="Tarija">Tarija</option>
-                </select>
+                  {destFallback ? '← Buscar en la lista' : '¿No está en la lista?'}
+                </button>
+              </div>
+              {destFallback ? (
+                <div className="quote-dest-fallback">
+                  <input
+                    type="text"
+                    maxLength={80}
+                    placeholder="Ciudad / localidad"
+                    value={fallbackCiudad}
+                    onChange={(e) => setFallbackCiudad(e.target.value)}
+                    className="form-input"
+                  />
+                  <select
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="form-select"
+                  >
+                    <option value="" disabled>Departamento</option>
+                    <option value="Beni">Beni</option>
+                    <option value="Chuquisaca">Chuquisaca</option>
+                    <option value="Cochabamba">Cochabamba</option>
+                    <option value="La Paz">La Paz</option>
+                    <option value="Oruro">Oruro</option>
+                    <option value="Pando">Pando</option>
+                    <option value="Potosí">Potosí</option>
+                    <option value="Santa Cruz">Santa Cruz</option>
+                    <option value="Tarija">Tarija</option>
+                  </select>
+                </div>
+              ) : destino ? (
+                <div className="quote-dest-chip">
+                  <span>
+                    📍 <strong>{destino.municipio}</strong>
+                    {' · Prov. '}{destino.provincia}{' · '}{destino.departamento}
+                  </span>
+                  <button
+                    type="button"
+                    className="quote-dest-clear"
+                    title="Cambiar destino"
+                    onClick={() => { setDestino(null); setDestQuery(''); }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="quote-dest-search">
+                  <input
+                    type="text"
+                    placeholder="Escribe la ciudad… ej. Quillacollo"
+                    value={destQuery}
+                    onChange={(e) => { setDestQuery(e.target.value); setDestOpen(true); }}
+                    onFocus={() => setDestOpen(true)}
+                    onBlur={() => setTimeout(() => setDestOpen(false), 150)}
+                    className="form-input"
+                    autoComplete="off"
+                  />
+                  {destOpen && destResults.length > 0 && (
+                    <ul className="quote-dest-results">
+                      {destResults.map((result) => (
+                        <li key={result.id}>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setDestino(result);
+                              setDestQuery('');
+                              setDestOpen(false);
+                            }}
+                          >
+                            <strong>{result.municipio}</strong>
+                            <span>{result.provincia} · {result.departamento}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {destOpen && destQuery.trim().length >= 2 && destResults.length === 0 && (
+                    <div className="quote-dest-empty">Sin resultados — usa "¿No está en la lista?"</div>
+                  )}
+                </div>
               )}
             </div>
 

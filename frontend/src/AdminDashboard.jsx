@@ -703,14 +703,27 @@ function AdminDashboard({ token }) {
     ),
     locations: (
       <section className="dashboard-card">
-        <h3>Ranking Departamentos / Provincias</h3>
+        <h3>Ranking Destinos · Departamento → Ciudad</h3>
         {topLocations.length === 0 ? (
           <p className="dashboard-empty">Sin datos este periodo</p>
         ) : (
-          <ol className="dashboard-list">
+          <ol className="dashboard-list dashboard-geo-list">
             {topLocations.map((location, index) => (
               <li key={`${location.location}-${index}`}>
-                <strong>{location.location}</strong> — {formatBs(location.total_sales)}
+                <div className="dashboard-geo-dept">
+                  <strong>{location.location}</strong>
+                  <span>{location.order_count} pedidos · {formatBs(location.total_sales)}</span>
+                </div>
+                {Array.isArray(location.cities) && location.cities.length > 0 && (
+                  <ul className="dashboard-geo-cities">
+                    {location.cities.map((city, cityIndex) => (
+                      <li key={`${city.ciudad}-${cityIndex}`}>
+                        <span>{city.ciudad}</span>
+                        <span>{formatBs(city.total_sales)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ol>
