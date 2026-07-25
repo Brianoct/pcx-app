@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { buildAccessForUser, canAccessPanel } from './roleAccess';
 import { sortProductsByCatalogOrder } from './productCatalog';
 import { apiRequest } from './apiClient';
@@ -20,6 +20,28 @@ function InventoryPanel({ token, role, access }) {
     typeof window !== 'undefined' ? window.innerWidth <= 768 : false
   );
   const { isOnline, enqueueWrite } = useOutbox();
+  const pageRef = useRef(null);
+  const toolbarRef = useRef(null);
+
+  // Un solo scroll (el de la página): la cabecera de la tabla se pega justo
+  // debajo del toolbar sticky, cuya altura varía (píldoras de sede, wrapping).
+  useEffect(() => {
+    const page = pageRef.current;
+    const bar = toolbarRef.current;
+    if (!page || !bar || typeof ResizeObserver === 'undefined') return undefined;
+    const apply = () => {
+      const stickyTop = parseFloat(getComputedStyle(bar).top) || 0;
+      page.style.setProperty('--inv-th-top', `${stickyTop + bar.offsetHeight}px`);
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(bar);
+    window.addEventListener('resize', apply);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', apply);
+    };
+  }, [loading]);
 
   const effectiveAccess = buildAccessForUser(role, access);
   const canViewGlobalInventory = canAccessPanel(effectiveAccess, 'inventarioGlobal');
@@ -401,7 +423,7 @@ function InventoryPanel({ token, role, access }) {
   );
 
   return (
-    <div className="container inv-page">
+    <div className="container inv-page" ref={pageRef}>
       <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
         Inventario
       </h2>
@@ -409,29 +431,28 @@ function InventoryPanel({ token, role, access }) {
         Vista: {canViewGlobalInventory ? 'Global' : `Individual (${individualStore?.location || 'Ciudad no configurada'})`}
       </p>
 
-      {canViewGlobalInventory && (
-        <div className="inv-city-pills">
-          <button
-            type="button"
-            className={`inv-city-pill ${globalStoreView === 'all' ? 'is-active' : ''}`}
-            onClick={() => setGlobalStoreView('all')}
-          >
-            Todas
-          </button>
-          {globalStores.map((store) => (
+      <div className="inv-toolbar" ref={toolbarRef}>
+        {canViewGlobalInventory && (
+          <div className="inv-city-pills">
             <button
-              key={`filter-${store.key}`}
               type="button"
-              className={`inv-city-pill ${globalStoreView === store.key ? 'is-active' : ''}`}
-              onClick={() => setGlobalStoreView(store.key)}
+              className={`inv-city-pill ${globalStoreView === 'all' ? 'is-active' : ''}`}
+              onClick={() => setGlobalStoreView('all')}
             >
-              {store.location}
+              Todas
             </button>
-          ))}
-        </div>
-      )}
-
-      <div className="inv-toolbar">
+            {globalStores.map((store) => (
+              <button
+                key={`filter-${store.key}`}
+                type="button"
+                className={`inv-city-pill ${globalStoreView === store.key ? 'is-active' : ''}`}
+                onClick={() => setGlobalStoreView(store.key)}
+              >
+                {store.location}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="inv-toolbar-row">
           <input
             type="text"
