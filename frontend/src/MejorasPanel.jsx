@@ -80,11 +80,6 @@ export default function MejorasPanel({ token }) {
     <div className="container prod-page">
       <div className="card plan-intro">
         <h2 className="plan-title">Mejoras — Bono mensual por estándares</h2>
-        <p className="plan-sub">
-          Cada área mantiene un estándar en su rutina diaria para ganar el bono a fin de mes.
-          El trabajo del día a día hace crecer las líneas <strong>Acero</strong> y <strong>Armonía</strong>;
-          esta sección se irá ampliando por fases para abrir nuevas etapas del negocio.
-        </p>
       </div>
 
       {quality && quality.total > 0 && (

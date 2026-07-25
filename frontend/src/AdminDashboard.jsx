@@ -952,7 +952,6 @@ function AdminDashboard({ token }) {
             ))}
           </select>
           <span className="dashboard-filter-hint">Periodo visualizado</span>
-          <span className="dashboard-filter-hint">Arrastra tarjetas para reordenar</span>
         </div>
       </section>
 

@@ -82,11 +82,6 @@ export default function ProductionReception({ token }) {
     <div className="container prod-page">
       <div className="card plan-intro">
         <h2 className="plan-title">Recepción de producción</h2>
-        <p className="plan-sub">
-          Lotes terminados en camino a tu almacén. Cuenta lo que llegó: solo las piezas
-          intactas entran al stock; las dañadas en el transporte se registran y la
-          reposición se regenera sola.
-        </p>
       </div>
 
       {error && <div className="card prod-error">{error}</div>}

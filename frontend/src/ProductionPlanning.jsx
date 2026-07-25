@@ -190,11 +190,6 @@ export default function ProductionPlanning({ token }) {
     <div className="container prod-page">
       <div className="card plan-intro">
         <h2 className="plan-title">Planificación de producción</h2>
-        <p className="plan-sub">
-          Las necesidades se acumulan aquí y la cantidad se ajusta sola con el stock.
-          Arrastra cada lote al día en que se ejecutará: ese día entra al tablero de
-          producción y su cantidad queda fija. Mientras tanto, sigue acumulando piezas.
-        </p>
       </div>
 
       {error && <div className="card prod-error">{error}</div>}
@@ -215,10 +210,6 @@ export default function ProductionPlanning({ token }) {
             <div className="plan-backlog-title">
               Sin programar <span className="plan-backlog-count">{unscheduled.length}</span>
             </div>
-            <p className="plan-backlog-hint">
-              Arrastra un lote a un día (o tócalo y luego toca el día). Suéltalo aquí para
-              quitarle la fecha. ▶ lo inicia ahora mismo.
-            </p>
             <div className="plan-backlog-list">
               {unscheduled.length === 0
                 ? <div className="plan-backlog-empty">Todo está programado 🎉</div>
@@ -263,10 +254,6 @@ export default function ProductionPlanning({ token }) {
                 </div>
               ))}
             </div>
-            <p className="plan-cal-foot">
-              El día programado, el lote entra solo al tablero y su cantidad se congela.
-              Arrastra entre días para reprogramar.
-            </p>
           </div>
         </div>
       )}

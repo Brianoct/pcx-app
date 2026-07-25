@@ -85,10 +85,7 @@ function QualityControlRecordsAdmin({ token }) {
 
   return (
     <div className="card">
-      <h3 style={{ marginBottom: '6px' }}>Control de calidad — registros</h3>
-      <p style={{ color: '#78716c', marginBottom: '14px' }}>
-        Los registros se crean desde el tablero de Producción (etapa embalado). Aquí puedes corregir o eliminar un registro con error.
-      </p>
+      <h3 style={{ marginBottom: '14px' }}>Control de calidad — registros</h3>
 
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
         <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="filter-select">

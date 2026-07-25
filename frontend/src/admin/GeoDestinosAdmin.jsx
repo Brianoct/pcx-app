@@ -111,10 +111,7 @@ function GeoDestinosAdmin({ token }) {
       <div className="geo-admin-head">
         <div>
           <h3>Destinos de envío</h3>
-          <p className="geo-admin-sub">
-            Clasificación de cotizaciones contra el catálogo oficial (departamento → provincia → municipio).
-            Las nuevas cotizaciones ya se clasifican solas; aquí se ordena el historial.
-          </p>
+          <p className="geo-admin-sub">Catálogo: departamento → provincia → municipio.</p>
         </div>
         <button type="button" className="geo-admin-refresh" onClick={loadSummary} disabled={loading}>
           {loading ? 'Actualizando…' : 'Actualizar'}

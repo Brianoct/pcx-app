@@ -294,12 +294,6 @@ export default function PromosPanel({ token, role }) {
     <div className="container prod-page">
       <div className="card plan-intro">
         <h2 className="plan-title">Promos · toolchest de ventas</h2>
-        <p className="plan-sub">
-          Herramientas que se <strong>activan por temporada</strong> (idealmente junto a una campaña)
-          y aparecen automáticamente en Cotizar y en la proforma del cliente. Lo prometido queda
-          estampado en cada cotización: apagar una herramienta no cambia proformas ya impresas.
-          Agrega y poda herramientas según los resultados.
-        </p>
       </div>
 
       {error && <div className="camp-error">{error}</div>}

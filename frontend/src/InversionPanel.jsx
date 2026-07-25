@@ -49,12 +49,6 @@ export default function InversionPanel({ token }) {
     <div className="container prod-page">
       <div className="card plan-intro">
         <h2 className="plan-title">Inversión</h2>
-        <p className="plan-sub">
-          Esto <strong>no es un presupuesto</strong>: cada peso invertido en una campaña o live
-          debe tener un camino claro de retorno. Aquí se compara lo invertido contra las
-          <strong> ventas extra</strong> que generó (ventas de la ventana menos la línea base
-          de los 30 días previos). Lo que se paga solo, se repite; lo que no, se corta.
-        </p>
       </div>
 
       {error && <div className="camp-error">{error}</div>}

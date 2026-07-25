@@ -434,7 +434,6 @@ function SalesAssistant({ token, user }) {
             <span className="sia-legend-item"><span className="sia-dot sia-dot-ia" />IA</span>
           </div>
         </div>
-        <p className="sia-head-sub">Un espacio compartido: el cliente pregunta, la IA propone y Ventas decide.</p>
       </div>
 
       {error && <div className="admin-ai-error">{error}</div>}

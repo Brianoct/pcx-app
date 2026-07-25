@@ -171,10 +171,6 @@ export default function LivePanel({ token, role }) {
       <div className="container prod-page">
         <div className="card live-form">
           <h2 className="live-form-title"><span className="live-dot" /> {form.id ? 'Editar Live' : 'Nuevo Live'}</h2>
-          <p className="plan-sub">
-            Programa el TikTok Live y define qué debe tener listo cada área afectada.
-            Al <strong>anunciarlo</strong>, todo el equipo lo verá en su Inicio.
-          </p>
           <div className="camp-form-grid">
             <label className="camp-field camp-field-wide">
               <span>Título del Live</span>
@@ -378,11 +374,9 @@ export default function LivePanel({ token, role }) {
       <div className="card plan-intro camp-intro live-intro">
         <div>
           <h2 className="plan-title"><span className="live-dot" /> Live</h2>
-          <p className="plan-sub">
-            {canEdit
-              ? 'Programa los TikTok Lives y avisa a las áreas afectadas qué deben tener listo.'
-              : `Aquí ves los lives programados y lo que tu área${myArea ? ` (${AREA_LABELS[myArea]})` : ''} debe preparar.`}
-          </p>
+          {!canEdit && myArea && (
+            <p className="plan-sub">Tu área: {AREA_LABELS[myArea]}</p>
+          )}
         </div>
         {canEdit && (
           <button type="button" className="btn btn-primary" onClick={() => { setFormError(''); setForm(emptyForm()); }}>
