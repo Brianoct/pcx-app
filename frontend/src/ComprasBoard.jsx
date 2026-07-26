@@ -146,12 +146,33 @@ export default function ComprasBoard({ token }) {
     }
   };
 
+  // Al marcar Comprado se pide el precio pagado por unidad: actualiza el costo
+  // del material en el catálogo y alimenta Rentabilidad. Vacío = no cambiarlo.
+  const markPurchased = async (req) => {
+    const hint = Number(req.current_unit_cost) > 0 ? String(req.current_unit_cost) : '';
+    const input = window.prompt(
+      `¿Precio pagado por ${req.unit_measure || 'unidad'} de ${req.material_name}? (Bs)\nActualiza el costo del material para Rentabilidad. Deja vacío para no cambiarlo.`,
+      hint
+    );
+    if (input === null) return;
+    const body = { status: 'purchased' };
+    if (input.trim() !== '') {
+      const price = Number(input);
+      if (!Number.isFinite(price) || price <= 0) {
+        toast.error('Precio inválido');
+        return;
+      }
+      body.unit_price_bs = price;
+    }
+    await patchRequest(req.id, body, 'Marcado como comprado');
+  };
+
   const nextActions = (req) => {
     const disabled = busyId === req.id;
     if (req.status === 'pending') {
       return (
         <>
-          <button type="button" className="btn compras-btn-primary" disabled={disabled} onClick={() => patchRequest(req.id, { status: 'purchased' }, 'Marcado como comprado')}>Comprado</button>
+          <button type="button" className="btn compras-btn-primary" disabled={disabled} onClick={() => markPurchased(req)}>Comprado</button>
           <button type="button" className="btn" disabled={disabled} onClick={() => editQty(req)}>Editar cant.</button>
           <button type="button" className="btn compras-btn-danger" disabled={disabled} onClick={() => removeRequest(req.id)}>Quitar</button>
         </>
@@ -295,6 +316,11 @@ export default function ComprasBoard({ token }) {
                     <div className="compras-card-meta">
                       {req.priority === 'urgent' && <span className="compras-pill" style={{ color: PRIORITY_COLOR.urgent, borderColor: PRIORITY_COLOR.urgent }}>Urgente</span>}
                       {req.scan_count > 1 && <span className="compras-pill">{req.scan_count} escaneos</span>}
+                      {Number(req.unit_price_bs) > 0 && (
+                        <span className="compras-pill" style={{ color: '#047857', borderColor: '#047857' }}>
+                          {Number(req.unit_price_bs).toFixed(2)} Bs/{req.unit_measure || 'u'}
+                        </span>
+                      )}
                       {req.supplier && <span className="compras-pill">{req.supplier}</span>}
                       {req.store_location && <span className="compras-pill">{req.store_location}</span>}
                     </div>

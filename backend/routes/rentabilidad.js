@@ -36,13 +36,13 @@ router.get('/api/admin/rentabilidad', authenticateToken, requireRole(['admin']),
     const dateFilter = buildDateFilter(month, year, 'q', 1);
     if (dateFilter.error) return res.status(400).json({ error: dateFilter.error });
 
-    const [productsRes, bomRes, stepsRes, settings, manualRes, salesRes, combosRes, comboItemsRes] = await Promise.all([
+    const [productsRes, bomRes, stepsRes, settings, manualRes, salesRes, combosRes, comboItemsRes, samplesRes] = await Promise.all([
       pool.query(
         `SELECT sku, name, sf_price, cf_price, product_line, product_type
          FROM products WHERE is_active = TRUE`
       ),
       pool.query(
-        `SELECT UPPER(m.sku) AS sku, m.qty_per_unit, c.unit_cost_bs, c.waste_pct
+        `SELECT UPPER(m.sku) AS sku, m.material_id, m.qty_per_unit, c.unit_cost_bs, c.waste_pct
          FROM product_material_map m
          JOIN production_material_catalog c ON c.id = m.material_id`
       ),
@@ -66,14 +66,45 @@ router.get('/api/admin/rentabilidad', authenticateToken, requireRole(['admin']),
         dateFilter.params
       ),
       pool.query('SELECT id, name, sf_price, cf_price, product_line FROM combos'),
-      pool.query('SELECT combo_id, UPPER(sku) AS sku, quantity FROM combo_items')
+      pool.query('SELECT combo_id, UPPER(sku) AS sku, quantity FROM combo_items'),
+      // Consumo REAL medido por el muestreo de producción: piezas y material
+      // usado por (producto, material) en tareas completadas.
+      pool.query(
+        `SELECT UPPER(sku) AS sku, material_id,
+                SUM(qty_used)::numeric AS used,
+                SUM(batch_qty)::int AS pieces,
+                COUNT(*)::int AS n
+         FROM production_task_samples
+         WHERE status = 'done' AND qty_used IS NOT NULL AND batch_qty > 0
+         GROUP BY UPPER(sku), material_id`
+      )
     ]);
 
     // Costo por SKU desde la Estructura (agregado en memoria: ~26 productos).
+    // En paralelo, el costo REAL de materiales: donde el muestreo tiene 3+
+    // mediciones para (producto, material), usa el consumo real promedio (que
+    // ya incluye la merma real) en vez del estándar del BOM.
+    const MIN_SAMPLES = 3;
+    const realUsage = new Map(); // "SKU|materialId" → { perUnit, n }
+    for (const row of samplesRes.rows) {
+      if (Number(row.n) >= MIN_SAMPLES && Number(row.pieces) > 0) {
+        realUsage.set(`${row.sku}|${row.material_id}`, {
+          perUnit: Number(row.used) / Number(row.pieces),
+          n: Number(row.n)
+        });
+      }
+    }
     const materialsCost = new Map();
+    const realMaterialsCost = new Map();
+    const realSampleCount = new Map();
     for (const row of bomRes.rows) {
-      const cost = Number(row.qty_per_unit || 0) * Number(row.unit_cost_bs || 0) * (1 + Number(row.waste_pct || 0) / 100);
-      materialsCost.set(row.sku, (materialsCost.get(row.sku) || 0) + cost);
+      const unitCost = Number(row.unit_cost_bs || 0);
+      const stdCost = Number(row.qty_per_unit || 0) * unitCost * (1 + Number(row.waste_pct || 0) / 100);
+      materialsCost.set(row.sku, (materialsCost.get(row.sku) || 0) + stdCost);
+      const real = realUsage.get(`${row.sku}|${row.material_id}`);
+      const realCost = real ? real.perUnit * unitCost : stdCost;
+      realMaterialsCost.set(row.sku, (realMaterialsCost.get(row.sku) || 0) + realCost);
+      if (real) realSampleCount.set(row.sku, (realSampleCount.get(row.sku) || 0) + real.n);
     }
     const equipCost = new Map();
     const minutes = new Map();
@@ -101,9 +132,14 @@ router.get('/api/admin/rentabilidad', authenticateToken, requireRole(['admin']),
       const labor = ((minutes.get(sku) || 0) / 60) * laborRate;
       let costSource = 'none';
       let cost = null;
+      let realCost = null;
       if (mat > 0) {
         costSource = 'estructura';
         cost = mat + eq + labor;
+        // Costo real solo cuando el muestreo aportó datos (si no, sería el mismo).
+        if (realSampleCount.has(sku)) {
+          realCost = (realMaterialsCost.get(sku) || 0) + eq + labor;
+        }
       } else if (manualCost.get(sku) > 0) {
         costSource = 'manual';
         cost = manualCost.get(sku);
@@ -121,6 +157,9 @@ router.get('/api/admin/rentabilidad', authenticateToken, requireRole(['admin']),
         cost_breakdown: costSource === 'estructura'
           ? { materials: Number(mat.toFixed(2)), equipment: Number(eq.toFixed(2)), labor: Number(labor.toFixed(2)) }
           : null,
+        real_cost: realCost !== null ? Number(realCost.toFixed(2)) : null,
+        real_delta_pct: realCost !== null && cost > 0 ? Number((((realCost - cost) / cost) * 100).toFixed(1)) : null,
+        real_samples: realSampleCount.get(sku) || 0,
         sf,
         cf: Number(p.cf_price || 0),
         margin: cost !== null ? Number((sf - cost).toFixed(2)) : null,

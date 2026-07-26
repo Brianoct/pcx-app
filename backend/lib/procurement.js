@@ -71,6 +71,8 @@ const buildPurchaseRequestRow = (row = {}) => ({
   purchased_at: row.purchased_at || null,
   received_by: row.received_by !== null && row.received_by !== undefined ? Number(row.received_by) : null,
   received_at: row.received_at || null,
+  unit_price_bs: row.unit_price_bs !== null && row.unit_price_bs !== undefined ? Number(row.unit_price_bs) : null,
+  current_unit_cost: row.current_unit_cost !== null && row.current_unit_cost !== undefined ? Number(row.current_unit_cost) : null,
   created_at: row.created_at || null,
   updated_at: row.updated_at || null
 });
