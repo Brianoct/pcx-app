@@ -11,11 +11,18 @@ const resolveImageUrl = (rawUrl = '') => {
   return value;
 };
 
-const CATEGORY_FILTERS = [
+// Tipo (Tablero/Accesorio/Combo) + línea (Acero/Armonía): la clasificación
+// vive en products.product_type / product_line, editable en Admin → Productos.
+const TYPE_FILTERS = [
   { key: 'todos', label: 'Todos' },
-  { key: 'Tableros', label: 'Tableros' },
-  { key: 'Accesorios', label: 'Accesorios' },
-  { key: 'combos', label: 'Combos' }
+  { key: 'tablero', label: 'Tableros' },
+  { key: 'accesorio', label: 'Accesorios' },
+  { key: 'combo', label: 'Combos' }
+];
+const LINE_FILTERS = [
+  { key: 'todas', label: 'Todas las líneas' },
+  { key: 'acero', label: 'Acero' },
+  { key: 'armonia', label: 'Armonía' }
 ];
 
 /**
@@ -24,7 +31,8 @@ const CATEGORY_FILTERS = [
  */
 export default function QuoteCatalogPicker({ items, rows, ventaType, onSetQty }) {
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('todos');
+  const [typeFilter, setTypeFilter] = useState('todos');
+  const [lineFilter, setLineFilter] = useState('todas');
 
   const qtyBySku = useMemo(() => {
     const map = new Map();
@@ -52,10 +60,15 @@ export default function QuoteCatalogPicker({ items, rows, ventaType, onSetQty })
   const visibleItems = useMemo(() => {
     const term = search.trim().toLowerCase();
     return items.filter((item) => {
-      if (category === 'combos' && !item.isCombo) return false;
-      if (category === 'Tableros' || category === 'Accesorios') {
+      if (typeFilter === 'combo') {
+        if (!item.isCombo && String(item.product_type || '') !== 'combo') return false;
+      } else if (typeFilter !== 'todos') {
         if (item.isCombo) return false;
-        if (String(item.menu_category || '') !== category) return false;
+        if (String(item.product_type || '') !== typeFilter) return false;
+      }
+      // Los combos no tienen línea propia: se muestran bajo cualquier línea.
+      if (lineFilter !== 'todas' && !item.isCombo) {
+        if (String(item.product_line || '') !== lineFilter) return false;
       }
       if (!term) return true;
       return (
@@ -63,7 +76,7 @@ export default function QuoteCatalogPicker({ items, rows, ventaType, onSetQty })
         String(item.sku || '').toLowerCase().includes(term)
       );
     });
-  }, [items, search, category]);
+  }, [items, search, typeFilter, lineFilter]);
 
   return (
     <div className="quote-catalog">
@@ -76,12 +89,24 @@ export default function QuoteCatalogPicker({ items, rows, ventaType, onSetQty })
           onChange={(e) => setSearch(e.target.value)}
         />
         <div className="quote-catalog-filters">
-          {CATEGORY_FILTERS.map((filter) => (
+          {TYPE_FILTERS.map((filter) => (
             <button
               key={filter.key}
               type="button"
-              className={`quote-catalog-filter ${category === filter.key ? 'active' : ''}`}
-              onClick={() => setCategory(filter.key)}
+              className={`quote-catalog-filter ${typeFilter === filter.key ? 'active' : ''}`}
+              onClick={() => setTypeFilter(filter.key)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+        <div className="quote-catalog-filters is-lines">
+          {LINE_FILTERS.map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              className={`quote-catalog-filter ${lineFilter === filter.key ? 'active' : ''}`}
+              onClick={() => setLineFilter(filter.key)}
             >
               {filter.label}
             </button>

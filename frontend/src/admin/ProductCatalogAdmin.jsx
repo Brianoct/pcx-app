@@ -51,6 +51,9 @@ function ProductCatalogAdmin({ token }) {
     description: '',
     sf: '',
     cf: '',
+    product_line: 'acero',
+    product_type: '',
+    material: 'metal',
     equipment_ids: [],
     material_ids: [],
     processes: []
@@ -161,6 +164,9 @@ function ProductCatalogAdmin({ token }) {
         description: String(newProduct.description || '').trim(),
         sf: Number(newProduct.sf || 0),
         cf: Number(newProduct.cf || 0),
+        product_line: newProduct.product_line || null,
+        product_type: newProduct.product_type || null,
+        material: newProduct.material || null,
         equipment_ids: Array.isArray(newProduct.equipment_ids) ? newProduct.equipment_ids : [],
         material_ids: Array.isArray(newProduct.material_ids) ? newProduct.material_ids : [],
         processes: Array.isArray(newProduct.processes) ? newProduct.processes : []
@@ -205,6 +211,9 @@ function ProductCatalogAdmin({ token }) {
         description: '',
         sf: '',
         cf: '',
+        product_line: 'acero',
+        product_type: '',
+        material: 'metal',
         equipment_ids: [],
         material_ids: [],
         processes: []
@@ -228,7 +237,10 @@ function ProductCatalogAdmin({ token }) {
         description: String(row.description || '').trim(),
         sf: Number(row.sf ?? row.sf_price ?? 0),
         cf: Number(row.cf ?? row.cf_price ?? 0),
-        is_active: Boolean(row.is_active)
+        is_active: Boolean(row.is_active),
+        product_line: row.product_line || null,
+        product_type: row.product_type || null,
+        material: row.material || null
       };
       if (!payload.name) throw new Error('Nombre requerido');
       if (!Number.isFinite(payload.sf) || payload.sf < 0 || !Number.isFinite(payload.cf) || payload.cf < 0) {
@@ -590,6 +602,36 @@ function ProductCatalogAdmin({ token }) {
             onChange={(e) => setNewProduct((prev) => ({ ...prev, cf: e.target.value }))}
             className="form-input form-input--inline"
           />
+          <select
+            value={newProduct.product_line}
+            onChange={(e) => setNewProduct((prev) => ({ ...prev, product_line: e.target.value }))}
+            className="form-select form-input--inline"
+            title="Línea"
+          >
+            <option value="acero">Línea: Acero</option>
+            <option value="armonia">Línea: Armonía</option>
+          </select>
+          <select
+            value={newProduct.product_type}
+            onChange={(e) => setNewProduct((prev) => ({ ...prev, product_type: e.target.value }))}
+            className="form-select form-input--inline"
+            title="Tipo"
+          >
+            <option value="">Tipo: automático</option>
+            <option value="tablero">Tipo: Tablero</option>
+            <option value="accesorio">Tipo: Accesorio</option>
+            <option value="combo">Tipo: Combo</option>
+          </select>
+          <select
+            value={newProduct.material}
+            onChange={(e) => setNewProduct((prev) => ({ ...prev, material: e.target.value }))}
+            className="form-select form-input--inline"
+            title="Material"
+          >
+            <option value="metal">Material: Metal</option>
+            <option value="plastico">Material: Plástico</option>
+            <option value="mixto">Material: Mixto</option>
+          </select>
           <button
             type="submit"
             disabled={saving}
@@ -774,6 +816,47 @@ function ProductCatalogAdmin({ token }) {
                         onChange={(e) => onRowField(row.sku, 'cf', e.target.value)}
                         className="form-input"
                       />
+                    </label>
+                  </div>
+
+                  <div className="pcat-price-row">
+                    <label className="pcat-field pcat-field--price">
+                      <span>Línea</span>
+                      <select
+                        value={row.product_line || ''}
+                        onChange={(e) => onRowField(row.sku, 'product_line', e.target.value)}
+                        className="form-select"
+                      >
+                        <option value="">—</option>
+                        <option value="acero">Acero</option>
+                        <option value="armonia">Armonía</option>
+                      </select>
+                    </label>
+                    <label className="pcat-field pcat-field--price">
+                      <span>Tipo</span>
+                      <select
+                        value={row.product_type || ''}
+                        onChange={(e) => onRowField(row.sku, 'product_type', e.target.value)}
+                        className="form-select"
+                      >
+                        <option value="">—</option>
+                        <option value="tablero">Tablero</option>
+                        <option value="accesorio">Accesorio</option>
+                        <option value="combo">Combo</option>
+                      </select>
+                    </label>
+                    <label className="pcat-field pcat-field--price">
+                      <span>Material</span>
+                      <select
+                        value={row.material || ''}
+                        onChange={(e) => onRowField(row.sku, 'material', e.target.value)}
+                        className="form-select"
+                      >
+                        <option value="">—</option>
+                        <option value="metal">Metal</option>
+                        <option value="plastico">Plástico</option>
+                        <option value="mixto">Mixto</option>
+                      </select>
                     </label>
                   </div>
                 </div>

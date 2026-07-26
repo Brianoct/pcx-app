@@ -90,10 +90,14 @@ router.post('/api/product-catalog', authenticateToken, requireRole(['admin']), a
     client = await pool.connect();
     await client.query('BEGIN');
 
+    // Defaults de clasificación si no vienen: tipo por nombre/SKU, línea Acero,
+    // material metal (el Admin ajusta las excepciones).
+    const inferredType = normalized.product_type
+      || ((sku.startsWith('T') || String(normalized.name || '').toLowerCase().includes('tablero')) ? 'tablero' : 'accesorio');
     const result = await client.query(
-      `INSERT INTO products (sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, last_updated)
-       VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, NOW())
-       RETURNING sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url`,
+      `INSERT INTO products (sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, product_line, product_type, material, last_updated)
+       VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9, $10, $11, NOW())
+       RETURNING sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, product_line, product_type, material`,
       [
         sku,
         normalized.name,
@@ -101,8 +105,11 @@ router.post('/api/product-catalog', authenticateToken, requireRole(['admin']), a
         normalized.sf_price,
         normalized.cf_price,
         Boolean(normalized.is_gift_eligible),
-        normalized.menu_category || null,
-        normalized.image_url || null
+        normalized.menu_category || (inferredType === 'tablero' ? 'Tableros' : 'Accesorios'),
+        normalized.image_url || null,
+        normalized.product_line || 'acero',
+        inferredType,
+        normalized.material || 'metal'
       ]
     );
     await saveProductProductionConfig(client, sku, productionConfig);
@@ -121,6 +128,9 @@ router.post('/api/product-catalog', authenticateToken, requireRole(['admin']), a
       is_gift_eligible: Boolean(result.rows[0].is_gift_eligible),
       menu_category: String(result.rows[0].menu_category || '').trim() || null,
       image_url: String(result.rows[0].image_url || '').trim() || null,
+      product_line: String(result.rows[0].product_line || '').trim() || null,
+      product_type: String(result.rows[0].product_type || '').trim() || null,
+      material: String(result.rows[0].material || '').trim() || null,
       equipment_ids: productionConfig.equipment_ids,
       material_ids: productionConfig.material_ids,
       processes: productionConfig.processes
@@ -180,12 +190,24 @@ router.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin
       values.push(normalized.image_url || null);
       sets.push(`image_url = $${values.length}`);
     }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'product_line')) {
+      values.push(normalized.product_line || null);
+      sets.push(`product_line = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'product_type')) {
+      values.push(normalized.product_type || null);
+      sets.push(`product_type = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(normalized, 'material')) {
+      values.push(normalized.material || null);
+      sets.push(`material = $${values.length}`);
+    }
     values.push(sku);
     const result = await pool.query(
       `UPDATE products
        SET ${sets.join(', ')}, last_updated = NOW()
        WHERE sku = $${values.length}
-       RETURNING sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url`,
+       RETURNING sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, product_line, product_type, material`,
       values
     );
     if (result.rowCount === 0) {
@@ -201,7 +223,10 @@ router.patch('/api/product-catalog/:sku', authenticateToken, requireRole(['admin
       is_active: Boolean(result.rows[0].is_active),
       is_gift_eligible: Boolean(result.rows[0].is_gift_eligible),
       menu_category: String(result.rows[0].menu_category || '').trim() || null,
-      image_url: String(result.rows[0].image_url || '').trim() || null
+      image_url: String(result.rows[0].image_url || '').trim() || null,
+      product_line: String(result.rows[0].product_line || '').trim() || null,
+      product_type: String(result.rows[0].product_type || '').trim() || null,
+      material: String(result.rows[0].material || '').trim() || null
     });
   } catch (err) {
     console.error(err);
