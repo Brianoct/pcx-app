@@ -54,6 +54,7 @@ function Combos({ token }) {
   const [discountAmount, setDiscountAmount] = useDraftState(`${draftKey}:discountAmount`, 0);
   const [comboPriceSf, setComboPriceSf] = useState(0);
   const [comboPriceCf, setComboPriceCf] = useState(0);
+  const [comboLine, setComboLine] = useState('acero');
   const [basePriceSf, setBasePriceSf] = useState(0);
   const [basePriceCf, setBasePriceCf] = useState(0);
   const [editingComboId, setEditingComboId] = useState(null);
@@ -183,6 +184,7 @@ function Combos({ token }) {
     setComboPriceCf(0);
     setEditingComboId(null);
     setPendingImage(null);
+    setComboLine('acero');
   };
 
   const handleStartEditCombo = (combo) => {
@@ -198,6 +200,7 @@ function Combos({ token }) {
 
     setEditingComboId(combo?.id || null);
     setComboName(String(combo?.name || ''));
+    setComboLine(combo?.product_line === 'armonia' ? 'armonia' : 'acero');
     setComboItems(nextItems);
     setDiscountPercent(0);
     setDiscountAmount(inferredDiscount);
@@ -218,6 +221,7 @@ function Combos({ token }) {
       name: comboName,
       sf: comboPriceSf,
       cf: comboPriceCf,
+      product_line: comboLine,
       products: validItems.map(i => ({ sku: i.sku, quantity: i.quantity }))
     };
     const isEditing = Boolean(editingComboId);
@@ -365,13 +369,24 @@ function Combos({ token }) {
           {editingComboId ? `Editar Combo #${editingComboId}` : 'Crear Nuevo Combo'}
         </h3>
 
-        <input
-          type="text"
-          value={comboName}
-          onChange={(e) => setComboName(e.target.value)}
-          placeholder="Nombre del Combo (ej: Combo Básico 3x2)"
-          style={{ width: '100%', padding: '12px', marginBottom: '16px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
-        />
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            value={comboName}
+            onChange={(e) => setComboName(e.target.value)}
+            placeholder="Nombre del Combo (ej: Combo Básico 3x2)"
+            style={{ flex: '1 1 260px', padding: '12px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
+          />
+          <select
+            value={comboLine}
+            onChange={(e) => setComboLine(e.target.value)}
+            title="Línea de producto"
+            style={{ flex: '0 0 auto', padding: '12px', background: '#ffffff', color: '#292524', border: '1px solid #e7e0d8', borderRadius: '6px' }}
+          >
+            <option value="acero">Línea: Acero</option>
+            <option value="armonia">Línea: Armonía</option>
+          </select>
+        </div>
 
         {editingComboId ? (
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px', padding: '12px', background: '#faf8f5', border: '1px solid #e7e0d8', borderRadius: '8px', flexWrap: 'wrap' }}>

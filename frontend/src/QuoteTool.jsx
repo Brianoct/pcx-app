@@ -260,6 +260,7 @@ export default function QuoteTool({ token, user }) {
       sf: Number(combo.sf_price) || 0,
       cf: Number(combo.cf_price) || 0,
       image_url: combo.image_url || null,
+      product_line: combo.product_line || null,
       isCombo: true,
       comboId: combo.id,
       items: combo.items || []
