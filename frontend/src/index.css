@@ -9728,3 +9728,7 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 /* Costo real (muestreo) bajo el costo estándar; en ámbar si excede >10%. */
 .rent-real { display: block; font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }
 .rent-real.is-over { color: #b45309; }
+/* Tendencia del margen: sparkline de snapshots diarios + delta en puntos. */
+.rent-trend { display: inline-flex; align-items: center; gap: 6px; }
+.rent-trend em { font-style: normal; font-size: 0.74rem; font-weight: 800; }
+.rent-spark { display: block; }

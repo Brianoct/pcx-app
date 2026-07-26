@@ -173,6 +173,21 @@ const collectDailyMetrics = async () => {
     metrics.crm_due = { count: Number(crmRows[0].n || 0) };
   }
 
+  // 8. Márgenes: productos con margen bajo que sí se están vendiendo este mes
+  // (vender barato lo que no se mueve es tema; venderlo activo es urgencia).
+  try {
+    const { computeRentabilidad } = require('./rentabilidad');
+    const rent = await computeRentabilidad({});
+    const low = [...rent.products, ...rent.combos]
+      .filter((r) => r.margin_pct !== null && r.margin_pct < 20 && r.units_sold > 0)
+      .sort((a, b) => a.margin_pct - b.margin_pct)
+      .slice(0, 5)
+      .map((r) => ({ name: r.name, margin_pct: r.margin_pct, units_sold: r.units_sold }));
+    metrics.margins = { low_count: low.length, low };
+  } catch (err) {
+    console.error('daily-brief margins skipped:', err.message);
+  }
+
   return metrics;
 };
 
@@ -214,6 +229,12 @@ const computeFlags = (metrics) => {
 
   if (metrics.crm_due && metrics.crm_due.count > 0) {
     push('media', `${metrics.crm_due.count} seguimiento(s) de cliente vencido(s) hoy o antes.`);
+  }
+
+  if (metrics.margins && metrics.margins.low_count > 0) {
+    const worst = metrics.margins.low
+      .map((m) => `${m.name} (${m.margin_pct}% · ${m.units_sold} vendidos)`).join('; ');
+    push('alta', `Margen bajo (<20%) en producto(s) que se están vendiendo: ${worst}.`);
   }
 
   if (Array.isArray(metrics.colors) && metrics.colors.length > 0) {
@@ -301,6 +322,15 @@ const generateAiNarrative = async (metrics, flags) => {
 
 // ─── Generación + persistencia (idempotente por fecha) ───────────────────────
 const generateDailyBrief = async () => {
+  // El brief nocturno también deja el snapshot diario de márgenes (la
+  // tendencia de Rentabilidad). Si falla, el brief sigue igual.
+  try {
+    const { saveMarginSnapshots } = require('./rentabilidad');
+    await saveMarginSnapshots();
+  } catch (err) {
+    console.error('daily-brief margin snapshot failed:', err.message);
+  }
+
   const metrics = await collectDailyMetrics();
   const flags = computeFlags(metrics);
 
