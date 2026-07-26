@@ -1050,6 +1050,10 @@ button, .btn {
   color: #fff;
 }
 
+/* Segunda fila de filtros: la línea de producto (Acero / Armonía). */
+.quote-catalog-filters.is-lines .quote-catalog-filter { min-height: 28px; padding: 4px 10px; font-size: 0.8rem; }
+.quote-catalog-filters.is-lines .quote-catalog-filter.active { background: #292524; }
+
 .quote-catalog-empty {
   text-align: center;
   color: #78716c;

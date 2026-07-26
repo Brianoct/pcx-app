@@ -3,6 +3,12 @@ const { CUSTOMER_MENU_CATEGORY_ACCESORIOS, CUSTOMER_MENU_CATEGORY_TABLEROS } = r
 const { normalizeText } = require('./rbac');
 const { createHttpError } = require('./util');
 
+// Clasificación del catálogo. Los valores viven en minúscula en la BD; las
+// etiquetas son para UI. Editar aquí para agregar líneas/tipos/materiales.
+const PRODUCT_LINES = { acero: 'Acero', armonia: 'Armonía' };
+const PRODUCT_TYPES = { tablero: 'Tablero', accesorio: 'Accesorio', combo: 'Combo' };
+const PRODUCT_MATERIALS = { metal: 'Metal', plastico: 'Plástico', mixto: 'Mixto' };
+
 const DEFAULT_PRODUCT_CATALOG = [
   { sku: 'T6195R', name: 'Tablero 61x95 Rojo', sf: 330, cf: 383 },
   { sku: 'T6195N', name: 'Tablero 61x95 Negro', sf: 330, cf: 383 },
@@ -97,7 +103,8 @@ const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
   await ensureProductCatalogReady();
   const whereClause = includeInactive ? '' : 'WHERE is_active = TRUE';
   const result = await pool.query(
-    `SELECT sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, attributes
+    `SELECT sku, name, description, sf_price, cf_price, is_active, is_gift_eligible, menu_category, image_url, attributes,
+            product_line, product_type, material
      FROM products
      ${whereClause}
      ORDER BY UPPER(name) ASC, UPPER(sku) ASC`
@@ -112,6 +119,9 @@ const loadProductCatalogRows = async ({ includeInactive = false } = {}) => {
     is_gift_eligible: Boolean(row.is_gift_eligible),
     menu_category: String(row.menu_category || '').trim() || null,
     image_url: String(row.image_url || '').trim() || null,
+    product_line: String(row.product_line || '').trim() || null,
+    product_type: String(row.product_type || '').trim() || null,
+    material: String(row.material || '').trim() || null,
     attributes: row.attributes && typeof row.attributes === 'object' ? row.attributes : {}
   }));
   if (!includeInactive) {
@@ -151,11 +161,14 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
   const hasMenuCategory = Object.prototype.hasOwnProperty.call(src, 'menu_category');
   const hasImageUrl = Object.prototype.hasOwnProperty.call(src, 'image_url');
   const hasDescription = Object.prototype.hasOwnProperty.call(src, 'description');
+  const hasProductLine = Object.prototype.hasOwnProperty.call(src, 'product_line');
+  const hasProductType = Object.prototype.hasOwnProperty.call(src, 'product_type');
+  const hasMaterial = Object.prototype.hasOwnProperty.call(src, 'material');
 
   if (!partial && (!hasName || !hasSf || !hasCf)) {
     throw createHttpError(400, 'Debes enviar name, sf y cf');
   }
-  if (partial && !hasName && !hasSf && !hasCf && !hasIsActive && !hasIsGiftEligible && !hasMenuCategory && !hasImageUrl && !hasDescription) {
+  if (partial && !hasName && !hasSf && !hasCf && !hasIsActive && !hasIsGiftEligible && !hasMenuCategory && !hasImageUrl && !hasDescription && !hasProductLine && !hasProductType && !hasMaterial) {
     throw createHttpError(400, 'No se enviaron cambios para actualizar');
   }
 
@@ -216,6 +229,26 @@ const normalizeProductPayload = (payload = {}, { partial = false } = {}) => {
       }
     }
   }
+  const parseClassification = (raw, allowed, label) => {
+    const value = normalizeText(String(raw || ''));
+    if (!value) return null;
+    if (!Object.prototype.hasOwnProperty.call(allowed, value)) {
+      throw createHttpError(400, `${label} inválido. Usa: ${Object.values(allowed).join(', ')}`);
+    }
+    return value;
+  };
+  if (hasProductLine) normalized.product_line = parseClassification(src.product_line, PRODUCT_LINES, 'Línea');
+  if (hasProductType) {
+    normalized.product_type = parseClassification(src.product_type, PRODUCT_TYPES, 'Tipo');
+    // El menú público agrupa por menu_category: mantenerla en sintonía con el
+    // tipo salvo que venga explícita en el mismo request.
+    if (normalized.product_type && !hasMenuCategory) {
+      normalized.menu_category = normalized.product_type === 'tablero'
+        ? CUSTOMER_MENU_CATEGORY_TABLEROS
+        : CUSTOMER_MENU_CATEGORY_ACCESORIOS;
+    }
+  }
+  if (hasMaterial) normalized.material = parseClassification(src.material, PRODUCT_MATERIALS, 'Material');
   if (hasImageUrl) {
     const urlValue = String(src.image_url || '').trim();
     if (!urlValue) {
@@ -261,6 +294,9 @@ const loadProductNameMap = async () => {
 
 module.exports = {
   DEFAULT_PRODUCT_CATALOG,
+  PRODUCT_LINES,
+  PRODUCT_TYPES,
+  PRODUCT_MATERIALS,
   PRODUCT_CATALOG,
   PRODUCT_CATALOG_BY_SKU,
   PRODUCT_SKU_REGEX,
