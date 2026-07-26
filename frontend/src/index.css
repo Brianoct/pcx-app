@@ -9684,3 +9684,44 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   font-size: 0.82rem; font-weight: 700; cursor: pointer;
 }
 .geo-admin-assign-btn:disabled { background: #d6d3d1; cursor: default; }
+
+/* ── Rentabilidad por producto (Estadísticas) ────────────────────────────── */
+.rent-card { margin-top: 14px; }
+.rent-filters { display: flex; gap: 8px; }
+.rent-select { min-height: 36px; padding: 6px 30px 6px 10px; font-size: 0.82rem; }
+.rent-summary {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  margin-bottom: 10px;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+.rent-warn-note { font-size: 0.78rem; color: #b45309; font-weight: 700; }
+.rent-table-wrap { overflow-x: auto; }
+.rent-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+.rent-table th {
+  text-align: right;
+  padding: 8px 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.rent-table th.rent-th-name { text-align: left; }
+.rent-table td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--border-soft); font-size: 0.86rem; white-space: nowrap; }
+.rent-td-name { text-align: left !important; white-space: normal !important; }
+.rent-td-name strong { display: block; font-size: 0.86rem; color: var(--text-primary); }
+.rent-sub { font-size: 0.72rem; color: var(--text-muted); }
+.rent-margin { font-weight: 700; padding: 2px 8px; border-radius: 999px; font-size: 0.8rem; }
+.rent-margin.is-good { background: rgba(4, 120, 87, 0.1); color: #047857; }
+.rent-margin.is-thin { background: rgba(245, 158, 11, 0.14); color: #b45309; }
+.rent-margin.is-bad { background: rgba(220, 38, 38, 0.12); color: #b91c1c; }
+.rent-flag { font-style: normal; font-size: 0.72rem; font-weight: 700; color: #b45309; }
+.rent-flag.is-missing { color: #b91c1c; }
+.rent-pos { color: #047857; }
+.rent-neg { color: #b91c1c; }

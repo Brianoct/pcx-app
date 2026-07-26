@@ -91,6 +91,8 @@ const battery = [
   ['GET', '/api/microfabrica/dashboard', admin],
   // admin stats
   ['GET', '/api/admin/stats?month=6&year=2026', admin],
+  ['GET', '/api/admin/rentabilidad?month=6&year=2026', admin],
+  ['GET', '/api/admin/rentabilidad', ventas], // expect 403 (solo admin)
   // whatsapp inbox
   ['GET', '/api/whatsapp/inbox/conversations', admin],
   ['GET', '/api/whatsapp/inbox/shortcuts', admin],
