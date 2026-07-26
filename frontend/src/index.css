@@ -1050,8 +1050,19 @@ button, .btn {
   color: #fff;
 }
 
-/* Segunda fila de filtros: la línea de producto (Acero / Armonía). */
-.quote-catalog-filters.is-lines .quote-catalog-filter { min-height: 28px; padding: 4px 10px; font-size: 0.8rem; }
+/* Dos dimensiones de filtro, cada grupo con su etiqueta ("Tipo" / "Línea")
+   para que se lean como filtros distintos y no como un solo bloque. */
+.quote-catalog-filter-label {
+  align-self: center;
+  padding: 0 6px 0 8px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #a8a29e;
+  border-right: 1px solid #e7e0d8;
+  margin-right: 4px;
+}
 .quote-catalog-filters.is-lines .quote-catalog-filter.active { background: #292524; }
 
 .quote-catalog-empty {

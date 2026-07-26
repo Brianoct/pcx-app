@@ -13,7 +13,7 @@ router.get('/api/combos', authenticateToken, async (req, res) => {
   try {
     const combosResult = await pool.query(`
       SELECT
-        c.id, c.name, c.sf_price, c.cf_price, c.image_url, c.created_at,
+        c.id, c.name, c.sf_price, c.cf_price, c.image_url, c.product_line, c.created_at,
         u.email as created_by_email
       FROM combos c
       LEFT JOIN users u ON c.created_by = u.id
@@ -40,10 +40,13 @@ router.get('/api/combos', authenticateToken, async (req, res) => {
 
 // POST create new combo
 router.post('/api/combos', authenticateToken, requireRole(['Marketing Lider', 'Admin']), async (req, res) => {
-  const { name, sf, cf, products } = req.body;
+  const { name, sf, cf, products, product_line } = req.body;
 
   const sfNumber = Number(sf);
   const cfNumber = Number(cf);
+  const lineValue = ['acero', 'armonia'].includes(String(product_line || '').trim().toLowerCase())
+    ? String(product_line).trim().toLowerCase()
+    : 'acero';
   const normalizedProducts = Array.isArray(products)
     ? products
       .map((item) => ({
@@ -68,8 +71,8 @@ router.post('/api/combos', authenticateToken, requireRole(['Marketing Lider', 'A
     await client.query('BEGIN');
 
     const comboRes = await client.query(
-      'INSERT INTO combos (name, sf_price, cf_price, created_by) VALUES ($1, $2, $3, $4) RETURNING id',
-      [String(name).trim(), sfNumber, cfNumber, req.user.id]
+      'INSERT INTO combos (name, sf_price, cf_price, product_line, created_by) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [String(name).trim(), sfNumber, cfNumber, lineValue, req.user.id]
     );
     const comboId = comboRes.rows[0].id;
 
@@ -99,9 +102,12 @@ router.put('/api/combos/:id', authenticateToken, requireRole(['Marketing Lider',
     return res.status(400).json({ error: 'Combo inválido' });
   }
 
-  const { name, sf, cf, products } = req.body;
+  const { name, sf, cf, products, product_line } = req.body;
   const sfNumber = Number(sf);
   const cfNumber = Number(cf);
+  const lineValue = ['acero', 'armonia'].includes(String(product_line || '').trim().toLowerCase())
+    ? String(product_line).trim().toLowerCase()
+    : 'acero';
   const normalizedProducts = Array.isArray(products)
     ? products
       .map((item) => ({
@@ -142,9 +148,10 @@ router.put('/api/combos/:id', authenticateToken, requireRole(['Marketing Lider',
       `UPDATE combos
        SET name = $1,
            sf_price = $2,
-           cf_price = $3
-       WHERE id = $4`,
-      [String(name || '').trim(), sfNumber, cfNumber, comboId]
+           cf_price = $3,
+           product_line = $4
+       WHERE id = $5`,
+      [String(name || '').trim(), sfNumber, cfNumber, lineValue, comboId]
     );
     await client.query('DELETE FROM combo_items WHERE combo_id = $1', [comboId]);
     for (const item of normalizedProducts) {

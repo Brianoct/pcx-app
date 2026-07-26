@@ -20,7 +20,7 @@ const TYPE_FILTERS = [
   { key: 'combo', label: 'Combos' }
 ];
 const LINE_FILTERS = [
-  { key: 'todas', label: 'Todas las líneas' },
+  { key: 'todas', label: 'Todas' },
   { key: 'acero', label: 'Acero' },
   { key: 'armonia', label: 'Armonía' }
 ];
@@ -66,9 +66,11 @@ export default function QuoteCatalogPicker({ items, rows, ventaType, onSetQty })
         if (item.isCombo) return false;
         if (String(item.product_type || '') !== typeFilter) return false;
       }
-      // Los combos no tienen línea propia: se muestran bajo cualquier línea.
-      if (lineFilter !== 'todas' && !item.isCombo) {
-        if (String(item.product_line || '') !== lineFilter) return false;
+      // La línea aplica a productos y combos por igual; lo no clasificado
+      // (línea vacía) solo aparece en "Todas".
+      if (lineFilter !== 'todas') {
+        const line = String(item.product_line || '');
+        if (line !== lineFilter) return false;
       }
       if (!term) return true;
       return (
@@ -89,6 +91,7 @@ export default function QuoteCatalogPicker({ items, rows, ventaType, onSetQty })
           onChange={(e) => setSearch(e.target.value)}
         />
         <div className="quote-catalog-filters">
+          <span className="quote-catalog-filter-label">Tipo</span>
           {TYPE_FILTERS.map((filter) => (
             <button
               key={filter.key}
@@ -101,6 +104,7 @@ export default function QuoteCatalogPicker({ items, rows, ventaType, onSetQty })
           ))}
         </div>
         <div className="quote-catalog-filters is-lines">
+          <span className="quote-catalog-filter-label">Línea</span>
           {LINE_FILTERS.map((filter) => (
             <button
               key={filter.key}
