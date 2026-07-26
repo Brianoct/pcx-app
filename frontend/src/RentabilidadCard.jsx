@@ -124,6 +124,14 @@ export default function RentabilidadCard({ token, month, year }) {
                         >
                           {formatBs(row.cost)}
                           {row.cost_source === 'manual' && <em className="rent-flag" title="Costeo manual — completa la Estructura para el costo derivado"> manual</em>}
+                          {row.real_cost !== null && row.real_cost !== undefined && (
+                            <span
+                              className={`rent-real ${row.real_delta_pct > 10 ? 'is-over' : ''}`}
+                              title={`Costo con el consumo REAL medido por el muestreo (${row.real_samples} mediciones)`}
+                            >
+                              real {formatBs(row.real_cost)}{row.real_delta_pct !== 0 ? ` (${row.real_delta_pct > 0 ? '+' : ''}${row.real_delta_pct}%)` : ''}
+                            </span>
+                          )}
                         </span>
                       ) : (
                         <em className="rent-flag is-missing" title="Sin costeo: completa materiales en Admin → Estructura">sin costeo</em>

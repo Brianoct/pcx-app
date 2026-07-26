@@ -35,7 +35,8 @@ const REQUEST_SELECT = `
   r.quantity, r.scan_count, r.status, r.priority, r.note, r.store_location,
   r.requested_by, requester.email AS requested_by_email,
   r.purchased_by, r.purchased_at, r.received_by, r.received_at,
-  r.created_at, r.updated_at, m.supplier`;
+  r.created_at, r.updated_at, r.unit_price_bs, m.supplier,
+  m.unit_cost_bs AS current_unit_cost`;
 
 const resolveMaterialByToken = async (token) => {
   const value = String(token || '').trim();
@@ -252,6 +253,16 @@ router.patch('/api/procurement/requests/:id', authenticateToken, async (req, res
   if (req.body?.store_location !== undefined) {
     assign('store_location', req.body.store_location ? String(req.body.store_location).slice(0, 120) : null);
   }
+  // Precio pagado por unidad: se guarda en la solicitud Y actualiza el costo
+  // del material en el catálogo (último precio) — de ahí sale Rentabilidad.
+  let unitPrice = null;
+  if (req.body?.unit_price_bs !== undefined) {
+    unitPrice = Number(req.body.unit_price_bs);
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+      return res.status(400).json({ error: 'Precio unitario inválido' });
+    }
+    assign('unit_price_bs', unitPrice);
+  }
   if (sets.length === 0) return res.status(400).json({ error: 'No se enviaron cambios' });
 
   sets.push('updated_at = NOW()');
@@ -260,10 +271,16 @@ router.patch('/api/procurement/requests/:id', authenticateToken, async (req, res
     const result = await pool.query(
       `UPDATE material_purchase_requests SET ${sets.join(', ')}
        WHERE id = $${values.length}
-       RETURNING id, material_id, material_code, material_name, unit_measure, quantity, scan_count, status, priority, note, store_location, requested_by, purchased_by, purchased_at, received_by, received_at, created_at, updated_at`,
+       RETURNING id, material_id, material_code, material_name, unit_measure, quantity, scan_count, status, priority, note, store_location, requested_by, purchased_by, purchased_at, received_by, received_at, created_at, updated_at, unit_price_bs`,
       values
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Solicitud no encontrada' });
+    if (unitPrice !== null && result.rows[0].material_id) {
+      await pool.query(
+        'UPDATE production_material_catalog SET unit_cost_bs = $1, updated_at = NOW() WHERE id = $2',
+        [unitPrice, result.rows[0].material_id]
+      );
+    }
     res.json({ message: 'Solicitud actualizada', request: buildPurchaseRequestRow(result.rows[0]) });
   } catch (err) {
     console.error('Procurement update error:', err);
