@@ -1,42 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
-import { BOARD_STAGES, STAGE_LABEL, groupIntoBatches, sedeTotals, stopwatchSince } from './productionShared';
-
-const hoursSince = (since, now) => {
-  if (!since) return null;
-  const h = (now - new Date(since).getTime()) / 3600000;
-  return Number.isFinite(h) ? Math.max(0, h) : null;
-};
-
-// Envejecimiento visual: cuanto más espera un lote en su etapa, más se nota.
-const ageClass = (h) => {
-  if (h == null) return '';
-  if (h >= 72) return 'is-age-3';
-  if (h >= 48) return 'is-age-2';
-  if (h >= 24) return 'is-age-1';
-  return '';
-};
-
-const waitLabel = (h) => {
-  if (h == null) return null;
-  if (h < 1) return '<1h';
-  if (h < 24) return `${Math.floor(h)}h`;
-  return `${Math.floor(h / 24)}d ${Math.floor(h % 24)}h`;
-};
+import { BOARD_STAGES, STAGE_LABEL, groupIntoBatches, sedeTotals } from './productionShared';
+import { boliviaToday } from './campaignShared';
 
 // The production board: only factory stages. Planning lives in /produccion-planificacion
 // (cards enter here when their tentative date arrives) and reception in /recepcion.
+// El ritmo lo marca el mínimo de inventario y la fecha de Planificación (deadline),
+// no el cronómetro: las tarjetas muestran su fecha, no el tiempo transcurrido.
 // `onCommissionChanged` refreshes the nav commission box: approving pieces at the
-// QC gate used to feed commissions; kept as a cheap refresh after quality runs.
+// QC gate feeds commissions; kept as a cheap refresh after quality runs.
+
+// "2026-06-04" → "4 jun" sin pasar por Date (evita corrimientos de zona horaria).
+const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const formatDeadline = (isoDate) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(isoDate || ''));
+  if (!match) return null;
+  return `${Number(match[3])} ${MONTH_SHORT[Number(match[2]) - 1] || ''}`;
+};
+
 export default function ProductionKanban({ token, onCommissionChanged }) {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyKey, setBusyKey] = useState('');
   const [activeStage, setActiveStage] = useState('corte_laser');
-  const [detailKey, setDetailKey] = useState(null);
+  const [expandedKey, setExpandedKey] = useState(null);
   const [notice, setNotice] = useState('');
-  const [sheetTasks, setSheetTasks] = useState([]);
+  const [batchTasks, setBatchTasks] = useState([]);
   const [taskInputs, setTaskInputs] = useState({});
   const [taskBusyId, setTaskBusyId] = useState(null);
 
@@ -57,6 +47,13 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     loadBoard();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  // Aviso fugaz cuando un lote avanza solo (p. ej. al completar el conteo).
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(() => setNotice(''), 4000);
+    return () => clearTimeout(timer);
+  }, [notice]);
 
   const boardStageKeys = useMemo(() => BOARD_STAGES.map((s) => s.key), []);
   const batches = useMemo(
@@ -79,29 +76,15 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
   const receptionCount = useMemo(() => cards.filter((c) => c.stage === 'recepcion').length, [cards]);
   const planningCount = useMemo(() => cards.filter((c) => c.stage === 'planificacion').length, [cards]);
 
-  const detailBatch = detailKey ? batches.get(detailKey) || null : null;
-
-  // Reloj lento del tablero: alcanza para envejecer tarjetas y esperas por
-  // columna sin re-renderizar cada segundo.
-  const [boardClock, setBoardClock] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setBoardClock(Date.now()), 60000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Carga por columna: lotes, piezas y la espera más vieja. La columna con
-  // más piezas (habiendo alguna) es el cuello de botella.
+  // Carga por columna: lotes y piezas. La columna con más piezas (habiendo
+  // alguna) es el cuello de botella.
   const colStats = useMemo(() => {
     const stats = {};
     for (const stage of BOARD_STAGES) {
       const items = itemsByStage[stage.key] || [];
       stats[stage.key] = {
         lots: items.length,
-        pieces: items.reduce((sum, b) => sum + b.total_qty, 0),
-        oldest: items.reduce((max, b) => {
-          const h = hoursSince(b.oldest_move, boardClock);
-          return h != null && h > max ? h : max;
-        }, 0)
+        pieces: items.reduce((sum, b) => sum + b.total_qty, 0)
       };
     }
     const maxPieces = Math.max(...Object.values(stats).map((s) => s.pieces), 0);
@@ -109,39 +92,25 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
       ? Object.keys(stats).find((key) => stats[key].pieces === maxPieces)
       : null;
     return { stats, bottleneck };
-  }, [itemsByStage, boardClock]);
+  }, [itemsByStage]);
 
-  // Aviso fugaz cuando un lote avanza solo (p. ej. al completar el conteo).
-  useEffect(() => {
-    if (!notice) return undefined;
-    const timer = setTimeout(() => setNotice(''), 4000);
-    return () => clearTimeout(timer);
-  }, [notice]);
+  const expandedBatch = expandedKey ? batches.get(expandedKey) || null : null;
 
-  // Ticking clock for the sheet's stopwatch (only runs while a sheet is open).
-  const [clock, setClock] = useState(() => Date.now());
+  // Measurement tasks for the expanded batch (merged across its cards).
   useEffect(() => {
-    if (!detailKey) return undefined;
-    setClock(Date.now());
-    const timer = setInterval(() => setClock(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [detailKey]);
-
-  // Measurement tasks for the open batch (merged across its cards).
-  useEffect(() => {
-    setSheetTasks([]);
+    setBatchTasks([]);
     setTaskInputs({});
-    const memberIds = detailBatch ? detailBatch.members.map((m) => m.id) : [];
+    const memberIds = expandedBatch ? expandedBatch.members.map((m) => m.id) : [];
     if (memberIds.length === 0) return;
     let active = true;
     Promise.all(memberIds.map((id) =>
       apiRequest(`/api/production/kanban/cards/${id}/tasks`, { token }).catch(() => ({ tasks: [] }))
     )).then((results) => {
-      if (active) setSheetTasks(results.flatMap((r) => (Array.isArray(r?.tasks) ? r.tasks : [])));
+      if (active) setBatchTasks(results.flatMap((r) => (Array.isArray(r?.tasks) ? r.tasks : [])));
     });
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detailKey, token]);
+  }, [expandedKey, token]);
 
   const resolveTask = async (task, skip) => {
     const qty = Number(taskInputs[task.id]);
@@ -157,7 +126,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         token,
         body: skip ? {} : { qty_used: qty }
       });
-      setSheetTasks((prev) => prev.filter((t) => t.id !== task.id));
+      setBatchTasks((prev) => prev.filter((t) => t.id !== task.id));
     } catch (err) {
       setError(err.message || 'No se pudo registrar la medición');
     } finally {
@@ -206,7 +175,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
           body: { card_ids: batch.members.map((m) => m.id), stage: next }
         });
       }
-      setDetailKey(null);
+      setExpandedKey(null);
       setNotice(`${batch.display_name} → ${STAGE_LABEL[next] || next} ✓`);
       await loadBoard();
     } catch (err) {
@@ -248,30 +217,31 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     });
   };
 
-  // La tarjeta responde las cuatro preguntas sin abrirla: qué es, cuánto
-  // avanzó (barra + contador en la tarjeta), cuánto lleva esperando (tinte +
-  // reloj) y si hay problema (chip En riesgo / Atrasado).
+  // La tarjeta lo es todo (sin popup): nombre, deadline de Planificación,
+  // barra + contador. Tocarla la expande para lo que no cabe en la cara:
+  // contadores por color en Pintado, tareas de medición y Avanzar/Devolver.
   const renderBatchCard = (batch) => {
-    const waitHours = hoursSince(batch.oldest_move, boardClock);
     const pct = batch.total_qty > 0 ? Math.round((batch.processed / batch.total_qty) * 100) : 0;
-    // En Pintado un lote multicolor se cuenta por color (dentro de la ficha);
-    // el contador de tarjeta solo aplica cuando el conteo es del lote entero.
     const countsPerColor = batch.is_variant_group && batch.stage === 'pintado';
-    const open = () => setDetailKey(batch.key);
+    const deadline = formatDeadline(batch.planned_date);
+    const overdue = Boolean(batch.planned_date) && String(batch.planned_date).slice(0, 10) < boliviaToday();
+    const isExpanded = expandedKey === batch.key;
+    const toggle = () => setExpandedKey(isExpanded ? null : batch.key);
     return (
       <div
         key={batch.key}
         role="button"
         tabIndex={0}
-        className={`prod-card ${ageClass(waitHours)} ${busyKey === batch.key ? 'is-busy' : ''}`}
-        onClick={open}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+        aria-expanded={isExpanded}
+        className={`prod-card ${isExpanded ? 'is-expanded' : ''} ${busyKey === batch.key ? 'is-busy' : ''}`}
+        onClick={toggle}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
       >
         <div className="prod-card-top">
           <span className="prod-card-name">{batch.display_name}</span>
-          {waitHours >= 24 && (
-            <span className={`prod-card-health ${waitHours >= 48 ? 'is-late' : 'is-risk'}`}>
-              {waitHours >= 48 ? 'Atrasado' : 'En riesgo'}
+          {deadline && (
+            <span className={`prod-card-deadline ${overdue ? 'is-overdue' : ''}`} title="Fecha planificada">
+              📅 {deadline}
             </span>
           )}
         </div>
@@ -288,7 +258,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         </div>
         <div className="prod-card-foot">
           {countsPerColor ? (
-            <span className="prod-card-percolor">conteo por color →</span>
+            <span className="prod-card-percolor">conteo por color ↓</span>
           ) : (
             <div className="prod-card-counter" onClick={(e) => e.stopPropagation()}>
               <button
@@ -316,9 +286,98 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                 {batch.pending_tasks} tarea{batch.pending_tasks > 1 ? 's' : ''}
               </span>
             )}
-            {waitLabel(waitHours) && <span className="prod-card-wait">⏱ {waitLabel(waitHours)}</span>}
+            <span className="prod-card-chevron" aria-hidden="true">{isExpanded ? '▴' : '▾'}</span>
           </span>
         </div>
+
+        {isExpanded && (
+          <div className="prod-card-extra" onClick={(e) => e.stopPropagation()}>
+            {countsPerColor && batch.color_list.map((color) => (
+              <div key={color.sku} className="prod-card-color-row">
+                <span className="prod-card-color-name">{color.label}</span>
+                <div className="prod-card-counter">
+                  <button
+                    type="button"
+                    aria-label={`Restar una pieza de ${color.label}`}
+                    disabled={color.processed <= 0}
+                    onClick={() => adjustProgress(batch, color.members, color.processed, color.qty, -1)}
+                  >
+                    −
+                  </button>
+                  <span className="prod-card-color-count">{color.processed}/{color.qty}</span>
+                  <button
+                    type="button"
+                    className="is-plus"
+                    aria-label={`Sumar una pieza de ${color.label}`}
+                    disabled={color.processed >= color.qty}
+                    onClick={() => adjustProgress(batch, color.members, color.processed, color.qty, 1)}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {batchTasks.map((task) => (
+              <div key={task.id} className="prod-task">
+                <div className="prod-task-question">
+                  ¿Cuánto <strong>{task.material_name}</strong> usaste en {STAGE_LABEL[task.process] || task.process} para este lote
+                  {task.batch_qty > 0 ? ` (${task.batch_qty} pzas)` : ''}?
+                </div>
+                <div className="prod-task-controls">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    className="prod-task-input"
+                    placeholder="0"
+                    value={taskInputs[task.id] ?? ''}
+                    onChange={(e) => setTaskInputs((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                  />
+                  <span className="prod-task-unit">{task.unit_measure}</span>
+                  <button
+                    type="button"
+                    className="btn btn-primary prod-task-save"
+                    disabled={taskBusyId === task.id || taskInputs[task.id] === undefined || taskInputs[task.id] === ''}
+                    onClick={() => resolveTask(task, false)}
+                  >
+                    {taskBusyId === task.id ? '…' : 'Registrar'}
+                  </button>
+                  <button
+                    type="button"
+                    className="prod-task-skip"
+                    disabled={taskBusyId === task.id}
+                    onClick={() => resolveTask(task, true)}
+                  >
+                    Omitir
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {nextStageOfBatch(batch) && (
+              <button
+                type="button"
+                className="btn btn-primary prod-advance-btn"
+                disabled={busyKey === batch.key}
+                onClick={() => completeStage(batch)}
+              >
+                Avanzar a {STAGE_LABEL[nextStageOfBatch(batch)]}
+              </button>
+            )}
+            {prevStageOfBatch(batch) && (
+              <button
+                type="button"
+                className="prod-back-btn"
+                disabled={busyKey === batch.key}
+                onClick={() => completeStage(batch, prevStageOfBatch(batch))}
+              >
+                ← Devolver a {STAGE_LABEL[prevStageOfBatch(batch)]}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -371,12 +430,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                   <header className="prod-col-head">
                     <div className="prod-col-title">
                       <span className="prod-col-name">{stage.label}</span>
-                      {stats.lots > 0 && (
-                        <span className="prod-col-load">
-                          {stats.pieces} pzas
-                          {stats.oldest >= 1 && ` · ⏱ ${waitLabel(stats.oldest)}`}
-                        </span>
-                      )}
+                      {stats.lots > 0 && <span className="prod-col-load">{stats.pieces} pzas</span>}
                     </div>
                     <span className={`prod-col-count ${items.length === 0 ? 'is-zero' : ''}`}>{items.length}</span>
                   </header>
@@ -387,187 +441,6 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                 </section>
               );
             })}
-          </div>
-        </div>
-      )}
-
-      {detailBatch && (
-        <div className="prod-sheet-overlay" onClick={() => setDetailKey(null)}>
-          <div className="prod-sheet" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <div className="prod-sheet-handle" aria-hidden="true" />
-            <div className="prod-sheet-head">
-              <div>
-                <div className="prod-sheet-title">{detailBatch.display_name}</div>
-                <div className="prod-sheet-sku">
-                  {detailBatch.display_sku}
-                  {detailBatch.is_variant_group
-                    ? ` · ${detailBatch.color_list.length} colores`
-                    : ` · lote de ${detailBatch.members.length} sede${detailBatch.members.length > 1 ? 's' : ''}`}
-                </div>
-              </div>
-              <button type="button" className="prod-sheet-close" onClick={() => setDetailKey(null)} aria-label="Cerrar">✕</button>
-            </div>
-
-            <div className="prod-hero">
-              <div className="prod-hero-qty">{detailBatch.total_qty}</div>
-              <div className="prod-hero-label">piezas a producir</div>
-              <div className="prod-sede-chips">
-                {detailBatch.is_variant_group
-                  ? detailBatch.color_list.map((color) => (
-                    <span key={color.sku} className="prod-sede-chip">
-                      {color.label} <strong>{color.qty}</strong>
-                    </span>
-                  ))
-                  : sedeTotals(detailBatch).map((s) => (
-                    <span key={s.sede} className="prod-sede-chip">
-                      {s.sede} <strong>{s.qty}</strong>
-                    </span>
-                  ))}
-              </div>
-              {detailBatch.is_variant_group && (
-                <div className="prod-sede-secondary">
-                  {sedeTotals(detailBatch).map((s) => `${s.sede} ${s.qty}`).join(' · ')}
-                </div>
-              )}
-            </div>
-
-            {stopwatchSince(detailBatch.oldest_move, clock) && (
-              <div className="prod-stopwatch">
-                <span className="prod-stopwatch-label">En {STAGE_LABEL[detailBatch.stage] || detailBatch.stage}</span>
-                <span className="prod-stopwatch-time">{stopwatchSince(detailBatch.oldest_move, clock)}</span>
-              </div>
-            )}
-
-            {/* Pintado on a multi-color lote: one counter per color. Any other
-                stage (or single-color lote): one counter for the whole batch. */}
-            {detailBatch.is_variant_group && detailBatch.stage === 'pintado' ? (
-              <div className="prod-counter">
-                <span className="prod-counter-label">Piezas pintadas por color</span>
-                {detailBatch.color_list.map((color) => (
-                  <div key={color.sku} className="prod-counter-color-row">
-                    <span className="prod-counter-color-name">{color.label}</span>
-                    <div className="prod-counter-controls is-compact">
-                      <button
-                        type="button"
-                        className="prod-counter-btn is-small"
-                        aria-label={`Restar una pieza de ${color.label}`}
-                        disabled={color.processed <= 0}
-                        onClick={() => adjustProgress(detailBatch, color.members, color.processed, color.qty, -1)}
-                      >
-                        −
-                      </button>
-                      <span className="prod-counter-display is-small">
-                        {color.processed}
-                        <span className="prod-counter-total">/{color.qty}</span>
-                      </span>
-                      <button
-                        type="button"
-                        className="prod-counter-btn is-small is-plus"
-                        aria-label={`Sumar una pieza de ${color.label}`}
-                        disabled={color.processed >= color.qty}
-                        onClick={() => adjustProgress(detailBatch, color.members, color.processed, color.qty, 1)}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="prod-counter">
-                <span className="prod-counter-label">Piezas procesadas en esta etapa</span>
-                <div className="prod-counter-controls">
-                  <button
-                    type="button"
-                    className="prod-counter-btn"
-                    aria-label="Restar una pieza"
-                    disabled={detailBatch.processed <= 0}
-                    onClick={() => adjustProgress(detailBatch, detailBatch.members, detailBatch.processed, detailBatch.total_qty, -1)}
-                  >
-                    −
-                  </button>
-                  <span className="prod-counter-display">
-                    {detailBatch.processed}
-                    <span className="prod-counter-total">/{detailBatch.total_qty}</span>
-                  </span>
-                  <button
-                    type="button"
-                    className="prod-counter-btn is-plus"
-                    aria-label="Sumar una pieza"
-                    disabled={detailBatch.processed >= detailBatch.total_qty}
-                    onClick={() => adjustProgress(detailBatch, detailBatch.members, detailBatch.processed, detailBatch.total_qty, 1)}
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* La ruta la conoce el software: al completar el conteo el lote
-                avanza solo. Aquí quedan el atajo manual y el camino de regreso. */}
-            {nextStageOfBatch(detailBatch) && (
-              <button
-                type="button"
-                className="btn btn-primary prod-advance-btn"
-                disabled={busyKey === detailBatch.key}
-                onClick={() => completeStage(detailBatch)}
-              >
-                Avanzar a {STAGE_LABEL[nextStageOfBatch(detailBatch)]}
-              </button>
-            )}
-            {prevStageOfBatch(detailBatch) && (
-              <button
-                type="button"
-                className="prod-back-btn"
-                disabled={busyKey === detailBatch.key}
-                onClick={() => completeStage(detailBatch, prevStageOfBatch(detailBatch))}
-              >
-                ← Devolver a {STAGE_LABEL[prevStageOfBatch(detailBatch)]}
-              </button>
-            )}
-
-            {sheetTasks.length > 0 && (
-              <div className="prod-tasks">
-                <div className="prod-sheet-section-label">Tareas de medición</div>
-                {sheetTasks.map((task) => (
-                  <div key={task.id} className="prod-task">
-                    <div className="prod-task-question">
-                      ¿Cuánto <strong>{task.material_name}</strong> usaste en {STAGE_LABEL[task.process] || task.process} para este lote
-                      {task.batch_qty > 0 ? ` (${task.batch_qty} pzas)` : ''}?
-                    </div>
-                    <div className="prod-task-controls">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputMode="decimal"
-                        className="prod-task-input"
-                        placeholder="0"
-                        value={taskInputs[task.id] ?? ''}
-                        onChange={(e) => setTaskInputs((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                      />
-                      <span className="prod-task-unit">{task.unit_measure}</span>
-                      <button
-                        type="button"
-                        className="btn btn-primary prod-task-save"
-                        disabled={taskBusyId === task.id || taskInputs[task.id] === undefined || taskInputs[task.id] === ''}
-                        onClick={() => resolveTask(task, false)}
-                      >
-                        {taskBusyId === task.id ? '…' : 'Registrar'}
-                      </button>
-                      <button
-                        type="button"
-                        className="prod-task-skip"
-                        disabled={taskBusyId === task.id}
-                        onClick={() => resolveTask(task, true)}
-                      >
-                        Omitir
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}
