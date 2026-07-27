@@ -14,6 +14,35 @@ const marginClass = (pct) => {
   return 'is-bad';
 };
 
+// Mini-sparkline del margen % (snapshots diarios del brief nocturno).
+function Sparkline({ points }) {
+  if (!Array.isArray(points) || points.length < 2) return null;
+  const w = 72;
+  const h = 20;
+  const values = points.map((p) => p.pct);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const coords = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * (w - 2) + 1;
+    const y = h - 2 - ((v - min) / span) * (h - 4);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const rising = values[values.length - 1] >= values[0];
+  return (
+    <svg className="rent-spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
+      <polyline
+        points={coords.join(' ')}
+        fill="none"
+        stroke={rising ? '#047857' : '#b91c1c'}
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 // Rentabilidad por producto: costo (Estructura, en vivo) vs precio vs ventas
 // reales del período. Usa el mismo mes/año que el resto de Estadísticas.
 export default function RentabilidadCard({ token, month, year }) {
@@ -99,6 +128,7 @@ export default function RentabilidadCard({ token, month, year }) {
                   <th>Costo</th>
                   <th>Precio SF</th>
                   <th>Margen</th>
+                  <th>Tendencia</th>
                   <th>Vendidos</th>
                   <th>Ventas</th>
                   <th>Ganancia est.</th>
@@ -145,6 +175,18 @@ export default function RentabilidadCard({ token, month, year }) {
                         </span>
                       ) : '—'}
                     </td>
+                    <td>
+                      {Array.isArray(row.trend) && row.trend.length >= 2 ? (
+                        <span className="rent-trend" title={`Margen % día a día (${row.trend.length} snapshots)`}>
+                          <Sparkline points={row.trend} />
+                          {row.trend_delta_pp !== null && row.trend_delta_pp !== undefined && (
+                            <em className={row.trend_delta_pp >= 0 ? 'rent-pos' : 'rent-neg'}>
+                              {row.trend_delta_pp > 0 ? '+' : ''}{row.trend_delta_pp} pp
+                            </em>
+                          )}
+                        </span>
+                      ) : '—'}
+                    </td>
                     <td>{row.units_sold}</td>
                     <td>{formatBs(row.revenue)}</td>
                     <td>
@@ -155,7 +197,7 @@ export default function RentabilidadCard({ token, month, year }) {
                   </tr>
                 ))}
                 {rows.length === 0 && (
-                  <tr><td colSpan={7} className="dashboard-muted" style={{ textAlign: 'center' }}>Sin productos para este filtro.</td></tr>
+                  <tr><td colSpan={8} className="dashboard-muted" style={{ textAlign: 'center' }}>Sin productos para este filtro.</td></tr>
                 )}
               </tbody>
             </table>
