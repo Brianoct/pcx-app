@@ -282,128 +282,126 @@ function EquipmentCatalogAdmin({ token }) {
         <h3 style={{ marginBottom: '12px' }}>Catálogo de equipos</h3>
         {loading ? (
           <p style={{ color: '#78716c' }}>Cargando equipos...</p>
+        ) : rows.length === 0 ? (
+          <p style={{ color: '#78716c' }}>Sin equipos</p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table" style={{ minWidth: '1220px' }}>
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Nombre</th>
-                  <th style={{ textAlign: 'right' }}>Reposición (Bs)</th>
-                  <th style={{ textAlign: 'right' }}>Vida útil (meses)</th>
-                  <th style={{ textAlign: 'right' }}>Mensual extra (Bs)</th>
-                  <th style={{ textAlign: 'right' }}>Capacidad mensual</th>
-                  <th>Unidad uso</th>
-                  <th>Notas</th>
-                  <th>Activo</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr><td colSpan={10} style={{ textAlign: 'center', color: '#78716c' }}>Sin equipos</td></tr>
-                ) : rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <input
-                        value={row.code || ''}
-                        onChange={(e) => onRowField(row.id, 'code', e.target.value.toUpperCase())}
-                        className="form-input" style={{ width: 120 }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        value={row.name || ''}
-                        onChange={(e) => onRowField(row.id, 'name', e.target.value)}
-                        className="form-input" style={{ minWidth: 180 }}
-                      />
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={Number(row.replacement_cost_bs || 0)}
-                        onChange={(e) => onRowField(row.id, 'replacement_cost_bs', e.target.value)}
-                        className="form-input" style={{ width: 120, textAlign: 'right' }}
-                      />
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={row.useful_life_months ?? ''}
-                        onChange={(e) => onRowField(row.id, 'useful_life_months', e.target.value)}
-                        className="form-input" style={{ width: 110, textAlign: 'right' }}
-                      />
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={Number(row.monthly_extra_cost_bs || 0)}
-                        onChange={(e) => onRowField(row.id, 'monthly_extra_cost_bs', e.target.value)}
-                        className="form-input" style={{ width: 120, textAlign: 'right' }}
-                      />
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <input
-                        type="number"
-                        min="0.01"
-                        step="0.01"
-                        value={row.monthly_capacity_units ?? ''}
-                        onChange={(e) => onRowField(row.id, 'monthly_capacity_units', e.target.value)}
-                        className="form-input" style={{ width: 120, textAlign: 'right' }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        value={row.usage_unit || ''}
-                        onChange={(e) => onRowField(row.id, 'usage_unit', e.target.value)}
-                        className="form-input" style={{ width: 120 }}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        value={row.notes || ''}
-                        onChange={(e) => onRowField(row.id, 'notes', e.target.value)}
-                        className="form-input" style={{ minWidth: 180 }}
-                      />
-                    </td>
-                    <td>
-                      <label className="form-check-inline">
+          <div className="cat-list">
+            {rows.map((row) => {
+              // Lo que este equipo aporta al costo de cada pieza:
+              // (depreciación mensual + extras) / capacidad mensual.
+              const life = Number(row.useful_life_months || 0);
+              const capacity = Number(row.monthly_capacity_units || 0);
+              const monthly = (life > 0 ? Number(row.replacement_cost_bs || 0) / life : 0)
+                + Number(row.monthly_extra_cost_bs || 0);
+              const perUnit = capacity > 0 ? monthly / capacity : null;
+              return (
+                <div key={row.id} className={`cat-item ${row.is_active ? '' : 'is-inactive'}`}>
+                  <div className="cat-item-fields">
+                    <div className="cat-row">
+                      <label className="cat-field cat-field--code">
+                        <span>Código</span>
+                        <input
+                          value={row.code || ''}
+                          onChange={(e) => onRowField(row.id, 'code', e.target.value.toUpperCase())}
+                          className="form-input"
+                        />
+                      </label>
+                      <label className="cat-field cat-field--grow">
+                        <span>Nombre</span>
+                        <input
+                          value={row.name || ''}
+                          onChange={(e) => onRowField(row.id, 'name', e.target.value)}
+                          className="form-input"
+                        />
+                      </label>
+                      {perUnit !== null && (
+                        <span className="cat-derived" title="Costo que este equipo aporta a cada pieza producida: (depreciación mensual + extras) ÷ capacidad mensual">
+                          {perUnit.toFixed(2)} Bs/pieza
+                        </span>
+                      )}
+                      <label className="cat-switch" title={row.is_active ? 'Activo' : 'Inactivo'}>
                         <input
                           type="checkbox"
                           checked={Boolean(row.is_active)}
                           onChange={(e) => onRowField(row.id, 'is_active', e.target.checked)}
                         />
-                        {row.is_active ? 'Sí' : 'No'}
+                        {row.is_active ? 'Activo' : 'Inactivo'}
                       </label>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => saveRow(row)}
-                          disabled={saving}
-                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
-                        >
-                          Guardar
-                        </button>
-                        <button
-                          onClick={() => deactivateRow(row)}
-                          disabled={saving || !row.is_active}
-                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
-                        >
-                          Desactivar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+
+                    <div className="cat-row">
+                      <label className="cat-field cat-field--num" title="Cuánto costaría reponer este equipo hoy">
+                        <span>Reposición (Bs)</span>
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={Number(row.replacement_cost_bs || 0)}
+                          onChange={(e) => onRowField(row.id, 'replacement_cost_bs', e.target.value)}
+                          className="form-input"
+                        />
+                      </label>
+                      <label className="cat-field cat-field--num">
+                        <span>Vida útil (meses)</span>
+                        <input
+                          type="number" min="1" step="1"
+                          value={row.useful_life_months ?? ''}
+                          onChange={(e) => onRowField(row.id, 'useful_life_months', e.target.value)}
+                          className="form-input"
+                        />
+                      </label>
+                      <label className="cat-field cat-field--num" title="Mantenimiento, energía y otros gastos mensuales del equipo">
+                        <span>Mensual extra (Bs)</span>
+                        <input
+                          type="number" min="0" step="0.01"
+                          value={Number(row.monthly_extra_cost_bs || 0)}
+                          onChange={(e) => onRowField(row.id, 'monthly_extra_cost_bs', e.target.value)}
+                          className="form-input"
+                        />
+                      </label>
+                      <label className="cat-field cat-field--num" title="Piezas que el equipo puede producir por mes (define el costo por pieza)">
+                        <span>Capacidad mensual</span>
+                        <input
+                          type="number" min="0.01" step="0.01"
+                          value={row.monthly_capacity_units ?? ''}
+                          onChange={(e) => onRowField(row.id, 'monthly_capacity_units', e.target.value)}
+                          className="form-input"
+                        />
+                      </label>
+                      <label className="cat-field cat-field--sm">
+                        <span>Unidad uso</span>
+                        <input
+                          value={row.usage_unit || ''}
+                          onChange={(e) => onRowField(row.id, 'usage_unit', e.target.value)}
+                          className="form-input"
+                        />
+                      </label>
+                    </div>
+
+                    <label className="cat-field">
+                      <span>Notas</span>
+                      <input
+                        value={row.notes || ''}
+                        onChange={(e) => onRowField(row.id, 'notes', e.target.value)}
+                        className="form-input"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="cat-actions">
+                    <button type="button" className="cat-action cat-action--save" onClick={() => saveRow(row)} disabled={saving}>
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      className="cat-action cat-action--danger"
+                      onClick={() => deactivateRow(row)}
+                      disabled={saving || !row.is_active}
+                    >
+                      Desactivar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

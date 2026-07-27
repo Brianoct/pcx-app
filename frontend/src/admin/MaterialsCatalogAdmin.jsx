@@ -428,134 +428,120 @@ function MaterialsCatalogAdmin({ token }) {
         </div>
         {loading ? (
           <p style={{ color: '#78716c' }}>Cargando materiales...</p>
+        ) : rows.length === 0 ? (
+          <p style={{ color: '#78716c' }}>Sin materiales</p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table" style={{ minWidth: '980px' }}>
-              <thead>
-                <tr>
-                  <th>Código</th>
-                  <th>Nombre</th>
-                  <th>Unidad</th>
-                  <th style={{ textAlign: 'right' }}>Costo unitario (Bs)</th>
-                  <th style={{ textAlign: 'right' }}>Merma %</th>
-                  <th style={{ textAlign: 'right' }}>Reposición</th>
-                  <th>Proveedor</th>
-                  <th>Notas</th>
-                  <th>Activo</th>
-                  <th>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.length === 0 ? (
-                  <tr><td colSpan={10} style={{ textAlign: 'center', color: '#78716c' }}>Sin materiales</td></tr>
-                ) : rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>
+          <div className="cat-list">
+            {rows.map((row) => (
+              <div key={row.id} className={`cat-item ${row.is_active ? '' : 'is-inactive'}`}>
+                <div className="cat-item-fields">
+                  <div className="cat-row">
+                    <label className="cat-field cat-field--code">
+                      <span>Código</span>
                       <input
                         value={row.code || ''}
                         onChange={(e) => onRowField(row.id, 'code', e.target.value.toUpperCase())}
-                        className="form-input" style={{ width: 120 }}
+                        className="form-input"
                       />
-                    </td>
-                    <td>
+                    </label>
+                    <label className="cat-field cat-field--grow">
+                      <span>Nombre</span>
                       <input
                         value={row.name || ''}
                         onChange={(e) => onRowField(row.id, 'name', e.target.value)}
-                        className="form-input" style={{ minWidth: 180 }}
+                        className="form-input"
                       />
-                    </td>
-                    <td>
+                    </label>
+                    <label className="cat-field cat-field--sm">
+                      <span>Unidad</span>
                       <input
                         value={row.unit_measure || ''}
                         onChange={(e) => onRowField(row.id, 'unit_measure', e.target.value)}
-                        className="form-input" style={{ width: 130 }}
+                        className="form-input"
                       />
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
+                    </label>
+                    <label className="cat-switch" title={row.is_active ? 'Activo' : 'Inactivo'}>
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="checkbox"
+                        checked={Boolean(row.is_active)}
+                        onChange={(e) => onRowField(row.id, 'is_active', e.target.checked)}
+                      />
+                      {row.is_active ? 'Activo' : 'Inactivo'}
+                    </label>
+                  </div>
+
+                  <div className="cat-row">
+                    <label className="cat-field cat-field--num">
+                      <span>Costo unitario (Bs)</span>
+                      <input
+                        type="number" min="0" step="0.01"
                         value={Number(row.unit_cost_bs || 0)}
                         onChange={(e) => onRowField(row.id, 'unit_cost_bs', e.target.value)}
-                        className="form-input" style={{ width: 120, textAlign: 'right' }}
+                        className="form-input"
                       />
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
+                    </label>
+                    <label className="cat-field cat-field--num" title="Desperdicio esperado; se suma al costo por unidad producida">
+                      <span>Merma %</span>
                       <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.01"
+                        type="number" min="0" max="100" step="0.01"
                         value={Number(row.waste_pct || 0)}
                         onChange={(e) => onRowField(row.id, 'waste_pct', e.target.value)}
-                        className="form-input" style={{ width: 100, textAlign: 'right' }}
+                        className="form-input"
                       />
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
+                    </label>
+                    <label className="cat-field cat-field--num" title="Cantidad a comprar cuando se escanea el QR de reposición">
+                      <span>Reposición</span>
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="number" min="0" step="0.01"
                         value={Number(row.reorder_qty || 0)}
                         onChange={(e) => onRowField(row.id, 'reorder_qty', e.target.value)}
-                        className="form-input" style={{ width: 100, textAlign: 'right' }}
+                        className="form-input"
                       />
-                    </td>
-                    <td>
+                    </label>
+                    <label className="cat-field cat-field--grow">
+                      <span>Proveedor</span>
                       <input
                         value={row.supplier || ''}
                         onChange={(e) => onRowField(row.id, 'supplier', e.target.value)}
-                        className="form-input" style={{ minWidth: 140 }}
+                        className="form-input"
                       />
-                    </td>
-                    <td>
-                      <input
-                        value={row.notes || ''}
-                        onChange={(e) => onRowField(row.id, 'notes', e.target.value)}
-                        className="form-input" style={{ minWidth: 160 }}
-                      />
-                    </td>
-                    <td>
-                      <label className="form-check-inline">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(row.is_active)}
-                          onChange={(e) => onRowField(row.id, 'is_active', e.target.checked)}
-                        />
-                        {row.is_active ? 'Sí' : 'No'}
-                      </label>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button
-                          onClick={() => saveRow(row)}
-                          disabled={saving}
-                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
-                        >
-                          Guardar
-                        </button>
-                        <button
-                          onClick={() => setQrMaterial(row)}
-                          disabled={!row.qr_token}
-                          title={row.qr_token ? 'Ver código QR' : 'Guarda el material para generar su QR'}
-                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#0f766e', color: 'white', cursor: row.qr_token ? 'pointer' : 'not-allowed' }}
-                        >
-                          QR
-                        </button>
-                        <button
-                          onClick={() => deactivateRow(row)}
-                          disabled={saving || !row.is_active}
-                          style={{ padding: '8px 10px', borderRadius: '8px', border: 'none', background: '#ef4444', color: 'white', cursor: saving ? 'not-allowed' : 'pointer' }}
-                        >
-                          Desactivar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </label>
+                  </div>
+
+                  <label className="cat-field">
+                    <span>Notas</span>
+                    <input
+                      value={row.notes || ''}
+                      onChange={(e) => onRowField(row.id, 'notes', e.target.value)}
+                      className="form-input"
+                    />
+                  </label>
+                </div>
+
+                <div className="cat-actions">
+                  <button type="button" className="cat-action cat-action--save" onClick={() => saveRow(row)} disabled={saving}>
+                    Guardar
+                  </button>
+                  <button
+                    type="button"
+                    className="cat-action cat-action--qr"
+                    onClick={() => setQrMaterial(row)}
+                    disabled={!row.qr_token}
+                    title={row.qr_token ? 'Ver código QR' : 'Guarda el material para generar su QR'}
+                  >
+                    QR
+                  </button>
+                  <button
+                    type="button"
+                    className="cat-action cat-action--danger"
+                    onClick={() => deactivateRow(row)}
+                    disabled={saving || !row.is_active}
+                  >
+                    Desactivar
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

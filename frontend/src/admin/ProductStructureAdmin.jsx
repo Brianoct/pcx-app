@@ -33,6 +33,8 @@ function ProductStructureAdmin({ token }) {
   const [materialsCatalog, setMaterialsCatalog] = useState([]);
   const [laborRate, setLaborRate] = useState('0');
   const [samplingRate, setSamplingRate] = useState('25');
+  const [leaderPct, setLeaderPct] = useState('15');
+  const [sellerPct, setSellerPct] = useState('10');
   const [savingRate, setSavingRate] = useState(false);
   const [variance, setVariance] = useState(null);
   const [search, setSearch] = useState('');
@@ -60,6 +62,8 @@ function ProductStructureAdmin({ token }) {
         setMaterialsCatalog(Array.isArray(materiales) ? materiales : []);
         setLaborRate(String(settings?.labor_rate_bs_hour ?? 0));
         setSamplingRate(String(settings?.sampling_rate_pct ?? 25));
+        setLeaderPct(String(settings?.commission_leader_pct ?? 15));
+        setSellerPct(String(settings?.commission_seller_pct ?? 10));
         setVariance(varianceData);
       } catch (err) {
         if (active) setError(err.message || 'No se pudieron cargar catálogos');
@@ -116,11 +120,15 @@ function ProductStructureAdmin({ token }) {
         token,
         body: {
           labor_rate_bs_hour: Number(laborRate) || 0,
-          sampling_rate_pct: Number.parseInt(samplingRate, 10) || 0
+          sampling_rate_pct: Number.parseInt(samplingRate, 10) || 0,
+          commission_leader_pct: Number(leaderPct) || 0,
+          commission_seller_pct: Number(sellerPct) || 0
         }
       });
       setLaborRate(String(data?.labor_rate_bs_hour ?? laborRate));
       setSamplingRate(String(data?.sampling_rate_pct ?? samplingRate));
+      setLeaderPct(String(data?.commission_leader_pct ?? leaderPct));
+      setSellerPct(String(data?.commission_seller_pct ?? sellerPct));
       toast.success('Configuración de producción guardada');
     } catch (err) {
       toast.error('Error: ' + (err.message || 'No se pudo guardar la configuración'));
@@ -266,6 +274,28 @@ function ProductStructureAdmin({ token }) {
               step="0.5"
               value={laborRate}
               onChange={(e) => setLaborRate(e.target.value)}
+            />
+          </label>
+          <label className="est-rate-label" title="Suma de los roles a % del ingreso total (Marketing, Ventas líder, Admin, Producción 1 y 2)">
+            Comisión liderazgo (%)
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              value={leaderPct}
+              onChange={(e) => setLeaderPct(e.target.value)}
+            />
+          </label>
+          <label className="est-rate-label" title="Comisión del vendedor sobre sus propias ventas (10% top seller, 8% resto — usa el caso conservador)">
+            Comisión vendedor (%)
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              value={sellerPct}
+              onChange={(e) => setSellerPct(e.target.value)}
             />
           </label>
           <label className="est-rate-label" title="Probabilidad de pedir una medición real al entrar a una etapa que consume material">

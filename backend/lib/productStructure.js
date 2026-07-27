@@ -7,11 +7,13 @@ const { createHttpError } = require('./util');
 
 const loadProductionSettings = async () => {
   const res = await pool.query(
-    'SELECT labor_rate_bs_hour, sampling_rate_pct, updated_at FROM production_settings WHERE id = 1'
+    'SELECT labor_rate_bs_hour, sampling_rate_pct, commission_leader_pct, commission_seller_pct, updated_at FROM production_settings WHERE id = 1'
   );
   return {
     labor_rate_bs_hour: Number(res.rows[0]?.labor_rate_bs_hour || 0),
     sampling_rate_pct: Number(res.rows[0]?.sampling_rate_pct ?? 25),
+    commission_leader_pct: Number(res.rows[0]?.commission_leader_pct ?? 15),
+    commission_seller_pct: Number(res.rows[0]?.commission_seller_pct ?? 10),
     updated_at: res.rows[0]?.updated_at || null
   };
 };
@@ -35,15 +37,28 @@ const saveProductionSettings = async (payload = {}, userId) => {
     }
   }
 
+  const parsePct = (value, label, fallback) => {
+    if (value === undefined) return fallback;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+      throw createHttpError(400, `${label} debe ser un número entre 0 y 100`);
+    }
+    return parsed;
+  };
+  const leaderPct = parsePct(payload.commission_leader_pct, 'commission_leader_pct', current.commission_leader_pct);
+  const sellerPct = parsePct(payload.commission_seller_pct, 'commission_seller_pct', current.commission_seller_pct);
+
   await pool.query(
-    `INSERT INTO production_settings (id, labor_rate_bs_hour, sampling_rate_pct, updated_by, updated_at)
-     VALUES (1, $1, $2, $3, NOW())
+    `INSERT INTO production_settings (id, labor_rate_bs_hour, sampling_rate_pct, commission_leader_pct, commission_seller_pct, updated_by, updated_at)
+     VALUES (1, $1, $2, $3, $4, $5, NOW())
      ON CONFLICT (id) DO UPDATE
      SET labor_rate_bs_hour = EXCLUDED.labor_rate_bs_hour,
          sampling_rate_pct = EXCLUDED.sampling_rate_pct,
+         commission_leader_pct = EXCLUDED.commission_leader_pct,
+         commission_seller_pct = EXCLUDED.commission_seller_pct,
          updated_by = EXCLUDED.updated_by,
          updated_at = NOW()`,
-    [rate, sampling, userId || null]
+    [rate, sampling, leaderPct, sellerPct, userId || null]
   );
   return loadProductionSettings();
 };

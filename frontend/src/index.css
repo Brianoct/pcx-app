@@ -9732,3 +9732,91 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 .rent-trend { display: inline-flex; align-items: center; gap: 6px; }
 .rent-trend em { font-style: normal; font-size: 0.74rem; font-weight: 800; }
 .rent-spark { display: block; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADMIN — Catálogos editables (Materiales / Equipos)
+   Tarjeta por fila con campos etiquetados: la tabla anterior usaba
+   table-layout fijo y los inputs se salían de su celda (se encimaban).
+   ═══════════════════════════════════════════════════════════════════════════ */
+.cat-list { display: grid; gap: 10px; }
+
+.cat-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 116px;
+  gap: 14px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+}
+.cat-item.is-inactive { opacity: 0.62; }
+
+.cat-item-fields { display: grid; gap: 10px; min-width: 0; }
+
+/* Cada fila reparte el ancho disponible; nada se sale de su caja. */
+.cat-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+
+.cat-field { display: grid; gap: 4px; min-width: 0; flex: 1 1 160px; }
+.cat-field > span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cat-field .form-input { width: 100%; box-sizing: border-box; }
+
+.cat-field--code { flex: 0 0 110px; }
+.cat-field--sm { flex: 0 0 120px; }
+.cat-field--num { flex: 0 0 150px; }
+.cat-field--num .form-input { text-align: right; }
+.cat-field--grow { flex: 2 1 220px; }
+
+.cat-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding-bottom: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Aporte del equipo al costo de cada pieza (calculado, no editable). */
+.cat-derived {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin-bottom: 8px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--accent-secondary);
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.cat-actions { display: grid; gap: 6px; }
+.cat-action {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+}
+.cat-action:disabled { opacity: 0.45; cursor: not-allowed; }
+.cat-action--save { background: var(--accent-secondary); }
+.cat-action--qr { background: #0f766e; }
+.cat-action--danger { background: var(--danger); }
+
+@media (max-width: 720px) {
+  .cat-item { grid-template-columns: minmax(0, 1fr); }
+  .cat-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

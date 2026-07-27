@@ -111,6 +111,11 @@ export default function RentabilidadCard({ token, month, year }) {
           <div className="rent-summary">
             <span>Ventas: <strong>{formatBs(totals.revenue)}</strong></span>
             <span>Ganancia estimada: <strong className={Number(totals.est_profit) >= 0 ? 'rent-pos' : 'rent-neg'}>{formatBs(totals.est_profit)}</strong></span>
+            {data?.commission_leader_pct !== undefined && (
+              <span title="Liderazgo (5 roles × % del ingreso) + comisión del vendedor — el equipo cobra por comisión, no por hora">
+                Comisiones: <strong>{Number(data.commission_leader_pct) + Number(data.commission_seller_pct)}% del precio</strong>
+              </span>
+            )}
             {(totals.sin_costeo > 0 || totals.costeo_manual > 0) && (
               <span className="rent-warn-note">
                 {totals.sin_costeo > 0 && `${totals.sin_costeo} sin costeo`}
@@ -149,8 +154,8 @@ export default function RentabilidadCard({ token, month, year }) {
                       {row.cost !== null ? (
                         <span
                           title={row.cost_breakdown
-                            ? `Materiales ${row.cost_breakdown.materials} · Equipos ${row.cost_breakdown.equipment} · Mano de obra ${row.cost_breakdown.labor}`
-                            : 'Costeo manual'}
+                            ? `Materiales ${row.cost_breakdown.materials} · Equipos ${row.cost_breakdown.equipment} · Comisiones ${row.cost_breakdown.commissions}`
+                            : 'Costeo manual + comisiones sobre el precio'}
                         >
                           {formatBs(row.cost)}
                           {row.cost_source === 'manual' && <em className="rent-flag" title="Costeo manual — completa la Estructura para el costo derivado"> manual</em>}
