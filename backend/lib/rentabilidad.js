@@ -109,10 +109,8 @@ const computeRentabilidad = async ({ month, year } = {}) => {
     if (real) realSampleCount.set(row.sku, (realSampleCount.get(row.sku) || 0) + real.n);
   }
   const equipCost = new Map();
-  const minutes = new Map();
   for (const row of stepsRes.rows) {
     equipCost.set(row.sku, (equipCost.get(row.sku) || 0) + equipmentCostPerUnit(row));
-    minutes.set(row.sku, (minutes.get(row.sku) || 0) + Number(row.std_minutes || 0));
   }
   // Costeo manual (fallback): suma de componentes SIN la utilidad.
   const manualCost = new Map();
@@ -137,31 +135,38 @@ const computeRentabilidad = async ({ month, year } = {}) => {
     return { trend: points, delta: Number((points[points.length - 1].pct - points[0].pct).toFixed(1)) };
   };
 
-  const laborRate = Number(settings.labor_rate_bs_hour || 0);
-  const costOf = new Map();
+  // La mano de obra NO es por hora: el equipo cobra comisión sobre ventas
+  // (liderazgo % del ingreso total + vendedor % de sus ventas). Por eso las
+  // comisiones se cargan como % del precio, y sobre el ingreso REAL en la
+  // ganancia estimada (si se vendió con descuento, la comisión también baja).
+  const commissionPct = (Number(settings.commission_leader_pct ?? 15) + Number(settings.commission_seller_pct ?? 10)) / 100;
+  const directCostOf = new Map();
 
   const products = productsRes.rows.map((p) => {
     const sku = String(p.sku || '').toUpperCase();
     const mat = materialsCost.get(sku) || 0;
     const eq = equipCost.get(sku) || 0;
-    const labor = ((minutes.get(sku) || 0) / 60) * laborRate;
+    const sf = Number(p.sf_price || 0);
+    const commissions = commissionPct * sf;
     let costSource = 'none';
+    let direct = null;
     let cost = null;
     let realCost = null;
     if (mat > 0) {
       costSource = 'estructura';
-      cost = mat + eq + labor;
+      direct = mat + eq;
+      cost = direct + commissions;
       // Costo real solo cuando el muestreo aportó datos (si no, sería el mismo).
       if (realSampleCount.has(sku)) {
-        realCost = (realMaterialsCost.get(sku) || 0) + eq + labor;
+        realCost = (realMaterialsCost.get(sku) || 0) + eq + commissions;
       }
     } else if (manualCost.get(sku) > 0) {
       costSource = 'manual';
-      cost = manualCost.get(sku);
+      direct = manualCost.get(sku);
+      cost = direct + commissions;
     }
-    if (cost !== null) costOf.set(sku, cost);
+    if (direct !== null) directCostOf.set(sku, direct);
     const sold = sales.get(sku) || { units: 0, revenue: 0 };
-    const sf = Number(p.sf_price || 0);
     const { trend, delta } = trendOf(sku);
     return {
       sku,
@@ -171,7 +176,7 @@ const computeRentabilidad = async ({ month, year } = {}) => {
       cost_source: costSource,
       cost: cost !== null ? Number(cost.toFixed(2)) : null,
       cost_breakdown: costSource === 'estructura'
-        ? { materials: Number(mat.toFixed(2)), equipment: Number(eq.toFixed(2)), labor: Number(labor.toFixed(2)) }
+        ? { materials: Number(mat.toFixed(2)), equipment: Number(eq.toFixed(2)), commissions: Number(commissions.toFixed(2)) }
         : null,
       real_cost: realCost !== null ? Number(realCost.toFixed(2)) : null,
       real_delta_pct: realCost !== null && cost > 0 ? Number((((realCost - cost) / cost) * 100).toFixed(1)) : null,
@@ -184,7 +189,9 @@ const computeRentabilidad = async ({ month, year } = {}) => {
       trend_delta_pp: delta,
       units_sold: sold.units,
       revenue: Number(sold.revenue.toFixed(2)),
-      est_profit: cost !== null ? Number((sold.revenue - sold.units * cost).toFixed(2)) : null
+      est_profit: direct !== null
+        ? Number((sold.revenue * (1 - commissionPct) - sold.units * direct).toFixed(2))
+        : null
     };
   });
 
@@ -197,16 +204,18 @@ const computeRentabilidad = async ({ month, year } = {}) => {
   }
   const combos = combosRes.rows.map((c) => {
     const items = itemsByCombo.get(c.id) || [];
-    let cost = 0;
+    // Costo directo del combo = componentes SIN sus comisiones (la comisión se
+    // paga una sola vez, sobre el precio del combo).
+    let direct = 0;
     let complete = items.length > 0;
     for (const item of items) {
-      const unitCost = costOf.get(item.sku);
-      if (unitCost === undefined) { complete = false; break; }
-      cost += unitCost * Number(item.quantity || 0);
+      const unitDirect = directCostOf.get(item.sku);
+      if (unitDirect === undefined) { complete = false; break; }
+      direct += unitDirect * Number(item.quantity || 0);
     }
     const sold = sales.get(`COMBO_${c.id}`) || { units: 0, revenue: 0 };
     const sf = Number(c.sf_price || 0);
-    const finalCost = complete ? Number(cost.toFixed(2)) : null;
+    const finalCost = complete ? Number((direct + commissionPct * sf).toFixed(2)) : null;
     const { trend, delta } = trendOf(`COMBO_${c.id}`);
     return {
       id: Number(c.id),
@@ -220,7 +229,9 @@ const computeRentabilidad = async ({ month, year } = {}) => {
       trend_delta_pp: delta,
       units_sold: sold.units,
       revenue: Number(sold.revenue.toFixed(2)),
-      est_profit: finalCost !== null ? Number((sold.revenue - sold.units * finalCost).toFixed(2)) : null
+      est_profit: complete
+        ? Number((sold.revenue * (1 - commissionPct) - sold.units * direct).toFixed(2))
+        : null
     };
   });
 
@@ -232,7 +243,13 @@ const computeRentabilidad = async ({ month, year } = {}) => {
     costeo_manual: products.filter((r) => r.cost_source === 'manual').length
   };
 
-  return { labor_rate_bs_hour: laborRate, products, combos, totals };
+  return {
+    commission_leader_pct: Number(settings.commission_leader_pct ?? 15),
+    commission_seller_pct: Number(settings.commission_seller_pct ?? 10),
+    products,
+    combos,
+    totals
+  };
 };
 
 // Snapshot diario de márgenes (lo dispara el brief nocturno): una fila por
