@@ -471,7 +471,7 @@ router.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id, user_id, customer_name, customer_phone, department, provincia, store_location,
+      `SELECT id, user_id, customer_name, customer_phone, department, provincia, ciudad, store_location,
               vendor, status, line_items, created_at, alternative_name, alternative_phone,
               coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty
        FROM quotes WHERE id = $1`,
@@ -666,6 +666,7 @@ router.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       alternative_phone: quote.alternative_phone,
       department: quote.department,
       provincia: quote.provincia,
+      ciudad: quote.ciudad,
       store_location: quote.store_location,
       vendor: quote.vendor,
       status: quote.status,
