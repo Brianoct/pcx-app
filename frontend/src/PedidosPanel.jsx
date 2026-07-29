@@ -398,6 +398,24 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     return expanded;
   };
 
+  // La CIUDAD es el destino que le sirve al cliente y al transporte; provincia
+  // y departamento solo son el contexto. Antes de tener catálogo de destinos,
+  // la ciudad se escribía en `provincia`, de ahí el fallback.
+  const destinationCity = (quote) => String(
+    quote?.ciudad || quote?.provincia || quote?.department || ''
+  ).trim();
+
+  // Etiqueta: ciudad + departamento cuando difieren. Hay municipios homónimos
+  // en distintos departamentos (San Pedro, El Puente, Entre Ríos…), así que
+  // "SAN PEDRO" solo sería ambiguo para la transportadora.
+  const destinationLabel = (quote) => {
+    const city = destinationCity(quote);
+    const dept = String(quote?.department || '').trim();
+    if (!city) return dept || '—';
+    if (!dept || city.toLowerCase() === dept.toLowerCase()) return city;
+    return `${city} · ${dept}`;
+  };
+
   // Recipient/destination data shared by the printed label and the on-screen preview.
   const buildLabelData = (quote) => ({
     recipientName: (quote?.alternative_name && String(quote.alternative_name).trim())
@@ -406,7 +424,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
     recipientPhone: (quote?.alternative_phone && String(quote.alternative_phone).trim())
       ? quote.alternative_phone.trim()
       : (quote?.customer_phone || '—'),
-    destination: String(quote?.provincia || quote?.department || '—').trim() || '—',
+    destination: destinationLabel(quote),
     notes: quote?.shipping_notes ? String(quote.shipping_notes).trim() : ''
   });
 
@@ -676,7 +694,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                     </div>
                     <div className="mobile-card-row">
                       <span className="mobile-card-label">Ubicación</span>
-                      <span>{quote.provincia || quote.department || '—'}</span>
+                      <span>{destinationLabel(quote)}</span>
                     </div>
                     <div className="mobile-card-row">
                       <span className="mobile-card-label">Almacén</span>
@@ -737,7 +755,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                     <th className="pedidos-th center">Vendedor</th>
                     <th className="pedidos-th center">Cliente</th>
                     <th className="pedidos-th center">Teléfono</th>
-                    <th className="pedidos-th center">Provincia / Depto</th>
+                    <th className="pedidos-th center">Destino</th>
                     <th className="pedidos-th center">Almacén</th>
                     <th className="pedidos-th center">Estado</th>
                     <th className="pedidos-th center">Fecha</th>
@@ -768,8 +786,12 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                       <td className="pedidos-td center nowrap">
                         {quote.customer_phone || '—'}
                       </td>
-                      <td className="pedidos-td center" title={quote.provincia || quote.department || '—'}>
-                        <span className="pedidos-cell-truncate">{quote.provincia || quote.department || '—'}</span>
+                      <td
+                        className="pedidos-td center"
+                        title={[quote.ciudad, quote.provincia ? `Prov. ${quote.provincia}` : '', quote.department]
+                          .filter(Boolean).join(' · ') || '—'}
+                      >
+                        <span className="pedidos-cell-truncate">{destinationCity(quote) || '—'}</span>
                       </td>
                       <td className="pedidos-td center" title={quote.store_location || '—'}>
                         <span className="pedidos-cell-truncate">{quote.store_location || '—'}</span>
