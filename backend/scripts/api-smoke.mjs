@@ -93,6 +93,9 @@ const battery = [
   ['GET', '/api/admin/stats?month=6&year=2026', admin],
   ['GET', '/api/admin/rentabilidad?month=6&year=2026', admin],
   ['GET', '/api/admin/rentabilidad', ventas], // expect 403 (solo admin)
+  // planificación estratégica (Programa → Operación → Misión → Tarea)
+  ['GET', '/api/planning', admin],
+  ['GET', '/api/planning', ventas], // expect 403 (fase 1: solo admin)
   // whatsapp inbox
   ['GET', '/api/whatsapp/inbox/conversations', admin],
   ['GET', '/api/whatsapp/inbox/shortcuts', admin],

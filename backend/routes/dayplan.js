@@ -19,7 +19,10 @@ const buildTaskRow = (row) => ({
   end_minute: Number(row.end_minute),
   title: row.title,
   task_type: TASK_TYPES.includes(row.task_type) ? row.task_type : 'tarea',
-  is_done: Boolean(row.is_done)
+  is_done: Boolean(row.is_done),
+  // Tarea que viene de Planificación (Programa→Operación→Misión→Tarea):
+  // el frontend la dibuja con checkbox y el check se sincroniza allá.
+  planning_task_id: row.planning_task_id ? Number(row.planning_task_id) : null
 });
 
 const parseTaskFields = (body, { partial = false } = {}) => {
@@ -131,7 +134,17 @@ router.patch('/api/day-plan/:id', authenticateToken, async (req, res) => {
       `UPDATE day_plan_tasks SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`,
       values
     );
-    res.json({ task: buildTaskRow(result.rows[0]) });
+    const updated = result.rows[0];
+    // Check sincronizado: si la tarea vino de Planificación, marcarla hecha
+    // aquí también la marca allá (y viceversa, ver routes/planning.js).
+    if (Object.prototype.hasOwnProperty.call(fields, 'is_done') && updated.planning_task_id) {
+      await pool.query(
+        `UPDATE planning_tasks SET is_done = $2, done_at = CASE WHEN $2 THEN NOW() ELSE NULL END, updated_at = NOW()
+         WHERE id = $1`,
+        [updated.planning_task_id, fields.is_done]
+      );
+    }
+    res.json({ task: buildTaskRow(updated) });
   } catch (err) {
     console.error('Error updating day plan task:', err);
     res.status(500).json({ error: 'No se pudo actualizar la tarea' });

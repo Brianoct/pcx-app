@@ -241,6 +241,7 @@ export default function Calendar({ token, user }) {
         <span className="dayplan-legend">
           <span className="dayplan-legend-chip is-3s">🧹 3S</span>
           <span className="dayplan-legend-chip is-kaizen">💡 Kaizen</span>
+          <span className="dayplan-legend-chip is-plan">📋 Plan</span>
           <span className="dayplan-legend-note">1 de cada una por persona, cada día</span>
         </span>
       </div>
@@ -289,28 +290,46 @@ export default function Calendar({ token, user }) {
                     const width = 100 / task.laneCount;
                     const type = TASK_TYPE_META[task.task_type] ? task.task_type : 'tarea';
                     const typeMeta = TASK_TYPE_META[type];
+                    // Tareas que vienen de Planificación (Programa→Operación→
+                    // Misión→Tarea): checkbox visible y look propio; el check
+                    // se sincroniza con la sección de Programas.
+                    const isPlan = Boolean(task.planning_task_id);
                     return (
                       <div
                         key={task.id}
-                        className={`dayplan-task ${task.is_done ? 'is-done' : ''} ${type !== 'tarea' ? `type-${type}` : ''}`}
+                        className={`dayplan-task ${task.is_done ? 'is-done' : ''} ${type !== 'tarea' ? `type-${type}` : ''} ${isPlan ? 'type-plan' : ''}`}
                         style={{
                           top,
                           height,
                           left: `${task.lane * width}%`,
                           width: `calc(${width}% - 4px)`,
-                          // Regular tasks wear the person's color; 3S/Kaizen use
-                          // the fixed team-wide look from CSS.
-                          background: type === 'tarea' ? color : undefined
+                          // Regular tasks wear the person's color; 3S/Kaizen and
+                          // planning tasks use the fixed team-wide look from CSS.
+                          background: type === 'tarea' && !isPlan ? color : undefined
                         }}
-                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}`}
+                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${isPlan ? 'Planificación · ' : typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}`}
                       >
                         <span className="dayplan-task-toprow">
                           <span className="dayplan-task-time">{minuteLabel(task.start_minute)}–{minuteLabel(task.end_minute)}</span>
-                          {type !== 'tarea' && (
+                          {isPlan ? (
+                            <span className="dayplan-task-badge is-plan">📋 PLAN</span>
+                          ) : type !== 'tarea' && (
                             <span className={`dayplan-task-badge is-${type}`}>{typeMeta.icon} {typeMeta.badge}</span>
                           )}
                         </span>
-                        <span className="dayplan-task-title">{task.title}</span>
+                        {isPlan ? (
+                          <label className="dayplan-task-checkline">
+                            <input
+                              type="checkbox"
+                              checked={task.is_done}
+                              disabled={!isMine}
+                              onChange={() => toggleDone(task)}
+                            />
+                            <span className="dayplan-task-title">{task.title}</span>
+                          </label>
+                        ) : (
+                          <span className="dayplan-task-title">{task.title}</span>
+                        )}
                         {isMine && (
                           <span className="dayplan-task-actions">
                             <button type="button" title={task.is_done ? 'Marcar pendiente' : 'Marcar hecha'} onClick={() => toggleDone(task)}>
