@@ -9820,3 +9820,126 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   .cat-item { grid-template-columns: minmax(0, 1fr); }
   .cat-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* ============================================================
+   Planificación estratégica (Admin → Programas):
+   Programa (área) → Operación → Misión → Tarea.
+   ============================================================ */
+.plan-admin { display: flex; flex-direction: column; gap: 14px; }
+.plan-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.plan-title { margin: 0; font-size: 1.15rem; }
+.plan-sub { margin: 2px 0 0; font-size: 0.8rem; color: var(--text-muted); }
+
+.plan-admin input[type="text"],
+.plan-admin input[type="date"],
+.plan-admin select {
+  padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 10px;
+  font: inherit; font-size: 0.85rem; background: #ffffff; min-height: 0;
+}
+.plan-admin input[type="text"]:focus,
+.plan-admin input[type="date"]:focus { outline: 2px solid rgba(15, 118, 110, 0.35); border-color: #0f766e; }
+
+.plan-op-form { display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+.plan-op-form input[type="text"] { width: 100%; }
+.plan-op-form-dates { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.plan-op-form-dates label { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); }
+
+.plan-empty { padding: 18px; }
+.plan-empty p { margin: 0; color: var(--text-muted); }
+
+.plan-ops-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.plan-op-card {
+  display: flex; flex-direction: column; gap: 6px;
+  min-width: 220px; max-width: 320px; flex: 1 1 240px;
+  padding: 12px 14px; text-align: left; cursor: pointer;
+  background: var(--surface, #fff); border: 2px solid var(--border, #e2e8f0);
+  border-radius: 12px; min-height: 0;
+}
+.plan-op-card.is-selected { border-color: #0f766e; box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12); }
+.plan-op-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.plan-op-card-top strong { font-size: 0.95rem; line-height: 1.25; }
+.plan-op-dates { font-size: 0.74rem; color: var(--text-muted); font-weight: 600; }
+.plan-op-progress { display: flex; align-items: center; gap: 8px; }
+.plan-op-progress-bar { flex: 1; height: 7px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+.plan-op-progress-bar span { display: block; height: 100%; border-radius: 999px; background: #0f766e; }
+.plan-op-progress-text { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+
+.plan-status-chip {
+  flex-shrink: 0; font-size: 0.64rem; font-weight: 800; letter-spacing: 0.03em;
+  padding: 2px 8px; border-radius: 999px; text-transform: uppercase;
+}
+.plan-status-chip.is-activa { background: #d1fae5; color: #065f46; }
+.plan-status-chip.is-pausada { background: #fef3c7; color: #92400e; }
+.plan-status-chip.is-completada { background: #e2e8f0; color: #475569; }
+
+.plan-detail { display: flex; flex-direction: column; gap: 12px; }
+.plan-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.plan-detail-title { margin: 0; font-size: 1.05rem; }
+.plan-detail-desc { margin: 3px 0 0; font-size: 0.82rem; color: var(--text-muted); }
+.plan-detail-actions { display: flex; align-items: center; gap: 8px; }
+.btn.plan-danger { background: #fff5f5; color: #b91c1c; border: 1px solid #fecaca; }
+.btn.plan-danger:hover { background: #fee2e2; }
+
+.plan-areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.plan-area { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.plan-area-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.plan-area-name { font-weight: 800; font-size: 0.95rem; }
+.plan-area-empty { margin: 0; font-size: 0.8rem; color: var(--text-muted); }
+
+.plan-mini-btn { min-height: 0; padding: 4px 10px; font-size: 0.76rem; white-space: nowrap; }
+.plan-icon-btn {
+  min-height: 0; padding: 2px 7px; font-size: 0.78rem; line-height: 1;
+  background: transparent; border: 1px solid transparent; border-radius: 8px;
+  color: var(--text-muted); cursor: pointer;
+}
+.plan-icon-btn:hover { background: #fee2e2; color: #b91c1c; }
+
+.plan-mission-form, .plan-task-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.plan-mission-form input[type="text"] { flex: 1 1 140px; min-width: 0; }
+.plan-task-form input[type="text"] { flex: 1 1 120px; min-width: 0; }
+.plan-task-form input[type="date"] { flex: 0 0 auto; }
+
+.plan-mission {
+  border: 1px solid var(--border, #e2e8f0); border-radius: 12px;
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
+  background: #f8fafc;
+}
+.plan-mission-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.plan-mission-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.plan-mission-info strong { font-size: 0.88rem; }
+.plan-mission-objective { font-size: 0.76rem; color: var(--text-muted); }
+.plan-mission-side { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.plan-mission-count { font-size: 0.72rem; font-weight: 800; color: #0f766e; white-space: nowrap; }
+
+.plan-tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.plan-task {
+  display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap;
+  padding: 5px 6px; border-radius: 8px; background: #ffffff;
+  border: 1px solid #eef2f7;
+}
+.plan-task.is-done .plan-task-title { text-decoration: line-through; color: var(--text-muted); }
+.plan-task-check { display: flex; align-items: center; gap: 8px; flex: 1 1 190px; min-width: 0; cursor: pointer; }
+.plan-task-check input[type="checkbox"] { width: 17px; height: 17px; margin: 0; flex-shrink: 0; accent-color: #0f766e; cursor: pointer; }
+.plan-task-title { font-size: 0.84rem; line-height: 1.25; overflow-wrap: break-word; min-width: 0; }
+.plan-task-due { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+.plan-task-due.is-overdue { color: #b91c1c; }
+.plan-task-inday { font-size: 0.7rem; font-weight: 800; color: #0f766e; white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .plan-areas { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Plan del día: tareas que vienen de Planificación (Programas) — look fijo
+   verde azulado + checkbox visible, para distinguirlas de las demás. */
+.dayplan-task.type-plan {
+  background: repeating-linear-gradient(135deg, #0f766e 0 12px, #115e59 12px 24px);
+  border-left: 4px solid #134e4a;
+}
+.dayplan-task-badge.is-plan { color: #0f766e; }
+.dayplan-legend-chip.is-plan { background: repeating-linear-gradient(135deg, #0f766e 0 8px, #115e59 8px 16px); }
+.dayplan-task-checkline { display: flex; align-items: flex-start; gap: 6px; min-width: 0; cursor: pointer; }
+.dayplan-task-checkline input[type="checkbox"] {
+  width: 15px; height: 15px; margin: 1px 0 0; flex-shrink: 0;
+  accent-color: #ffffff; cursor: pointer;
+}
+.dayplan-task-checkline input[type="checkbox"]:disabled { cursor: default; }
