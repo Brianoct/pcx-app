@@ -5,7 +5,7 @@ import TopBar from './TopBar';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
-function AppShell({ access, displayName, currentCommission, isTopSeller, onLogout, children }) {
+function AppShell({ access, displayName, roleName, currentCommission, isTopSeller, onLogout, children }) {
   // Mobile: off-canvas drawer. Desktop: persistent, hideable for full-width work.
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [sidebarHidden, setSidebarHidden] = useState(
@@ -34,11 +34,13 @@ function AppShell({ access, displayName, currentCommission, isTopSeller, onLogou
       <Sidebar
         access={access}
         displayName={displayName}
+        roleName={roleName}
         onLogout={onLogout}
         onNavigate={() => setDrawerOpen(false)}
       />
       <div className="shell-main">
         <TopBar
+          displayName={displayName}
           currentCommission={currentCommission}
           isTopSeller={isTopSeller}
           onToggleSidebar={toggleSidebar}

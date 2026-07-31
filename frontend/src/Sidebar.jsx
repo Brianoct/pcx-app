@@ -2,9 +2,34 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import logo from './assets/PCX.png';
 import { getSidebarSections } from './navConfig';
 
-function Sidebar({ access, displayName, onLogout, onNavigate }) {
+// Iconos por ruta: monocromos y discretos para que la barra se lea limpia.
+const NAV_ICONS = {
+  '/': '⌂',
+  '/calendario': '☑',
+  '/cotizar': '✚',
+  '/history': '≣',
+  '/pedidos': '⧉',
+  '/inventory': '▤',
+  '/recepcion': '⬇',
+  '/produccion-planificacion': '◫',
+  '/produccion-kanban': '⚙',
+  '/mejoras': '✦',
+  '/marketing-calendario': '▦',
+  '/campanas': '◈',
+  '/live': '●',
+  '/promos': '%',
+  '/marketing-inversion': '↗',
+  '/combos': '❖',
+  '/gastos': '$',
+  '/comprar': '⊞',
+  '/admin': '⛭',
+  '/dashboard': '𝄜'
+};
+
+function Sidebar({ access, displayName, roleName, onLogout, onNavigate }) {
   const sections = getSidebarSections(access);
   const navigate = useNavigate();
+  const initial = String(displayName || '?').trim().charAt(0).toUpperCase();
 
   return (
     <aside className="sidebar">
@@ -24,6 +49,7 @@ function Sidebar({ access, displayName, onLogout, onNavigate }) {
                 className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
                 onClick={onNavigate}
               >
+                <span className="sidebar-link-icon" aria-hidden="true">{NAV_ICONS[item.to] || '·'}</span>
                 {item.label}
               </NavLink>
             ))}
@@ -35,14 +61,19 @@ function Sidebar({ access, displayName, onLogout, onNavigate }) {
         <button
           type="button"
           className="sidebar-user"
+          title="Mi perfil"
           onClick={() => {
             onNavigate?.();
             navigate('/perfil');
           }}
         >
-          {displayName}
+          <span className="sidebar-user-avatar" aria-hidden="true">{initial}</span>
+          <span className="sidebar-user-info">
+            <strong>{displayName}</strong>
+            {roleName && <small>{roleName}</small>}
+          </span>
         </button>
-        <button type="button" className="sidebar-logout" onClick={onLogout}>
+        <button type="button" className="sidebar-logout" onClick={onLogout} title="Cerrar sesión">
           Cerrar Sesión
         </button>
       </div>

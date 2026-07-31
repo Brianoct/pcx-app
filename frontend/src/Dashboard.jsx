@@ -1,12 +1,13 @@
-// Inicio: everything at a glance. One overview call feeds role-aware stat
-// tiles (ventas de hoy, pedidos por preparar, alertas de stock, seguimientos,
-// producción, mi plan) plus the working lists that matter right now.
+// Inicio "Tu operación, hoy": un escritorio en calma. Tiles blancos con
+// alerta roja cuando algo pide acción, prioridades del día con checkbox,
+// carga de fábrica por etapa y los pendientes que importan ahora mismo.
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from './apiClient';
 import { canAccessPanel } from './roleAccess';
-import { NAV_ITEMS, allowsAny } from './navConfig';
+import { allowsAny } from './navConfig';
 import PerformanceDashboard from './PerformanceDashboard';
+import { useToast } from './ui/toastContext';
 import { areaForRole, AREA_LABELS, boliviaToday, campaignIsActive, formatCampaignDate } from './campaignShared';
 
 const formatBs = (value) => `${Number(value || 0).toFixed(2).replace(/\.00$/, '')} Bs`;
@@ -24,14 +25,9 @@ const STAGE_LABELS = {
 };
 const STAGE_ORDER = Object.keys(STAGE_LABELS);
 
-// Acciones directas (no navegación general): cada una arranca una tarea.
-const QUICK_ACTIONS = [
-  { path: '/cotizar', icon: '＋', label: 'Nueva cotización' },
-  { path: '/produccion-planificacion', icon: '🏭', label: 'Planificar producción' },
-  { path: '/recepcion', icon: '📦', label: 'Recibir lotes' },
-  { path: '/comprar', icon: '🧾', label: 'Compras' },
-  { path: '/calendario', icon: '🗓', label: 'Mi plan' }
-];
+const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+const AVATAR_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#6366f1'];
 
 const minuteLabel = (minute) => {
   const h = Math.floor(minute / 60);
@@ -41,32 +37,18 @@ const minuteLabel = (minute) => {
 
 export default function Dashboard({ token, user, role, access }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [campaigns, setCampaigns] = useState([]);
 
-  const greetingName = user?.display_name || (user?.email ? user.email.split('@')[0] : 'Bienvenido');
   const showPerformance = canAccessPanel(access, 'rendimientoGlobal') || canAccessPanel(access, 'rendimientoIndividual');
+  const canQuote = allowsAny(access, ['cotizar']);
 
-  const todayLabel = useMemo(() => {
-    const formatted = new Intl.DateTimeFormat('es-BO', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
-    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  const dateChip = useMemo(() => {
+    const now = new Date();
+    return `${now.getDate()} ${MONTH_SHORT[now.getMonth()]}`;
   }, []);
-
-  const quickLinks = useMemo(() => (
-    NAV_ITEMS
-      .filter((item) => item.path !== '/' && item.path !== '/perfil' && !item.hidden)
-      .filter((item) => allowsAny(access, item.navAccess || item.routeAccess))
-      .map((item) => ({ to: item.path, label: item.label }))
-  ), [access]);
-
-  // Solo las acciones cuyos paneles puede abrir este usuario.
-  const quickActions = useMemo(() => (
-    QUICK_ACTIONS.filter((action) => {
-      const item = NAV_ITEMS.find((nav) => nav.path === action.path);
-      return item && allowsAny(access, item.navAccess || item.routeAccess);
-    })
-  ), [access]);
 
   useEffect(() => {
     let active = true;
@@ -117,11 +99,11 @@ export default function Dashboard({ token, user, role, access }) {
     const delta = overview.quotes_today.count - (overview.quotes_today.yesterday_count || 0);
     tiles.push({
       key: 'quotes',
-      label: overview.quotes_today.scope === 'team' ? 'Cotizaciones hoy (equipo)' : 'Mis cotizaciones hoy',
+      label: overview.quotes_today.scope === 'team' ? 'Cotizaciones · equipo' : 'Mis cotizaciones',
       value: overview.quotes_today.count,
       detail: overview.quotes_today.sold_count > 0
-        ? `${formatBs(overview.quotes_today.total)} · ${overview.quotes_today.sold_count} cobradas (${formatBs(overview.quotes_today.sold_total)})`
-        : formatBs(overview.quotes_today.total),
+        ? `${formatBs(overview.quotes_today.total)} · ${overview.quotes_today.sold_count} cobradas`
+        : `hoy · ${formatBs(overview.quotes_today.total)}`,
       trend: delta === 0
         ? { text: 'igual que ayer', dir: 'flat' }
         : { text: `${Math.abs(delta)} vs ayer`, dir: delta > 0 ? 'up' : 'down' },
@@ -131,7 +113,7 @@ export default function Dashboard({ token, user, role, access }) {
   if (overview?.pipeline) {
     tiles.push({
       key: 'prepare',
-      label: 'Pedidos por preparar',
+      label: 'Por preparar',
       value: overview.pipeline.pagado,
       detail: `${overview.pipeline.embalado} embalados · ${overview.pipeline.enviado_hoy} enviados hoy`,
       to: '/pedidos',
@@ -144,7 +126,7 @@ export default function Dashboard({ token, user, role, access }) {
       key: 'stock',
       label: 'Bajo mínimo',
       value: overview.stock_alerts,
-      detail: sinStock > 0 ? `${sinStock} sin stock en alguna sede` : 'ninguno agotado',
+      detail: sinStock > 0 ? `${sinStock} sin stock` : 'ninguno agotado',
       to: '/inventory',
       warn: Number(overview.stock_alerts) > 0
     });
@@ -152,7 +134,7 @@ export default function Dashboard({ token, user, role, access }) {
   if (overview?.crm_due !== null && overview?.crm_due !== undefined) {
     tiles.push({
       key: 'crm',
-      label: 'Seguimientos de clientes',
+      label: 'Seguimientos',
       value: overview.crm_due,
       detail: 'vencen hoy o antes',
       to: '/cotizar',
@@ -162,13 +144,14 @@ export default function Dashboard({ token, user, role, access }) {
   if (overview?.production) {
     tiles.push({
       key: 'prod',
-      label: 'Producción activa',
+      label: 'En producción',
       value: overview.production.active_cards,
       detail: `${overview.production.por_recibir} por recibir`,
       to: '/produccion-kanban',
       warn: Number(overview.production.por_recibir) > 0
     });
   }
+
   // El timeline de producción: etapas en orden de ruta, con el cuello de
   // botella (la etapa con más lotes) resaltado.
   const stageRows = useMemo(() => {
@@ -181,54 +164,76 @@ export default function Dashboard({ token, user, role, access }) {
     return rows.length > 0 ? { rows, max } : null;
   }, [overview]);
 
+  const bottleneck = useMemo(() => {
+    if (!stageRows) return null;
+    const candidates = stageRows.rows.filter((r) => r.stage !== 'recepcion');
+    if (candidates.length < 2) return null;
+    return candidates.find((r) => r.count === stageRows.max) || null;
+  }, [stageRows]);
+
   const myDay = overview?.my_day || null;
-  const planPct = myDay && myDay.tasks > 0 ? Math.round((myDay.done / myDay.tasks) * 100) : 0;
+
+  // Checkbox directo en Inicio: marcar hecha sin abrir el Plan del día.
+  const toggleMyTask = async (item) => {
+    try {
+      const data = await apiRequest(`/api/day-plan/${item.id}`, {
+        method: 'PATCH',
+        token,
+        body: { is_done: !item.done }
+      });
+      const nowDone = Boolean(data?.task?.is_done);
+      setOverview((prev) => {
+        if (!prev?.my_day) return prev;
+        const items = (prev.my_day.items || []).map((t) => (t.id === item.id ? { ...t, done: nowDone } : t));
+        const done = prev.my_day.done + (nowDone ? 1 : -1);
+        return { ...prev, my_day: { ...prev.my_day, done: Math.max(0, done), items } };
+      });
+    } catch (err) {
+      toast.error(err.message || 'No se pudo actualizar la tarea');
+    }
+  };
+
+  const teamDay = Array.isArray(overview?.team_day) ? overview.team_day : [];
+  const teamTasks = teamDay.reduce((sum, m) => sum + Number(m.tasks || 0), 0);
+  const teamDone = teamDay.reduce((sum, m) => sum + Number(m.done || 0), 0);
 
   return (
-    <div className="container dashboard-page">
-      <div className="dashboard-hero">
+    <div className="container dashboard-page home-page">
+      <header className="home-hero">
         <div>
-          <p className="dashboard-eyebrow">{todayLabel}</p>
-          <h2 className="dashboard-title">Hola, {greetingName}</h2>
-          <p className="dashboard-subtitle">Todo el negocio de un vistazo.</p>
+          <h2 className="home-title">Tu operación, hoy</h2>
+          <p className="home-subtitle">Lo importante primero; el detalle está a un clic.</p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => navigate('/calendario')}>
-          Plan del día
-        </button>
-      </div>
-
-      {quickActions.length > 0 && (
-        <div className="dash-actions">
-          {quickActions.map((action) => (
-            <button
-              key={`${action.path}-${action.label}`}
-              type="button"
-              className="dash-action"
-              onClick={() => navigate(action.path)}
-            >
-              <span className="dash-action-icon" aria-hidden="true">{action.icon}</span>
-              {action.label}
+        <div className="home-hero-side">
+          <span className="home-date-chip">📅 {dateChip}</span>
+          {canQuote ? (
+            <button type="button" className="btn btn-primary home-cta" onClick={() => navigate('/cotizar')}>
+              + Nueva cotización
             </button>
-          ))}
+          ) : (
+            <button type="button" className="btn btn-primary home-cta" onClick={() => navigate('/calendario')}>
+              Abrir mi plan
+            </button>
+          )}
         </div>
-      )}
+      </header>
 
       {campaignBanner && allowsAny(access, ['campanas_live', 'admin']) && (
         <button
           type="button"
-          className={`campaign-banner ${campaignBanner.campaign.kind === 'live' ? 'is-live' : ''}`}
+          className={`home-campaign ${campaignBanner.campaign.kind === 'live' ? 'is-live' : ''}`}
           onClick={() => navigate(campaignBanner.campaign.kind === 'live' ? '/live' : '/campanas')}
         >
-          <span className="campaign-banner-icon">
-            {campaignBanner.campaign.kind === 'live' ? '🔴' : '📣'}
+          <span className="home-campaign-icon" aria-hidden="true">
+            {campaignBanner.campaign.kind === 'live' ? '🔴' : '🎉'}
           </span>
-          <span className="campaign-banner-body">
-            <span className="campaign-banner-title">
+          <span className="home-campaign-body">
+            <strong>
               {campaignBanner.campaign.kind === 'live'
                 ? `Live TikTok${campaignBanner.campaign.start_date === boliviaToday() ? ' HOY' : ''}: ${campaignBanner.campaign.name}`
-                : `${campaignBanner.active ? 'Campaña en curso' : 'Próxima campaña'}: ${campaignBanner.campaign.name}`}
-            </span>
-            <span className="campaign-banner-detail">
+                : `${campaignBanner.campaign.name} · ${formatCampaignDate(campaignBanner.campaign.kind === 'live' ? campaignBanner.campaign.start_date : campaignBanner.campaign.end_date)}`}
+            </strong>
+            <span>
               {campaignBanner.campaign.kind === 'live'
                 ? `${formatCampaignDate(campaignBanner.campaign.start_date)}${campaignBanner.campaign.live_time ? ` · ${campaignBanner.campaign.live_time}` : ''}`
                 : `${formatCampaignDate(campaignBanner.campaign.start_date)} — ${formatCampaignDate(campaignBanner.campaign.end_date)}`}
@@ -239,7 +244,7 @@ export default function Dashboard({ token, user, role, access }) {
               )}
             </span>
           </span>
-          <span className="campaign-banner-cta">Ver responsabilidades →</span>
+          <span className="home-campaign-cta">Ver responsabilidades →</span>
         </button>
       )}
 
@@ -248,12 +253,12 @@ export default function Dashboard({ token, user, role, access }) {
       ) : (
         <>
           {tiles.length > 0 && (
-            <div className="glance-tiles">
+            <div className="home-tiles">
               {tiles.map((tile) => (
-                <button key={tile.key} type="button" className={`glance-tile ${tile.warn ? 'is-warn' : ''}`} onClick={() => navigate(tile.to)}>
-                  <span className="glance-tile-value">{tile.value}</span>
-                  <span className="glance-tile-label">{tile.label}</span>
-                  <span className="glance-tile-detail">{tile.detail}</span>
+                <button key={tile.key} type="button" className={`home-tile ${tile.warn ? 'is-warn' : ''}`} onClick={() => navigate(tile.to)}>
+                  <span className="home-tile-value">{tile.value}</span>
+                  <span className="home-tile-label">{tile.label}</span>
+                  <span className="home-tile-detail">{tile.detail}</span>
                   {tile.trend && (
                     <span className={`glance-tile-trend is-${tile.trend.dir}`}>
                       {tile.trend.dir === 'up' ? '↑' : tile.trend.dir === 'down' ? '↓' : '='} {tile.trend.text}
@@ -264,72 +269,84 @@ export default function Dashboard({ token, user, role, access }) {
             </div>
           )}
 
-          {myDay && (
-            <section className={`card dashboard-card dash-myplan ${myDay.tasks === 0 ? 'is-empty' : ''}`}>
-              <div className="dashboard-card-head">
-                <h3>🎯 Mi plan de hoy</h3>
-                <button type="button" className="dashboard-link" onClick={() => navigate('/calendario')}>
-                  {myDay.tasks === 0 ? 'Planificar mi día →' : 'Abrir tablero →'}
-                </button>
-              </div>
-              {myDay.tasks === 0 ? (
-                <p className="dashboard-muted">Sin tareas registradas todavía.</p>
-              ) : (
-                <>
-                  <div className="dash-myplan-progress">
-                    <div className="dash-myplan-bar">
-                      <div className="dash-myplan-fill" style={{ width: `${planPct}%` }} />
-                    </div>
-                    <strong>{myDay.done}/{myDay.tasks}</strong>
+          <div className="home-grid">
+            {myDay && (
+              <section className="home-card">
+                <div className="home-card-head">
+                  <div>
+                    <h3>Prioridades de hoy</h3>
+                    {myDay.tasks > 0 && (
+                      <p className="home-card-sub">{myDay.done} de {myDay.tasks} {myDay.done === 1 ? 'completada' : 'completadas'}</p>
+                    )}
                   </div>
-                  <ul className="dash-myplan-items">
+                  <button type="button" className="dashboard-link" onClick={() => navigate('/calendario')}>
+                    {myDay.tasks === 0 ? 'Planificar mi día →' : 'Ver plan →'}
+                  </button>
+                </div>
+                {myDay.tasks === 0 ? (
+                  <p className="dashboard-muted">Sin tareas registradas todavía.</p>
+                ) : (
+                  <ul className="home-task-list">
                     {(myDay.items || []).map((item) => (
                       <li key={item.id} className={item.done ? 'is-done' : ''}>
-                        <span className="dash-myplan-check">{item.done ? '✓' : '○'}</span>
-                        <span className="dash-myplan-time">{minuteLabel(item.start_minute)}</span>
-                        <span className="dash-myplan-title">{item.title}</span>
+                        <label className="home-task-main">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(item.done)}
+                            onChange={() => toggleMyTask(item)}
+                          />
+                          <span className="home-task-title">{item.title}</span>
+                        </label>
+                        <span className="home-task-time">{minuteLabel(item.start_minute)}</span>
                       </li>
                     ))}
                   </ul>
-                </>
-              )}
-            </section>
-          )}
+                )}
+              </section>
+            )}
 
-          <div className="glance-lists">
             {stageRows && (
-              <section className="card dashboard-card">
-                <div className="dashboard-card-head">
-                  <h3>🏭 Fábrica hoy</h3>
+              <section className="home-card">
+                <div className="home-card-head">
+                  <div>
+                    <h3>Producción</h3>
+                    <p className="home-card-sub">Carga actual por etapa</p>
+                  </div>
                   <button type="button" className="dashboard-link" onClick={() => navigate('/produccion-kanban')}>Ver tablero →</button>
                 </div>
-                <div className="dash-stages">
+                <div className="home-stages">
                   {stageRows.rows.map((row) => (
-                    <div key={row.stage} className="dash-stage-row">
-                      <span className="dash-stage-label">{row.label}</span>
-                      <div className="dash-stage-track">
+                    <div key={row.stage} className="home-stage-row">
+                      <span className="home-stage-label">{row.label}</span>
+                      <div className="home-stage-track">
                         <div
-                          className={`dash-stage-bar ${row.count === stageRows.max && row.stage !== 'recepcion' ? 'is-bottleneck' : ''}`}
+                          className={`home-stage-bar ${bottleneck && row.stage === bottleneck.stage ? 'is-bottleneck' : ''}`}
                           style={{ width: `${Math.max(8, Math.round((row.count / stageRows.max) * 100))}%` }}
                         />
                       </div>
-                      <span className="dash-stage-count">
+                      <span className="home-stage-count">
                         {row.count}
                         {row.stuck > 0 && <em title="Lotes sin moverse hace más de 48 horas"> · {row.stuck} +48h</em>}
                       </span>
                     </div>
                   ))}
                 </div>
+                {bottleneck && (
+                  <p className="home-stage-note">{bottleneck.label} concentra la mayor carga del día.</p>
+                )}
               </section>
             )}
 
             {Array.isArray(overview?.to_prepare) && overview.to_prepare.length > 0 && (
-              <section className="card dashboard-card">
-                <div className="dashboard-card-head">
-                  <h3>🔵 Pagados esperando preparación</h3>
+              <section className="home-card">
+                <div className="home-card-head">
+                  <div>
+                    <h3>Pedidos esperando preparación</h3>
+                    <p className="home-card-sub">Pagados listos para armar</p>
+                  </div>
                   <button type="button" className="dashboard-link" onClick={() => navigate('/pedidos')}>Ir a Pedidos →</button>
                 </div>
-                <ul className="glance-list">
+                <ul className="home-detail-list">
                   {overview.to_prepare.map((quote) => (
                     <li key={quote.id}>
                       <strong>#{quote.id} {quote.customer_name}</strong>
@@ -341,12 +358,15 @@ export default function Dashboard({ token, user, role, access }) {
             )}
 
             {Array.isArray(overview?.crm_due_list) && overview.crm_due_list.length > 0 && (
-              <section className="card dashboard-card">
-                <div className="dashboard-card-head">
-                  <h3>📞 Seguimientos para hoy</h3>
+              <section className="home-card">
+                <div className="home-card-head">
+                  <div>
+                    <h3>Seguimientos para hoy</h3>
+                    <p className="home-card-sub">Clientes esperando una respuesta</p>
+                  </div>
                   <button type="button" className="dashboard-link" onClick={() => navigate('/cotizar')}>Abrir Clientes →</button>
                 </div>
-                <ul className="glance-list">
+                <ul className="home-detail-list">
                   {overview.crm_due_list.map((customer) => (
                     <li key={customer.id}>
                       <strong>{customer.name}</strong>
@@ -357,47 +377,52 @@ export default function Dashboard({ token, user, role, access }) {
               </section>
             )}
 
-            <section className="card dashboard-card">
-              <div className="dashboard-card-head">
-                <h3>🗓 Plan del equipo hoy</h3>
-                <button type="button" className="dashboard-link" onClick={() => navigate('/calendario')}>Ver tablero →</button>
+            <section className="home-card">
+              <div className="home-card-head">
+                <div>
+                  <h3>Equipo</h3>
+                  <p className="home-card-sub">Plan de hoy</p>
+                </div>
+                <button type="button" className="dashboard-link" onClick={() => navigate('/calendario')}>Ver equipo →</button>
               </div>
-              {(!overview?.team_day || overview.team_day.length === 0) ? (
-                <p className="dashboard-muted">Nadie registró su plan todavía. Empiecen en la reunión de la mañana.</p>
+              {teamDay.length === 0 ? (
+                <p className="dashboard-muted">Nadie registró su plan todavía.</p>
               ) : (
-                <ul className="glance-list">
-                  {overview.team_day.map((member) => (
-                    <li key={member.user_id}>
-                      <strong>{member.name}</strong>
-                      <span>{member.done}/{member.tasks} tareas hechas</span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <div className="home-team-row">
+                    <span className="home-team-avatars">
+                      {teamDay.slice(0, 5).map((member, index) => (
+                        <span
+                          key={member.user_id}
+                          className="home-team-avatar"
+                          style={{ background: AVATAR_COLORS[index % AVATAR_COLORS.length] }}
+                          title={member.name}
+                        >
+                          {String(member.name || '?').trim().charAt(0).toUpperCase()}
+                        </span>
+                      ))}
+                    </span>
+                    <span className="home-team-summary">
+                      {teamDay.length} {teamDay.length === 1 ? 'persona' : 'personas'} · {teamDone}/{teamTasks} tareas hechas
+                    </span>
+                  </div>
+                  <ul className="home-detail-list compact">
+                    {teamDay.map((member) => (
+                      <li key={member.user_id}>
+                        <strong>{member.name}</strong>
+                        <span>{member.done}/{member.tasks} hechas</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
             </section>
           </div>
         </>
       )}
 
-      <section className="card dashboard-card">
-        <div className="dashboard-card-head">
-          <h3>Acceso rápido</h3>
-        </div>
-        {quickLinks.length === 0 ? (
-          <p className="dashboard-muted">No tienes paneles asignados todavía.</p>
-        ) : (
-          <div className="dashboard-quick-links is-sleek">
-            {quickLinks.map((link) => (
-              <button key={link.to} type="button" className="dashboard-quick-link" onClick={() => navigate(link.to)}>
-                {link.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
       {showPerformance && (
-        <section className="dashboard-performance">
+        <section className="dashboard-performance home-performance">
           <h3 className="dashboard-section-title">Rendimiento</h3>
           <PerformanceDashboard token={token} user={user} role={role} access={access} />
         </section>

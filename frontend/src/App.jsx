@@ -78,6 +78,7 @@ function App() {
       <AppShell
         access={effectiveAccess}
         displayName={displayName}
+        roleName={role}
         currentCommission={commission}
         isTopSeller={isTopSeller}
         onLogout={handleLogout}
