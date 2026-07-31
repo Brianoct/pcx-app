@@ -7,6 +7,7 @@ import { NAV_ITEMS, allowsAny, getDefaultPath } from './navConfig';
 import { useAuth } from './authContext';
 import { useCommission } from './useCommission';
 import './index.css';
+import './focusDesk.css';
 
 const PublicCustomerMenu = lazy(() => import('./PublicCustomerMenu'));
 const ComprasScan = lazy(() => import('./ComprasScan'));

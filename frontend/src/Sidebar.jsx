@@ -2,14 +2,15 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import logo from './assets/PCX.png';
 import { getSidebarSections } from './navConfig';
 
-function Sidebar({ access, displayName, onLogout, onNavigate }) {
+function Sidebar({ access, displayName, open, onLogout, onNavigate, onClose }) {
   const sections = getSidebarSections(access);
   const navigate = useNavigate();
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar focus-drawer" aria-hidden={!open} inert={!open}>
       <div className="sidebar-header">
         <img src={logo} alt="PCX" className="app-logo" />
+        <button type="button" className="sidebar-close" onClick={onClose} aria-label="Cerrar menú">×</button>
       </div>
 
       <nav className="sidebar-nav">

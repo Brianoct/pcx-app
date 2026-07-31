@@ -1,47 +1,43 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 
-const DESKTOP_QUERY = '(min-width: 1024px)';
-
 function AppShell({ access, displayName, currentCommission, isTopSeller, onLogout, children }) {
-  // Mobile: off-canvas drawer. Desktop: persistent, hideable for full-width work.
+  // The navigation is intentionally off-canvas at every viewport width. This
+  // keeps operational screens wide while preserving the complete role-aware menu.
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [sidebarHidden, setSidebarHidden] = useState(
-    () => localStorage.getItem('sidebar_hidden') === '1'
-  );
-  const location = useLocation();
 
   useEffect(() => {
-    setDrawerOpen(false);
-  }, [location.pathname, location.search]);
-
-  const toggleSidebar = () => {
-    if (window.matchMedia(DESKTOP_QUERY).matches) {
-      setSidebarHidden((prev) => {
-        localStorage.setItem('sidebar_hidden', prev ? '0' : '1');
-        return !prev;
-      });
-    } else {
-      setDrawerOpen((prev) => !prev);
-    }
-  };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setDrawerOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, []);
 
   return (
-    <div className={`app-shell ${drawerOpen ? 'drawer-open' : ''} ${sidebarHidden ? 'sidebar-hidden' : ''}`}>
-      {drawerOpen && <div className="sidebar-overlay" onClick={() => setDrawerOpen(false)} />}
+    <div className={`app-shell focus-shell ${drawerOpen ? 'drawer-open' : ''}`}>
+      {drawerOpen && (
+        <button
+          type="button"
+          className="sidebar-overlay"
+          aria-label="Cerrar menú"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
       <Sidebar
         access={access}
         displayName={displayName}
+        open={drawerOpen}
         onLogout={onLogout}
         onNavigate={() => setDrawerOpen(false)}
+        onClose={() => setDrawerOpen(false)}
       />
       <div className="shell-main">
         <TopBar
           currentCommission={currentCommission}
           isTopSeller={isTopSeller}
-          onToggleSidebar={toggleSidebar}
+          onToggleSidebar={() => setDrawerOpen((prev) => !prev)}
         />
         <main className="shell-content">
           {children}

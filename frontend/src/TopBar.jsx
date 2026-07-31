@@ -4,6 +4,7 @@ import { getNavLabel } from './navConfig';
 import { useOutbox } from './OutboxProvider';
 import { useOnlineStatus } from './useOnlineStatus';
 import OutboxPanel from './OutboxPanel';
+import logo from './assets/PCX.png';
 
 function SyncStatus() {
   const isOnline = useOnlineStatus();
@@ -70,9 +71,13 @@ function TopBar({ currentCommission, isTopSeller, onToggleSidebar }) {
         onClick={onToggleSidebar}
         aria-label="Mostrar u ocultar menú"
       >
-        ☰
+        <span aria-hidden="true">☰</span>
       </button>
-      <h1 className="topbar-title">{getNavLabel(location.pathname)}</h1>
+      <img src={logo} alt="PCX" className="topbar-logo" />
+      <div className="topbar-context">
+        <span className="topbar-context-label">Área actual</span>
+        <h1 className="topbar-title">{getNavLabel(location.pathname)}</h1>
+      </div>
       <div className="topbar-right">
         <SyncStatus />
         <button
