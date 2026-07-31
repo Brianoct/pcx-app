@@ -1,0 +1,580 @@
+/* Focus Desk redesign
+   Presentation-only overrides for the application shell and Inicio. Keeping
+   these rules separate makes the redesign easy to review, revert, or iterate. */
+
+.focus-shell {
+  display: block;
+  min-height: 100dvh;
+}
+
+.focus-shell .shell-main {
+  width: 100%;
+  min-height: 100dvh;
+}
+
+.focus-shell .focus-drawer {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 1000;
+  width: 300px;
+  max-width: 86vw;
+  transform: translateX(-105%);
+  transition: transform 0.22s ease;
+  background: rgba(255, 255, 255, 0.99);
+  box-shadow: 20px 0 52px rgba(76, 57, 45, 0.2);
+}
+
+.focus-shell.drawer-open .focus-drawer {
+  transform: translateX(0);
+}
+
+.focus-shell .sidebar-overlay {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  width: 100%;
+  min-height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: rgba(28, 25, 23, 0.42);
+  cursor: pointer;
+}
+
+.focus-shell .sidebar-header {
+  min-height: 76px;
+  justify-content: space-between;
+  padding: 12px 18px;
+}
+
+.focus-shell .sidebar-header .app-logo {
+  height: 50px;
+  max-width: 164px;
+}
+
+.sidebar-close {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.45rem;
+}
+
+.focus-shell .sidebar-nav {
+  padding: 16px 14px 20px;
+}
+
+.focus-shell .sidebar-section {
+  margin-bottom: 18px;
+}
+
+.focus-shell .sidebar-link {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 9px 12px;
+  border-radius: 10px;
+}
+
+.focus-shell .sidebar-link.active {
+  box-shadow: none;
+  background: #f7e9e2;
+  color: #be123c;
+}
+
+.focus-shell .topbar {
+  min-height: 72px;
+  gap: 12px;
+  padding: 10px 22px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 1px 0 rgba(214, 204, 192, 0.35);
+}
+
+.focus-shell .topbar-menu-btn {
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+}
+
+.topbar-logo {
+  display: block;
+  width: 112px;
+  height: 46px;
+  padding: 5px 10px;
+  border-radius: 9px;
+  background: #1c2433;
+  object-fit: contain;
+}
+
+.topbar-context {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 2px;
+}
+
+.topbar-context-label {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.focus-shell .topbar-title {
+  font-size: 0.96rem;
+}
+
+.focus-shell .shell-content {
+  background: #f8f5f1;
+}
+
+/* Inicio: a calm, decision-first workspace. */
+.focus-dashboard {
+  max-width: 1360px;
+  padding: 30px 28px 42px;
+}
+
+.focus-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 0 24px;
+}
+
+.focus-hero .dashboard-eyebrow {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.focus-hero .dashboard-title {
+  margin: 3px 0 5px;
+  color: var(--text-primary);
+  font-size: clamp(1.6rem, 2.6vw, 2.15rem);
+  font-weight: 700;
+}
+
+.focus-hero .dashboard-subtitle {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.focus-primary-action {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 10px 16px;
+  box-shadow: 0 7px 18px rgba(190, 18, 60, 0.18);
+}
+
+.focus-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 30px;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.focus-summary-item {
+  min-width: 0;
+  min-height: 112px;
+  padding: 17px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.focus-summary-item:first-child {
+  padding-left: 0;
+}
+
+.focus-summary-item:last-child {
+  border-right: 0;
+}
+
+.focus-summary-item:hover {
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.focus-summary-label {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.focus-summary-value {
+  margin: 3px 0 1px;
+  color: var(--text-primary);
+  font-size: 1.55rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.focus-summary-detail {
+  color: var(--text-muted);
+  font-size: 0.73rem;
+}
+
+.focus-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(310px, 0.78fr);
+  gap: 34px;
+  align-items: start;
+}
+
+.focus-main-column,
+.focus-side-column {
+  min-width: 0;
+}
+
+.focus-section {
+  padding: 4px 0 26px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 26px;
+}
+
+.focus-section .dashboard-card-head,
+.focus-factory-card .dashboard-card-head,
+.focus-team-card .dashboard-card-head {
+  margin-bottom: 10px;
+}
+
+.focus-section .dashboard-card-head h3,
+.focus-factory-card .dashboard-card-head h3,
+.focus-team-card .dashboard-card-head h3 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.focus-attention-list {
+  border-top: 1px solid var(--border-soft);
+}
+
+.focus-attention-row {
+  width: 100%;
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.focus-attention-row:hover {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.focus-attention-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent-warm);
+}
+
+.focus-attention-row.is-urgent .focus-attention-dot {
+  background: var(--accent-primary);
+}
+
+.focus-attention-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.focus-attention-copy strong {
+  font-size: 0.9rem;
+}
+
+.focus-attention-copy small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-row-arrow {
+  color: var(--text-muted);
+  font-size: 1.3rem;
+}
+
+.focus-clear-state {
+  margin: 0;
+  padding: 16px 0;
+  color: var(--success);
+  font-size: 0.9rem;
+}
+
+.focus-myday .dash-myplan-progress {
+  margin-bottom: 7px;
+}
+
+.focus-myday .dash-myplan-bar {
+  height: 7px;
+}
+
+.focus-myday .dash-myplan-fill {
+  background: var(--success);
+}
+
+.focus-myday .dash-myplan-progress strong {
+  font-size: 0.8rem;
+}
+
+.focus-task-list,
+.focus-detail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.focus-task-list li {
+  display: grid;
+  grid-template-columns: 48px 19px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+}
+
+.focus-task-list li.is-done .dash-myplan-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.focus-task-check {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.65rem;
+}
+
+.focus-task-list li.is-done .focus-task-check {
+  border-color: var(--success);
+  background: var(--success);
+}
+
+.focus-detail-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.84rem;
+}
+
+.focus-detail-list li span {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  text-align: right;
+}
+
+.focus-factory-card,
+.focus-team-card {
+  padding: 19px;
+  border: 1px solid rgba(214, 204, 192, 0.72);
+  border-radius: 15px;
+  background: var(--bg-secondary);
+  box-shadow: 0 8px 24px rgba(120, 100, 80, 0.08);
+}
+
+.focus-team-card {
+  margin-top: 18px;
+}
+
+.focus-factory-card .dash-stage-row {
+  grid-template-columns: 86px minmax(0, 1fr) auto;
+}
+
+.focus-factory-card .dash-stage-track {
+  height: 8px;
+}
+
+.focus-factory-card .dash-stage-bar {
+  background: #a8a29e;
+}
+
+.focus-factory-card .dash-stage-bar.is-bottleneck {
+  background: var(--accent-warm);
+}
+
+.focus-campaign {
+  width: 100%;
+  min-height: 0;
+  margin-top: 18px;
+  padding: 16px 17px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  border: 0;
+  border-left: 3px solid var(--accent-primary);
+  border-radius: 0 12px 12px 0;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.focus-campaign:hover {
+  background: #fffaf6;
+}
+
+.focus-campaign-label {
+  color: var(--accent-primary);
+  font-size: 0.69rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.focus-campaign > span:not(.focus-campaign-label),
+.focus-campaign small {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.focus-performance {
+  margin-top: 8px;
+  padding-top: 22px;
+}
+
+@media (max-width: 980px) {
+  .focus-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .focus-side-column {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .focus-campaign,
+  .focus-team-card {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .focus-shell .topbar {
+    min-height: 64px;
+    padding: 8px 12px;
+  }
+
+  .topbar-logo {
+    width: 88px;
+    height: 42px;
+    padding: 5px 8px;
+  }
+
+  .topbar-context-label,
+  .focus-shell .commission-chip-label {
+    display: none;
+  }
+
+  .focus-shell .commission-chip {
+    padding: 6px 9px;
+    font-size: 0.78rem;
+  }
+
+  .focus-dashboard {
+    padding: 22px 15px 34px;
+  }
+
+  .focus-hero {
+    display: block;
+  }
+
+  .focus-primary-action {
+    width: 100%;
+    margin-top: 16px;
+  }
+
+  .focus-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .focus-summary-item,
+  .focus-summary-item:first-child {
+    min-height: 104px;
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .focus-summary-item:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .focus-summary-item:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
+  .focus-side-column {
+    display: block;
+  }
+
+  .focus-campaign,
+  .focus-team-card {
+    margin-top: 16px;
+  }
+}
+
+@media (max-width: 440px) {
+  .focus-shell .topbar-context {
+    display: none;
+  }
+
+  .focus-shell .topbar-right {
+    margin-left: auto;
+  }
+
+  .focus-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .focus-summary-value {
+    font-size: 1.3rem;
+  }
+
+  .focus-attention-copy small {
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .focus-shell .focus-drawer {
+    transition: none;
+  }
+}

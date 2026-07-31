@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from './apiClient';
 import { canAccessPanel } from './roleAccess';
-import { NAV_ITEMS, allowsAny } from './navConfig';
+import { allowsAny } from './navConfig';
 import PerformanceDashboard from './PerformanceDashboard';
 import { areaForRole, AREA_LABELS, boliviaToday, campaignIsActive, formatCampaignDate } from './campaignShared';
 
@@ -23,15 +23,6 @@ const STAGE_LABELS = {
   recepcion: 'Recepción'
 };
 const STAGE_ORDER = Object.keys(STAGE_LABELS);
-
-// Acciones directas (no navegación general): cada una arranca una tarea.
-const QUICK_ACTIONS = [
-  { path: '/cotizar', icon: '＋', label: 'Nueva cotización' },
-  { path: '/produccion-planificacion', icon: '🏭', label: 'Planificar producción' },
-  { path: '/recepcion', icon: '📦', label: 'Recibir lotes' },
-  { path: '/comprar', icon: '🧾', label: 'Compras' },
-  { path: '/calendario', icon: '🗓', label: 'Mi plan' }
-];
 
 const minuteLabel = (minute) => {
   const h = Math.floor(minute / 60);
@@ -53,20 +44,7 @@ export default function Dashboard({ token, user, role, access }) {
     return formatted.charAt(0).toUpperCase() + formatted.slice(1);
   }, []);
 
-  const quickLinks = useMemo(() => (
-    NAV_ITEMS
-      .filter((item) => item.path !== '/' && item.path !== '/perfil' && !item.hidden)
-      .filter((item) => allowsAny(access, item.navAccess || item.routeAccess))
-      .map((item) => ({ to: item.path, label: item.label }))
-  ), [access]);
-
-  // Solo las acciones cuyos paneles puede abrir este usuario.
-  const quickActions = useMemo(() => (
-    QUICK_ACTIONS.filter((action) => {
-      const item = NAV_ITEMS.find((nav) => nav.path === action.path);
-      return item && allowsAny(access, item.navAccess || item.routeAccess);
-    })
-  ), [access]);
+  const canQuote = allowsAny(access, ['cotizar']);
 
   useEffect(() => {
     let active = true;
@@ -183,77 +161,75 @@ export default function Dashboard({ token, user, role, access }) {
 
   const myDay = overview?.my_day || null;
   const planPct = myDay && myDay.tasks > 0 ? Math.round((myDay.done / myDay.tasks) * 100) : 0;
+  const stuckLots = stageRows?.rows.reduce((sum, row) => sum + Number(row.stuck || 0), 0) || 0;
+  const attentionItems = [];
+
+  if (Number(overview?.stock_alerts || 0) > 0) {
+    const outOfStock = Number(overview?.stock_sin_stock || 0);
+    attentionItems.push({
+      key: 'stock',
+      title: `${overview.stock_alerts} productos bajo mínimo`,
+      detail: outOfStock > 0 ? `${outOfStock} sin stock en alguna sede` : 'Revisar reposición',
+      to: '/inventory',
+      urgent: outOfStock > 0
+    });
+  }
+  if (stuckLots > 0) {
+    attentionItems.push({
+      key: 'stuck',
+      title: `${stuckLots} ${stuckLots === 1 ? 'lote detenido' : 'lotes detenidos'}`,
+      detail: 'Más de 48 horas sin movimiento',
+      to: '/produccion-kanban',
+      urgent: true
+    });
+  }
+  if (Number(overview?.crm_due || 0) > 0) {
+    attentionItems.push({
+      key: 'crm',
+      title: `${overview.crm_due} seguimientos vencen hoy`,
+      detail: 'Clientes esperando una respuesta',
+      to: '/cotizar'
+    });
+  }
+  if (Number(overview?.pipeline?.pagado || 0) > 0) {
+    attentionItems.push({
+      key: 'prepare',
+      title: `${overview.pipeline.pagado} pedidos por preparar`,
+      detail: `${overview.pipeline.embalado || 0} ya están embalados`,
+      to: '/pedidos'
+    });
+  }
 
   return (
-    <div className="container dashboard-page">
-      <div className="dashboard-hero">
+    <div className="container dashboard-page focus-dashboard">
+      <header className="focus-hero">
         <div>
           <p className="dashboard-eyebrow">{todayLabel}</p>
-          <h2 className="dashboard-title">Hola, {greetingName}</h2>
-          <p className="dashboard-subtitle">Todo el negocio de un vistazo.</p>
+          <h2 className="dashboard-title">Buenos días, {greetingName}</h2>
+          <p className="dashboard-subtitle">Primero lo importante; el resto queda a un clic.</p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => navigate('/calendario')}>
-          Plan del día
-        </button>
-      </div>
-
-      {quickActions.length > 0 && (
-        <div className="dash-actions">
-          {quickActions.map((action) => (
-            <button
-              key={`${action.path}-${action.label}`}
-              type="button"
-              className="dash-action"
-              onClick={() => navigate(action.path)}
-            >
-              <span className="dash-action-icon" aria-hidden="true">{action.icon}</span>
-              {action.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {campaignBanner && allowsAny(access, ['campanas_live', 'admin']) && (
-        <button
-          type="button"
-          className={`campaign-banner ${campaignBanner.campaign.kind === 'live' ? 'is-live' : ''}`}
-          onClick={() => navigate(campaignBanner.campaign.kind === 'live' ? '/live' : '/campanas')}
-        >
-          <span className="campaign-banner-icon">
-            {campaignBanner.campaign.kind === 'live' ? '🔴' : '📣'}
-          </span>
-          <span className="campaign-banner-body">
-            <span className="campaign-banner-title">
-              {campaignBanner.campaign.kind === 'live'
-                ? `Live TikTok${campaignBanner.campaign.start_date === boliviaToday() ? ' HOY' : ''}: ${campaignBanner.campaign.name}`
-                : `${campaignBanner.active ? 'Campaña en curso' : 'Próxima campaña'}: ${campaignBanner.campaign.name}`}
-            </span>
-            <span className="campaign-banner-detail">
-              {campaignBanner.campaign.kind === 'live'
-                ? `${formatCampaignDate(campaignBanner.campaign.start_date)}${campaignBanner.campaign.live_time ? ` · ${campaignBanner.campaign.live_time}` : ''}`
-                : `${formatCampaignDate(campaignBanner.campaign.start_date)} — ${formatCampaignDate(campaignBanner.campaign.end_date)}`}
-              {campaignBanner.myTotal > 0 && (
-                campaignBanner.myPending > 0
-                  ? ` · ${AREA_LABELS[campaignBanner.myArea]}: ${campaignBanner.myPending} ${campaignBanner.myPending === 1 ? 'tarea pendiente' : 'tareas pendientes'}`
-                  : ` · ${AREA_LABELS[campaignBanner.myArea]}: ¡todo listo! ✓`
-              )}
-            </span>
-          </span>
-          <span className="campaign-banner-cta">Ver responsabilidades →</span>
-        </button>
-      )}
+        {canQuote ? (
+          <button type="button" className="btn btn-primary focus-primary-action" onClick={() => navigate('/cotizar')}>
+            + Nueva cotización
+          </button>
+        ) : (
+          <button type="button" className="btn btn-primary focus-primary-action" onClick={() => navigate('/calendario')}>
+            Abrir mi plan
+          </button>
+        )}
+      </header>
 
       {loading ? (
         <p className="dashboard-muted">Cargando resumen…</p>
       ) : (
         <>
           {tiles.length > 0 && (
-            <div className="glance-tiles">
+            <section className="focus-summary" aria-label="Resumen del negocio">
               {tiles.map((tile) => (
-                <button key={tile.key} type="button" className={`glance-tile ${tile.warn ? 'is-warn' : ''}`} onClick={() => navigate(tile.to)}>
-                  <span className="glance-tile-value">{tile.value}</span>
-                  <span className="glance-tile-label">{tile.label}</span>
-                  <span className="glance-tile-detail">{tile.detail}</span>
+                <button key={tile.key} type="button" className="focus-summary-item" onClick={() => navigate(tile.to)}>
+                  <span className="focus-summary-label">{tile.label}</span>
+                  <span className="focus-summary-value">{tile.value}</span>
+                  <span className="focus-summary-detail">{tile.detail}</span>
                   {tile.trend && (
                     <span className={`glance-tile-trend is-${tile.trend.dir}`}>
                       {tile.trend.dir === 'up' ? '↑' : tile.trend.dir === 'down' ? '↓' : '='} {tile.trend.text}
@@ -261,143 +237,132 @@ export default function Dashboard({ token, user, role, access }) {
                   )}
                 </button>
               ))}
-            </div>
+            </section>
           )}
 
-          {myDay && (
-            <section className={`card dashboard-card dash-myplan ${myDay.tasks === 0 ? 'is-empty' : ''}`}>
-              <div className="dashboard-card-head">
-                <h3>🎯 Mi plan de hoy</h3>
-                <button type="button" className="dashboard-link" onClick={() => navigate('/calendario')}>
-                  {myDay.tasks === 0 ? 'Planificar mi día →' : 'Abrir tablero →'}
-                </button>
-              </div>
-              {myDay.tasks === 0 ? (
-                <p className="dashboard-muted">Sin tareas registradas todavía.</p>
-              ) : (
-                <>
-                  <div className="dash-myplan-progress">
-                    <div className="dash-myplan-bar">
-                      <div className="dash-myplan-fill" style={{ width: `${planPct}%` }} />
-                    </div>
-                    <strong>{myDay.done}/{myDay.tasks}</strong>
+          <div className="focus-columns">
+            <div className="focus-main-column">
+              <section className="focus-section">
+                <div className="dashboard-card-head">
+                  <h3>Lo que requiere una decisión</h3>
+                </div>
+                {attentionItems.length === 0 ? (
+                  <p className="focus-clear-state">Todo está al día. No hay alertas operativas pendientes.</p>
+                ) : (
+                  <div className="focus-attention-list">
+                    {attentionItems.map((item) => (
+                      <button key={item.key} type="button" className={`focus-attention-row ${item.urgent ? 'is-urgent' : ''}`} onClick={() => navigate(item.to)}>
+                        <span className="focus-attention-dot" aria-hidden="true" />
+                        <span className="focus-attention-copy">
+                          <strong>{item.title}</strong>
+                          <small>{item.detail}</small>
+                        </span>
+                        <span className="focus-row-arrow" aria-hidden="true">›</span>
+                      </button>
+                    ))}
                   </div>
-                  <ul className="dash-myplan-items">
-                    {(myDay.items || []).map((item) => (
-                      <li key={item.id} className={item.done ? 'is-done' : ''}>
-                        <span className="dash-myplan-check">{item.done ? '✓' : '○'}</span>
-                        <span className="dash-myplan-time">{minuteLabel(item.start_minute)}</span>
-                        <span className="dash-myplan-title">{item.title}</span>
-                      </li>
+                )}
+              </section>
+
+              {myDay && (
+                <section className={`focus-section focus-myday ${myDay.tasks === 0 ? 'is-empty' : ''}`}>
+                  <div className="dashboard-card-head">
+                    <h3>Mi día · {myDay.done}/{myDay.tasks}</h3>
+                    <button type="button" className="dashboard-link" onClick={() => navigate('/calendario')}>
+                      {myDay.tasks === 0 ? 'Planificar mi día →' : 'Abrir plan →'}
+                    </button>
+                  </div>
+                  {myDay.tasks === 0 ? (
+                    <p className="dashboard-muted">Sin tareas registradas todavía.</p>
+                  ) : (
+                    <>
+                      <div className="dash-myplan-progress">
+                        <div className="dash-myplan-bar"><div className="dash-myplan-fill" style={{ width: `${planPct}%` }} /></div>
+                        <strong>{planPct}%</strong>
+                      </div>
+                      <ul className="focus-task-list">
+                        {(myDay.items || []).map((item) => (
+                          <li key={item.id} className={item.done ? 'is-done' : ''}>
+                            <span className="dash-myplan-time">{minuteLabel(item.start_minute)}</span>
+                            <span className="focus-task-check" aria-hidden="true">{item.done ? '✓' : ''}</span>
+                            <span className="dash-myplan-title">{item.title}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </section>
+              )}
+
+              {(Array.isArray(overview?.to_prepare) && overview.to_prepare.length > 0) && (
+                <section className="focus-section">
+                  <div className="dashboard-card-head">
+                    <h3>Pagados esperando preparación</h3>
+                    <button type="button" className="dashboard-link" onClick={() => navigate('/pedidos')}>Ir a Pedidos →</button>
+                  </div>
+                  <ul className="focus-detail-list">
+                    {overview.to_prepare.map((quote) => (
+                      <li key={quote.id}><strong>#{quote.id} {quote.customer_name}</strong><span>{quote.store_location} · {formatBs(quote.total)}</span></li>
                     ))}
                   </ul>
-                </>
+                </section>
               )}
-            </section>
-          )}
+            </div>
 
-          <div className="glance-lists">
-            {stageRows && (
-              <section className="card dashboard-card">
-                <div className="dashboard-card-head">
-                  <h3>🏭 Fábrica hoy</h3>
-                  <button type="button" className="dashboard-link" onClick={() => navigate('/produccion-kanban')}>Ver tablero →</button>
-                </div>
-                <div className="dash-stages">
-                  {stageRows.rows.map((row) => (
-                    <div key={row.stage} className="dash-stage-row">
-                      <span className="dash-stage-label">{row.label}</span>
-                      <div className="dash-stage-track">
-                        <div
-                          className={`dash-stage-bar ${row.count === stageRows.max && row.stage !== 'recepcion' ? 'is-bottleneck' : ''}`}
-                          style={{ width: `${Math.max(8, Math.round((row.count / stageRows.max) * 100))}%` }}
-                        />
+            <aside className="focus-side-column">
+              {stageRows && (
+                <section className="focus-factory-card">
+                  <div className="dashboard-card-head">
+                    <h3>Fábrica ahora</h3>
+                    <button type="button" className="dashboard-link" onClick={() => navigate('/produccion-kanban')}>Ver Kanban →</button>
+                  </div>
+                  <div className="dash-stages">
+                    {stageRows.rows.map((row) => (
+                      <div key={row.stage} className="dash-stage-row">
+                        <span className="dash-stage-label">{row.label}</span>
+                        <div className="dash-stage-track">
+                          <div className={`dash-stage-bar ${row.count === stageRows.max && row.stage !== 'recepcion' ? 'is-bottleneck' : ''}`} style={{ width: `${Math.max(8, Math.round((row.count / stageRows.max) * 100))}%` }} />
+                        </div>
+                        <span className="dash-stage-count">{row.count}{row.stuck > 0 && <em title="Lotes sin moverse hace más de 48 horas"> · {row.stuck} +48h</em>}</span>
                       </div>
-                      <span className="dash-stage-count">
-                        {row.count}
-                        {row.stuck > 0 && <em title="Lotes sin moverse hace más de 48 horas"> · {row.stuck} +48h</em>}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {Array.isArray(overview?.to_prepare) && overview.to_prepare.length > 0 && (
-              <section className="card dashboard-card">
-                <div className="dashboard-card-head">
-                  <h3>🔵 Pagados esperando preparación</h3>
-                  <button type="button" className="dashboard-link" onClick={() => navigate('/pedidos')}>Ir a Pedidos →</button>
-                </div>
-                <ul className="glance-list">
-                  {overview.to_prepare.map((quote) => (
-                    <li key={quote.id}>
-                      <strong>#{quote.id} {quote.customer_name}</strong>
-                      <span>{quote.store_location} · {formatBs(quote.total)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {Array.isArray(overview?.crm_due_list) && overview.crm_due_list.length > 0 && (
-              <section className="card dashboard-card">
-                <div className="dashboard-card-head">
-                  <h3>📞 Seguimientos para hoy</h3>
-                  <button type="button" className="dashboard-link" onClick={() => navigate('/cotizar')}>Abrir Clientes →</button>
-                </div>
-                <ul className="glance-list">
-                  {overview.crm_due_list.map((customer) => (
-                    <li key={customer.id}>
-                      <strong>{customer.name}</strong>
-                      <span>{customer.phone || 'sin teléfono'}{customer.note ? ` · ${customer.note}` : ''}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            <section className="card dashboard-card">
-              <div className="dashboard-card-head">
-                <h3>🗓 Plan del equipo hoy</h3>
-                <button type="button" className="dashboard-link" onClick={() => navigate('/calendario')}>Ver tablero →</button>
-              </div>
-              {(!overview?.team_day || overview.team_day.length === 0) ? (
-                <p className="dashboard-muted">Nadie registró su plan todavía. Empiecen en la reunión de la mañana.</p>
-              ) : (
-                <ul className="glance-list">
-                  {overview.team_day.map((member) => (
-                    <li key={member.user_id}>
-                      <strong>{member.name}</strong>
-                      <span>{member.done}/{member.tasks} tareas hechas</span>
-                    </li>
-                  ))}
-                </ul>
+                    ))}
+                  </div>
+                </section>
               )}
-            </section>
+
+              {campaignBanner && allowsAny(access, ['campanas_live', 'admin']) && (
+                <button type="button" className={`focus-campaign ${campaignBanner.campaign.kind === 'live' ? 'is-live' : ''}`} onClick={() => navigate(campaignBanner.campaign.kind === 'live' ? '/live' : '/campanas')}>
+                  <span className="focus-campaign-label">{campaignBanner.campaign.kind === 'live' ? 'Live' : campaignBanner.active ? 'En curso' : 'Próxima'}</span>
+                  <strong>{campaignBanner.campaign.name}</strong>
+                  <span>{campaignBanner.campaign.kind === 'live'
+                    ? `${formatCampaignDate(campaignBanner.campaign.start_date)}${campaignBanner.campaign.live_time ? ` · ${campaignBanner.campaign.live_time}` : ''}`
+                    : `${formatCampaignDate(campaignBanner.campaign.start_date)} — ${formatCampaignDate(campaignBanner.campaign.end_date)}`}</span>
+                  {campaignBanner.myTotal > 0 && <small>{campaignBanner.myPending > 0 ? `${AREA_LABELS[campaignBanner.myArea]}: ${campaignBanner.myPending} pendientes` : `${AREA_LABELS[campaignBanner.myArea]}: todo listo ✓`}</small>}
+                </button>
+              )}
+
+              <section className="focus-team-card">
+                <div className="dashboard-card-head">
+                  <h3>Plan del equipo</h3>
+                  <button type="button" className="dashboard-link" onClick={() => navigate('/calendario')}>Ver →</button>
+                </div>
+                {(!overview?.team_day || overview.team_day.length === 0) ? (
+                  <p className="dashboard-muted">Nadie registró su plan todavía.</p>
+                ) : (
+                  <ul className="focus-detail-list compact">
+                    {overview.team_day.map((member) => (
+                      <li key={member.user_id}><strong>{member.name}</strong><span>{member.done}/{member.tasks} hechas</span></li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </aside>
           </div>
         </>
       )}
 
-      <section className="card dashboard-card">
-        <div className="dashboard-card-head">
-          <h3>Acceso rápido</h3>
-        </div>
-        {quickLinks.length === 0 ? (
-          <p className="dashboard-muted">No tienes paneles asignados todavía.</p>
-        ) : (
-          <div className="dashboard-quick-links is-sleek">
-            {quickLinks.map((link) => (
-              <button key={link.to} type="button" className="dashboard-quick-link" onClick={() => navigate(link.to)}>
-                {link.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
       {showPerformance && (
-        <section className="dashboard-performance">
+        <section className="dashboard-performance focus-performance">
           <h3 className="dashboard-section-title">Rendimiento</h3>
           <PerformanceDashboard token={token} user={user} role={role} access={access} />
         </section>
