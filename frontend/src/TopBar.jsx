@@ -58,9 +58,14 @@ function SyncStatus() {
   );
 }
 
-function TopBar({ currentCommission, isTopSeller, onToggleSidebar }) {
+function TopBar({ displayName, currentCommission, isTopSeller, onToggleSidebar }) {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // En Inicio la barra saluda (como un escritorio); en el resto muestra la
+  // sección activa para no perder el "¿dónde estoy?".
+  const isHome = location.pathname === '/';
+  const todayLabel = new Intl.DateTimeFormat('es-BO', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
 
   return (
     <header className="topbar">
@@ -72,7 +77,14 @@ function TopBar({ currentCommission, isTopSeller, onToggleSidebar }) {
       >
         ☰
       </button>
-      <h1 className="topbar-title">{getNavLabel(location.pathname)}</h1>
+      {isHome ? (
+        <div className="topbar-greet">
+          <h1 className="topbar-title">Hola, {displayName}</h1>
+          <span className="topbar-greet-sub">{todayLabel.charAt(0).toUpperCase() + todayLabel.slice(1)}</span>
+        </div>
+      ) : (
+        <h1 className="topbar-title">{getNavLabel(location.pathname)}</h1>
+      )}
       <div className="topbar-right">
         <SyncStatus />
         <button
