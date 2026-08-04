@@ -11,7 +11,7 @@ const TASK_TYPES = ['tarea', '3s', 'kaizen'];
 const userDisplayName = (row) =>
   String(row.display_name || '').trim() || String(row.email || '').split('@')[0] || 'Usuario';
 
-const buildTaskRow = (row) => ({
+const buildTaskRow = (row, subtasks = []) => ({
   id: Number(row.id),
   user_id: Number(row.user_id),
   task_date: row.task_date instanceof Date ? row.task_date.toISOString().slice(0, 10) : String(row.task_date).slice(0, 10),
@@ -22,8 +22,58 @@ const buildTaskRow = (row) => ({
   is_done: Boolean(row.is_done),
   // Tarea que viene de Planificación (Programa→Operación→Misión→Tarea):
   // el frontend la dibuja con checkbox y el check se sincroniza allá.
-  planning_task_id: row.planning_task_id ? Number(row.planning_task_id) : null
+  planning_task_id: row.planning_task_id ? Number(row.planning_task_id) : null,
+  // Checklist del bloque: el % de avance se dibuja dentro del bloque.
+  subtasks
 });
+
+const buildSubtaskRow = (row) => ({
+  id: Number(row.id),
+  task_id: Number(row.task_id),
+  title: row.title,
+  is_done: Boolean(row.is_done)
+});
+
+const loadSubtasksByTask = async (taskIds) => {
+  if (taskIds.length === 0) return new Map();
+  const result = await pool.query(
+    'SELECT * FROM day_plan_subtasks WHERE task_id = ANY($1) ORDER BY position, id',
+    [taskIds]
+  );
+  const map = new Map();
+  for (const row of result.rows) {
+    const sub = buildSubtaskRow(row);
+    if (!map.has(sub.task_id)) map.set(sub.task_id, []);
+    map.get(sub.task_id).push(sub);
+  }
+  return map;
+};
+
+// Sincroniza el check con la tarea de Planificación vinculada (si la hay).
+const syncPlanningDone = async (taskRow, isDone) => {
+  if (!taskRow.planning_task_id) return;
+  await pool.query(
+    `UPDATE planning_tasks SET is_done = $2, done_at = CASE WHEN $2 THEN NOW() ELSE NULL END, updated_at = NOW()
+     WHERE id = $1`,
+    [taskRow.planning_task_id, isDone]
+  );
+};
+
+// Con checklist, el bloque se marca hecho solo cuando TODO está completo.
+const recomputeTaskDone = async (taskRow) => {
+  const agg = await pool.query(
+    'SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_done)::int AS done FROM day_plan_subtasks WHERE task_id = $1',
+    [taskRow.id]
+  );
+  const { total, done } = agg.rows[0];
+  if (Number(total) === 0) return null;
+  const allDone = Number(done) === Number(total);
+  if (Boolean(taskRow.is_done) !== allDone) {
+    await pool.query('UPDATE day_plan_tasks SET is_done = $2, updated_at = NOW() WHERE id = $1', [taskRow.id, allDone]);
+    await syncPlanningDone(taskRow, allDone);
+  }
+  return allDone;
+};
 
 const parseTaskFields = (body, { partial = false } = {}) => {
   const out = {};
@@ -72,6 +122,7 @@ router.get('/api/day-plan', authenticateToken, async (req, res) => {
         [date]
       )
     ]);
+    const subtasksByTask = await loadSubtasksByTask(tasksRes.rows.map((row) => Number(row.id)));
     res.json({
       date,
       team: teamRes.rows.map((row) => ({
@@ -79,7 +130,7 @@ router.get('/api/day-plan', authenticateToken, async (req, res) => {
         name: userDisplayName(row),
         role: row.role
       })),
-      tasks: tasksRes.rows.map(buildTaskRow)
+      tasks: tasksRes.rows.map((row) => buildTaskRow(row, subtasksByTask.get(Number(row.id)) || []))
     });
   } catch (err) {
     console.error('Error loading day plan:', err);
@@ -138,13 +189,10 @@ router.patch('/api/day-plan/:id', authenticateToken, async (req, res) => {
     // Check sincronizado: si la tarea vino de Planificación, marcarla hecha
     // aquí también la marca allá (y viceversa, ver routes/planning.js).
     if (Object.prototype.hasOwnProperty.call(fields, 'is_done') && updated.planning_task_id) {
-      await pool.query(
-        `UPDATE planning_tasks SET is_done = $2, done_at = CASE WHEN $2 THEN NOW() ELSE NULL END, updated_at = NOW()
-         WHERE id = $1`,
-        [updated.planning_task_id, fields.is_done]
-      );
+      await syncPlanningDone(updated, fields.is_done);
     }
-    res.json({ task: buildTaskRow(updated) });
+    const subtasksByTask = await loadSubtasksByTask([taskId]);
+    res.json({ task: buildTaskRow(updated, subtasksByTask.get(taskId) || []) });
   } catch (err) {
     console.error('Error updating day plan task:', err);
     res.status(500).json({ error: 'No se pudo actualizar la tarea' });
@@ -164,6 +212,101 @@ router.delete('/api/day-plan/:id', authenticateToken, async (req, res) => {
     res.json({ message: 'Tarea eliminada' });
   } catch (err) {
     console.error('Error deleting day plan task:', err);
+    res.status(500).json({ error: 'No se pudo eliminar la tarea' });
+  }
+});
+
+// ─── Checklist dentro de un bloque ──────────────────────────────────────────
+
+const loadOwnedTask = async (req, res, taskId) => {
+  if (!Number.isInteger(taskId) || taskId <= 0) {
+    res.status(400).json({ error: 'Tarea inválida' });
+    return null;
+  }
+  const result = await pool.query('SELECT * FROM day_plan_tasks WHERE id = $1', [taskId]);
+  if (result.rowCount === 0) {
+    res.status(404).json({ error: 'Tarea no encontrada' });
+    return null;
+  }
+  if (!canManageTask(req, result.rows[0])) {
+    res.status(403).json({ error: 'Solo puedes editar tus propias tareas' });
+    return null;
+  }
+  return result.rows[0];
+};
+
+router.post('/api/day-plan/:id/subtasks', authenticateToken, async (req, res) => {
+  const taskId = Number.parseInt(req.params.id, 10);
+  try {
+    const task = await loadOwnedTask(req, res, taskId);
+    if (!task) return;
+    const title = String(req.body?.title || '').trim().slice(0, 120);
+    if (!title) return res.status(400).json({ error: 'La tarea necesita una descripción' });
+    const posRes = await pool.query(
+      'SELECT COALESCE(MAX(position), 0) + 1 AS next FROM day_plan_subtasks WHERE task_id = $1',
+      [taskId]
+    );
+    const result = await pool.query(
+      'INSERT INTO day_plan_subtasks (task_id, title, position) VALUES ($1, $2, $3) RETURNING *',
+      [taskId, title, Number(posRes.rows[0].next)]
+    );
+    // Un checklist con un ítem nuevo pendiente reabre el bloque si estaba hecho.
+    const allDone = await recomputeTaskDone(task);
+    res.status(201).json({ subtask: buildSubtaskRow(result.rows[0]), task_done: allDone });
+  } catch (err) {
+    console.error('Error creating subtask:', err);
+    res.status(500).json({ error: 'No se pudo agregar la tarea a la lista' });
+  }
+});
+
+router.patch('/api/day-plan/subtasks/:id', authenticateToken, async (req, res) => {
+  const subtaskId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(subtaskId) || subtaskId <= 0) return res.status(400).json({ error: 'Tarea inválida' });
+  try {
+    const subRes = await pool.query('SELECT * FROM day_plan_subtasks WHERE id = $1', [subtaskId]);
+    if (subRes.rowCount === 0) return res.status(404).json({ error: 'Tarea no encontrada' });
+    const task = await loadOwnedTask(req, res, Number(subRes.rows[0].task_id));
+    if (!task) return;
+
+    const has = (key) => Object.prototype.hasOwnProperty.call(req.body || {}, key);
+    const sets = [];
+    const values = [subtaskId];
+    if (has('title')) {
+      const title = String(req.body.title || '').trim().slice(0, 120);
+      if (!title) return res.status(400).json({ error: 'La tarea necesita una descripción' });
+      values.push(title);
+      sets.push(`title = $${values.length}`);
+    }
+    if (has('is_done')) {
+      values.push(Boolean(req.body.is_done));
+      sets.push(`is_done = $${values.length}`);
+    }
+    if (sets.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
+    const result = await pool.query(
+      `UPDATE day_plan_subtasks SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
+      values
+    );
+    const allDone = await recomputeTaskDone(task);
+    res.json({ subtask: buildSubtaskRow(result.rows[0]), task_done: allDone });
+  } catch (err) {
+    console.error('Error updating subtask:', err);
+    res.status(500).json({ error: 'No se pudo actualizar la tarea' });
+  }
+});
+
+router.delete('/api/day-plan/subtasks/:id', authenticateToken, async (req, res) => {
+  const subtaskId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(subtaskId) || subtaskId <= 0) return res.status(400).json({ error: 'Tarea inválida' });
+  try {
+    const subRes = await pool.query('SELECT * FROM day_plan_subtasks WHERE id = $1', [subtaskId]);
+    if (subRes.rowCount === 0) return res.status(404).json({ error: 'Tarea no encontrada' });
+    const task = await loadOwnedTask(req, res, Number(subRes.rows[0].task_id));
+    if (!task) return;
+    await pool.query('DELETE FROM day_plan_subtasks WHERE id = $1', [subtaskId]);
+    const allDone = await recomputeTaskDone(task);
+    res.json({ message: 'Tarea eliminada', task_done: allDone });
+  } catch (err) {
+    console.error('Error deleting subtask:', err);
     res.status(500).json({ error: 'No se pudo eliminar la tarea' });
   }
 });

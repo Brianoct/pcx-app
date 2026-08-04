@@ -10454,3 +10454,73 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   min-height: 38px; padding: 7px 10px; border: 1px solid var(--border);
   border-radius: 10px; font: inherit; background: #ffffff;
 }
+
+/* Plan del día: avance de la checklist dentro del bloque. */
+.dayplan-task.is-editable { cursor: pointer; }
+.dayplan-task-progress { display: flex; align-items: center; gap: 6px; margin-top: 3px; min-width: 0; }
+.dayplan-task-progress-bar {
+  flex: 1; height: 5px; min-width: 24px;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.35); overflow: hidden;
+}
+.dayplan-task-progress-bar > span { display: block; height: 100%; border-radius: 999px; background: #ffffff; }
+.dayplan-task-progress-text { flex-shrink: 0; font-size: 0.62rem; font-weight: 800; opacity: 0.95; white-space: nowrap; }
+
+/* Editor de bloque (modal). */
+.dpe-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(28, 25, 23, 0.45);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.dpe-panel {
+  width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto;
+  background: #ffffff; border-radius: 16px; padding: 18px 20px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.dpe-head { display: flex; align-items: center; justify-content: space-between; }
+.dpe-head h3 { margin: 0; font-size: 1.05rem; }
+.dpe-close {
+  min-height: 0; width: 32px; height: 32px; padding: 0;
+  border: 1px solid var(--border); border-radius: 9px; background: transparent;
+  color: var(--text-secondary); cursor: pointer; font-size: 0.95rem;
+}
+.dpe-title {
+  width: 100%; min-height: 42px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 10px; font: inherit; font-weight: 600;
+}
+.dpe-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dpe-row select { min-height: 38px; }
+.dpe-save { margin-left: auto; min-height: 38px; padding: 8px 16px; }
+
+.dpe-checklist { border-top: 1px solid #f0efed; padding-top: 10px; }
+.dpe-checklist h4 { margin: 0 0 8px; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; }
+.dpe-checklist-count { font-size: 0.74rem; font-weight: 800; color: #0f766e; }
+.dpe-empty { margin: 0 0 8px; font-size: 0.8rem; color: var(--text-muted); }
+.dpe-subtasks { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.dpe-subtasks li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 6px; border-radius: 8px;
+}
+.dpe-subtasks li:hover { background: #faf9f7; }
+.dpe-subtasks label { flex: 1; display: flex; align-items: center; gap: 9px; cursor: pointer; min-width: 0; }
+.dpe-subtasks input[type="checkbox"] { width: 17px; height: 17px; margin: 0; flex-shrink: 0; accent-color: #16a34a; cursor: pointer; }
+.dpe-subtasks li span { font-size: 0.88rem; overflow-wrap: anywhere; }
+.dpe-subtasks li.is-done span { color: var(--text-muted); text-decoration: line-through; }
+.dpe-sub-delete {
+  min-height: 0; padding: 2px 7px; border: none; border-radius: 7px;
+  background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.8rem;
+}
+.dpe-sub-delete:hover { background: #fee2e2; color: #b91c1c; }
+.dpe-subtask-add { display: flex; gap: 8px; }
+.dpe-subtask-add input {
+  flex: 1; min-height: 38px; padding: 8px 11px;
+  border: 1px solid var(--border); border-radius: 10px; font: inherit;
+}
+.dpe-subtask-add .btn { min-height: 38px; padding: 7px 13px; white-space: nowrap; }
+
+.dpe-foot { border-top: 1px solid #f0efed; padding-top: 10px; display: flex; justify-content: flex-end; }
+.dpe-delete {
+  min-height: 34px; padding: 6px 14px; border: 1px solid #fecaca; border-radius: 10px;
+  background: #fff5f5; color: #b91c1c; font: inherit; font-weight: 700; cursor: pointer;
+}
+.dpe-delete:hover { background: #fee2e2; }
