@@ -49,13 +49,26 @@ export default function VentasDashboard({ token }) {
   if (error) return <div className="container home-page"><p className="dashboard-muted">{error}</p></div>;
   if (!data) return <div className="container home-page"><p className="dashboard-muted">Cargando panel de ventas…</p></div>;
 
-  const { sales, funnel, seguimientos, alerts, goals, per_vendor: perVendor, scope } = data;
+  const { sales, team, funnel, seguimientos, alerts, goals, per_vendor: perVendor, scope } = data;
   const today = todayText();
+
+  // Primero lo del vendedor que inició sesión; al final lo global del área.
+  const seguimientosTile = {
+    key: 'seguimientos',
+    icon: '📞',
+    label: scope === 'team' ? 'Seguimientos · equipo' : 'Mis seguimientos',
+    value: seguimientos.hoy + seguimientos.vencidos,
+    detail: seguimientos.vencidos > 0 ? `${seguimientos.vencidos} vencidos` : 'para hoy',
+    to: '/crm',
+    warn: seguimientos.vencidos > 0,
+    team: scope === 'team'
+  };
 
   const tiles = [
     {
       key: 'mes_bs',
-      label: scope === 'team' ? 'Ventas del mes · equipo' : 'Mis ventas del mes',
+      icon: '💰',
+      label: 'Mis ventas del mes',
       value: formatBs(sales.sold_month_bs),
       detail: goals ? `Meta ${formatBs(goals.monthly_target_bs)} (${sales.goal_bs_pct ?? 0}%)` : `${sales.sold_month} cerradas`,
       to: '/history',
@@ -63,7 +76,8 @@ export default function VentasDashboard({ token }) {
     },
     {
       key: 'mes_units',
-      label: 'Ventas cerradas',
+      icon: '✅',
+      label: 'Mis ventas cerradas',
       value: sales.sold_month,
       detail: goals
         ? `Meta ${goals.monthly_units_expected} · mín ${goals.monthly_units_min} · sobresaliente ${goals.monthly_units_high}`
@@ -74,33 +88,40 @@ export default function VentasDashboard({ token }) {
     },
     {
       key: 'pendientes',
-      label: 'Cotizaciones pendientes',
+      icon: '🧾',
+      label: 'Mis cotizaciones pendientes',
       value: sales.pending_count,
       detail: `${formatBs(sales.pending_bs)} por cerrar`,
       to: '/history',
       warn: sales.pending_stale > 0
     },
-    {
-      key: 'seguimientos',
-      label: 'Seguimientos',
-      value: seguimientos.hoy + seguimientos.vencidos,
-      detail: seguimientos.vencidos > 0 ? `${seguimientos.vencidos} vencidos` : 'para hoy',
-      to: '/crm',
-      warn: seguimientos.vencidos > 0
-    },
+    ...(scope === 'own' ? [seguimientosTile] : []),
     {
       key: 'semana',
-      label: 'Esta semana',
+      icon: '📆',
+      label: 'Mi semana',
       value: sales.sold_week,
       detail: `${formatBs(sales.sold_week_bs)} · hoy ${sales.sold_today}`,
       to: '/history'
     },
+    ...(scope === 'team' ? [seguimientosTile] : []),
+    {
+      key: 'equipo_mes',
+      icon: '🏪',
+      label: 'Ventas del área · mes',
+      value: formatBs(team.sold_month_bs),
+      detail: `${team.sold_month} cerradas · ${team.pending_count} pendientes (${formatBs(team.pending_bs)})`,
+      to: '/history',
+      team: true
+    },
     {
       key: 'nuevos',
-      label: 'Clientes nuevos',
-      value: funnel.nuevos_mes,
+      icon: '👥',
+      label: 'Clientes nuevos · área',
+      value: team.nuevos_mes,
       detail: goals ? `Meta ${goals.monthly_new_customers} este mes` : 'este mes',
-      to: '/crm'
+      to: '/crm',
+      team: true
     }
   ];
 
@@ -158,7 +179,11 @@ export default function VentasDashboard({ token }) {
 
       <div className="home-tiles vd-tiles">
         {tiles.map((tile) => (
-          <button key={tile.key} type="button" className={`home-tile ${tile.warn ? 'is-warn' : ''}`} onClick={() => navigate(tile.to)}>
+          <button key={tile.key} type="button" className={`home-tile ${tile.warn ? 'is-warn' : ''} ${tile.team ? 'is-team' : ''}`} onClick={() => navigate(tile.to)}>
+            <span className="vd-tile-top">
+              <span className="vd-tile-icon" aria-hidden="true">{tile.icon}</span>
+              {tile.team && <span className="vd-tile-chip">EQUIPO</span>}
+            </span>
             <span className="home-tile-value">{tile.value}</span>
             <span className="home-tile-label">{tile.label}</span>
             <span className="home-tile-detail">{tile.detail}</span>
