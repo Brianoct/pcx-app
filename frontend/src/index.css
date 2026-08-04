@@ -10524,3 +10524,39 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   background: #fff5f5; color: #b91c1c; font: inherit; font-weight: 700; cursor: pointer;
 }
 .dpe-delete:hover { background: #fee2e2; }
+
+/* Arrastre de bloques en el Plan del día. */
+.dayplan-task.is-editable { cursor: grab; }
+.dayplan-task.is-dragging {
+  cursor: grabbing;
+  z-index: 30;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+  opacity: 0.95;
+}
+.dayplan-task-resize {
+  position: absolute;
+  left: 0; right: 0; bottom: -2px;
+  height: 9px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.dayplan-task-resize::after {
+  content: '';
+  position: absolute; left: 50%; bottom: 3px;
+  width: 26px; height: 3px; margin-left: -13px;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.55);
+  opacity: 0;
+}
+.dayplan-task:hover .dayplan-task-resize::after { opacity: 1; }
+
+/* «Pasar a otro día» en el editor. */
+.dpe-move {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  border-top: 1px solid #f0efed; padding-top: 10px;
+}
+.dpe-move-label { font-size: 0.8rem; font-weight: 700; color: var(--text-secondary); }
+.dpe-move input[type="date"] {
+  min-height: 36px; padding: 6px 9px;
+  border: 1px solid var(--border); border-radius: 10px; font: inherit; font-size: 0.85rem;
+}
+.dpe-move-btn { min-height: 36px; padding: 6px 12px; font-size: 0.84rem; }

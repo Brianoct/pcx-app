@@ -1,7 +1,7 @@
 // Plan del día: the team's workday at a glance. In the morning meeting each
 // person logs their tasks for today with a time frame; everyone's day shows
 // side by side, one column per person. Replaces the old event calendar.
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { apiRequest } from './apiClient';
 import { useToast } from './ui/toastContext';
 
@@ -60,6 +60,12 @@ export default function Calendar({ token, user }) {
   const [editorId, setEditorId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
   const [newSubtask, setNewSubtask] = useState('');
+  const [moveDate, setMoveDate] = useState('');
+  // Arrastre: mover el bloque (misma duración) o estirar el borde inferior.
+  const dragRef = useRef(null);
+  const previewRef = useRef(null);
+  const suppressClickRef = useRef(false);
+  const [dragPreview, setDragPreview] = useState(null);
 
   const isToday = date === toDateText(new Date());
   const myId = Number(user?.id);
@@ -151,6 +157,92 @@ export default function Calendar({ token, user }) {
       end_minute: task.end_minute
     });
     setNewSubtask('');
+    // Fecha sugerida para «pasar a otro día»: el día siguiente del tablero.
+    const [y, m, d] = date.split('-').map(Number);
+    setMoveDate(toDateText(new Date(y, m - 1, d + 1)));
+  };
+
+  // ── Arrastre para mover / estirar bloques ─────────────────────────────────
+  const snap15 = (minute) => Math.round(minute / 15) * 15;
+
+  const setPreview = (value) => {
+    previewRef.current = value;
+    setDragPreview(value);
+  };
+
+  const onDragMove = useCallback((e) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const deltaPx = e.clientY - drag.startY;
+    if (!drag.moved && Math.abs(deltaPx) < 5) return;
+    drag.moved = true;
+    const deltaMin = snap15((deltaPx / HOUR_PX) * 60);
+    if (drag.mode === 'move') {
+      const duration = drag.origEnd - drag.origStart;
+      const start = Math.max(DAY_START, Math.min(drag.origStart + deltaMin, DAY_END - duration));
+      setPreview({ taskId: drag.taskId, start_minute: start, end_minute: start + duration });
+    } else {
+      const end = Math.max(drag.origStart + 15, Math.min(drag.origEnd + deltaMin, DAY_END));
+      setPreview({ taskId: drag.taskId, start_minute: drag.origStart, end_minute: end });
+    }
+     
+  }, []);
+
+  const onDragEnd = useCallback(async () => {
+    window.removeEventListener('pointermove', onDragMove);
+    window.removeEventListener('pointerup', onDragEnd);
+    const drag = dragRef.current;
+    dragRef.current = null;
+    const preview = previewRef.current;
+    setPreview(null);
+    if (!drag || !drag.moved || !preview) return;
+    // El click del navegador llega justo después del pointerup: no abrir editor.
+    suppressClickRef.current = true;
+    setTimeout(() => { suppressClickRef.current = false; }, 150);
+    if (preview.start_minute === drag.origStart && preview.end_minute === drag.origEnd) return;
+    try {
+      const data = await apiRequest(`/api/day-plan/${drag.taskId}`, {
+        method: 'PATCH',
+        token,
+        body: { start_minute: preview.start_minute, end_minute: preview.end_minute }
+      });
+      setTasks((prev) => prev.map((t) => (t.id === drag.taskId ? data.task : t)));
+    } catch (err) {
+      toast.error(err.message || 'No se pudo mover el bloque');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  const beginDrag = (e, task, mode) => {
+    // En táctil el arrastre pelea con el scroll: ahí un toque abre el editor
+    // (que tiene selects de hora); el arrastre queda para mouse/lápiz.
+    if (e.pointerType === 'touch' || e.button !== 0) return;
+    if (mode === 'move' && e.target.closest('button, input, label, a')) return;
+    e.preventDefault();
+    dragRef.current = {
+      taskId: task.id,
+      mode,
+      startY: e.clientY,
+      origStart: task.start_minute,
+      origEnd: task.end_minute,
+      moved: false
+    };
+    window.addEventListener('pointermove', onDragMove);
+    window.addEventListener('pointerup', onDragEnd);
+  };
+
+  const moveToDate = async (task, targetDate) => {
+    if (!targetDate || targetDate === date) return;
+    try {
+      await apiRequest(`/api/day-plan/${task.id}`, { method: 'PATCH', token, body: { task_date: targetDate } });
+      setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      setEditorId(null);
+      const [y, m, d] = targetDate.split('-').map(Number);
+      const label = new Intl.DateTimeFormat('es-BO', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(y, m - 1, d));
+      toast.success(`Bloque movido al ${label}`);
+    } catch (err) {
+      toast.error(err.message || 'No se pudo mover');
+    }
   };
 
   const saveEditor = async () => {
@@ -367,8 +459,13 @@ export default function Calendar({ token, user }) {
                     <div className="dayplan-now-line" style={{ top: ((nowMinute - DAY_START) / 60) * HOUR_PX }} />
                   )}
                   {memberTasks.map((task) => {
-                    const top = Math.max(0, ((task.start_minute - DAY_START) / 60) * HOUR_PX);
-                    const height = Math.max(24, ((Math.min(task.end_minute, DAY_END) - Math.max(task.start_minute, DAY_START)) / 60) * HOUR_PX - 3);
+                    // Mientras se arrastra, el bloque se dibuja en su posición
+                    // tentativa; al soltar se confirma con el PATCH.
+                    const isDragging = dragPreview?.taskId === task.id;
+                    const dispStart = isDragging ? dragPreview.start_minute : task.start_minute;
+                    const dispEnd = isDragging ? dragPreview.end_minute : task.end_minute;
+                    const top = Math.max(0, ((dispStart - DAY_START) / 60) * HOUR_PX);
+                    const height = Math.max(24, ((Math.min(dispEnd, DAY_END) - Math.max(dispStart, DAY_START)) / 60) * HOUR_PX - 3);
                     const width = 100 / task.laneCount;
                     const type = TASK_TYPE_META[task.task_type] ? task.task_type : 'tarea';
                     const typeMeta = TASK_TYPE_META[type];
@@ -383,7 +480,7 @@ export default function Calendar({ token, user }) {
                     return (
                       <div
                         key={task.id}
-                        className={`dayplan-task ${task.is_done ? 'is-done' : ''} ${type !== 'tarea' ? `type-${type}` : ''} ${isPlan ? 'type-plan' : ''} ${canEdit ? 'is-editable' : ''}`}
+                        className={`dayplan-task ${task.is_done ? 'is-done' : ''} ${type !== 'tarea' ? `type-${type}` : ''} ${isPlan ? 'type-plan' : ''} ${canEdit ? 'is-editable' : ''} ${isDragging ? 'is-dragging' : ''}`}
                         style={{
                           top,
                           height,
@@ -393,12 +490,13 @@ export default function Calendar({ token, user }) {
                           // planning tasks use the fixed team-wide look from CSS.
                           background: type === 'tarea' && !isPlan ? color : undefined
                         }}
-                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${isPlan ? 'Planificación · ' : typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}${canEdit ? ' · clic para editar' : ''}`}
-                        onClick={canEdit ? () => openEditor(task) : undefined}
+                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${isPlan ? 'Planificación · ' : typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}${canEdit ? ' · clic para editar · arrastra para mover' : ''}`}
+                        onClick={canEdit ? () => { if (!suppressClickRef.current) openEditor(task); } : undefined}
+                        onPointerDown={canEdit ? (e) => beginDrag(e, task, 'move') : undefined}
                         role={canEdit ? 'button' : undefined}
                       >
                         <span className="dayplan-task-toprow">
-                          <span className="dayplan-task-time">{minuteLabel(task.start_minute)}–{minuteLabel(task.end_minute)}</span>
+                          <span className="dayplan-task-time">{minuteLabel(dispStart)}–{minuteLabel(dispEnd)}</span>
                           {isPlan ? (
                             <span className="dayplan-task-badge is-plan">📋 PLAN</span>
                           ) : type !== 'tarea' && (
@@ -435,6 +533,14 @@ export default function Calendar({ token, user }) {
                             )}
                             <button type="button" title="Eliminar" onClick={() => removeTask(task)}>✕</button>
                           </span>
+                        )}
+                        {canEdit && (
+                          <span
+                            className="dayplan-task-resize"
+                            title="Arrastra para cambiar la hora fin"
+                            onPointerDown={(e) => { e.stopPropagation(); beginDrag(e, task, 'resize'); }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
                         )}
                       </div>
                     );
@@ -528,6 +634,34 @@ export default function Calendar({ token, user }) {
                 />
                 <button type="button" className="btn btn-secondary" disabled={!newSubtask.trim()} onClick={addSubtask}>+ Agregar</button>
               </div>
+            </div>
+
+            <div className="dpe-move">
+              <span className="dpe-move-label">Pasar a:</span>
+              <button
+                type="button"
+                className="btn btn-secondary dpe-move-btn"
+                onClick={() => {
+                  const [y, m, d] = date.split('-').map(Number);
+                  moveToDate(editorTask, toDateText(new Date(y, m - 1, d + 1)));
+                }}
+              >
+                → Mañana
+              </button>
+              <input
+                type="date"
+                value={moveDate}
+                min={toDateText(new Date())}
+                onChange={(e) => setMoveDate(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary dpe-move-btn"
+                disabled={!moveDate || moveDate === date}
+                onClick={() => moveToDate(editorTask, moveDate)}
+              >
+                Mover
+              </button>
             </div>
 
             <div className="dpe-foot">
