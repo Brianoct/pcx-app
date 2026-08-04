@@ -56,9 +56,15 @@ export default function Calendar({ token, user }) {
   const [endMinute, setEndMinute] = useState(9 * 60);
   const [saving, setSaving] = useState(false);
   const [nowMinute, setNowMinute] = useState(() => new Date().getHours() * 60 + new Date().getMinutes());
+  // Editor de bloque: título, horario, tipo y checklist interna.
+  const [editorId, setEditorId] = useState(null);
+  const [editDraft, setEditDraft] = useState(null);
+  const [newSubtask, setNewSubtask] = useState('');
 
   const isToday = date === toDateText(new Date());
   const myId = Number(user?.id);
+  const isAdmin = String(user?.role || '').trim().toLowerCase() === 'admin';
+  const editorTask = editorId ? tasks.find((t) => t.id === editorId) : null;
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -130,6 +136,82 @@ export default function Calendar({ token, user }) {
     try {
       await apiRequest(`/api/day-plan/${task.id}`, { method: 'DELETE', token });
       setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      if (editorId === task.id) setEditorId(null);
+    } catch (err) {
+      toast.error(err.message || 'No se pudo eliminar');
+    }
+  };
+
+  const openEditor = (task) => {
+    setEditorId(task.id);
+    setEditDraft({
+      title: task.title,
+      task_type: task.task_type,
+      start_minute: task.start_minute,
+      end_minute: task.end_minute
+    });
+    setNewSubtask('');
+  };
+
+  const saveEditor = async () => {
+    if (!editorTask || !editDraft?.title?.trim()) return;
+    try {
+      const data = await apiRequest(`/api/day-plan/${editorTask.id}`, {
+        method: 'PATCH',
+        token,
+        body: {
+          title: editDraft.title.trim(),
+          task_type: editDraft.task_type,
+          start_minute: editDraft.start_minute,
+          end_minute: editDraft.end_minute
+        }
+      });
+      setTasks((prev) => prev.map((t) => (t.id === editorTask.id ? data.task : t)));
+      toast.success('Bloque actualizado');
+    } catch (err) {
+      toast.error(err.message || 'No se pudo guardar');
+    }
+  };
+
+  // La respuesta de cada operación de checklist trae task_done (true/false)
+  // cuando el bloque tiene lista: el bloque se marca hecho solo al completar.
+  const applySubtaskResult = (taskId, mutate, taskDone) => {
+    setTasks((prev) => prev.map((t) => {
+      if (t.id !== taskId) return t;
+      const subtasks = mutate([...(t.subtasks || [])]);
+      const is_done = typeof taskDone === 'boolean' ? taskDone : t.is_done;
+      return { ...t, subtasks, is_done };
+    }));
+  };
+
+  const addSubtask = async () => {
+    if (!editorTask || !newSubtask.trim()) return;
+    try {
+      const data = await apiRequest(`/api/day-plan/${editorTask.id}/subtasks`, {
+        method: 'POST', token, body: { title: newSubtask.trim() }
+      });
+      applySubtaskResult(editorTask.id, (subs) => [...subs, data.subtask], data.task_done);
+      setNewSubtask('');
+    } catch (err) {
+      toast.error(err.message || 'No se pudo agregar');
+    }
+  };
+
+  const toggleSubtask = async (task, subtask) => {
+    try {
+      const data = await apiRequest(`/api/day-plan/subtasks/${subtask.id}`, {
+        method: 'PATCH', token, body: { is_done: !subtask.is_done }
+      });
+      applySubtaskResult(task.id, (subs) => subs.map((s) => (s.id === subtask.id ? data.subtask : s)), data.task_done);
+    } catch (err) {
+      toast.error(err.message || 'No se pudo actualizar');
+    }
+  };
+
+  const removeSubtask = async (task, subtask) => {
+    try {
+      const data = await apiRequest(`/api/day-plan/subtasks/${subtask.id}`, { method: 'DELETE', token });
+      applySubtaskResult(task.id, (subs) => subs.filter((s) => s.id !== subtask.id), data.task_done);
     } catch (err) {
       toast.error(err.message || 'No se pudo eliminar');
     }
@@ -294,10 +376,14 @@ export default function Calendar({ token, user }) {
                     // Misión→Tarea): checkbox visible y look propio; el check
                     // se sincroniza con la sección de Programas.
                     const isPlan = Boolean(task.planning_task_id);
+                    const subtasks = task.subtasks || [];
+                    const subDone = subtasks.filter((s) => s.is_done).length;
+                    const progressPct = subtasks.length > 0 ? Math.round((subDone / subtasks.length) * 100) : null;
+                    const canEdit = isMine || isAdmin;
                     return (
                       <div
                         key={task.id}
-                        className={`dayplan-task ${task.is_done ? 'is-done' : ''} ${type !== 'tarea' ? `type-${type}` : ''} ${isPlan ? 'type-plan' : ''}`}
+                        className={`dayplan-task ${task.is_done ? 'is-done' : ''} ${type !== 'tarea' ? `type-${type}` : ''} ${isPlan ? 'type-plan' : ''} ${canEdit ? 'is-editable' : ''}`}
                         style={{
                           top,
                           height,
@@ -307,7 +393,9 @@ export default function Calendar({ token, user }) {
                           // planning tasks use the fixed team-wide look from CSS.
                           background: type === 'tarea' && !isPlan ? color : undefined
                         }}
-                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${isPlan ? 'Planificación · ' : typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}`}
+                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${isPlan ? 'Planificación · ' : typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}${canEdit ? ' · clic para editar' : ''}`}
+                        onClick={canEdit ? () => openEditor(task) : undefined}
+                        role={canEdit ? 'button' : undefined}
                       >
                         <span className="dayplan-task-toprow">
                           <span className="dayplan-task-time">{minuteLabel(task.start_minute)}–{minuteLabel(task.end_minute)}</span>
@@ -318,7 +406,7 @@ export default function Calendar({ token, user }) {
                           )}
                         </span>
                         {isPlan ? (
-                          <label className="dayplan-task-checkline">
+                          <label className="dayplan-task-checkline" onClick={(e) => e.stopPropagation()}>
                             <input
                               type="checkbox"
                               checked={task.is_done}
@@ -330,11 +418,21 @@ export default function Calendar({ token, user }) {
                         ) : (
                           <span className="dayplan-task-title">{task.title}</span>
                         )}
+                        {progressPct !== null && (
+                          <span className="dayplan-task-progress">
+                            <span className="dayplan-task-progress-bar">
+                              <span style={{ width: `${progressPct}%` }} />
+                            </span>
+                            <span className="dayplan-task-progress-text">{subDone}/{subtasks.length} · {progressPct}%</span>
+                          </span>
+                        )}
                         {isMine && (
-                          <span className="dayplan-task-actions">
-                            <button type="button" title={task.is_done ? 'Marcar pendiente' : 'Marcar hecha'} onClick={() => toggleDone(task)}>
-                              {task.is_done ? '↺' : '✓'}
-                            </button>
+                          <span className="dayplan-task-actions" onClick={(e) => e.stopPropagation()}>
+                            {subtasks.length === 0 && (
+                              <button type="button" title={task.is_done ? 'Marcar pendiente' : 'Marcar hecha'} onClick={() => toggleDone(task)}>
+                                {task.is_done ? '↺' : '✓'}
+                              </button>
+                            )}
                             <button type="button" title="Eliminar" onClick={() => removeTask(task)}>✕</button>
                           </span>
                         )}
@@ -345,6 +443,97 @@ export default function Calendar({ token, user }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {editorTask && editDraft && (
+        <div className="dpe-overlay" onClick={() => setEditorId(null)}>
+          <div className="dpe-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="dpe-head">
+              <h3>Editar bloque</h3>
+              <button type="button" className="dpe-close" onClick={() => setEditorId(null)} aria-label="Cerrar">✕</button>
+            </div>
+
+            <input
+              type="text"
+              className="dpe-title"
+              maxLength={120}
+              value={editDraft.title}
+              onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })}
+            />
+
+            <div className="dpe-row">
+              <select
+                className="dayplan-type-select"
+                value={editDraft.task_type}
+                onChange={(e) => setEditDraft({ ...editDraft, task_type: e.target.value })}
+              >
+                {Object.entries(TASK_TYPE_META).map(([value, meta]) => (
+                  <option key={value} value={value}>{meta.icon ? `${meta.icon} ${meta.label}` : meta.label}</option>
+                ))}
+              </select>
+              <select
+                value={editDraft.start_minute}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setEditDraft({
+                    ...editDraft,
+                    start_minute: v,
+                    end_minute: editDraft.end_minute <= v ? Math.min(v + 60, DAY_END) : editDraft.end_minute
+                  });
+                }}
+              >
+                {TIME_OPTIONS.filter((m) => m < DAY_END).map((m) => <option key={m} value={m}>{minuteLabel(m)}</option>)}
+              </select>
+              <span className="dayplan-add-sep">→</span>
+              <select
+                value={editDraft.end_minute}
+                onChange={(e) => setEditDraft({ ...editDraft, end_minute: Number(e.target.value) })}
+              >
+                {TIME_OPTIONS.filter((m) => m > editDraft.start_minute).map((m) => <option key={m} value={m}>{minuteLabel(m)}</option>)}
+              </select>
+              <button type="button" className="btn btn-primary dpe-save" disabled={!editDraft.title.trim()} onClick={saveEditor}>
+                Guardar
+              </button>
+            </div>
+
+            <div className="dpe-checklist">
+              <h4>Checklist del bloque {editorTask.subtasks?.length > 0 && (
+                <span className="dpe-checklist-count">
+                  {editorTask.subtasks.filter((s) => s.is_done).length}/{editorTask.subtasks.length}
+                </span>
+              )}</h4>
+              {(editorTask.subtasks || []).length === 0 && (
+                <p className="dpe-empty">Agrega varias tareas dentro de este horario: el bloque mostrará el % de avance y se marcará hecho al completarlas todas.</p>
+              )}
+              <ul className="dpe-subtasks">
+                {(editorTask.subtasks || []).map((subtask) => (
+                  <li key={subtask.id} className={subtask.is_done ? 'is-done' : ''}>
+                    <label>
+                      <input type="checkbox" checked={subtask.is_done} onChange={() => toggleSubtask(editorTask, subtask)} />
+                      <span>{subtask.title}</span>
+                    </label>
+                    <button type="button" className="dpe-sub-delete" title="Quitar" onClick={() => removeSubtask(editorTask, subtask)}>✕</button>
+                  </li>
+                ))}
+              </ul>
+              <div className="dpe-subtask-add">
+                <input
+                  type="text"
+                  maxLength={120}
+                  placeholder="Nueva tarea de la lista…"
+                  value={newSubtask}
+                  onChange={(e) => setNewSubtask(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') addSubtask(); }}
+                />
+                <button type="button" className="btn btn-secondary" disabled={!newSubtask.trim()} onClick={addSubtask}>+ Agregar</button>
+              </div>
+            </div>
+
+            <div className="dpe-foot">
+              <button type="button" className="dpe-delete" onClick={() => removeTask(editorTask)}>Eliminar bloque</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
