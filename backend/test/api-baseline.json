@@ -295,6 +295,36 @@
   },
   {
     "method": "GET",
+    "path": "/api/features",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/sales-goals",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/sales-goals",
+    "status": 403,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ventas/dashboard",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/ventas/dashboard",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
     "path": "/api/whatsapp/inbox/conversations",
     "status": 200,
     "shape": "object"

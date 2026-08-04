@@ -7,6 +7,7 @@ import { apiRequest } from './apiClient';
 import { canAccessPanel } from './roleAccess';
 import { allowsAny } from './navConfig';
 import PerformanceDashboard from './PerformanceDashboard';
+import VentasDashboard from './VentasDashboard';
 import { useToast } from './ui/toastContext';
 import { areaForRole, AREA_LABELS, boliviaToday, campaignIsActive, formatCampaignDate } from './campaignShared';
 
@@ -35,7 +36,16 @@ const minuteLabel = (minute) => {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 };
 
-export default function Dashboard({ token, user, role, access }) {
+export default function Dashboard({ token, user, role, access, features }) {
+  // Inicio por área: si el admin activó el Panel de Ventas, el equipo
+  // comercial ve su tablero en lugar del Inicio genérico.
+  if (features?.panel_ventas && areaForRole(role) === 'ventas') {
+    return <VentasDashboard token={token} />;
+  }
+  return <GeneralDashboard token={token} user={user} role={role} access={access} />;
+}
+
+function GeneralDashboard({ token, user, role, access }) {
   const navigate = useNavigate();
   const toast = useToast();
   const [overview, setOverview] = useState(null);

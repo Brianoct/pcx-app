@@ -1,5 +1,6 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { apiRequest } from './apiClient';
 import Login from './Login';
 import AppShell from './AppShell';
 import { RouteErrorBoundary } from './ui/ErrorBoundary';
@@ -38,6 +39,19 @@ function App() {
     reset: resetCommission
   } = useCommission(token, user, role);
 
+  // Paneles por área activados desde Admin: definen qué Inicio ve cada área
+  // y qué entradas extra aparecen en el menú (ej: Clientes/CRM).
+  const [features, setFeatures] = useState({});
+
+  useEffect(() => {
+    if (!token) return undefined;
+    let active = true;
+    apiRequest('/api/features', { token })
+      .then((data) => { if (active) setFeatures(data?.features || {}); })
+      .catch(() => { if (active) setFeatures({}); });
+    return () => { active = false; };
+  }, [token]);
+
   const handleLogout = () => {
     resetCommission();
     logout();
@@ -69,6 +83,7 @@ function App() {
     user,
     role,
     access: effectiveAccess,
+    features,
     onQuoteStatusChanged: refreshCommission,
     onUserUpdated: updateUser
   };
@@ -79,6 +94,7 @@ function App() {
         access={effectiveAccess}
         displayName={displayName}
         roleName={role}
+        features={features}
         currentCommission={commission}
         isTopSeller={isTopSeller}
         onLogout={handleLogout}
