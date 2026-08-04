@@ -123,14 +123,12 @@ router.get('/api/ventas/dashboard', authenticateToken, async (req, res) => {
     // Líder: ve al equipo completo y el desglose por vendedor.
     const isLeader = isAdmin || can('historial_global');
 
-    const quoteScope = isLeader ? '' : 'AND q.user_id = $1';
     const quoteParams = isLeader ? [] : [req.user.id];
     const customerScope = isLeader ? '' : 'AND (c.assigned_user_id = $1 OR c.created_by = $1)';
 
-    const jobs = {
-      goals: loadGoals(),
-      sales: pool.query(
-        `SELECT
+    // Los tiles muestran primero lo personal y al final lo global del área,
+    // así que las cifras de cotizaciones se calculan en ambos alcances.
+    const SALES_SELECT = (scopeSql) => `SELECT
            COUNT(*) FILTER (WHERE ${BO_DATE('q.created_at')} = ${BO_TODAY})::int AS quotes_today,
            COUNT(*) FILTER (WHERE ${BO_DATE('q.created_at')} >= ${BO_TODAY} - 6)::int AS quotes_week,
            COUNT(*) FILTER (WHERE ${BO_DATE('q.created_at')} >= ${BO_MONTH})::int AS quotes_month,
@@ -144,8 +142,15 @@ router.get('/api/ventas/dashboard', authenticateToken, async (req, res) => {
            COALESCE(SUM(q.total) FILTER (WHERE q.status = 'Cotizado'), 0) AS pending_bs,
            COUNT(*) FILTER (WHERE q.status = 'Cotizado' AND ${BO_DATE('q.created_at')} <= ${BO_TODAY} - 3)::int AS pending_stale
          FROM quotes q
-         WHERE TRUE ${quoteScope}`,
-        quoteParams
+         WHERE TRUE ${scopeSql}`;
+
+    const jobs = {
+      goals: loadGoals(),
+      sales: pool.query(SALES_SELECT('AND q.user_id = $1'), [req.user.id]),
+      salesTeam: pool.query(SALES_SELECT('')),
+      teamNew: pool.query(
+        `SELECT COUNT(*) FILTER (WHERE (c.created_at AT TIME ZONE 'America/La_Paz') >= ${BO_MONTH})::int AS nuevos_mes
+         FROM customers c`
       ),
       funnel: pool.query(
         `SELECT
@@ -201,6 +206,7 @@ router.get('/api/ventas/dashboard', authenticateToken, async (req, res) => {
     keys.forEach((key, i) => { data[key] = results[i]; });
 
     const sales = data.sales.rows[0];
+    const salesTeam = data.salesTeam.rows[0];
     const funnel = data.funnel.rows[0];
     const goals = data.goals;
     const soldMonth = Number(sales.sold_month);
@@ -209,6 +215,15 @@ router.get('/api/ventas/dashboard', authenticateToken, async (req, res) => {
     res.json({
       scope: isLeader ? 'team' : 'own',
       goals,
+      // Cifras globales del área: van al final de la fila de tiles.
+      team: {
+        quotes_month: Number(salesTeam.quotes_month),
+        sold_month: Number(salesTeam.sold_month),
+        sold_month_bs: Number(salesTeam.sold_month_bs),
+        pending_count: Number(salesTeam.pending_count),
+        pending_bs: Number(salesTeam.pending_bs),
+        nuevos_mes: Number(data.teamNew.rows[0].nuevos_mes)
+      },
       sales: {
         quotes_today: Number(sales.quotes_today),
         quotes_week: Number(sales.quotes_week),
@@ -251,7 +266,8 @@ router.get('/api/ventas/dashboard', authenticateToken, async (req, res) => {
       },
       alerts: {
         seguimientos_vencidos: Number(funnel.seg_vencidos),
-        cotizaciones_sin_respuesta: Number(sales.pending_stale),
+        // Para líderes la alerta cubre al equipo; para vendedores, lo suyo.
+        cotizaciones_sin_respuesta: Number(isLeader ? salesTeam.pending_stale : sales.pending_stale),
         sin_siguiente_paso: Number(funnel.sin_siguiente_paso),
         sin_contacto_7d: Number(funnel.sin_contacto_7d)
       },

@@ -10246,6 +10246,19 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
    ============================================================ */
 .vd-crm-btn { min-height: 44px; }
 .vd-tiles { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+
+/* Icono arriba de cada tile + distintivo EQUIPO en los globales del área. */
+.vd-tile-top { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 6px; }
+.vd-tile-icon {
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border-radius: 10px; background: #f4f2ef; font-size: 1.05rem;
+}
+.home-tile.is-warn .vd-tile-icon { background: #fdeaea; }
+.vd-tile-chip {
+  font-size: 0.6rem; font-weight: 900; letter-spacing: 0.08em;
+  color: #475569; background: #eef2f7; border-radius: 999px; padding: 3px 8px;
+}
+.home-tile.is-team { background: #fbfcfe; border-style: dashed; }
 .vd-tile-bar {
   width: 100%; height: 6px; margin-top: 8px;
   border-radius: 999px; background: #edecea; overflow: hidden; display: block;
