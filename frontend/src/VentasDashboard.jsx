@@ -163,9 +163,6 @@ export default function VentasDashboard({ token }) {
       <header className="home-hero">
         <div>
           <h2 className="home-title">Panel de Ventas</h2>
-          <p className="home-subtitle">
-            {scope === 'team' ? 'Todo el equipo comercial de un vistazo.' : 'Tu día comercial: primero los seguimientos, después el cierre.'}
-          </p>
         </div>
         <div className="home-hero-side">
           <button type="button" className="btn btn-secondary vd-crm-btn" onClick={() => navigate('/crm')}>
