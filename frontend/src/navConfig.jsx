@@ -25,6 +25,7 @@ const MarketingCalendar = lazy(() => import('./MarketingCalendar'));
 const InversionPanel = lazy(() => import('./InversionPanel'));
 const PromosPanel = lazy(() => import('./PromosPanel'));
 const ForjaPanel = lazy(() => import('./ForjaPanel'));
+const CrmPanel = lazy(() => import('./CrmPanel'));
 
 /**
  * Single source of truth for every internal destination.
@@ -44,7 +45,7 @@ export const NAV_ITEMS = [
     label: 'Inicio',
     routeAccess: null,
     render: (ctx) => (
-      <Dashboard token={ctx.token} user={ctx.user} role={ctx.role} access={ctx.access} />
+      <Dashboard token={ctx.token} user={ctx.user} role={ctx.role} access={ctx.access} features={ctx.features} />
     )
   },
   {
@@ -60,6 +61,14 @@ export const NAV_ITEMS = [
     render: (ctx) => (
       <QuoteHistory token={ctx.token} role={ctx.role} access={ctx.access} onStatusUpdated={ctx.onQuoteStatusChanged} />
     )
+  },
+  {
+    path: '/crm',
+    label: 'Clientes',
+    routeAccess: ['cotizar', 'historial_global'],
+    // Aparece en el menú solo cuando el admin activa el Panel de Ventas.
+    feature: 'panel_ventas',
+    render: (ctx) => <CrmPanel token={ctx.token} user={ctx.user} />
   },
   {
     path: '/pedidos',
@@ -190,7 +199,7 @@ export const NAV_ITEMS = [
 // can see at least one of its items, so most roles get a short sidebar.
 const SIDEBAR_SECTIONS = [
   { key: 'principal', label: 'Principal', paths: ['/', '/calendario'] },
-  { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/history'] },
+  { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/crm', '/history'] },
   { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion'] },
   { key: 'produccion', label: 'Producción', paths: ['/produccion-planificacion', '/produccion-kanban'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras'] },
@@ -202,7 +211,7 @@ const SIDEBAR_SECTIONS = [
 export const allowsAny = (access, keys) =>
   !keys || keys.length === 0 || keys.some((key) => canAccessPanel(access, key));
 
-export function getSidebarSections(access) {
+export function getSidebarSections(access, features = {}) {
   const byPath = new Map(NAV_ITEMS.map((item) => [item.path, item]));
   return SIDEBAR_SECTIONS
     .map((section) => ({
@@ -211,6 +220,7 @@ export function getSidebarSections(access) {
       items: section.paths
         .map((path) => byPath.get(path))
         .filter((item) => item && !item.hidden && allowsAny(access, item.navAccess || item.routeAccess))
+        .filter((item) => !item.feature || features[item.feature])
         .map(({ path, label }) => ({ to: path, label }))
     }))
     .filter((section) => section.items.length > 0);

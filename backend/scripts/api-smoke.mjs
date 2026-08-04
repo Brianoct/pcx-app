@@ -96,6 +96,12 @@ const battery = [
   // planificación estratégica (Programa → Operación → Misión → Tarea)
   ['GET', '/api/planning', admin],
   ['GET', '/api/planning', ventas], // expect 403 (fase 1: solo admin)
+  // paneles por área (flags + metas + tablero de ventas)
+  ['GET', '/api/features', ventas],
+  ['GET', '/api/admin/sales-goals', admin],
+  ['GET', '/api/admin/sales-goals', ventas], // expect 403 (solo admin)
+  ['GET', '/api/ventas/dashboard', ventas],
+  ['GET', '/api/ventas/dashboard', admin],
   // whatsapp inbox
   ['GET', '/api/whatsapp/inbox/conversations', admin],
   ['GET', '/api/whatsapp/inbox/shortcuts', admin],

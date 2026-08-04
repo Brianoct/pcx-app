@@ -8,6 +8,7 @@ const NAV_ICONS = {
   '/calendario': '☑',
   '/cotizar': '✚',
   '/history': '≣',
+  '/crm': '⚇',
   '/pedidos': '⧉',
   '/inventory': '▤',
   '/recepcion': '⬇',
@@ -26,8 +27,8 @@ const NAV_ICONS = {
   '/dashboard': '𝄜'
 };
 
-function Sidebar({ access, displayName, roleName, onLogout, onNavigate }) {
-  const sections = getSidebarSections(access);
+function Sidebar({ access, displayName, roleName, features, onLogout, onNavigate }) {
+  const sections = getSidebarSections(access, features);
   const navigate = useNavigate();
   const initial = String(displayName || '?').trim().charAt(0).toUpperCase();
 
