@@ -2,11 +2,18 @@
 // Paneles). KPIs del vendedor, embudo, seguimientos próximos, alertas y —
 // para líderes — rendimiento por vendedor. Basado en el requerimiento del
 // equipo de ventas (Embudo.pdf).
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from './apiClient';
+import { useToast } from './ui/toastContext';
 
 const formatBs = (value) => `${Math.round(Number(value || 0)).toLocaleString('es-BO')} Bs`;
+
+const DAY_START = 7 * 60;
+const DAY_END = 19 * 60;
+const TIME_OPTIONS = [];
+for (let m = DAY_START; m <= DAY_END; m += 30) TIME_OPTIONS.push(m);
+const minuteLabel = (minute) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
 
 const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const shortDate = (text) => {
@@ -29,10 +36,32 @@ const STAGE_LABELS = {
 
 const FUNNEL_COLORS = { contactado: '#3b82f6', cotizado: '#8b5cf6', negociando: '#f59e0b', ganados: '#16a34a' };
 
-export default function VentasDashboard({ token }) {
+export default function VentasDashboard({ token, user }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  // Mi plan de hoy: los bloques propios del Plan del día, editables aquí.
+  const [myPlan, setMyPlan] = useState(null);
+  const [planExpanded, setPlanExpanded] = useState(null);
+  const [planTitle, setPlanTitle] = useState('');
+  const [planStart, setPlanStart] = useState(8 * 60);
+  const [planEnd, setPlanEnd] = useState(9 * 60);
+  const [planSaving, setPlanSaving] = useState(false);
+
+  const myId = Number(user?.id);
+
+  const loadPlan = useCallback(async () => {
+    try {
+      const res = await apiRequest(`/api/day-plan?date=${todayText()}`, { token });
+      const mine = (Array.isArray(res?.tasks) ? res.tasks : [])
+        .filter((t) => Number(t.user_id) === myId)
+        .sort((a, b) => a.start_minute - b.start_minute);
+      setMyPlan(mine);
+    } catch {
+      setMyPlan([]);
+    }
+  }, [token, myId]);
 
   useEffect(() => {
     let active = true;
@@ -40,11 +69,60 @@ export default function VentasDashboard({ token }) {
       apiRequest('/api/ventas/dashboard', { token })
         .then((res) => { if (active) { setData(res); setError(null); } })
         .catch((err) => { if (active) setError(err.message || 'No se pudo cargar el panel'); });
+      loadPlan();
     };
     load();
     const intervalId = setInterval(load, 60000);
     return () => { active = false; clearInterval(intervalId); };
-  }, [token]);
+  }, [token, loadPlan]);
+
+  const patchPlanTask = (taskId, updater) => {
+    setMyPlan((prev) => (prev || []).map((t) => (t.id === taskId ? updater(t) : t)));
+  };
+
+  const togglePlanBlock = async (task) => {
+    try {
+      const res = await apiRequest(`/api/day-plan/${task.id}`, { method: 'PATCH', token, body: { is_done: !task.is_done } });
+      patchPlanTask(task.id, () => res.task);
+    } catch (err) {
+      toast.error(err.message || 'No se pudo actualizar');
+    }
+  };
+
+  const togglePlanSubtask = async (task, subtask) => {
+    try {
+      const res = await apiRequest(`/api/day-plan/subtasks/${subtask.id}`, { method: 'PATCH', token, body: { is_done: !subtask.is_done } });
+      patchPlanTask(task.id, (t) => ({
+        ...t,
+        is_done: typeof res.task_done === 'boolean' ? res.task_done : t.is_done,
+        subtasks: (t.subtasks || []).map((s) => (s.id === subtask.id ? res.subtask : s))
+      }));
+    } catch (err) {
+      toast.error(err.message || 'No se pudo actualizar');
+    }
+  };
+
+  const addPlanBlock = async () => {
+    if (!planTitle.trim() || planSaving) return;
+    setPlanSaving(true);
+    try {
+      const res = await apiRequest('/api/day-plan', {
+        method: 'POST',
+        token,
+        body: { date: todayText(), title: planTitle.trim(), start_minute: planStart, end_minute: planEnd, task_type: 'tarea' }
+      });
+      setMyPlan((prev) => [...(prev || []), res.task].sort((a, b) => a.start_minute - b.start_minute));
+      setPlanTitle('');
+      const duration = planEnd - planStart;
+      const nextStart = Math.min(planEnd, DAY_END - 30);
+      setPlanStart(nextStart);
+      setPlanEnd(Math.min(nextStart + duration, DAY_END));
+    } catch (err) {
+      toast.error(err.message || 'No se pudo agregar');
+    } finally {
+      setPlanSaving(false);
+    }
+  };
 
   if (error) return <div className="container home-page"><p className="dashboard-muted">{error}</p></div>;
   if (!data) return <div className="container home-page"><p className="dashboard-muted">Cargando panel de ventas…</p></div>;
@@ -192,6 +270,93 @@ export default function VentasDashboard({ token }) {
       </div>
 
       <div className="home-grid">
+        <section className="home-card vdp-card">
+          <div className="home-card-head">
+            <div>
+              <h3>Mi plan de hoy</h3>
+              {Array.isArray(myPlan) && myPlan.length > 0 && (
+                <p className="home-card-sub">{myPlan.filter((t) => t.is_done).length} de {myPlan.length} {myPlan.filter((t) => t.is_done).length === 1 ? 'hecha' : 'hechas'}</p>
+              )}
+            </div>
+            <button type="button" className="dashboard-link" onClick={() => navigate('/calendario')}>Ver plan →</button>
+          </div>
+
+          <div className="vdp-add">
+            <input
+              type="text"
+              maxLength={120}
+              placeholder="¿Qué vas a hacer?"
+              value={planTitle}
+              onChange={(e) => setPlanTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') addPlanBlock(); }}
+            />
+            <select value={planStart} onChange={(e) => {
+              const v = Number(e.target.value);
+              setPlanStart(v);
+              if (planEnd <= v) setPlanEnd(Math.min(v + 60, DAY_END));
+            }}>
+              {TIME_OPTIONS.filter((m) => m < DAY_END).map((m) => <option key={m} value={m}>{minuteLabel(m)}</option>)}
+            </select>
+            <span aria-hidden="true">→</span>
+            <select value={planEnd} onChange={(e) => setPlanEnd(Number(e.target.value))}>
+              {TIME_OPTIONS.filter((m) => m > planStart).map((m) => <option key={m} value={m}>{minuteLabel(m)}</option>)}
+            </select>
+            <button type="button" className="btn btn-primary vdp-add-btn" disabled={planSaving || !planTitle.trim()} onClick={addPlanBlock}>+</button>
+          </div>
+
+          {myPlan === null ? (
+            <p className="dashboard-muted">Cargando…</p>
+          ) : myPlan.length === 0 ? (
+            <p className="dashboard-muted">Sin tareas todavía. Agrega la primera arriba o planifica en la reunión de la mañana.</p>
+          ) : (
+            <ul className="vdp-list">
+              {myPlan.map((task) => {
+                const subtasks = task.subtasks || [];
+                const subDone = subtasks.filter((s) => s.is_done).length;
+                const pct = subtasks.length > 0 ? Math.round((subDone / subtasks.length) * 100) : null;
+                const isOpen = planExpanded === task.id;
+                return (
+                  <li key={task.id} className={task.is_done ? 'is-done' : ''}>
+                    <div className="vdp-row">
+                      {subtasks.length === 0 ? (
+                        <input type="checkbox" checked={task.is_done} onChange={() => togglePlanBlock(task)} />
+                      ) : (
+                        <button
+                          type="button"
+                          className={`vdp-expand ${isOpen ? 'is-open' : ''}`}
+                          onClick={() => setPlanExpanded(isOpen ? null : task.id)}
+                          title="Ver checklist"
+                        >
+                          ▸
+                        </button>
+                      )}
+                      <span className="vdp-time">{minuteLabel(task.start_minute)}</span>
+                      <span className="vdp-title">{task.title}</span>
+                      {pct !== null && (
+                        <button type="button" className="vdp-progress" onClick={() => setPlanExpanded(isOpen ? null : task.id)}>
+                          {subDone}/{subtasks.length} · {pct}%
+                        </button>
+                      )}
+                    </div>
+                    {isOpen && subtasks.length > 0 && (
+                      <ul className="vdp-sublist">
+                        {subtasks.map((subtask) => (
+                          <li key={subtask.id} className={subtask.is_done ? 'is-done' : ''}>
+                            <label>
+                              <input type="checkbox" checked={subtask.is_done} onChange={() => togglePlanSubtask(task, subtask)} />
+                              <span>{subtask.title}</span>
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
         <section className="home-card">
           <div className="home-card-head">
             <div>
