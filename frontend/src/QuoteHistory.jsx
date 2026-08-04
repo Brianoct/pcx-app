@@ -520,7 +520,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       customerPhone: quote.customer_phone,
       vendorName: quote.vendor,
       storeLocation: quote.store_location,
-      dateText: new Date(quote.created_at).toLocaleString('es-BO'),
+      dateText: new Date(quote.created_at).toLocaleString('es-BO', { hour12: false }),
       sourceText: quote.store_location ? `Despacho: ${quote.store_location}` : 'Origen no especificado',
       department: quote.department,
       provincia: quote.provincia,
@@ -1109,7 +1109,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   const formatHistoryDate = (value) => {
     if (!value) return '—';
     try {
-      return new Date(value).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' });
+      return new Date(value).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short', hour12: false });
     } catch {
       return '—';
     }
@@ -1327,13 +1327,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
               <table className="history-table">
                 <colgroup>
                   <col style={{ width: '6%' }} />
-                  <col style={{ width: isLeader ? '15%' : '21%' }} />
-                  <col style={{ width: isLeader ? '12%' : '16%' }} />
-                  {isLeader && <col style={{ width: '11%' }} />}
-                  <col style={{ width: isLeader ? '17%' : '21%' }} />
+                  <col style={{ width: isLeader ? '15%' : '20%' }} />
+                  <col style={{ width: isLeader ? '12%' : '15%' }} />
+                  {isLeader && <col style={{ width: '10%' }} />}
+                  <col style={{ width: isLeader ? '15%' : '19%' }} />
                   <col style={{ width: isLeader ? '11%' : '13%' }} />
-                  <col style={{ width: isLeader ? '12%' : '11%' }} />
-                  <col style={{ width: isLeader ? '16%' : '12%' }} />
+                  <col style={{ width: isLeader ? '13%' : '13%' }} />
+                  <col style={{ width: isLeader ? '18%' : '14%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -1458,7 +1458,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                           <option value="Enviado">Enviado</option>
                         </select>
                       </td>
-                      <td className="history-td center nowrap">
+                      <td className="history-td center history-td-date">
                         {formatHistoryDate(quote.created_at)}
                       </td>
                       <td className="history-td center">

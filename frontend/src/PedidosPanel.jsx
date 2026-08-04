@@ -566,7 +566,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const formatPedidoDate = (value) => {
     if (!value) return '—';
     try {
-      return new Date(value).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' });
+      return new Date(value).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short', hour12: false });
     } catch {
       return '—';
     }
@@ -740,14 +740,14 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
               <table className="pedidos-table">
                 <colgroup>
                   <col style={{ width: '5%' }} />
-                  <col style={{ width: '11%' }} />
-                  <col style={{ width: '16%' }} />
                   <col style={{ width: '10%' }} />
                   <col style={{ width: '15%' }} />
                   <col style={{ width: '10%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '10%' }} />
                   <col style={{ width: '11%' }} />
                   <col style={{ width: '12%' }} />
-                  <col style={{ width: '10%' }} />
+                  <col style={{ width: '13%' }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -830,7 +830,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                           )}
                         </select>
                       </td>
-                      <td className="pedidos-td center nowrap">
+                      <td className="pedidos-td center pedidos-td-date">
                         {formatPedidoDate(quote.created_at)}
                       </td>
                       <td className="pedidos-td center">

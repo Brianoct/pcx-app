@@ -533,7 +533,7 @@ function UserManagement({ token }) {
                     </span>
                   </td>
                   <td style={{ padding: '12px' }}>{user.city || '—'}</td>
-                  <td style={{ padding: '12px' }}>{new Date(user.created_at).toLocaleString('es-BO')}</td>
+                  <td style={{ padding: '12px' }}>{new Date(user.created_at).toLocaleString('es-BO', { hour12: false })}</td>
                   <td style={{ padding: '12px' }}>
                     <button
                       onClick={() => openEditModal(user)}

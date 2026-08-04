@@ -10213,3 +10213,30 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   .home-campaign { flex-wrap: wrap; }
   .home-campaign-cta { width: 100%; text-align: right; }
 }
+
+/* Fecha en tablas: si la columna queda angosta (modo escritorio en celular),
+   la fecha se parte en dos líneas en vez de invadir la columna vecina. */
+.history-td-date,
+.pedidos-td-date {
+  white-space: normal;
+  overflow-wrap: break-word;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.86rem;
+}
+
+/* Inventario en pantallas bajas (celular en modo escritorio): el toolbar
+   deja de ser pegajoso y se compacta para que la tabla respire. */
+@media (max-height: 620px) {
+  .inv-toolbar {
+    position: static;
+    padding: 6px 10px;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .inv-th { top: 0; }
+  .inv-city-pill { min-height: 32px; padding: 5px 12px; font-size: 0.8rem; }
+  .inv-search { min-height: 34px; padding: 6px 10px; font-size: 0.84rem; }
+  .inv-alert-toggle { min-height: 34px; padding: 5px 12px; }
+  .inv-toolbar-actions .btn { min-height: 36px; padding: 7px 12px; font-size: 0.82rem; }
+  .inv-toolbar-meta { font-size: 0.78rem; }
+}
