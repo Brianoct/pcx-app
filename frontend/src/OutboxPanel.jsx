@@ -38,7 +38,7 @@ const statusLabel = (item) => {
 const formatDate = (ts) => {
   if (!ts) return '';
   try {
-    return new Date(ts).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short' });
+    return new Date(ts).toLocaleString('es-BO', { dateStyle: 'short', timeStyle: 'short', hour12: false });
   } catch {
     return '';
   }
