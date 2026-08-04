@@ -40,7 +40,7 @@ export default function Dashboard({ token, user, role, access, features }) {
   // Inicio por área: si el admin activó el Panel de Ventas, el equipo
   // comercial ve su tablero en lugar del Inicio genérico.
   if (features?.panel_ventas && areaForRole(role) === 'ventas') {
-    return <VentasDashboard token={token} />;
+    return <VentasDashboard token={token} user={user} />;
   }
   return <GeneralDashboard token={token} user={user} role={role} access={access} />;
 }

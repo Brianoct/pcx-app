@@ -10560,3 +10560,38 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   border: 1px solid var(--border); border-radius: 10px; font: inherit; font-size: 0.85rem;
 }
 .dpe-move-btn { min-height: 36px; padding: 6px 12px; font-size: 0.84rem; }
+
+/* Panel de Ventas: tarjeta «Mi plan de hoy» (editable desde el panel). */
+.vdp-add { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.vdp-add input[type="text"] {
+  flex: 1; min-width: 0; min-height: 38px; padding: 8px 11px;
+  border: 1px solid var(--border); border-radius: 10px; font: inherit; font-size: 0.86rem;
+}
+.vdp-add select { min-height: 38px; font-size: 0.82rem; }
+.vdp-add-btn { min-height: 38px; padding: 6px 13px; font-size: 1rem; }
+
+.vdp-list { list-style: none; margin: 0; padding: 0; }
+.vdp-list > li { border-top: 1px solid #f0efed; padding: 7px 0; }
+.vdp-list > li:first-child { border-top: 0; }
+.vdp-row { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+.vdp-row input[type="checkbox"] { width: 18px; height: 18px; margin: 0; flex-shrink: 0; accent-color: #16a34a; cursor: pointer; }
+.vdp-expand {
+  width: 18px; height: 18px; min-height: 0; padding: 0; flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: 5px; background: #fff;
+  color: var(--text-secondary); cursor: pointer; font-size: 0.7rem; line-height: 1;
+  display: grid; place-items: center; transition: transform 0.12s ease;
+}
+.vdp-expand.is-open { transform: rotate(90deg); }
+.vdp-time { flex-shrink: 0; font-size: 0.78rem; font-weight: 800; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.vdp-title { flex: 1; min-width: 0; font-size: 0.88rem; font-weight: 600; overflow-wrap: anywhere; }
+.vdp-list > li.is-done .vdp-title { color: var(--text-muted); text-decoration: line-through; font-weight: 500; }
+.vdp-progress {
+  flex-shrink: 0; min-height: 0; padding: 3px 9px; border: none; border-radius: 999px;
+  background: #e7f6ef; color: #15803d; font-size: 0.72rem; font-weight: 800; cursor: pointer;
+  white-space: nowrap;
+}
+.vdp-sublist { list-style: none; margin: 6px 0 2px 28px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.vdp-sublist label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.vdp-sublist input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: #16a34a; cursor: pointer; }
+.vdp-sublist span { font-size: 0.82rem; }
+.vdp-sublist li.is-done span { color: var(--text-muted); text-decoration: line-through; }
