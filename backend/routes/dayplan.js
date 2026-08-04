@@ -97,6 +97,12 @@ const parseTaskFields = (body, { partial = false } = {}) => {
     if (!TASK_TYPES.includes(type)) return { error: 'Tipo de tarea inválido' };
     out.task_type = type;
   }
+  // Pasar el bloque a otra fecha (con su checklist intacta).
+  if (has('task_date')) {
+    const taskDate = String(body.task_date || '').trim();
+    if (!DATE_RE.test(taskDate)) return { error: 'Fecha inválida (AAAA-MM-DD)' };
+    out.task_date = taskDate;
+  }
   if (has('is_done')) out.is_done = Boolean(body.is_done);
   return { fields: out };
 };
