@@ -194,12 +194,26 @@ export default function Calendar({ token, user }) {
     const drag = dragRef.current;
     dragRef.current = null;
     const preview = previewRef.current;
-    setPreview(null);
-    if (!drag || !drag.moved || !preview) return;
+    if (!drag || !drag.moved || !preview) {
+      setPreview(null);
+      return;
+    }
     // El click del navegador llega justo después del pointerup: no abrir editor.
     suppressClickRef.current = true;
     setTimeout(() => { suppressClickRef.current = false; }, 150);
-    if (preview.start_minute === drag.origStart && preview.end_minute === drag.origEnd) return;
+    if (preview.start_minute === drag.origStart && preview.end_minute === drag.origEnd) {
+      setPreview(null);
+      return;
+    }
+    // Optimista: el bloque se queda donde lo soltaste ANTES de limpiar la
+    // vista previa — sin ese orden hay un parpadeo a la posición original
+    // mientras responde el servidor. Si el PATCH falla, se revierte.
+    setTasks((prev) => prev.map((t) => (
+      t.id === drag.taskId
+        ? { ...t, start_minute: preview.start_minute, end_minute: preview.end_minute }
+        : t
+    )));
+    setPreview(null);
     try {
       const data = await apiRequest(`/api/day-plan/${drag.taskId}`, {
         method: 'PATCH',
@@ -209,6 +223,11 @@ export default function Calendar({ token, user }) {
       setTasks((prev) => prev.map((t) => (t.id === drag.taskId ? data.task : t)));
     } catch (err) {
       toast.error(err.message || 'No se pudo mover el bloque');
+      setTasks((prev) => prev.map((t) => (
+        t.id === drag.taskId
+          ? { ...t, start_minute: drag.origStart, end_minute: drag.origEnd }
+          : t
+      )));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
