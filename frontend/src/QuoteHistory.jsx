@@ -861,7 +861,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         alternative_name: editingQuote.alternative_name ? editingQuote.alternative_name.trim() : null,
         alternative_phone: editingQuote.alternative_phone ? editingQuote.alternative_phone.trim() : null,
         store_location: editingQuote.store_location,
-        seller_user_id: editingQuote.seller_user_id ? Number(editingQuote.seller_user_id) : null,
+        // Solo líderes reasignan; para vendedores el campo no viaja (el 403 al editar lo propio venía de aquí).
+        seller_user_id: canViewGlobalHistory && editingQuote.seller_user_id ? Number(editingQuote.seller_user_id) : null,
         venta_type: editingQuote.venta_type || 'sf',
         discount_percent: Number(editingQuote.discount_percent || 0),
         // Gift fields deliberately NOT sent: regalos of historical quotes
@@ -956,7 +957,8 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
           alternative_name: editingQuote.alternative_name ? editingQuote.alternative_name.trim() : null,
           alternative_phone: editingQuote.alternative_phone ? editingQuote.alternative_phone.trim() : null,
           store_location: editingQuote.store_location,
-          seller_user_id: editingQuote.seller_user_id ? Number(editingQuote.seller_user_id) : null,
+          // Solo líderes reasignan; para vendedores el campo no viaja (el 403 al editar lo propio venía de aquí).
+          seller_user_id: canViewGlobalHistory && editingQuote.seller_user_id ? Number(editingQuote.seller_user_id) : null,
           venta_type: editingQuote.venta_type || 'sf',
           discount_percent: Number(editingQuote.discount_percent || 0),
           rows: (Array.isArray(editingQuote.line_items) ? editingQuote.line_items : []).map((row) => ({
@@ -1583,30 +1585,39 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                   onChange={(e) => onEditField('customer_phone', e.target.value)}
                 />
               </label>
-              <label>
-                Vendedor asignado
-                <select
-                  value={editingQuote.seller_user_id || ''}
-                  onChange={(e) => {
-                    const sellerId = e.target.value;
-                    const seller = salesUsers.find((s) => String(s.id) === String(sellerId));
-                    onEditField('seller_user_id', sellerId);
-                    onEditField(
-                      'vendor',
-                      seller
-                        ? (seller.display_name || String(seller.email || '').split('@')[0] || '')
-                        : ''
-                    );
-                  }}
-                >
-                  <option value="">Seleccionar vendedor</option>
-                  {salesUsers.map((seller) => (
-                    <option key={seller.id} value={seller.id}>
-                      {(seller.display_name || String(seller.email || '').split('@')[0] || 'Vendedor')} ({seller.role})
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {canViewGlobalHistory ? (
+                <label>
+                  Vendedor asignado
+                  <select
+                    value={editingQuote.seller_user_id || ''}
+                    onChange={(e) => {
+                      const sellerId = e.target.value;
+                      const seller = salesUsers.find((s) => String(s.id) === String(sellerId));
+                      onEditField('seller_user_id', sellerId);
+                      onEditField(
+                        'vendor',
+                        seller
+                          ? (seller.display_name || String(seller.email || '').split('@')[0] || '')
+                          : ''
+                      );
+                    }}
+                  >
+                    <option value="">Seleccionar vendedor</option>
+                    {salesUsers.map((seller) => (
+                      <option key={seller.id} value={seller.id}>
+                        {(seller.display_name || String(seller.email || '').split('@')[0] || 'Vendedor')} ({seller.role})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                // Vendedores: el dueño no se toca desde aquí; solo un líder
+                // puede reasignar cotizaciones.
+                <label>
+                  Vendedor
+                  <input value={editingQuote.vendor || ''} disabled />
+                </label>
+              )}
               <label>
                 Departamento
                 <select

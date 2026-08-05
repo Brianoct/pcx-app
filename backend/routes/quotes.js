@@ -952,15 +952,21 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     let nextQuoteOwnerId = currentQuote.user_id;
     let nextVendorName = nextVendor || currentQuote.vendor || null;
     if (hasSellerUserId) {
-      if (!canManageAnyQuote) {
-        throw createHttpError(403, 'No autorizado para reasignar vendedor en esta cotización');
-      }
       const selectedSellerId = Number.parseInt(seller_user_id, 10);
       if (!Number.isInteger(selectedSellerId) || selectedSellerId <= 0) {
         throw createHttpError(400, 'Vendedor asignado inválido');
       }
-      nextVendorName = await resolveAssignableVendorName(selectedSellerId, nextVendorName || '');
-      nextQuoteOwnerId = selectedSellerId;
+      // El modal de edición reenvía siempre el vendedor actual: eso NO es una
+      // reasignación. El permiso global solo se exige cuando el dueño cambia
+      // de verdad — antes esto devolvía 403 a los vendedores editando SUS
+      // propias cotizaciones.
+      if (selectedSellerId !== Number(currentQuote.user_id)) {
+        if (!canManageAnyQuote) {
+          throw createHttpError(403, 'No autorizado para reasignar vendedor en esta cotización');
+        }
+        nextVendorName = await resolveAssignableVendorName(selectedSellerId, nextVendorName || '');
+        nextQuoteOwnerId = selectedSellerId;
+      }
     }
 
     const hasAnyGiftField = hasGiftNameField || hasGiftSkuField || hasGiftQtyField;
