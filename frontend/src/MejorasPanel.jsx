@@ -78,9 +78,7 @@ export default function MejorasPanel({ token }) {
 
   return (
     <div className="container prod-page">
-      <div className="card plan-intro">
-        <h2 className="plan-title">Mejoras — Bono mensual por estándares</h2>
-      </div>
+      <p className="page-sub">Bono mensual por estándares</p>
 
       {quality && quality.total > 0 && (
         <div className="mejoras-quality">

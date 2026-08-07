@@ -188,10 +188,6 @@ export default function ProductionPlanning({ token }) {
 
   return (
     <div className="container prod-page">
-      <div className="card plan-intro">
-        <h2 className="plan-title">Planificación de producción</h2>
-      </div>
-
       {error && <div className="card prod-error">{error}</div>}
 
       {loading ? (

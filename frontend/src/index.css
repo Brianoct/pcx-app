@@ -5788,11 +5788,10 @@ img, video, canvas { max-width: 100%; }
 
 /* Pedidos header: centered title with the pagado-alert toggle on the right */
 .pedidos-title-row {
-  position: relative;
   display: flex;
+  justify-content: flex-end;
   align-items: center;
-  justify-content: center;
-  margin: 20px 0;
+  margin: 4px 0 12px;
 }
 
 .pedidos-title-row h2 {
@@ -7240,7 +7239,7 @@ img, video, canvas { max-width: 100%; }
 }
 
 .dayplan-title { margin: 0; }
-.dayplan-subtitle { margin: 2px 0 0; color: var(--text-muted); font-size: 0.9rem; }
+.dayplan-subtitle { margin: 0; color: var(--text-secondary); font-size: 1.02rem; font-weight: 700; }
 
 .dayplan-nav { display: flex; align-items: center; gap: 8px; }
 .dayplan-nav .btn { min-height: 38px; padding: 6px 14px; }
@@ -10639,3 +10638,12 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 .invsg-apply-one { min-height: 30px; padding: 4px 10px; font-size: 0.78rem; }
 .invsg-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .invsg-note { font-size: 0.75rem; color: var(--text-muted); }
+
+
+/* Subtítulo de página (el título vive en la barra superior). */
+.page-sub {
+  margin: 4px 0 14px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}

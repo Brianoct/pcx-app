@@ -588,7 +588,6 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   return (
     <div className="container">
       <div className="pedidos-title-row">
-        <h2>Pedidos</h2>
         <button
           type="button"
           className={`pedidos-sound-toggle ${alertSoundOn ? 'is-on' : ''}`}

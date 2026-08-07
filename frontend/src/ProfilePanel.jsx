@@ -264,8 +264,6 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
 
   return (
     <div className="container profile-page">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>Perfil</h2>
-
       {/* Hero: avatar + identity */}
       <div className="card profile-hero">
         <div className="profile-avatar-wrap">

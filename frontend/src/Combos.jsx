@@ -360,7 +360,6 @@ function Combos({ token }) {
 
   return (
     <div style={{ padding: '16px' }}>
-      <h2 style={{ textAlign: 'center', color: '#dc2626', marginBottom: '24px' }}>Combos</h2>
       {error && <p style={{ textAlign: 'center', color: '#dc2626', marginBottom: '12px' }}>{error}</p>}
 
       {/* Create Combo Form */}
