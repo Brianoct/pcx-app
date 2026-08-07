@@ -312,6 +312,7 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       phone: customer_phone,
       department: destino.department,
       provincia: destino.provincia,
+      ciudad: destino.ciudad,
       vendor: vendorDisplayName,
       userId: req.user.id
     });
@@ -1108,6 +1109,7 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
       phone: customer_phone,
       department: destinoEdit.department,
       provincia: destinoEdit.provincia,
+      ciudad: destinoEdit.ciudad,
       vendor: nextVendorName,
       userId: req.user.id
     });
