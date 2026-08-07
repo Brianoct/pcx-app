@@ -113,17 +113,26 @@ const getNiceAxisMax = (value) => {
   return 10 * magnitude;
 };
 
+// Escala secuencial de UN solo tono (azul claro → azul oscuro): la magnitud
+// se lee por oscuridad, y el texto con halo blanco contrasta en toda la escala.
 const getDepartmentFillColor = (ratio, hasSales) => {
   if (!hasSales) {
-    return 'rgba(245, 241, 236, 0.78)';
+    return '#f4f3f0';
   }
   const t = Math.max(0, Math.min(1, ratio));
-  const start = { r: 30, g: 64, b: 175 };
-  const end = { r: 249, g: 115, b: 22 };
-  const r = Math.round(start.r + (end.r - start.r) * t);
-  const g = Math.round(start.g + (end.g - start.g) * t);
-  const b = Math.round(start.b + (end.b - start.b) * t);
-  return `rgb(${r} ${g} ${b})`;
+  const stops = [
+    { r: 205, g: 226, b: 251 }, // #cde2fb
+    { r: 42, g: 120, b: 214 },  // #2a78d6
+    { r: 13, g: 54, b: 107 }    // #0d366b
+  ];
+  const seg = t < 0.5 ? 0 : 1;
+  const local = (t - seg * 0.5) / 0.5;
+  const a = stops[seg];
+  const b = stops[seg + 1];
+  const r = Math.round(a.r + (b.r - a.r) * local);
+  const g = Math.round(a.g + (b.g - a.g) * local);
+  const bl = Math.round(a.b + (b.b - a.b) * local);
+  return `rgb(${r} ${g} ${bl})`;
 };
 
 const normalizeText = (value = '') => String(value || '')
@@ -157,10 +166,18 @@ const DASHBOARD_CARD_ORDER = [
   'products',
   'colorSales',
   'customers',
-  'productionQuality',
   'warehouses',
-  'locations',
   'map'
+];
+
+// Grupos de tarjetas: pestañas junto al selector de fecha para saltar entre
+// familias de gráficos sin scrollear. «lineStats» y «rentabilidad» viven fuera
+// de la grilla pero se filtran con el mismo grupo.
+const DASHBOARD_GROUPS = [
+  { id: 'todos', label: 'Todo', cards: null },
+  { id: 'ventas', label: '💰 Ventas y equipo', cards: ['summary', 'dailySales', 'funnel', 'salespeople', 'commissions', 'customers'] },
+  { id: 'productos', label: '📦 Productos y rentabilidad', cards: ['products', 'colorSales'] },
+  { id: 'destinos', label: '🗺️ Destinos y almacenes', cards: ['warehouses', 'map'] }
 ];
 
 // Accent per business domain: consistent color language across tiles.
@@ -172,9 +189,7 @@ const DASHBOARD_CARD_ACCENTS = {
   products: 'accent-producto',
   colorSales: 'accent-producto',
   customers: 'accent-clientes',
-  productionQuality: 'accent-produccion',
   warehouses: 'accent-almacen',
-  locations: 'accent-geo',
   map: 'accent-geo',
   commissions: 'accent-equipo'
 };
@@ -209,6 +224,7 @@ function AdminDashboard({ token }) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [cardOrder, setCardOrder] = useState(DASHBOARD_CARD_ORDER);
+  const [cardGroup, setCardGroup] = useState('todos');
   const [draggedCardId, setDraggedCardId] = useState('');
   const [dragOverCardId, setDragOverCardId] = useState('');
 
@@ -331,9 +347,6 @@ function AdminDashboard({ token }) {
       labelY: feature.labelY + offset.dy
     };
   });
-  const mapRankingRows = [...mapFeatureRows]
-    .sort((a, b) => b.totalSales - a.totalSales);
-
   // Comparison vs previous month + funnel (new backend fields).
   const periodSummary = stats.periodSummary || null;
   const previousSummary = stats.previousSummary || null;
@@ -359,11 +372,8 @@ function AdminDashboard({ token }) {
   const customerMix = stats.customerMix || null;
   const topCustomers = Array.isArray(stats.topCustomers) ? stats.topCustomers : [];
   const colorSales = Array.isArray(stats.colorSales) ? stats.colorSales : [];
-  const productionQuality = stats.productionQuality || null;
   const mixTotal = customerMix ? Number(customerMix.new_total) + Number(customerMix.repeat_total) : 0;
   const repeatPct = mixTotal > 0 ? (Number(customerMix.repeat_total) / mixTotal) * 100 : 0;
-  const qcTotal = productionQuality ? productionQuality.qc_passed + productionQuality.qc_rejected : 0;
-  const receptionTotal = productionQuality ? productionQuality.received + productionQuality.damaged : 0;
 
   // Backend counts are already cumulative (Pagado implies Confirmado, etc.).
   const funnelSteps = funnel ? [
@@ -449,6 +459,9 @@ function AdminDashboard({ token }) {
     setDraggedCardId('');
     setDragOverCardId('');
   };
+
+  // null = grupo «Todo» (sin filtro).
+  const activeGroupCards = DASHBOARD_GROUPS.find((group) => group.id === cardGroup)?.cards || null;
 
   const dashboardCards = {
     summary: (
@@ -573,39 +586,6 @@ function AdminDashboard({ token }) {
         )}
       </section>
     ),
-    productionQuality: (
-      <section className="dashboard-card">
-        <h3>Calidad de producción</h3>
-        {!productionQuality || (qcTotal === 0 && receptionTotal === 0) ? (
-          <p className="dashboard-empty">Sin actividad de producción este periodo</p>
-        ) : (
-          <div className="dashboard-mini-kpis dashboard-mini-kpis-grid">
-            <div>
-              <span>Aprobadas en calidad</span>
-              <strong>{productionQuality.qc_passed}</strong>
-            </div>
-            <div>
-              <span>Rechazadas en calidad</span>
-              <strong className={productionQuality.qc_rejected > 0 ? 'is-bad' : ''}>
-                {productionQuality.qc_rejected}
-                {qcTotal > 0 ? ` (${((productionQuality.qc_rejected / qcTotal) * 100).toFixed(1)}%)` : ''}
-              </strong>
-            </div>
-            <div>
-              <span>Recibidas en almacén</span>
-              <strong>{productionQuality.received}</strong>
-            </div>
-            <div>
-              <span>Dañadas en tránsito</span>
-              <strong className={productionQuality.damaged > 0 ? 'is-bad' : ''}>
-                {productionQuality.damaged}
-                {receptionTotal > 0 ? ` (${((productionQuality.damaged / receptionTotal) * 100).toFixed(1)}%)` : ''}
-              </strong>
-            </div>
-          </div>
-        )}
-      </section>
-    ),
     products: (
       <section className="dashboard-card">
         <h3>Productos Más Vendidos (Cantidad)</h3>
@@ -703,35 +683,6 @@ function AdminDashboard({ token }) {
         )}
       </section>
     ),
-    locations: (
-      <section className="dashboard-card">
-        <h3>Ranking Destinos · Departamento → Ciudad</h3>
-        {topLocations.length === 0 ? (
-          <p className="dashboard-empty">Sin datos este periodo</p>
-        ) : (
-          <ol className="dashboard-list dashboard-geo-list">
-            {topLocations.map((location, index) => (
-              <li key={`${location.location}-${index}`}>
-                <div className="dashboard-geo-dept">
-                  <strong>{location.location}</strong>
-                  <span>{location.order_count} pedidos · {formatBs(location.total_sales)}</span>
-                </div>
-                {Array.isArray(location.cities) && location.cities.length > 0 && (
-                  <ul className="dashboard-geo-cities">
-                    {location.cities.map((city, cityIndex) => (
-                      <li key={`${city.ciudad}-${cityIndex}`}>
-                        <span>{city.ciudad}</span>
-                        <span>{formatBs(city.total_sales)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-    ),
     map: (
       <section className="dashboard-card dashboard-map-card">
         <h3>Mapa de Bolivia · Ventas por departamento</h3>
@@ -763,7 +714,7 @@ function AdminDashboard({ token }) {
                     <text x={region.labelX} y={region.labelY} className="dashboard-map-region-label">
                       {region.shortLabel}
                     </text>
-                    <text x={region.labelX} y={region.labelY + 14} className="dashboard-map-region-value">
+                    <text x={region.labelX} y={region.labelY + 26} className="dashboard-map-region-value">
                       {formatCompactBs(region.totalSales)} Bs
                     </text>
                   </g>
@@ -772,12 +723,31 @@ function AdminDashboard({ token }) {
             </svg>
           </div>
           <div className="dashboard-map-ranking">
-            {mapRankingRows.map((row) => (
-              <div key={row.id} className="dashboard-map-ranking-row">
-                <strong>{row.department}</strong>
-                <span>{formatBs(row.totalSales)}</span>
-              </div>
-            ))}
+            <h4 className="dashboard-map-ranking-title">Ranking destinos · Departamento → Ciudad</h4>
+            {topLocations.length === 0 ? (
+              <p className="dashboard-empty">Sin datos este periodo</p>
+            ) : (
+              <ol className="dashboard-list dashboard-geo-list">
+                {topLocations.map((location, index) => (
+                  <li key={`${location.location}-${index}`}>
+                    <div className="dashboard-geo-dept">
+                      <strong>{location.location}</strong>
+                      <span>{location.order_count} pedido{Number(location.order_count) === 1 ? '' : 's'} · {formatBs(location.total_sales)}</span>
+                    </div>
+                    {Array.isArray(location.cities) && location.cities.length > 0 && (
+                      <ul className="dashboard-geo-cities">
+                        {location.cities.map((city, cityIndex) => (
+                          <li key={`${city.ciudad}-${cityIndex}`}>
+                            <span>{city.ciudad}</span>
+                            <span>{formatBs(city.total_sales)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
         </div>
         <div className="dashboard-map-legend">
@@ -953,7 +923,20 @@ function AdminDashboard({ token }) {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-          <span className="dashboard-filter-hint">Periodo visualizado</span>
+          <div className="dashboard-group-tabs" role="tablist" aria-label="Grupos de gráficos">
+            {DASHBOARD_GROUPS.map((group) => (
+              <button
+                key={group.id}
+                type="button"
+                role="tab"
+                aria-selected={cardGroup === group.id}
+                className={`dashboard-group-tab${cardGroup === group.id ? ' is-active' : ''}`}
+                onClick={() => setCardGroup(group.id)}
+              >
+                {group.label}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -961,6 +944,7 @@ function AdminDashboard({ token }) {
         {cardOrder.map((cardId) => {
           const cardElement = dashboardCards[cardId];
           if (!cardElement) return null;
+          if (activeGroupCards && !activeGroupCards.includes(cardId)) return null;
           const isDragging = draggedCardId === cardId;
           const isDropTarget = dragOverCardId === cardId && draggedCardId && draggedCardId !== cardId;
           return cloneElement(cardElement, {
@@ -981,9 +965,12 @@ function AdminDashboard({ token }) {
         })}
       </div>
 
-      <LineStatsCard token={token} month={selectedMonth} year={selectedYear} />
-
-      <RentabilidadCard token={token} month={selectedMonth} year={selectedYear} />
+      {(cardGroup === 'todos' || cardGroup === 'productos') && (
+        <>
+          <LineStatsCard token={token} month={selectedMonth} year={selectedYear} />
+          <RentabilidadCard token={token} month={selectedMonth} year={selectedYear} />
+        </>
+      )}
     </div>
   );
 }

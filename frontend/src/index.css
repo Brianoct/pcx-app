@@ -3026,7 +3026,7 @@ button, .btn {
   width: 120px;
   height: 8px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #163a7a 0%, #2e6ed5 45%, #ff7f30 100%);
+  background: linear-gradient(90deg, #cde2fb 0%, #2a78d6 50%, #0d366b 100%);
 }
 
 .dashboard-map-wrap {
@@ -3044,55 +3044,57 @@ button, .btn {
 }
 
 .dashboard-bolivia-map svg {
-  width: min(100%, 760px);
-  height: clamp(260px, 44vw, 520px);
+  width: min(100%, 520px);
+  height: clamp(230px, 30vw, 400px);
   margin: 0 auto;
   display: block;
 }
 
 .dashboard-map-region {
-  stroke: rgba(203, 213, 225, 0.75);
-  stroke-width: 1.5;
+  stroke: #ffffff;
+  stroke-width: 2;
 }
 
 .dashboard-map-label-leader {
-  stroke: rgba(191, 219, 254, 0.38);
+  stroke: rgba(120, 113, 108, 0.45);
   stroke-width: 1.1;
   stroke-dasharray: 3 3;
 }
 
+/* Halo blanco (paint-order) para que el texto contraste sobre cualquier
+   relleno de la escala, del celeste al azul marino. */
 .dashboard-map-region-label {
-  fill: #292524;
-  font-size: 12px;
-  font-weight: 700;
+  fill: #1c1917;
+  font-size: 30px;
+  font-weight: 800;
   text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 6px;
+  stroke-linejoin: round;
 }
 
 .dashboard-map-region-value {
-  fill: #1d4ed8;
-  font-size: 10.5px;
+  fill: #292524;
+  font-size: 23px;
+  font-weight: 600;
   text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
+
+.dashboard-map-ranking-title {
+  margin: 0 0 10px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #44403c;
 }
 
 .dashboard-map-ranking {
   display: grid;
   gap: 7px;
-}
-
-.dashboard-map-ranking-row {
-  border: 1px solid rgba(214, 204, 192, 0.75);
-  border-radius: 10px;
-  background: rgba(250, 248, 245, 0.74);
-  padding: 8px 10px;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: #44403c;
-  font-size: 0.84rem;
-}
-
-.dashboard-map-ranking-row strong {
-  color: #292524;
 }
 
 .dashboard-line-card {
@@ -3167,9 +3169,40 @@ button, .btn {
 
 @media (min-width: 980px) {
   .dashboard-map-wrap {
-    grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.7fr);
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 1fr);
     align-items: start;
   }
+}
+
+/* Pestañas de grupos de gráficos (junto al selector de periodo) */
+.dashboard-group-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.dashboard-group-tab {
+  border: 1px solid #d6d3d1;
+  background: #fff;
+  color: #57534e;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.dashboard-group-tab:hover {
+  border-color: #a8a29e;
+  color: #1c1917;
+}
+
+.dashboard-group-tab.is-active {
+  background: #1c1917;
+  border-color: #1c1917;
+  color: #fff;
 }
 
 .projects-workspace {
