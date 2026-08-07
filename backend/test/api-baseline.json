@@ -283,6 +283,18 @@
   },
   {
     "method": "GET",
+    "path": "/api/admin/line-stats",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/line-stats",
+    "status": 403,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
     "path": "/api/planning",
     "status": 200,
     "shape": "object"

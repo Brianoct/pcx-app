@@ -26,6 +26,7 @@ const routers = [
   require('./routes/production'),
   require('./routes/adminStats'),
   require('./routes/rentabilidad'),
+  require('./routes/lineStats'),
   require('./routes/adminBrief'),
   require('./routes/ai'),
   require('./routes/qc'),

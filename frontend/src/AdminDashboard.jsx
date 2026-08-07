@@ -5,6 +5,7 @@ import boliviaAdminMapSvg from './assets/bolivia-admin1.svg?raw';
 import { useToast } from './ui/toastContext';
 import MorningBrief from './MorningBrief';
 import RentabilidadCard from './RentabilidadCard';
+import LineStatsCard from './LineStatsCard';
 
 const BOLIVIA_DEPARTMENT_MAP = {
   'la paz': 'La Paz',
@@ -979,6 +980,8 @@ function AdminDashboard({ token }) {
           });
         })}
       </div>
+
+      <LineStatsCard token={token} month={selectedMonth} year={selectedYear} />
 
       <RentabilidadCard token={token} month={selectedMonth} year={selectedYear} />
     </div>

@@ -10647,3 +10647,68 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   font-weight: 600;
   color: var(--text-muted);
 }
+
+/* ── Ventas por línea (Acero vs Armonía) ─────────────────────────────── */
+.ls-card { display: flex; flex-direction: column; gap: 14px; }
+.ls-legend { display: flex; gap: 14px; align-items: center; }
+.ls-legend-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.82rem; font-weight: 600; color: #52514e;
+}
+.ls-dot {
+  width: 10px; height: 10px; border-radius: 4px; flex: 0 0 auto;
+  display: inline-block;
+}
+.ls-tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.ls-tile {
+  border: 1px solid rgba(11, 11, 11, 0.1); border-radius: 12px;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 3px;
+  background: #fcfcfb;
+}
+.ls-tile-name {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 0.82rem; font-weight: 700; color: #52514e;
+}
+.ls-tile-value { font-size: 1.35rem; color: #0b0b0b; line-height: 1.2; }
+.ls-tile-detail { font-size: 0.8rem; color: #898781; }
+.ls-top { list-style: none; margin: 6px 0 0; padding: 6px 0 0; border-top: 1px dashed #e1e0d9; }
+.ls-top li {
+  font-size: 0.78rem; color: #52514e; display: flex; justify-content: space-between; gap: 8px;
+  padding: 1px 0;
+}
+.ls-top li em { font-style: normal; color: #898781; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ls-share { display: flex; flex-direction: column; gap: 5px; }
+.ls-share-bar { display: flex; gap: 2px; height: 14px; }
+.ls-share-seg { border-radius: 4px; min-width: 6px; transition: filter 0.15s; }
+.ls-share-seg:hover { filter: brightness(0.92); }
+.ls-share-labels {
+  display: flex; justify-content: space-between;
+  font-size: 0.78rem; font-weight: 600; color: #52514e;
+  font-variant-numeric: tabular-nums;
+}
+.ls-chart-wrap { overflow-x: auto; }
+.ls-chart {
+  width: 100%; min-width: 480px; max-width: 720px;
+  height: auto; display: block; margin: 0 auto;
+}
+.ls-grid { stroke: #e1e0d9; stroke-width: 1; }
+.ls-baseline { stroke: #c3c2b7; stroke-width: 1; }
+.ls-tick { fill: #898781; font-size: 10px; }
+.ls-bar { transition: filter 0.15s; }
+.ls-bar:hover { filter: brightness(0.88); }
+.ls-bar-label { fill: #52514e; font-size: 10px; font-weight: 600; }
+.ls-table-wrap { overflow-x: auto; }
+.ls-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.ls-table th {
+  text-align: left; color: #898781; font-weight: 600; font-size: 0.75rem;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 4px 10px 4px 0; border-bottom: 1px solid #e1e0d9;
+}
+.ls-table td {
+  padding: 5px 10px 5px 0; border-bottom: 1px solid #f0efec;
+  color: #52514e; font-variant-numeric: tabular-nums;
+}
+.ls-table tr.is-selected td { color: #0b0b0b; font-weight: 600; background: #f9f9f7; }
