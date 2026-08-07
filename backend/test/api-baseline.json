@@ -295,6 +295,12 @@
   },
   {
     "method": "GET",
+    "path": "/api/inventory/minmax-suggestions",
+    "status": 200,
+    "shape": "object"
+  },
+  {
+    "method": "GET",
     "path": "/api/features",
     "status": 200,
     "shape": "object"

@@ -96,6 +96,8 @@ const battery = [
   // planificación estratégica (Programa → Operación → Misión → Tarea)
   ['GET', '/api/planning', admin],
   ['GET', '/api/planning', ventas], // expect 403 (fase 1: solo admin)
+  // sugerencias de mín/máx (inventario)
+  ['GET', '/api/inventory/minmax-suggestions', admin],
   // paneles por área (flags + metas + tablero de ventas)
   ['GET', '/api/features', ventas],
   ['GET', '/api/admin/sales-goals', admin],
