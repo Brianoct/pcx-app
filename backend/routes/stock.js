@@ -244,9 +244,53 @@ router.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Al
 //   · mín ≈ 3 semanas de venta (producción + transporte + colchón), para no
 //     quedar en cero mientras se repone.
 // La velocidad de venta sale de las cotizaciones cobradas (Pagado/Embalado/
-// Enviado) de los últimos `days` días, por almacén, expandiendo combos a sus
-// componentes.
+// Enviado) de los últimos `days` días, expandiendo combos a sus componentes.
+//
+// Atribución por DESTINO (Logística PCX — rutas y días de envío): cada venta
+// cuenta para el almacén que atiende su destino, no para el store_location
+// tecleado. Regla: primero ciudades con ruta explícita (el dpto. de Potosí se
+// parte: Uyuni/Llallagua/Uncía salen por Cbba, Tupiza/Villazón por SCZ),
+// después el departamento; si no hay destino, el store_location de la venta.
 const CITY_KEY_BY_STORE = { Cochabamba: 'cochabamba', 'Santa Cruz': 'santacruz', Lima: 'lima' };
+
+const stripAccents = (value) => String(value || '')
+  .toLowerCase().trim()
+  .normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+// Ciudades con ruta explícita en el afiche de logística.
+const ROUTE_BY_CITY = {
+  // Salen de Santa Cruz (nacionales diarios + provincias de los viernes)
+  trinidad: 'santacruz', riberalta: 'santacruz', guayaramerin: 'santacruz',
+  cobija: 'santacruz', tarija: 'santacruz', bermejo: 'santacruz',
+  'entre rios': 'santacruz', camargo: 'santacruz', tupiza: 'santacruz',
+  villazon: 'santacruz', 'puerto suarez': 'santacruz', montero: 'santacruz',
+  yapacani: 'santacruz', warnes: 'santacruz', cotoca: 'santacruz',
+  vallegrande: 'santacruz', 'santa cruz de la sierra': 'santacruz',
+  'santa cruz': 'santacruz',
+  // Salen de Cochabamba
+  potosi: 'cochabamba', uyuni: 'cochabamba', llallagua: 'cochabamba',
+  uncia: 'cochabamba', oruro: 'cochabamba', 'la paz': 'cochabamba',
+  'el alto': 'cochabamba', sucre: 'cochabamba', 'villa tunari': 'cochabamba',
+  shinahota: 'cochabamba', chimore: 'cochabamba', ivirgarzama: 'cochabamba',
+  'san gabriel': 'cochabamba', cochabamba: 'cochabamba',
+  lima: 'lima'
+};
+
+// Sin ciudad con ruta explícita: el departamento decide.
+const ROUTE_BY_DEPARTMENT = {
+  'santa cruz': 'santacruz', beni: 'santacruz', pando: 'santacruz', tarija: 'santacruz',
+  cochabamba: 'cochabamba', 'la paz': 'cochabamba', oruro: 'cochabamba',
+  chuquisaca: 'cochabamba', potosi: 'cochabamba',
+  lima: 'lima'
+};
+
+const routeWarehouseKey = ({ ciudad, department, store_location: storeLocation }) => {
+  const cityRoute = ROUTE_BY_CITY[stripAccents(ciudad)];
+  if (cityRoute) return cityRoute;
+  const deptRoute = ROUTE_BY_DEPARTMENT[stripAccents(department)];
+  if (deptRoute) return deptRoute;
+  return CITY_KEY_BY_STORE[storeLocation] || null;
+};
 
 router.get('/api/inventory/minmax-suggestions', authenticateToken, async (req, res) => {
   try {
@@ -259,13 +303,13 @@ router.get('/api/inventory/minmax-suggestions', authenticateToken, async (req, r
     const windowDays = Math.min(Math.max(Number.parseInt(req.query.days, 10) || 90, 30), 365);
 
     const salesRes = await pool.query(
-      `SELECT q.store_location, UPPER(item->>'sku') AS sku,
+      `SELECT q.store_location, q.department, q.ciudad, UPPER(item->>'sku') AS sku,
               SUM(COALESCE((item->>'qty')::numeric, 0)) AS units
        FROM quotes q
        CROSS JOIN LATERAL jsonb_array_elements(q.line_items::jsonb) item
        WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
          AND q.created_at >= NOW() - ($1 * INTERVAL '1 day')
-       GROUP BY 1, 2`,
+       GROUP BY 1, 2, 3, 4`,
       [windowDays]
     );
 
@@ -278,7 +322,7 @@ router.get('/api/inventory/minmax-suggestions', authenticateToken, async (req, r
     };
     const comboRows = [];
     for (const row of salesRes.rows) {
-      const cityKey = CITY_KEY_BY_STORE[row.store_location];
+      const cityKey = routeWarehouseKey(row);
       const comboMatch = String(row.sku || '').match(/^COMBO_(\d+)$/);
       if (comboMatch) {
         comboRows.push({ comboId: Number(comboMatch[1]), cityKey, units: Number(row.units) });
@@ -339,7 +383,7 @@ router.get('/api/inventory/minmax-suggestions', authenticateToken, async (req, r
 
     res.json({
       window_days: windowDays,
-      criteria: 'Producción ~1 vez al mes: máx−mín ≈ 1 mes de venta; mín ≈ 3 semanas de venta.',
+      criteria: 'Producción ~1 vez al mes: máx−mín ≈ 1 mes de venta; mín ≈ 3 semanas de venta. Venta atribuida al almacén que atiende el destino (rutas Logística PCX).',
       rows,
       products_with_sales: rows.filter((r) => Object.values(r.cities).some((c) => c.units_sold > 0)).length
     });

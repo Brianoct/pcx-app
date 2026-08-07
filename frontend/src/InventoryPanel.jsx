@@ -678,8 +678,9 @@ function InventoryPanel({ token, role, access }) {
               <div>
                 <h3>Sugerencias de mín/máx</h3>
                 <p className="invsg-sub">
-                  Ventas de los últimos {suggestions.window_days} días · criterio: producción ~1 vez al mes
-                  (máx−mín ≈ 1 mes de venta; mín ≈ 3 semanas para cubrir producción + transporte).
+                  Ventas de los últimos {suggestions.window_days} días, atribuidas al almacén que atiende cada destino
+                  (rutas Logística PCX; ej: La Paz y Potosí → Cbba; Tarija, Beni y Tupiza → SCZ) · criterio: producción
+                  ~1 vez al mes (máx−mín ≈ 1 mes de venta; mín ≈ 3 semanas para cubrir producción + transporte).
                 </p>
               </div>
               <button type="button" className="invsg-close" onClick={() => setShowSuggestions(false)} aria-label="Cerrar">✕</button>
