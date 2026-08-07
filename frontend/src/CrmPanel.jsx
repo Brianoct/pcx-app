@@ -54,7 +54,7 @@ export default function CrmPanel({ token }) {
   const [expandedId, setExpandedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', department: '', follow_up_at: '' });
+  const [form, setForm] = useState({ name: '', phone: '', ciudad: '', follow_up_at: '' });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -131,12 +131,12 @@ export default function CrmPanel({ token }) {
         body: {
           name: form.name.trim(),
           phone: form.phone.trim() || null,
-          department: form.department.trim() || null,
+          ciudad: form.ciudad.trim() || null,
           follow_up_at: form.follow_up_at || null
         }
       });
       toast.success('Cliente creado');
-      setForm({ name: '', phone: '', department: '', follow_up_at: '' });
+      setForm({ name: '', phone: '', ciudad: '', follow_up_at: '' });
       setShowForm(false);
       load();
     } catch (err) {
@@ -169,8 +169,8 @@ export default function CrmPanel({ token }) {
             onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <input type="text" maxLength={40} placeholder="Teléfono (WhatsApp)" value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          <input type="text" maxLength={120} placeholder="Ciudad" value={form.department}
-            onChange={(e) => setForm({ ...form, department: e.target.value })} />
+          <input type="text" maxLength={120} placeholder="Ciudad" value={form.ciudad}
+            onChange={(e) => setForm({ ...form, ciudad: e.target.value })} />
           <label className="cli-form-date">Seguimiento
             <input type="date" value={form.follow_up_at} onChange={(e) => setForm({ ...form, follow_up_at: e.target.value })} />
           </label>
@@ -281,7 +281,7 @@ function FragmentRow({ customer, stage, followUp, overdue, lastContact, isExpand
             </a>
           ) : '—'}
         </td>
-        <td className="cli-nowrap">{customer.provincia || customer.department || '—'}</td>
+        <td className="cli-nowrap">{customer.ciudad || customer.provincia || customer.department || '—'}</td>
         <td>
           <select
             className={`cli-stage-select ${stage.cls}`}

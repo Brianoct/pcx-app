@@ -262,6 +262,7 @@ const parseCustomerPayload = (body = {}, { partial = false } = {}) => {
   if (has('email')) out.email = trimOrNull(body.email, 160);
   if (has('department')) out.department = trimOrNull(body.department, 120);
   if (has('provincia')) out.provincia = trimOrNull(body.provincia, 120);
+  if (has('ciudad')) out.ciudad = trimOrNull(body.ciudad, 120);
   if (has('address')) out.address = trimOrNull(body.address, 240);
   if (has('assigned_vendor')) out.assigned_vendor = trimOrNull(body.assigned_vendor, 120);
   if (has('pipeline_stage')) {
@@ -306,12 +307,12 @@ router.post('/api/customers', authenticateToken, async (req, res) => {
       }
     }
     const result = await pool.query(
-      `INSERT INTO customers (name, phone, phone_normalized, email, department, provincia, address, assigned_vendor, pipeline_stage, follow_up_at, follow_up_note, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9, 'contactado'), $10, $11, $12)
+      `INSERT INTO customers (name, phone, phone_normalized, email, department, provincia, ciudad, address, assigned_vendor, pipeline_stage, follow_up_at, follow_up_note, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, 'contactado'), $11, $12, $13)
        RETURNING *`,
       [
         data.name, data.phone, data.phone_normalized, data.email || null,
-        data.department || null, data.provincia || null, data.address || null,
+        data.department || null, data.provincia || null, data.ciudad || null, data.address || null,
         data.assigned_vendor || null, data.pipeline_stage || null,
         data.follow_up_at || null, data.follow_up_note || null, req.user.id
       ]

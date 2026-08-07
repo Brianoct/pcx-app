@@ -39,6 +39,7 @@ const buildCustomerRow = (row = {}) => ({
   email: row.email || null,
   department: row.department || null,
   provincia: row.provincia || null,
+  ciudad: row.ciudad || null,
   address: row.address || null,
   pipeline_stage: row.pipeline_stage || 'contactado',
   follow_up_at: formatDateOnly(row.follow_up_at),
@@ -59,20 +60,21 @@ const buildCustomerRow = (row = {}) => ({
 // Called whenever a quote is created/edited: keeps the customer book current
 // without any extra typing from the seller. Never throws — a CRM hiccup must
 // not block a sale.
-const upsertCustomerFromQuote = async ({ name, phone, department, provincia, vendor, userId }) => {
+const upsertCustomerFromQuote = async ({ name, phone, department, provincia, ciudad, vendor, userId }) => {
   try {
     const phoneNormalized = normalizeCustomerPhone(phone);
     const safeName = trimOrNull(name, 160);
     if (!phoneNormalized || !safeName) return null;
     const result = await pool.query(
-      `INSERT INTO customers (name, phone, phone_normalized, department, provincia, assigned_vendor, assigned_user_id, pipeline_stage, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'cotizado', $7)
+      `INSERT INTO customers (name, phone, phone_normalized, department, provincia, ciudad, assigned_vendor, assigned_user_id, pipeline_stage, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'cotizado', $8)
        ON CONFLICT (phone_normalized) WHERE phone_normalized IS NOT NULL AND phone_normalized <> ''
        DO UPDATE SET
          name = EXCLUDED.name,
          phone = EXCLUDED.phone,
          department = COALESCE(EXCLUDED.department, customers.department),
          provincia = COALESCE(EXCLUDED.provincia, customers.provincia),
+         ciudad = COALESCE(EXCLUDED.ciudad, customers.ciudad),
          assigned_vendor = COALESCE(customers.assigned_vendor, EXCLUDED.assigned_vendor),
          -- First rep to attend the customer becomes the owner; never stolen by
          -- a later upsert.
@@ -89,6 +91,7 @@ const upsertCustomerFromQuote = async ({ name, phone, department, provincia, ven
         phoneNormalized,
         trimOrNull(department, 120),
         trimOrNull(provincia, 120),
+        trimOrNull(ciudad, 120),
         trimOrNull(vendor, 120),
         userId || null
       ]
