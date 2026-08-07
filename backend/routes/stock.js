@@ -236,4 +236,117 @@ router.get('/api/products', authenticateToken, requireRole(['Almacen Lider', 'Al
   }
 });
 
+
+// ─── Sugerencias de mín/máx a partir de las ventas reales ───────────────────
+// Criterio del negocio: activar producción ~una vez al mes por producto.
+//   · máx − mín ≈ 1 mes de venta → el stock baja de máx a mín en ~un mes y
+//     el disparo de producción ocurre mensualmente.
+//   · mín ≈ 3 semanas de venta (producción + transporte + colchón), para no
+//     quedar en cero mientras se repone.
+// La velocidad de venta sale de las cotizaciones cobradas (Pagado/Embalado/
+// Enviado) de los últimos `days` días, por almacén, expandiendo combos a sus
+// componentes.
+const CITY_KEY_BY_STORE = { Cochabamba: 'cochabamba', 'Santa Cruz': 'santacruz', Lima: 'lima' };
+
+router.get('/api/inventory/minmax-suggestions', authenticateToken, async (req, res) => {
+  try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const scope = getInventoryAccessScope(userContext, access);
+    if (scope.error) return res.status(403).json({ error: scope.error });
+
+    const windowDays = Math.min(Math.max(Number.parseInt(req.query.days, 10) || 90, 30), 365);
+
+    const salesRes = await pool.query(
+      `SELECT q.store_location, UPPER(item->>'sku') AS sku,
+              SUM(COALESCE((item->>'qty')::numeric, 0)) AS units
+       FROM quotes q
+       CROSS JOIN LATERAL jsonb_array_elements(q.line_items::jsonb) item
+       WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')
+         AND q.created_at >= NOW() - ($1 * INTERVAL '1 day')
+       GROUP BY 1, 2`,
+      [windowDays]
+    );
+
+    // Combos venden componentes: COMBO_<id> se expande vía combo_items.
+    const unitsBySkuCity = new Map();
+    const addUnits = (sku, cityKey, units) => {
+      if (!sku || !cityKey || !(units > 0)) return;
+      if (!unitsBySkuCity.has(sku)) unitsBySkuCity.set(sku, { cochabamba: 0, santacruz: 0, lima: 0 });
+      unitsBySkuCity.get(sku)[cityKey] += units;
+    };
+    const comboRows = [];
+    for (const row of salesRes.rows) {
+      const cityKey = CITY_KEY_BY_STORE[row.store_location];
+      const comboMatch = String(row.sku || '').match(/^COMBO_(\d+)$/);
+      if (comboMatch) {
+        comboRows.push({ comboId: Number(comboMatch[1]), cityKey, units: Number(row.units) });
+      } else {
+        addUnits(row.sku, cityKey, Number(row.units));
+      }
+    }
+    if (comboRows.length > 0) {
+      const comboIds = [...new Set(comboRows.map((r) => r.comboId))];
+      const itemsRes = await pool.query(
+        'SELECT combo_id, UPPER(sku) AS sku, quantity FROM combo_items WHERE combo_id = ANY($1)',
+        [comboIds]
+      );
+      const itemsByCombo = new Map();
+      for (const item of itemsRes.rows) {
+        if (!itemsByCombo.has(Number(item.combo_id))) itemsByCombo.set(Number(item.combo_id), []);
+        itemsByCombo.get(Number(item.combo_id)).push(item);
+      }
+      for (const comboRow of comboRows) {
+        for (const item of itemsByCombo.get(comboRow.comboId) || []) {
+          addUnits(item.sku, comboRow.cityKey, comboRow.units * Number(item.quantity));
+        }
+      }
+    }
+
+    const productsRes = await pool.query(
+      `SELECT sku, name,
+              min_stock_cochabamba, min_stock_santacruz, min_stock_lima,
+              max_stock_cochabamba, max_stock_santacruz, max_stock_lima
+       FROM products
+       WHERE is_active = TRUE
+       ORDER BY sku`
+    );
+
+    const suggestFor = (monthly) => {
+      if (!(monthly > 0)) return { suggested_min: 0, suggested_max: 0 };
+      const min = Math.max(1, Math.ceil(monthly * 0.75));
+      const max = min + Math.max(1, Math.ceil(monthly));
+      return { suggested_min: min, suggested_max: max };
+    };
+
+    const rows = productsRes.rows.map((product) => {
+      const sold = unitsBySkuCity.get(String(product.sku).toUpperCase()) || { cochabamba: 0, santacruz: 0, lima: 0 };
+      const cities = {};
+      for (const [cityKey, suffix] of [['cochabamba', 'cochabamba'], ['santacruz', 'santacruz'], ['lima', 'lima']]) {
+        const units = sold[cityKey] || 0;
+        const monthly = Math.round((units * 30 / windowDays) * 10) / 10;
+        cities[cityKey] = {
+          units_sold: units,
+          monthly,
+          current_min: Number(product[`min_stock_${suffix}`] ?? 0),
+          current_max: Number(product[`max_stock_${suffix}`] ?? 0),
+          ...suggestFor(monthly)
+        };
+      }
+      return { sku: product.sku, name: product.name, cities };
+    });
+
+    res.json({
+      window_days: windowDays,
+      criteria: 'Producción ~1 vez al mes: máx−mín ≈ 1 mes de venta; mín ≈ 3 semanas de venta.',
+      rows,
+      products_with_sales: rows.filter((r) => Object.values(r.cities).some((c) => c.units_sold > 0)).length
+    });
+  } catch (err) {
+    console.error('Error computing min/max suggestions:', err);
+    res.status(500).json({ error: 'No se pudieron calcular las sugerencias' });
+  }
+});
+
 module.exports = router;

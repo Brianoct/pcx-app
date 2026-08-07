@@ -46,6 +46,12 @@ function InventoryPanel({ token, role, access }) {
   const effectiveAccess = buildAccessForUser(role, access);
   const canViewGlobalInventory = canAccessPanel(effectiveAccess, 'inventarioGlobal');
   const [userCity, setUserCity] = useState('');
+  // Sugerencias de mín/máx a partir de las ventas (criterio: producción ~1
+  // vez al mes). Se revisan en un modal y «Aplicar» solo llena los campos:
+  // nada se guarda hasta presionar «Guardar min/max».
+  const [suggestions, setSuggestions] = useState(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const globalStores = [
     { key: 'cochabamba', field: 'stock_cochabamba', location: 'Cochabamba', minField: 'min_stock_cochabamba', maxField: 'max_stock_cochabamba', minLabel: 'Min/Max Cbba' },
     { key: 'santacruz', field: 'stock_santacruz', location: 'Santa Cruz', minField: 'min_stock_santacruz', maxField: 'max_stock_santacruz', minLabel: 'Min/Max Scz' },
@@ -310,6 +316,48 @@ function InventoryPanel({ token, role, access }) {
     }
   };
 
+  const openSuggestions = async () => {
+    setLoadingSuggestions(true);
+    try {
+      const data = await apiRequest('/api/inventory/minmax-suggestions?days=90', { token });
+      setSuggestions(data);
+      setShowSuggestions(true);
+    } catch (err) {
+      setSaveMessage(`No se pudieron calcular sugerencias: ${err.message}`);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  // Llena los campos mín/máx con las sugerencias (solo donde hubo ventas):
+  // quedan como cambios pendientes y se confirman con «Guardar min/max».
+  const applySuggestions = (onlySku = null) => {
+    if (!suggestions) return;
+    const bySku = new Map(suggestions.rows.map((row) => [row.sku, row]));
+    let applied = 0;
+    setProducts((prev) => prev.map((product) => {
+      if (onlySku && product.sku !== onlySku) return product;
+      const row = bySku.get(product.sku);
+      if (!row) return product;
+      const next = { ...product };
+      let touched = false;
+      editableStores.forEach((store) => {
+        const city = row.cities[store.key];
+        if (city && city.monthly > 0) {
+          next[store.minField] = city.suggested_min;
+          next[store.maxField] = city.suggested_max;
+          touched = true;
+        }
+      });
+      if (touched) applied += 1;
+      return touched ? next : product;
+    }));
+    if (onlySku === null) setShowSuggestions(false);
+    setSaveMessage(applied > 0
+      ? `Sugerencias aplicadas a ${applied} producto(s): revisa y presiona «Guardar min/max».`
+      : 'No hay sugerencias aplicables (sin ventas en la ventana).');
+  };
+
   const changedSkus = products.reduce((acc, product) => {
     const base = originalStocks[product.sku];
     if (!base) return acc;
@@ -482,6 +530,15 @@ function InventoryPanel({ token, role, access }) {
           <div className="inv-toolbar-actions">
             <button
               type="button"
+              onClick={openSuggestions}
+              disabled={loadingSuggestions}
+              className="btn inv-suggest-btn"
+              title="Sugerir mín/máx según las ventas de los últimos 90 días"
+            >
+              {loadingSuggestions ? 'Calculando…' : '💡 Sugerir mín/máx'}
+            </button>
+            <button
+              type="button"
               onClick={saveMinimums}
               disabled={savingMins || changedMinSkus.length === 0}
               className="btn inv-save-levels"
@@ -617,6 +674,83 @@ function InventoryPanel({ token, role, access }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showSuggestions && suggestions && (
+        <div className="invsg-overlay" onClick={() => setShowSuggestions(false)}>
+          <div className="invsg-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="invsg-head">
+              <div>
+                <h3>Sugerencias de mín/máx</h3>
+                <p className="invsg-sub">
+                  Ventas de los últimos {suggestions.window_days} días · criterio: producción ~1 vez al mes
+                  (máx−mín ≈ 1 mes de venta; mín ≈ 3 semanas para cubrir producción + transporte).
+                </p>
+              </div>
+              <button type="button" className="invsg-close" onClick={() => setShowSuggestions(false)} aria-label="Cerrar">✕</button>
+            </div>
+
+            {suggestions.products_with_sales === 0 ? (
+              <p className="dashboard-muted">Sin ventas cobradas en la ventana: no hay base para sugerir niveles.</p>
+            ) : (
+              <>
+                <div className="invsg-table-wrap">
+                  <table className="invsg-table">
+                    <thead>
+                      <tr>
+                        <th>Producto</th>
+                        {editableStores.map((store) => (
+                          <th key={store.key}>{store.location}<small>venta/mes · mín · máx</small></th>
+                        ))}
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {suggestions.rows
+                        .filter((row) => editableStores.some((store) => (row.cities[store.key]?.monthly || 0) > 0))
+                        .map((row) => (
+                          <tr key={row.sku}>
+                            <td className="invsg-name">
+                              <strong>{row.sku}</strong>
+                              <small>{row.name}</small>
+                            </td>
+                            {editableStores.map((store) => {
+                              const city = row.cities[store.key];
+                              if (!city || city.monthly <= 0) return <td key={store.key} className="invsg-empty">—</td>;
+                              const minChanged = city.suggested_min !== city.current_min;
+                              const maxChanged = city.suggested_max !== city.current_max;
+                              return (
+                                <td key={store.key}>
+                                  <span className="invsg-monthly">≈{city.monthly}/mes</span>
+                                  <span className={`invsg-level ${minChanged ? 'is-diff' : ''}`}>
+                                    mín {city.current_min} → <strong>{city.suggested_min}</strong>
+                                  </span>
+                                  <span className={`invsg-level ${maxChanged ? 'is-diff' : ''}`}>
+                                    máx {city.current_max} → <strong>{city.suggested_max}</strong>
+                                  </span>
+                                </td>
+                              );
+                            })}
+                            <td>
+                              <button type="button" className="btn btn-secondary invsg-apply-one" onClick={() => applySuggestions(row.sku)}>
+                                Aplicar
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="invsg-foot">
+                  <span className="invsg-note">«Aplicar» solo llena los campos: nada se guarda hasta presionar «Guardar min/max».</span>
+                  <button type="button" className="btn btn-primary" onClick={() => applySuggestions()}>
+                    Aplicar todas las sugerencias
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
