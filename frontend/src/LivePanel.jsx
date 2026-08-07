@@ -373,7 +373,6 @@ export default function LivePanel({ token, role }) {
     <div className="container prod-page">
       <div className="card plan-intro camp-intro live-intro">
         <div>
-          <h2 className="plan-title"><span className="live-dot" /> Live</h2>
           {!canEdit && myArea && (
             <p className="plan-sub">Tu área: {AREA_LABELS[myArea]}</p>
           )}

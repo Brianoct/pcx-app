@@ -47,10 +47,6 @@ export default function InversionPanel({ token }) {
 
   return (
     <div className="container prod-page">
-      <div className="card plan-intro">
-        <h2 className="plan-title">Inversión</h2>
-      </div>
-
       {error && <div className="camp-error">{error}</div>}
 
       {totals && (

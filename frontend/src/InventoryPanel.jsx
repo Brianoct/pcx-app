@@ -405,9 +405,6 @@ function InventoryPanel({ token, role, access }) {
   if (!canViewGlobalInventory && !individualStore) {
     return (
       <div className="container">
-        <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
-          Inventario
-        </h2>
         <div className="card" style={{ textAlign: 'center', color: '#dc2626' }}>
           Tu usuario no tiene una ciudad válida configurada para el panel de inventario individual.
         </div>
@@ -472,9 +469,6 @@ function InventoryPanel({ token, role, access }) {
 
   return (
     <div className="container inv-page" ref={pageRef}>
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
-        Inventario
-      </h2>
       <p className="inv-view-note">
         Vista: {canViewGlobalInventory ? 'Global' : `Individual (${individualStore?.location || 'Ciudad no configurada'})`}
       </p>

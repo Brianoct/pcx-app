@@ -80,10 +80,6 @@ export default function ProductionReception({ token }) {
 
   return (
     <div className="container prod-page">
-      <div className="card plan-intro">
-        <h2 className="plan-title">Recepción de producción</h2>
-      </div>
-
       {error && <div className="card prod-error">{error}</div>}
       {doneMsg && <div className="card recep-done">{doneMsg}</div>}
 

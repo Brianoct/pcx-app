@@ -292,10 +292,6 @@ export default function PromosPanel({ token, role }) {
 
   return (
     <div className="container prod-page">
-      <div className="card plan-intro">
-        <h2 className="plan-title">Promos · toolchest de ventas</h2>
-      </div>
-
       {error && <div className="camp-error">{error}</div>}
       {notice && <div className="promo-notice" onClick={() => setNotice('')}>{notice}</div>}
 

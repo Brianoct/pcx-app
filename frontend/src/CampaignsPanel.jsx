@@ -394,7 +394,6 @@ export default function CampaignsPanel({ token, role }) {
     <div className="container prod-page">
       <div className="card plan-intro camp-intro">
         <div>
-          <h2 className="plan-title">Campañas</h2>
           {!canEdit && myArea && (
             <p className="plan-sub">Tu área: {AREA_LABELS[myArea]}</p>
           )}

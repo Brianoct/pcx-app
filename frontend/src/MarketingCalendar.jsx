@@ -145,9 +145,6 @@ export default function MarketingCalendar({ token, role }) {
   return (
     <div className="container prod-page">
       <div className="card plan-intro camp-intro">
-        <div>
-          <h2 className="plan-title">Calendario de Marketing</h2>
-        </div>
         <div className="mkcal-legend">
           <span className="mkcal-chip is-campana">Campaña</span>
           <span className="mkcal-chip is-live">● Live</span>

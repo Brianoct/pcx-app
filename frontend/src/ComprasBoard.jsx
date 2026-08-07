@@ -195,12 +195,9 @@ export default function ComprasBoard({ token }) {
     <div className="container compras-page">
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-          <div>
-            <h2 style={{ marginBottom: 6, color: '#dc2626' }}>Compras (procurement)</h2>
-            <p style={{ color: '#78716c', margin: 0 }}>
-              Lista de reposición de materiales (sistema de dos contenedores). Escanea el QR de un insumo cuando se vacíe un contenedor para agregarlo aquí.
-            </p>
-          </div>
+          <p style={{ color: '#78716c', margin: 0, maxWidth: 640 }}>
+            Lista de reposición de materiales (sistema de dos contenedores). Escanea el QR de un insumo cuando se vacíe un contenedor para agregarlo aquí.
+          </p>
           <button type="button" className="btn btn-secondary" onClick={load} disabled={loading}>Actualizar</button>
         </div>
         <form onSubmit={addManual} className="compras-add-form">

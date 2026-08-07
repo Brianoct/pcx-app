@@ -1131,10 +1131,6 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
 
   return (
     <div className="container">
-      <h2 style={{ textAlign: 'center', margin: '20px 0', color: '#dc2626' }}>
-        Historial de Cotizaciones
-      </h2>
-
       {/* Filter Bar */}
       <div className="filter-bar">
         <input

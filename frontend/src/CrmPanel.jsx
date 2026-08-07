@@ -151,10 +151,7 @@ export default function CrmPanel({ token }) {
   return (
     <div className="container cli-page">
       <div className="cli-head">
-        <div>
-          <h2 className="cli-title">Clientes</h2>
-          <p className="cli-sub">Tu cartera comercial: estado, seguimiento y contacto en un solo lugar.</p>
-        </div>
+        <p className="cli-sub">Tu cartera comercial: estado, seguimiento y contacto en un solo lugar.</p>
         <div className="cli-head-actions">
           <div className="admin-subtabs cli-view-tabs" role="tablist" aria-label="Vista de clientes">
             <button type="button" className={`admin-subtab ${view === 'lista' ? 'is-active' : ''}`} onClick={() => setView('lista')}>Lista</button>

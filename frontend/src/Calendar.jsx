@@ -371,10 +371,7 @@ export default function Calendar({ token, user }) {
   return (
     <div className="container dayplan-page">
       <div className="dayplan-head">
-        <div>
-          <h2 className="dayplan-title">Plan del día</h2>
-          <p className="dayplan-subtitle">{dateLabel}{isToday ? ' · hoy' : ''}</p>
-        </div>
+        <p className="dayplan-subtitle">{dateLabel}{isToday ? ' · hoy' : ''}</p>
         <div className="dayplan-nav">
           <button type="button" className="btn btn-secondary" onClick={() => shiftDay(-1)} aria-label="Día anterior">‹</button>
           <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
