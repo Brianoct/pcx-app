@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
 const { normalizeRole } = require('./rbac');
+const { getRequestContext } = require('./requestContext');
+const { canUseSandbox } = require('./sandbox');
 
 // Middleware: Verify JWT token
 const authenticateToken = (req, res, next) => {
@@ -19,6 +21,16 @@ const authenticateToken = (req, res, next) => {
         return res.status(403).json({ error: 'Cuenta desactivada. Contacta a un administrador.' });
       }
       req.user = user;
+      // Session checks above always ran against the real schema; only now,
+      // with the user known, does the requested sandbox mode become active
+      // for the rest of this request.
+      const ctx = getRequestContext();
+      if (ctx?.sandboxRequested) {
+        if (!canUseSandbox(user.role)) {
+          return res.status(403).json({ error: 'El modo sandbox no está habilitado para tu rol.' });
+        }
+        ctx.sandbox = true;
+      }
       next();
     } catch (dbErr) {
       console.error(dbErr);

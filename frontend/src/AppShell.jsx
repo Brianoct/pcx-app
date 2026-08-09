@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
+import { SandboxBanner } from './SandboxControls';
+import { isSandboxActive } from './sandbox';
 
 const DESKTOP_QUERY = '(min-width: 1024px)';
 
@@ -29,7 +31,7 @@ function AppShell({ access, displayName, roleName, features, currentCommission, 
   };
 
   return (
-    <div className={`app-shell ${drawerOpen ? 'drawer-open' : ''} ${sidebarHidden ? 'sidebar-hidden' : ''}`}>
+    <div className={`app-shell ${drawerOpen ? 'drawer-open' : ''} ${sidebarHidden ? 'sidebar-hidden' : ''} ${isSandboxActive() ? 'sandbox-active' : ''}`}>
       {drawerOpen && <div className="sidebar-overlay" onClick={() => setDrawerOpen(false)} />}
       <Sidebar
         access={access}
@@ -40,6 +42,7 @@ function AppShell({ access, displayName, roleName, features, currentCommission, 
         onNavigate={() => setDrawerOpen(false)}
       />
       <div className="shell-main">
+        <SandboxBanner />
         <TopBar
           displayName={displayName}
           currentCommission={currentCommission}

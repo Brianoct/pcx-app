@@ -64,6 +64,15 @@ export async function apiRequest(path, options = {}) {
 
     try {
       const requestHeaders = { ...headers };
+      // Modo sandbox: marca cada petición para que el backend la enrute al
+      // schema de práctica (ver src/sandbox.js).
+      try {
+        if (localStorage.getItem('pcx_sandbox') === '1') {
+          requestHeaders['X-PCX-Sandbox'] = '1';
+        }
+      } catch {
+        // localStorage puede no estar disponible (SSR/tests); seguir normal.
+      }
       const init = {
         method: methodUpper,
         headers: requestHeaders,

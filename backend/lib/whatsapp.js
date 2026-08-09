@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const { pool } = require('../db');
+const { isSandboxRequest } = require('./requestContext');
 const { ROLE_KEYS, normalizeRole } = require('./rbac');
 const { createHttpError, parseJsonInput, parseOptionalBoolean } = require('./util');
 
@@ -409,6 +410,14 @@ const buildOutboundWhatsAppPayload = ({ toPhone, body = {} }) => {
 };
 
 const sendWhatsAppMessage = async ({ payload }) => {
+  // En modo sandbox nunca se contacta la API real: el mensaje se registra
+  // como simulado y ningún cliente recibe nada.
+  if (isSandboxRequest()) {
+    return {
+      wa_message_id: `sandbox-${crypto.randomUUID()}`,
+      raw_response: { sandbox: true, simulated: true }
+    };
+  }
   if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
     throw createHttpError(500, 'Configuración de WhatsApp incompleta en el servidor');
   }
@@ -438,6 +447,9 @@ const sendWhatsAppMessage = async ({ payload }) => {
 };
 
 const uploadMediaToWhatsApp = async ({ fileBuffer, mimeType = '', filename = '' }) => {
+  if (isSandboxRequest()) {
+    return { id: `sandbox-media-${crypto.randomUUID()}` };
+  }
   if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
     throw createHttpError(500, 'Configuración de WhatsApp incompleta en el servidor');
   }
@@ -468,6 +480,9 @@ const uploadMediaToWhatsApp = async ({ fileBuffer, mimeType = '', filename = '' 
 };
 
 const fetchWhatsAppMediaMeta = async (mediaId) => {
+  if (isSandboxRequest()) {
+    throw createHttpError(400, 'Media no disponible en modo sandbox (mensajes simulados)');
+  }
   if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
     throw createHttpError(500, 'Configuración de WhatsApp incompleta en el servidor');
   }
@@ -489,6 +504,9 @@ const fetchWhatsAppMediaMeta = async (mediaId) => {
 };
 
 const fetchWhatsAppMediaBinary = async (mediaUrl) => {
+  if (isSandboxRequest()) {
+    throw createHttpError(400, 'Media no disponible en modo sandbox (mensajes simulados)');
+  }
   if (!WHATSAPP_ACCESS_TOKEN) {
     throw createHttpError(500, 'Configuración de WhatsApp incompleta en el servidor');
   }

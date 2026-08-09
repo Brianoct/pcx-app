@@ -10745,3 +10745,78 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   color: #52514e; font-variant-numeric: tabular-nums;
 }
 .ls-table tr.is-selected td { color: #0b0b0b; font-weight: 600; background: #f9f9f7; }
+
+/* ── Modo sandbox ─────────────────────────────────────────────────────────── */
+
+.sandbox-toggle {
+  cursor: pointer;
+  color: #9a3412;
+  font-weight: 700;
+  font-size: 0.9rem;
+  background: rgba(255, 127, 48, 0.12);
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 127, 48, 0.45);
+  white-space: nowrap;
+}
+
+.sandbox-toggle:hover {
+  background: rgba(255, 127, 48, 0.22);
+}
+
+.sandbox-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #ff7f30 0%, #f59e0b 100%);
+  color: #fff;
+  font-size: 0.92rem;
+  border-bottom: 2px solid #c2410c;
+}
+
+.sandbox-banner-text strong {
+  letter-spacing: 0.04em;
+}
+
+.sandbox-banner-error {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.85rem;
+}
+
+.sandbox-banner-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.sandbox-banner-actions button {
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 5px 12px;
+  border-radius: 8px;
+}
+
+.sandbox-banner-actions button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.sandbox-banner-actions button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Con el sandbox activo, la barra superior también se tiñe: hasta una captura
+   de pantalla delata en qué mundo se hizo. */
+.sandbox-active .topbar {
+  background: linear-gradient(180deg, rgba(255, 237, 213, 0.98), rgba(255, 228, 196, 0.95));
+  border-bottom-color: rgba(234, 88, 12, 0.5);
+}
