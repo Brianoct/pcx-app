@@ -2,10 +2,19 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { CUSTOMER_MENU_IMAGE_DIR, LEGACY_MENU_IMAGE_DIR } = require('./lib/customerMenu');
+const { runWithRequestContext } = require('./lib/requestContext');
+const { SANDBOX_HEADER } = require('./lib/sandbox');
 const fsSync = require('fs');
 
 const app = express();
 const httpServer = http.createServer(app);
+
+// Every request gets a context store. The sandbox flag is only *requested*
+// here; it becomes active in authenticateToken once the user's role is known.
+app.use((req, _res, next) => {
+  const requested = String(req.headers[SANDBOX_HEADER] || '').trim() === '1';
+  runWithRequestContext({ sandbox: false, sandboxRequested: requested }, () => next());
+});
 
 // Behind Render's proxy; needed so rate limiting sees real client IPs.
 app.set('trust proxy', 1);

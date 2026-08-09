@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getNavLabel } from './navConfig';
+import { SandboxToggle } from './SandboxControls';
 import { useOutbox } from './OutboxProvider';
 import { useOnlineStatus } from './useOnlineStatus';
 import OutboxPanel from './OutboxPanel';
@@ -86,6 +87,7 @@ function TopBar({ displayName, currentCommission, isTopSeller, onToggleSidebar }
         <h1 className="topbar-title">{getNavLabel(location.pathname)}</h1>
       )}
       <div className="topbar-right">
+        <SandboxToggle />
         <SyncStatus />
         <button
           type="button"

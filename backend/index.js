@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const { app, httpServer, errorHandler } = require('./app');
 const { pool } = require('./db');
+const { ensureSandboxReady } = require('./lib/sandbox');
 const { runMigrations } = require('./scripts/migrate');
 const { syncGeoCatalog } = require('./lib/geo');
 const { initWhatsAppInboxWebSocketGateway } = require('./lib/whatsapp');
@@ -40,7 +41,8 @@ const routers = [
   require('./routes/planning'),
   require('./routes/areaPanels'),
   require('./routes/overview'),
-  require('./routes/geo')
+  require('./routes/geo'),
+  require('./routes/sandbox')
 ];
 
 for (const router of routers) {
@@ -51,6 +53,7 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 4000;
 const startServer = async () => {
   await runMigrations(pool);
+  await ensureSandboxReady();
   await syncGeoCatalog();
   initWhatsAppInboxWebSocketGateway(httpServer);
   httpServer.listen(PORT, () => {
