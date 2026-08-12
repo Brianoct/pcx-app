@@ -563,18 +563,21 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     );
     const discountAmount = subtotal * (Math.max(0, Math.min(100, discountPercent)) / 100);
     const total = Math.max(0, subtotal - discountAmount);
-    return { subtotal, total };
+    // discount_bs es el texto que muestra el campo "Descuento Bs"; se deriva
+    // del % salvo mientras el usuario está escribiendo en ese campo.
+    return { subtotal, total, discount_bs: discountAmount.toFixed(2) };
   };
 
   const updateEditRows = (nextRows, nextDiscountPercent = null) => {
-    const { subtotal, total } = recalcEditTotals(nextRows, nextDiscountPercent);
+    const { subtotal, total, discount_bs } = recalcEditTotals(nextRows, nextDiscountPercent);
     setEditingQuote((prev) => (
       prev
         ? {
             ...prev,
             line_items: nextRows,
             subtotal,
-            total
+            total,
+            discount_bs
           }
         : prev
     ));
@@ -600,15 +603,40 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   };
 
   const onEditDiscountPercent = (value) => {
-    const normalized = Math.max(0, Math.min(100, Number(value) || 0));
+    const parsed = Number(String(value).replace(',', '.'));
+    const clamped = Math.max(0, Math.min(100, Number.isFinite(parsed) ? parsed : 0));
+    const normalized = Math.round(clamped * 10000) / 10000;
     setEditingQuote((prev) => {
       if (!prev) return prev;
-      const { subtotal, total } = recalcEditTotals(prev.line_items, normalized);
+      const { subtotal, total, discount_bs } = recalcEditTotals(prev.line_items, normalized);
       return {
         ...prev,
         discount_percent: normalized,
         subtotal,
-        total
+        total,
+        discount_bs
+      };
+    });
+  };
+
+  // Descuento escrito en Bs: calcula el % equivalente (4 decimales) y el total
+  // exacto. Así "dejar la cotización en 1900" es un solo campo, sin hacer la
+  // regla de tres a mano.
+  const onEditDiscountBs = (value) => {
+    setEditingQuote((prev) => {
+      if (!prev) return prev;
+      const rows = Array.isArray(prev.line_items) ? prev.line_items : [];
+      const subtotal = rows.reduce((sum, row) => sum + Number(row?.lineTotal || 0), 0);
+      const parsed = Number(String(value).replace(',', '.'));
+      const bs = Math.max(0, Math.min(subtotal, Number.isFinite(parsed) ? parsed : 0));
+      const percent = subtotal > 0 ? Math.round((bs / subtotal) * 1000000) / 10000 : 0;
+      return {
+        ...prev,
+        discount_percent: percent,
+        // Conservar lo tecleado para que el campo no "salte" mientras escribe.
+        discount_bs: value,
+        subtotal,
+        total: Math.max(0, subtotal - bs)
       };
     });
   };
@@ -638,12 +666,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         unitPrice,
         lineTotal: unitPrice * safeQty
       };
-      const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
+      const { subtotal, total, discount_bs } = recalcEditTotals(rows, prev.discount_percent);
       return {
         ...prev,
         line_items: rows,
         subtotal,
-        total
+        total,
+        discount_bs
       };
     });
   };
@@ -662,12 +691,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         qty,
         lineTotal: unitPrice * qty
       };
-      const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
+      const { subtotal, total, discount_bs } = recalcEditTotals(rows, prev.discount_percent);
       return {
         ...prev,
         line_items: rows,
         subtotal,
-        total
+        total,
+        discount_bs
       };
     });
   };
@@ -688,12 +718,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         qty: safeQty,
         lineTotal: unitPrice * safeQty
       };
-      const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
+      const { subtotal, total, discount_bs } = recalcEditTotals(rows, prev.discount_percent);
       return {
         ...prev,
         line_items: rows,
         subtotal,
-        total
+        total,
+        discount_bs
       };
     });
   };
@@ -703,12 +734,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       if (!prev) return prev;
       const rows = Array.isArray(prev.line_items) ? [...prev.line_items] : [];
       rows.push(createDefaultEditRow(availableProducts[0]?.sku, prev.venta_type || 'sf'));
-      const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
+      const { subtotal, total, discount_bs } = recalcEditTotals(rows, prev.discount_percent);
       return {
         ...prev,
         line_items: rows,
         subtotal,
-        total
+        total,
+        discount_bs
       };
     });
   };
@@ -719,12 +751,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       const rows = Array.isArray(prev.line_items) ? [...prev.line_items] : [];
       if (rows.length <= 1) return prev;
       rows.splice(index, 1);
-      const { subtotal, total } = recalcEditTotals(rows, prev.discount_percent);
+      const { subtotal, total, discount_bs } = recalcEditTotals(rows, prev.discount_percent);
       return {
         ...prev,
         line_items: rows,
         subtotal,
-        total
+        total,
+        discount_bs
       };
     });
   };
@@ -787,12 +820,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     const finalRows = normalizedRows.length > 0
       ? normalizedRows
       : [createDefaultEditRow(availableProducts[0]?.sku, draft.venta_type || 'sf')];
-    const { subtotal, total } = recalcEditTotals(finalRows, draft.discount_percent);
+    const { subtotal, total, discount_bs } = recalcEditTotals(finalRows, draft.discount_percent);
     setEditingQuote({
       ...draft,
       line_items: finalRows,
       subtotal,
-      total
+      total,
+      discount_bs
     });
   };
 
@@ -825,13 +859,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
             lineTotal: fallbackUnit * safeQty
           };
         });
-        const { subtotal, total } = recalcEditTotals(nextRows, prev.discount_percent);
+        const { subtotal, total, discount_bs } = recalcEditTotals(nextRows, prev.discount_percent);
         return {
           ...prev,
           venta_type: nextType,
           line_items: nextRows,
           subtotal,
-          total
+          total,
+          discount_bs
         };
       });
       return;
@@ -1672,8 +1707,20 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                   type="number"
                   min="0"
                   max="100"
+                  step="0.01"
                   value={editingQuote.discount_percent}
                   onChange={(e) => onEditField('discount_percent', e.target.value)}
+                />
+              </label>
+              <label>
+                Descuento Bs
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editingQuote.discount_bs ?? ''}
+                  onChange={(e) => onEditDiscountBs(e.target.value)}
+                  title="Monto a rebajar en Bs; el porcentaje se calcula solo"
                 />
               </label>
               <label>
@@ -1804,8 +1851,12 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
               </div>
             </div>
 
-            <div style={{ marginTop: '10px', color: '#57534e', display: 'flex', justifyContent: 'flex-end', gap: '16px', fontWeight: 600 }}>
+            <div style={{ marginTop: '10px', color: '#57534e', display: 'flex', justifyContent: 'flex-end', gap: '16px', fontWeight: 600, flexWrap: 'wrap' }}>
               <span>Subtotal: {Number(editingQuote.subtotal || 0).toFixed(2)} Bs</span>
+              <span>
+                Descuento: −{Math.max(0, Number(editingQuote.subtotal || 0) - Number(editingQuote.total || 0)).toFixed(2)} Bs
+                {' '}({Number(editingQuote.discount_percent || 0).toFixed(2)}%)
+              </span>
               <span>Total: {Number(editingQuote.total || 0).toFixed(2)} Bs</span>
             </div>
 

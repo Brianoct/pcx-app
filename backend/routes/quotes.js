@@ -139,6 +139,8 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
     if (!Number.isFinite(discountPercentValue) || discountPercentValue < 0 || discountPercentValue > 100) {
       throw createHttpError(400, 'Descuento inválido');
     }
+    // La columna guarda NUMERIC(7,4): normalizar a 4 decimales.
+    discountPercentValue = Math.round(discountPercentValue * 10000) / 10000;
     if (totalValue - subtotalValue > 0.01) {
       throw createHttpError(400, 'El total no puede ser mayor al subtotal');
     }
@@ -914,6 +916,8 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     if (!Number.isFinite(discountPercentValue) || discountPercentValue < 0 || discountPercentValue > 100) {
       throw createHttpError(400, 'Descuento inválido');
     }
+    // La columna guarda NUMERIC(7,4): normalizar a 4 decimales.
+    discountPercentValue = Math.round(discountPercentValue * 10000) / 10000;
     if (totalValue - subtotalValue > 0.01) {
       throw createHttpError(400, 'El total no puede ser mayor al subtotal');
     }
