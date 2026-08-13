@@ -1,6 +1,7 @@
-// Paneles por área: flags de activación (admin), metas de ventas y el
-// tablero del área de Ventas (KPIs, embudo, seguimientos, alertas y — para
-// líderes — rendimiento por vendedor). Fase 1: solo Ventas.
+// Paneles por área: flags de activación (admin), metas de ventas y los
+// tableros de área. Fase 1: Ventas (KPIs, embudo, seguimientos, alertas y —
+// para líderes — rendimiento por vendedor). Fase 2: Marketing (ventas por
+// destino, agenda, resumen de campañas/lives/promos y el mismo CRM).
 const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
@@ -287,6 +288,209 @@ router.get('/api/ventas/dashboard', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Error loading ventas dashboard:', err);
     res.status(500).json({ error: 'No se pudo cargar el panel de ventas' });
+  }
+});
+
+// ─── Tablero de Marketing ───────────────────────────────────────────────────
+
+router.get('/api/marketing/dashboard', authenticateToken, async (req, res) => {
+  try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const role = userContext.role;
+    const isAdmin = normalizeRole(role || '') === ROLE_KEYS.admin;
+    const can = (key) => isAdmin || canAccessPanel(userContext.panel_access, role, key);
+    const marketingKeys = ['marketing_calendario', 'marketing_combos', 'marketing_inversion', 'marketing_promos'];
+    if (!marketingKeys.some((key) => can(key))) {
+      return res.status(403).json({ error: 'No tienes acceso al panel de marketing' });
+    }
+
+    const jobs = {
+      // Destinos del mes: mismo rollup departamento → ciudad de Estadísticas,
+      // acotado al mes en curso (lo que Marketing necesita para orientar pauta).
+      geo: pool.query(
+        `SELECT
+           COALESCE(NULLIF(TRIM(q.department), ''), 'Sin clasificar') AS department,
+           COALESCE(NULLIF(TRIM(q.ciudad), ''), NULLIF(TRIM(q.provincia), ''), 'Sin detalle') AS ciudad,
+           COUNT(*)::int AS order_count,
+           COALESCE(SUM(q.total), 0) AS total_sales
+         FROM quotes q
+         WHERE q.status IN ${SOLD} AND ${BO_DATE('q.created_at')} >= ${BO_MONTH}
+         GROUP BY 1, 2`
+      ),
+      agendaCampaigns: pool.query(
+        `SELECT id, name, kind, status, start_date::text AS start_date, end_date::text AS end_date,
+                live_time::text AS live_time
+         FROM marketing_campaigns
+         WHERE status <> 'finalizada' AND end_date >= ${BO_TODAY} AND start_date <= ${BO_TODAY} + 14
+         ORDER BY start_date ASC
+         LIMIT 10`
+      ),
+      agendaEvents: pool.query(
+        `SELECT id, title, event_date::text AS event_date, event_time::text AS event_time
+         FROM marketing_events
+         WHERE event_date BETWEEN ${BO_TODAY} AND ${BO_TODAY} + 14
+         ORDER BY event_date ASC, event_time ASC NULLS LAST
+         LIMIT 10`
+      ),
+      campaignStats: pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE status = 'anunciada' AND start_date <= ${BO_TODAY} AND end_date >= ${BO_TODAY})::int AS activas,
+           COUNT(*) FILTER (WHERE kind = 'live' AND status = 'anunciada' AND end_date >= ${BO_TODAY})::int AS lives_pendientes,
+           COUNT(*) FILTER (WHERE status = 'borrador')::int AS borradores,
+           COUNT(*) FILTER (WHERE status = 'finalizada' AND end_date >= ${BO_MONTH})::int AS finalizadas_mes
+         FROM marketing_campaigns`
+      ),
+      nextLive: pool.query(
+        `SELECT id, name, start_date::text AS start_date, live_time::text AS live_time
+         FROM marketing_campaigns
+         WHERE kind = 'live' AND status = 'anunciada' AND start_date >= ${BO_TODAY}
+         ORDER BY start_date ASC, live_time ASC NULLS LAST
+         LIMIT 1`
+      ),
+      inversion: pool.query(
+        `SELECT COALESCE(SUM(cc.amount), 0) AS total_mes
+         FROM campaign_costs cc
+         WHERE (cc.created_at AT TIME ZONE 'America/La_Paz') >= ${BO_MONTH}`
+      ),
+      promoTools: pool.query(
+        `SELECT COUNT(*) FILTER (WHERE active)::int AS activas FROM promo_tools`
+      ),
+      promoCodes: pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE (pc.created_at AT TIME ZONE 'America/La_Paz') >= ${BO_MONTH})::int AS emitidos_mes,
+           COUNT(*) FILTER (WHERE pc.redeemed_at IS NOT NULL
+             AND (pc.redeemed_at AT TIME ZONE 'America/La_Paz') >= ${BO_MONTH})::int AS canjeados_mes
+         FROM promo_codes pc`
+      ),
+      // El mismo embudo y seguimientos del Panel de Ventas, en alcance global:
+      // Marketing lee el CRM completo, igual que un líder de ventas.
+      funnel: pool.query(
+        `SELECT
+           COUNT(*) FILTER (WHERE c.pipeline_stage = 'contactado')::int AS contactado,
+           COUNT(*) FILTER (WHERE c.pipeline_stage = 'cotizado')::int AS cotizado,
+           COUNT(*) FILTER (WHERE c.pipeline_stage = 'negociando')::int AS negociando,
+           COUNT(*) FILTER (WHERE c.pipeline_stage = 'cliente'
+             AND (c.stage_changed_at AT TIME ZONE 'America/La_Paz') >= ${BO_MONTH})::int AS ganados_mes,
+           COUNT(*) FILTER (WHERE c.pipeline_stage = 'perdido'
+             AND (c.stage_changed_at AT TIME ZONE 'America/La_Paz') >= ${BO_MONTH})::int AS perdidos_mes,
+           COUNT(*) FILTER (WHERE (c.created_at AT TIME ZONE 'America/La_Paz') >= ${BO_MONTH})::int AS nuevos_mes,
+           COUNT(*) FILTER (WHERE c.follow_up_at IS NOT NULL AND c.follow_up_at = ${BO_TODAY})::int AS seg_hoy,
+           COUNT(*) FILTER (WHERE c.follow_up_at IS NOT NULL AND c.follow_up_at < ${BO_TODAY})::int AS seg_vencidos
+         FROM customers c`
+      ),
+      followUps: pool.query(
+        `SELECT c.id, c.name, c.phone, c.follow_up_at, c.follow_up_note, c.pipeline_stage
+         FROM customers c
+         WHERE c.follow_up_at IS NOT NULL
+           AND c.follow_up_at <= ${BO_TODAY} + 7
+           AND c.pipeline_stage NOT IN ('perdido', 'inactivo')
+         ORDER BY c.follow_up_at ASC, c.updated_at DESC
+         LIMIT 8`
+      )
+    };
+
+    const keys = Object.keys(jobs);
+    const results = await Promise.all(keys.map((key) => jobs[key]));
+    const data = {};
+    keys.forEach((key, i) => { data[key] = results[i]; });
+
+    // Rollup destinos: idéntico al de Estadísticas (adminStats topLocations).
+    const locByDept = new Map();
+    for (const row of data.geo.rows) {
+      if (!locByDept.has(row.department)) {
+        locByDept.set(row.department, { location: row.department, order_count: 0, total_sales: 0, cities: [] });
+      }
+      const dept = locByDept.get(row.department);
+      dept.order_count += Number(row.order_count || 0);
+      dept.total_sales += Number(row.total_sales || 0);
+      dept.cities.push({ ciudad: row.ciudad, order_count: Number(row.order_count || 0), total_sales: Number(row.total_sales || 0) });
+    }
+    const topLocations = [...locByDept.values()]
+      .sort((a, b) => b.total_sales - a.total_sales)
+      .map((dept) => ({ ...dept, cities: dept.cities.sort((a, b) => b.total_sales - a.total_sales).slice(0, 5) }));
+    const salesByDepartment = [...locByDept.values()].map((dept) => ({
+      department: dept.location,
+      order_count: dept.order_count,
+      total_sales: dept.total_sales
+    }));
+
+    // Agenda unificada: campañas/lives + eventos propios, en orden cronológico.
+    const dateOnly = (value) => (value instanceof Date ? value.toISOString().slice(0, 10) : String(value || '').slice(0, 10));
+    const agenda = [
+      ...data.agendaCampaigns.rows.map((row) => ({
+        type: row.kind === 'live' ? 'live' : 'campana',
+        id: Number(row.id),
+        title: row.name,
+        date: dateOnly(row.start_date),
+        end_date: dateOnly(row.end_date),
+        time: row.live_time ? String(row.live_time).slice(0, 5) : null,
+        status: row.status
+      })),
+      ...data.agendaEvents.rows.map((row) => ({
+        type: 'evento',
+        id: Number(row.id),
+        title: row.title,
+        date: dateOnly(row.event_date),
+        end_date: null,
+        time: row.event_time ? String(row.event_time).slice(0, 5) : null,
+        status: null
+      }))
+    ].sort((a, b) => (a.date === b.date ? String(a.time || '99').localeCompare(String(b.time || '99')) : a.date.localeCompare(b.date)));
+
+    const campaignStats = data.campaignStats.rows[0];
+    const funnel = data.funnel.rows[0];
+    const nextLiveRow = data.nextLive.rows[0] || null;
+
+    res.json({
+      geo: { topLocations, salesByDepartment },
+      agenda,
+      campaigns: {
+        activas: Number(campaignStats.activas),
+        lives_pendientes: Number(campaignStats.lives_pendientes),
+        borradores: Number(campaignStats.borradores),
+        finalizadas_mes: Number(campaignStats.finalizadas_mes),
+        proximo_live: nextLiveRow
+          ? {
+            id: Number(nextLiveRow.id),
+            name: nextLiveRow.name,
+            start_date: dateOnly(nextLiveRow.start_date),
+            live_time: nextLiveRow.live_time ? String(nextLiveRow.live_time).slice(0, 5) : null
+          }
+          : null,
+        inversion_mes_bs: Number(data.inversion.rows[0].total_mes)
+      },
+      promos: {
+        herramientas_activas: Number(data.promoTools.rows[0].activas),
+        cupones_emitidos_mes: Number(data.promoCodes.rows[0].emitidos_mes),
+        cupones_canjeados_mes: Number(data.promoCodes.rows[0].canjeados_mes)
+      },
+      funnel: {
+        contactado: Number(funnel.contactado),
+        cotizado: Number(funnel.cotizado),
+        negociando: Number(funnel.negociando),
+        ganados_mes: Number(funnel.ganados_mes),
+        perdidos_mes: Number(funnel.perdidos_mes),
+        nuevos_mes: Number(funnel.nuevos_mes)
+      },
+      seguimientos: {
+        hoy: Number(funnel.seg_hoy),
+        vencidos: Number(funnel.seg_vencidos),
+        proximos: data.followUps.rows.map((row) => ({
+          id: Number(row.id),
+          name: row.name,
+          phone: row.phone,
+          follow_up_at: row.follow_up_at instanceof Date
+            ? row.follow_up_at.toISOString().slice(0, 10)
+            : String(row.follow_up_at).slice(0, 10),
+          follow_up_note: row.follow_up_note || null,
+          pipeline_stage: row.pipeline_stage
+        }))
+      }
+    });
+  } catch (err) {
+    console.error('Error loading marketing dashboard:', err);
+    res.status(500).json({ error: 'No se pudo cargar el panel de marketing' });
   }
 });
 

@@ -246,6 +246,19 @@ const STORE_BY_DEPARTMENT = {
   Cochabamba: 'Cochabamba'
 };
 
+// Ciudad capital por departamento para que el ranking Departamento → Ciudad
+// del panel de marketing tenga detalle también con datos de práctica.
+const CITY_BY_DEPARTMENT = {
+  'La Paz': 'La Paz',
+  'El Alto': 'El Alto',
+  Cochabamba: 'Cochabamba',
+  'Santa Cruz': 'Santa Cruz de la Sierra',
+  Oruro: 'Oruro',
+  Tarija: 'Tarija',
+  Potosí: 'Potosí',
+  Chuquisaca: 'Sucre'
+};
+
 const seedSandboxData = async (client) => {
   const usersRes = await client.query(
     `SELECT id, email, display_name, role FROM sandbox.users WHERE is_active ORDER BY id`
@@ -343,16 +356,17 @@ const seedSandboxData = async (client) => {
       const subtotal = lineItems.reduce((sum, item) => sum + item.lineTotal, 0);
       await client.query(
         `INSERT INTO sandbox.quotes
-           (user_id, customer_name, customer_phone, department, store_location, vendor,
+           (user_id, customer_name, customer_phone, department, ciudad, store_location, vendor,
             venta_type, discount_percent, line_items, subtotal, total, status,
             payment_method, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8::jsonb, $9, $9, $10, $11,
-                 NOW() - ($12 || ' days')::interval)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9::jsonb, $10, $10, $11, $12,
+                 NOW() - ($13 || ' days')::interval)`,
         [
           vendorUser.id,
           buyer.name,
           buyer.phone,
           buyer.department,
+          CITY_BY_DEPARTMENT[buyer.department] || buyer.department,
           STORE_BY_DEPARTMENT[buyer.department] || 'Cochabamba',
           displayNameOf(vendorUser),
           plan.venta,

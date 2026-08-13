@@ -8,6 +8,7 @@ import { canAccessPanel } from './roleAccess';
 import { allowsAny } from './navConfig';
 import PerformanceDashboard from './PerformanceDashboard';
 import VentasDashboard from './VentasDashboard';
+import MarketingDashboard from './MarketingDashboard';
 import { useToast } from './ui/toastContext';
 import { areaForRole, AREA_LABELS, boliviaToday, campaignIsActive, formatCampaignDate } from './campaignShared';
 
@@ -41,6 +42,9 @@ export default function Dashboard({ token, user, role, access, features }) {
   // comercial ve su tablero en lugar del Inicio genérico.
   if (features?.panel_ventas && areaForRole(role) === 'ventas') {
     return <VentasDashboard token={token} user={user} />;
+  }
+  if (features?.panel_marketing && areaForRole(role) === 'marketing') {
+    return <MarketingDashboard token={token} />;
   }
   return <GeneralDashboard token={token} user={user} role={role} access={access} />;
 }

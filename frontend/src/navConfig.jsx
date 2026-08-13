@@ -65,7 +65,8 @@ export const NAV_ITEMS = [
   {
     path: '/crm',
     label: 'Clientes',
-    routeAccess: ['cotizar', 'historial_global'],
+    // Marketing entra por sus propias llaves: mismo CRM que Ventas.
+    routeAccess: ['cotizar', 'historial_global', 'marketing_calendario'],
     // Aparece en el menú solo cuando el admin activa el Panel de Ventas.
     feature: 'panel_ventas',
     render: (ctx) => <CrmPanel token={ctx.token} user={ctx.user} />
