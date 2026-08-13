@@ -12,7 +12,13 @@ const PANELS = [
     detail: 'Inicio del área comercial: KPIs, embudo, seguimientos y metas. Activa también la página Clientes (CRM).',
     available: true
   },
-  { key: 'panel_marketing', label: 'Panel de Marketing', icon: '📣', detail: 'Próximamente.', available: false },
+  {
+    key: 'panel_marketing',
+    label: 'Panel de Marketing',
+    icon: '📣',
+    detail: 'Inicio del área de marketing: ventas por destino, agenda, resumen de campañas/lives/promos y el CRM. Activa también la página Clientes para Marketing.',
+    available: true
+  },
   { key: 'panel_produccion', label: 'Panel de Producción', icon: '🏭', detail: 'Próximamente.', available: false },
   { key: 'panel_almacen', label: 'Panel de Almacén', icon: '📦', detail: 'Próximamente.', available: false }
 ];

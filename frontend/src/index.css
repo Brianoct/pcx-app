@@ -10820,3 +10820,103 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   background: linear-gradient(180deg, rgba(255, 237, 213, 0.98), rgba(255, 228, 196, 0.95));
   border-bottom-color: rgba(234, 88, 12, 0.5);
 }
+
+/* ── Panel de Marketing ───────────────────────────────────────────────────── */
+
+.mkd-agenda {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mkd-agenda li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #eceae6;
+  border-radius: 10px;
+  background: #fcfcfb;
+}
+
+.mkd-agenda-chip {
+  flex-shrink: 0;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.mkd-agenda-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mkd-agenda-main strong {
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mkd-agenda-main small {
+  color: #78716c;
+  font-size: 0.78rem;
+}
+
+.mkd-agenda-date {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #57534e;
+  white-space: nowrap;
+}
+
+.mkd-summary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mkd-summary li + li {
+  border-top: 1px solid #f0efec;
+}
+
+.mkd-summary button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: #44403c;
+  text-align: left;
+}
+
+.mkd-summary button:hover {
+  color: #0b0b0b;
+}
+
+.mkd-summary strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* El mapa ocupa el ancho completo de la grilla del panel. */
+.mkd-map-span {
+  grid-column: 1 / -1;
+}
