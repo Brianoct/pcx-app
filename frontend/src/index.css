@@ -10920,3 +10920,42 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 .mkd-map-span {
   grid-column: 1 / -1;
 }
+
+/* ── Kanban pieza a pieza ─────────────────────────────────────────────────── */
+
+.prod-card-colorchip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f1efec;
+  border: 1px solid #ddd9d3;
+  color: #57534e;
+  font-size: 0.7rem;
+  font-weight: 700;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.prod-chunk-qty {
+  min-width: 34px;
+  text-align: center;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+}
+
+.prod-card-nexthint {
+  color: #78716c;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.prod-card-sede-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: #57534e;
+  font-size: 0.82rem;
+  padding: 4px 0;
+}

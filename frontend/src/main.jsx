@@ -5,6 +5,9 @@ import App from './App.jsx'
 import { OutboxProvider } from './OutboxProvider'
 import { AuthProvider } from './AuthProvider'
 import { ToastProvider } from './ui/ToastProvider'
+import { installNumberInputSelectAll } from './numberInputUX'
+
+installNumberInputSelectAll()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
