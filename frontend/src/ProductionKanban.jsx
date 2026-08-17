@@ -289,7 +289,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
           )}
         </div>
         <span className="prod-card-sede">
-          {chunk.qty} de {group.total_qty} pza{group.total_qty === 1 ? '' : 's'} del lote en esta estación
+          {chunk.qty} de {group.total_qty} del lote
         </span>
         <div className="prod-card-foot">
           <div className="prod-card-counter" onClick={(e) => e.stopPropagation()}>
