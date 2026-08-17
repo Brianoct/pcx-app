@@ -77,7 +77,7 @@ export default function CatalogosPage() {
                   Ver catálogo
                   <span aria-hidden="true"> →</span>
                 </span>
-                <span className="catalog-card-meta">PDF · {cat.pages} páginas · gratis</span>
+                <span className="catalog-card-meta">PDF · {cat.pages} páginas</span>
               </span>
             </a>
           ))}
@@ -115,7 +115,7 @@ export default function CatalogosPage() {
       <footer className="landing-footer">
         <span>PCX · Hecho en Bolivia</span>
         <span className="landing-footer-dot">·</span>
-        <span>Cochabamba · Santa Cruz · Lima</span>
+        <span>Cochabamba · Santa Cruz</span>
       </footer>
     </div>
   );
