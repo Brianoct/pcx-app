@@ -43,6 +43,19 @@ export const stopwatchSince = (since, now) => {
 const COLOR_SUFFIXES = { AM: 'Amarillo', AP: 'Azul Petroleo', PL: 'Plomo', BL: 'Blanco', N: 'Negro', R: 'Rojo', C: 'Cromo', B: 'Blanco' };
 const VARIANT_SKU_REGEX = /^([A-Z0-9]*?\d)(AM|AP|PL|BL|N|R|C|B)$/;
 
+// Muestra real de cada código de color (swatches del tablero). Mantener en
+// sinc con COLOR_SUFFIXES y con COLOR_SWATCH en AdminDashboard.jsx.
+export const COLOR_SWATCH = {
+  AM: '#facc15', // Amarillo
+  AP: '#0e7490', // Azul Petroleo
+  PL: '#6b7280', // Plomo
+  BL: '#f8fafc', // Blanco
+  N: '#1f2937',  // Negro
+  R: '#dc2626',  // Rojo
+  C: '#cbd5e1',  // Cromo
+  B: '#f8fafc'   // Blanco
+};
+
 export const parseVariantSku = (sku = '') => {
   const match = String(sku || '').trim().toUpperCase().match(VARIANT_SKU_REGEX);
   if (!match) return null;

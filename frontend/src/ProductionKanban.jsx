@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
-import { BOARD_STAGES, STAGE_LABEL, parseVariantSku, stripColorFromName } from './productionShared';
+import { BOARD_STAGES, COLOR_SWATCH, STAGE_LABEL, parseVariantSku, stripColorFromName } from './productionShared';
 import { boliviaToday } from './campaignShared';
 
 // El tablero de producción, con flujo pieza a pieza:
@@ -28,6 +28,19 @@ const formatDeadline = (isoDate) => {
 };
 
 const BOARD_STAGE_KEYS = BOARD_STAGES.map((s) => s.key);
+
+// Sedes abreviadas para la cara de la tarjeta de Embalado.
+const SEDE_SHORT = { Cochabamba: 'CBBA', 'Santa Cruz': 'SCZ', Lima: 'LIMA' };
+const shortSede = (sede) => SEDE_SHORT[String(sede || '').trim()] || String(sede || '—');
+
+const ColorSwatch = ({ code, label }) => (
+  <span
+    className="prod-color-swatch"
+    style={{ background: COLOR_SWATCH[code] || '#d6d3d1' }}
+    title={label || undefined}
+    aria-hidden="true"
+  />
+);
 
 const stageQtyOf = (members, stage) =>
   members.reduce((sum, member) => sum + Number(member.stage_qty?.[stage] || 0), 0);
@@ -64,6 +77,7 @@ const groupCards = (cards) => {
       group.colors.set(sku, {
         sku,
         label: variant ? variant.colorLabel : null,
+        code: variant ? variant.colorCode : null,
         members: [],
         required: 0
       });
@@ -336,8 +350,8 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         <div className="prod-card-top">
           <span className="prod-card-name">
             {group.display_name}
-            {chunk.kind === 'color' && chunk.color.label && (
-              <span className="prod-card-colorchip">{chunk.color.label}</span>
+            {chunk.kind === 'color' && chunk.color.code && (
+              <ColorSwatch code={chunk.color.code} label={chunk.color.label} />
             )}
           </span>
           {deadline && (
@@ -365,18 +379,6 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
 
   const renderExpandedCommon = (chunk, { showAdvanceAll = true } = {}) => (
     <>
-      {chunk.members.length > 1 && (
-        <div className="prod-card-sede-detail">
-          {chunk.members
-            .map((member) => ({
-              label: `${member.store_location || '—'}`,
-              qty: Number(member.stage_qty?.[chunk.stage] || 0)
-            }))
-            .filter((row) => row.qty > 0)
-            .map((row, i) => <span key={`${row.label}-${i}`}>{row.label}: {row.qty}</span>)}
-        </div>
-      )}
-
       {chunkTasks.map((task) => (
         <div key={task.id} className="prod-task">
           <div className="prod-task-question">
@@ -436,12 +438,13 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
   const renderCounterCard = (chunk) => cardShell(chunk, ({ isExpanded }) => (
     <>
       <span className="prod-card-sede">
-        {chunk.kind === 'color'
-          ? `${chunk.qty} de ${chunk.color.required} del color`
+        {chunk.stage === 'embalado'
+          ? (chunk.members
+              .map((member) => ({ sede: shortSede(member.store_location), qty: Number(member.stage_qty?.embalado || 0) }))
+              .filter((row) => row.qty > 0)
+              .map((row) => `${row.sede} ${row.qty}`)
+              .join(' · ') || `${chunk.qty} pzas`)
           : `${chunk.qty} de ${chunk.group.total_qty} del lote`}
-        {chunk.kind === 'pool' && chunk.group.is_variant_group && (
-          <> · {chunk.group.color_list.map((c) => `${c.label} ${c.required}`).join(' · ')}</>
-        )}
       </span>
       <div className="prod-card-foot">
         <div className="prod-card-counter" onClick={(e) => e.stopPropagation()}>
@@ -486,6 +489,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
       <div className="prod-paint-rows" onClick={(e) => e.stopPropagation()}>
         {chunk.colors.map((color) => (
           <div key={color.sku} className="prod-card-color-row">
+            <ColorSwatch code={color.code} label={color.label} />
             <span className="prod-card-color-name">{color.label || color.sku}</span>
             <span
               className="prod-card-color-count"
