@@ -363,7 +363,7 @@ export default function QuoteTool({ token, user }) {
   };
 
   const addRow = () => {
-    const newRow = { id: Date.now(), sku: '', skuDisplay: '', qty: '', unitPrice: 0, lineTotal: 0, availableStock: null, isCombo: false };
+    const newRow = { id: Date.now(), sku: '', skuDisplay: '', qty: 1, unitPrice: 0, lineTotal: 0, availableStock: null, isCombo: false };
     setRows([...rows, newRow]);
   };
 
@@ -375,7 +375,7 @@ export default function QuoteTool({ token, user }) {
       // storage unavailable; preference just won't persist
     }
     if (view === 'lista') {
-      setRows((prev) => (prev.length === 0 ? [{ id: Date.now(), sku: '', skuDisplay: '', qty: '', unitPrice: 0, lineTotal: 0, availableStock: null, isCombo: false }] : prev));
+      setRows((prev) => (prev.length === 0 ? [{ id: Date.now(), sku: '', skuDisplay: '', qty: 1, unitPrice: 0, lineTotal: 0, availableStock: null, isCombo: false }] : prev));
     }
   };
 
