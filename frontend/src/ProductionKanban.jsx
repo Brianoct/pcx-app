@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
-import { BOARD_STAGES, STAGE_LABEL, parseVariantSku } from './productionShared';
+import { BOARD_STAGES, STAGE_LABEL, parseVariantSku, stripColorFromName } from './productionShared';
 import { boliviaToday } from './campaignShared';
 
 // El tablero de producción, con flujo pieza a pieza:
-//  - Cada tarjeta es UN producto con su color (los colores ya no viajan
-//    agrupados: cada color tiene su propia tarjeta en el tablero).
-//  - Un producto puede tener piezas en varias estaciones a la vez; el botón
-//    «+» empuja una pieza a la siguiente estación (baja aquí, sube allá) y
-//    «−» la devuelve a la anterior (retrabajo).
-//  - Entrar a Embalado sigue siendo la puerta de calidad: cada pieza empujada
-//    queda registrada como aprobada (alimenta las comisiones de QC, de ahí
-//    `onCommissionChanged`).
+//  - Antes de Pintado los colores de un mismo producto viajan como UNA sola
+//    tarjeta: físicamente son la misma pieza sin pintar. La tarjeta muestra la
+//    mezcla de colores del lote como referencia.
+//  - En Pintado la tarjeta lista los colores pendientes y cada color tiene su
+//    propio «+»: el departamento de pintura elige qué color pintar primero.
+//    (El backend permite pintar cualquier pieza sin pintar del lote del color
+//    que haga falta, sin importar a qué color estaba "asignada".)
+//  - Después de Pintado cada color es su propia tarjeta: una pieza pintada ya
+//    no puede cambiar de color.
+//  - «+» empuja piezas a la siguiente estación y «−» las devuelve a la
+//    anterior. Entrar a Embalado sigue siendo la puerta de calidad: cada pieza
+//    empujada queda registrada como aprobada (alimenta comisiones de QC, de
+//    ahí `onCommissionChanged`).
 // Planificación vive en /produccion-planificacion y Recepción en /recepcion.
 
 // "2026-06-04" → "4 jun" sin pasar por Date (evita corrimientos de zona horaria).
@@ -24,59 +29,132 @@ const formatDeadline = (isoDate) => {
 
 const BOARD_STAGE_KEYS = BOARD_STAGES.map((s) => s.key);
 
-// Agrupa tarjetas por SKU (las sedes de un mismo SKU son el mismo producto
-// físico). Cada color es su propio grupo: tarjetas kanban separadas por color.
-const groupBySku = (cards) => {
+const stageQtyOf = (members, stage) =>
+  members.reduce((sum, member) => sum + Number(member.stage_qty?.[stage] || 0), 0);
+
+// Agrupa tarjetas por producto base: las variantes de color son el mismo
+// fierro hasta Pintado, así que comparten grupo (y las sedes también).
+const groupCards = (cards) => {
   const groups = new Map();
   for (const card of cards) {
     if (card.stage === 'planificacion') continue;
     const sku = String(card.sku || '').toUpperCase();
-    if (!groups.has(sku)) {
-      const variant = parseVariantSku(sku);
-      groups.set(sku, {
-        sku,
-        display_name: card.product_name || sku,
-        color_label: variant ? variant.colorLabel : null,
-        route: Array.isArray(card.route) ? card.route : [],
+    const variant = parseVariantSku(sku);
+    const key = variant ? variant.base : sku;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
         members: [],
+        colors: new Map(),
+        route: Array.isArray(card.route) ? card.route : [],
         total_qty: 0,
         pending_tasks: 0,
-        planned_date: null
+        planned_date: null,
+        display_name: ''
       });
     }
-    const group = groups.get(sku);
+    const group = groups.get(key);
     group.members.push(card);
     group.total_qty += Number(card.required_qty || 0);
     group.pending_tasks += Number(card.pending_tasks || 0);
     if (card.planned_date && (!group.planned_date || card.planned_date < group.planned_date)) {
       group.planned_date = card.planned_date;
     }
+    if (!group.colors.has(sku)) {
+      group.colors.set(sku, {
+        sku,
+        label: variant ? variant.colorLabel : null,
+        members: [],
+        required: 0
+      });
+    }
+    const color = group.colors.get(sku);
+    color.members.push(card);
+    color.required += Number(card.required_qty || 0);
+  }
+  for (const group of groups.values()) {
+    group.color_list = [...group.colors.values()]
+      .sort((a, b) => String(a.label || '').localeCompare(String(b.label || '')));
+    group.is_variant_group = group.color_list.length > 1;
+    const firstCard = group.members[0];
+    const variant = parseVariantSku(firstCard.sku);
+    group.display_name = group.is_variant_group
+      ? stripColorFromName(firstCard.product_name, variant?.colorLabel)
+      : (firstCard.product_name || group.key);
   }
   return groups;
 };
 
-// Un "chunk" es la presencia de un grupo en una estación: cuántas piezas de
-// ese producto/color están ahí ahora mismo.
+// Un "chunk" es una tarjeta visible del tablero: el grupo (o un color del
+// grupo) en una estación concreta.
 const buildChunks = (groups) => {
   const chunks = [];
   for (const group of groups.values()) {
+    const route = group.route;
+    const paintIdx = route.indexOf('pintado');
+    const splitByColor = group.is_variant_group && paintIdx >= 0;
     for (const stage of BOARD_STAGE_KEYS) {
-      const qty = group.members.reduce(
-        (sum, member) => sum + Number(member.stage_qty?.[stage] || 0),
-        0
-      );
-      if (qty <= 0) continue;
-      const route = group.route;
       const idx = route.indexOf(stage);
-      const nextStage = idx >= 0 && idx < route.length - 1 ? route[idx + 1] : null;
+      if (idx < 0) continue;
+      const nextStage = idx < route.length - 1 ? route[idx + 1] : null;
       const prevCandidate = idx > 0 ? route[idx - 1] : null;
+      const prevStage = prevCandidate && prevCandidate !== 'planificacion' ? prevCandidate : null;
+
+      if (splitByColor && stage === 'pintado') {
+        // Pintado: pool de piezas sin pintar + lista de colores pendientes.
+        const pool = stageQtyOf(group.members, 'pintado');
+        if (pool <= 0) continue;
+        const afterStages = route.slice(paintIdx + 1);
+        const colors = group.color_list.map((color) => {
+          const beyond = afterStages.reduce((sum, s) => sum + stageQtyOf(color.members, s), 0);
+          return { ...color, remaining: Math.max(0, color.required - beyond) };
+        });
+        chunks.push({
+          kind: 'paint',
+          key: `${group.key}::pintado`,
+          group,
+          stage,
+          qty: pool,
+          members: group.members,
+          colors,
+          nextStage,
+          prevStage
+        });
+        continue;
+      }
+
+      if (splitByColor && idx > paintIdx) {
+        // Después de Pintado: cada color es su propia tarjeta.
+        for (const color of group.color_list) {
+          const qty = stageQtyOf(color.members, stage);
+          if (qty <= 0) continue;
+          chunks.push({
+            kind: 'color',
+            key: `${color.sku}::${stage}`,
+            group,
+            color,
+            stage,
+            qty,
+            members: color.members,
+            nextStage,
+            prevStage
+          });
+        }
+        continue;
+      }
+
+      // Antes de Pintado (o producto sin variantes): una sola tarjeta.
+      const qty = stageQtyOf(group.members, stage);
+      if (qty <= 0) continue;
       chunks.push({
-        key: `${group.sku}::${stage}`,
+        kind: 'pool',
+        key: `${group.key}::${stage}`,
         group,
         stage,
         qty,
+        members: group.members,
         nextStage,
-        prevStage: prevCandidate && prevCandidate !== 'planificacion' ? prevCandidate : null
+        prevStage
       });
     }
   }
@@ -119,7 +197,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     return () => clearTimeout(timer);
   }, [notice]);
 
-  const groups = useMemo(() => groupBySku(cards), [cards]);
+  const groups = useMemo(() => groupCards(cards), [cards]);
   const chunks = useMemo(() => buildChunks(groups), [groups]);
 
   const chunksByStage = useMemo(() => {
@@ -143,8 +221,6 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
   );
   const planningCount = useMemo(() => cards.filter((c) => c.stage === 'planificacion').length, [cards]);
 
-  // Carga por columna: productos y piezas. La columna con más piezas (habiendo
-  // alguna) es el cuello de botella.
   const colStats = useMemo(() => {
     const stats = {};
     for (const stage of BOARD_STAGES) {
@@ -163,11 +239,11 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
 
   const expandedChunk = expandedKey ? chunks.find((chunk) => chunk.key === expandedKey) || null : null;
 
-  // Tareas de medición del grupo expandido (por tarjeta miembro).
+  // Tareas de medición del chunk expandido (por tarjeta miembro).
   useEffect(() => {
     setChunkTasks([]);
     setTaskInputs({});
-    const memberIds = expandedChunk ? expandedChunk.group.members.map((m) => m.id) : [];
+    const memberIds = expandedChunk ? expandedChunk.members.map((m) => m.id) : [];
     if (memberIds.length === 0) return;
     let active = true;
     Promise.all(memberIds.map((id) =>
@@ -201,72 +277,52 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     }
   };
 
-  // Refleja localmente lo que hará el servidor (reparto en orden de id) para
-  // que el tablero responda al toque sin recargar; si el request falla, se
-  // recarga y la verdad vuelve del servidor.
-  const applyPushLocally = (chunk, toStage, qty) => {
-    const ordered = [...chunk.group.members].sort((a, b) => Number(a.id) - Number(b.id));
-    const shares = new Map();
-    let remaining = qty;
-    for (const member of ordered) {
-      const available = Number(member.stage_qty?.[chunk.stage] || 0);
-      const share = Math.min(remaining, available);
-      if (share > 0) shares.set(member.id, share);
-      remaining -= share;
-    }
+  // La respuesta del push trae las tarjetas afectadas (incluidos hermanos que
+  // prestaron piezas en Pintado); se funden en el estado sin recargar todo.
+  const mergeServerCards = (updated) => {
+    const byId = new Map(updated.map((card) => [Number(card.id), card]));
     setCards((prev) => prev.map((card) => {
-      const share = shares.get(card.id);
-      if (!share) return card;
-      const dist = { ...(card.stage_qty || {}) };
-      dist[chunk.stage] = Math.max(0, Number(dist[chunk.stage] || 0) - share);
-      if (dist[chunk.stage] === 0) delete dist[chunk.stage];
-      dist[toStage] = Number(dist[toStage] || 0) + share;
-      return { ...card, stage_qty: dist };
+      const next = byId.get(Number(card.id));
+      return next ? { ...card, stage: next.stage, stage_qty: next.stage_qty } : card;
     }));
   };
 
-  const pushPieces = (chunk, direction, qty = 1) => {
-    const toStage = direction === 'forward' ? chunk.nextStage : chunk.prevStage;
-    if (!toStage) return;
-    const moveQty = Math.min(qty, chunk.qty);
-    if (moveQty <= 0) return;
-    applyPushLocally(chunk, toStage, moveQty);
-    if (direction === 'forward' && toStage === 'embalado' && typeof onCommissionChanged === 'function') {
-      onCommissionChanged();
-    }
-    if (toStage === 'recepcion') {
-      setNotice(`${chunk.group.display_name}: ${moveQty} pza${moveQty === 1 ? '' : 's'} → Recepción ✓`);
-    }
-    apiRequest('/api/production/kanban/push', {
-      method: 'POST',
-      token,
-      body: {
-        card_ids: chunk.group.members.map((m) => m.id),
-        from_stage: chunk.stage,
-        qty: moveQty,
-        direction
+  const pushPieces = async (chunk, { members, fromStage, direction, qty }) => {
+    if (busyKey) return;
+    setBusyKey(chunk.key);
+    setError('');
+    try {
+      const res = await apiRequest('/api/production/kanban/push', {
+        method: 'POST',
+        token,
+        body: {
+          card_ids: members.map((m) => m.id),
+          from_stage: fromStage,
+          qty,
+          direction
+        }
+      });
+      if (Array.isArray(res?.cards)) mergeServerCards(res.cards);
+      if (res?.to_stage === 'embalado' && direction === 'forward' && typeof onCommissionChanged === 'function') {
+        onCommissionChanged();
       }
-    }).catch((err) => {
+      if (res?.to_stage === 'recepcion') {
+        setNotice(`${chunk.group.display_name}: ${res.moved} pza${res.moved === 1 ? '' : 's'} → Recepción ✓`);
+      }
+    } catch (err) {
       setError(err.message || 'No se pudieron mover las piezas');
       loadBoard();
-    });
+    } finally {
+      setBusyKey('');
+    }
   };
 
-  // Tarjeta por producto+color en cada estación: la cara muestra cuántas
-  // piezas hay AQUÍ y los botones que las empujan. Expandida: detalle por
-  // sede, tareas de medición y «Avanzar todo».
-  const renderChunkCard = (chunk) => {
+  const cardShell = (chunk, children) => {
     const { group } = chunk;
     const deadline = formatDeadline(group.planned_date);
     const overdue = Boolean(group.planned_date) && String(group.planned_date).slice(0, 10) < boliviaToday();
     const isExpanded = expandedKey === chunk.key;
     const toggle = () => setExpandedKey(isExpanded ? null : chunk.key);
-    const sedeRows = group.members
-      .map((member) => ({
-        sede: member.store_location || '—',
-        qty: Number(member.stage_qty?.[chunk.stage] || 0)
-      }))
-      .filter((row) => row.qty > 0);
     return (
       <div
         key={chunk.key}
@@ -280,7 +336,9 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         <div className="prod-card-top">
           <span className="prod-card-name">
             {group.display_name}
-            {group.color_label && <span className="prod-card-colorchip">{group.color_label}</span>}
+            {chunk.kind === 'color' && chunk.color.label && (
+              <span className="prod-card-colorchip">{chunk.color.label}</span>
+            )}
           </span>
           {deadline && (
             <span className={`prod-card-deadline ${overdue ? 'is-overdue' : ''}`} title="Fecha planificada">
@@ -288,113 +346,191 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
             </span>
           )}
         </div>
-        <span className="prod-card-sede">
-          {chunk.qty} de {group.total_qty} del lote
-        </span>
-        <div className="prod-card-foot">
-          <div className="prod-card-counter" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              aria-label={`Devolver una pieza a ${STAGE_LABEL[chunk.prevStage] || 'la etapa anterior'}`}
-              title={chunk.prevStage ? `Devolver 1 a ${STAGE_LABEL[chunk.prevStage]}` : 'Sin etapa anterior'}
-              disabled={!chunk.prevStage || chunk.qty <= 0}
-              onClick={() => pushPieces(chunk, 'back', 1)}
-            >
-              −
-            </button>
-            <span className="prod-chunk-qty">{chunk.qty}</span>
-            <button
-              type="button"
-              className="is-plus"
-              aria-label={`Empujar una pieza a ${STAGE_LABEL[chunk.nextStage] || 'la siguiente etapa'}`}
-              title={chunk.nextStage ? `Empujar 1 a ${STAGE_LABEL[chunk.nextStage]}` : 'Sin etapa siguiente'}
-              disabled={!chunk.nextStage || chunk.qty <= 0}
-              onClick={() => pushPieces(chunk, 'forward', 1)}
-            >
-              +
-            </button>
-          </div>
-          <span className="prod-card-meta">
-            {chunk.nextStage && (
-              <span className="prod-card-nexthint">+ → {STAGE_LABEL[chunk.nextStage]}</span>
-            )}
-            {group.pending_tasks > 0 && (
-              <span className="prod-card-task-badge" title="Tareas de medición pendientes">
-                {group.pending_tasks} tarea{group.pending_tasks > 1 ? 's' : ''}
-              </span>
-            )}
-            <span className="prod-card-chevron" aria-hidden="true">{isExpanded ? '▴' : '▾'}</span>
-          </span>
-        </div>
-
-        {isExpanded && (
-          <div className="prod-card-extra" onClick={(e) => e.stopPropagation()}>
-            {sedeRows.length > 1 && (
-              <div className="prod-card-sede-detail">
-                {sedeRows.map((row) => (
-                  <span key={row.sede}>{row.sede}: {row.qty}</span>
-                ))}
-              </div>
-            )}
-
-            {chunkTasks.map((task) => (
-              <div key={task.id} className="prod-task">
-                <div className="prod-task-question">
-                  ¿Cuánto <strong>{task.material_name}</strong> usaste en {STAGE_LABEL[task.process] || task.process} para este lote
-                  {task.batch_qty > 0 ? ` (${task.batch_qty} pzas)` : ''}?
-                </div>
-                <div className="prod-task-controls">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    className="prod-task-input"
-                    placeholder="0"
-                    value={taskInputs[task.id] ?? ''}
-                    onChange={(e) => setTaskInputs((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                  />
-                  <span className="prod-task-unit">{task.unit_measure}</span>
-                  <button
-                    type="button"
-                    className="btn btn-primary prod-task-save"
-                    disabled={taskBusyId === task.id || taskInputs[task.id] === undefined || taskInputs[task.id] === ''}
-                    onClick={() => resolveTask(task, false)}
-                  >
-                    {taskBusyId === task.id ? '…' : 'Registrar'}
-                  </button>
-                  <button
-                    type="button"
-                    className="prod-task-skip"
-                    disabled={taskBusyId === task.id}
-                    onClick={() => resolveTask(task, true)}
-                  >
-                    Omitir
-                  </button>
-                </div>
-              </div>
-            ))}
-
-            {chunk.nextStage && chunk.qty > 1 && (
-              <button
-                type="button"
-                className="btn btn-primary prod-advance-btn"
-                disabled={busyKey === chunk.key}
-                onClick={() => {
-                  setBusyKey(chunk.key);
-                  pushPieces(chunk, 'forward', chunk.qty);
-                  setExpandedKey(null);
-                  setBusyKey('');
-                }}
-              >
-                Avanzar las {chunk.qty} a {STAGE_LABEL[chunk.nextStage]}
-              </button>
-            )}
-          </div>
-        )}
+        {children({ isExpanded })}
       </div>
     );
   };
+
+  const renderMeta = (chunk, isExpanded, hintText) => (
+    <span className="prod-card-meta">
+      {hintText && <span className="prod-card-nexthint">{hintText}</span>}
+      {chunk.group.pending_tasks > 0 && (
+        <span className="prod-card-task-badge" title="Tareas de medición pendientes">
+          {chunk.group.pending_tasks} tarea{chunk.group.pending_tasks > 1 ? 's' : ''}
+        </span>
+      )}
+      <span className="prod-card-chevron" aria-hidden="true">{isExpanded ? '▴' : '▾'}</span>
+    </span>
+  );
+
+  const renderExpandedCommon = (chunk, { showAdvanceAll = true } = {}) => (
+    <>
+      {chunk.members.length > 1 && (
+        <div className="prod-card-sede-detail">
+          {chunk.members
+            .map((member) => ({
+              label: `${member.store_location || '—'}`,
+              qty: Number(member.stage_qty?.[chunk.stage] || 0)
+            }))
+            .filter((row) => row.qty > 0)
+            .map((row, i) => <span key={`${row.label}-${i}`}>{row.label}: {row.qty}</span>)}
+        </div>
+      )}
+
+      {chunkTasks.map((task) => (
+        <div key={task.id} className="prod-task">
+          <div className="prod-task-question">
+            ¿Cuánto <strong>{task.material_name}</strong> usaste en {STAGE_LABEL[task.process] || task.process} para este lote
+            {task.batch_qty > 0 ? ` (${task.batch_qty} pzas)` : ''}?
+          </div>
+          <div className="prod-task-controls">
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              className="prod-task-input"
+              placeholder="0"
+              value={taskInputs[task.id] ?? ''}
+              onChange={(e) => setTaskInputs((prev) => ({ ...prev, [task.id]: e.target.value }))}
+            />
+            <span className="prod-task-unit">{task.unit_measure}</span>
+            <button
+              type="button"
+              className="btn btn-primary prod-task-save"
+              disabled={taskBusyId === task.id || taskInputs[task.id] === undefined || taskInputs[task.id] === ''}
+              onClick={() => resolveTask(task, false)}
+            >
+              {taskBusyId === task.id ? '…' : 'Registrar'}
+            </button>
+            <button
+              type="button"
+              className="prod-task-skip"
+              disabled={taskBusyId === task.id}
+              onClick={() => resolveTask(task, true)}
+            >
+              Omitir
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {showAdvanceAll && chunk.nextStage && chunk.qty > 1 && (
+        <button
+          type="button"
+          className="btn btn-primary prod-advance-btn"
+          disabled={busyKey === chunk.key}
+          onClick={() => {
+            pushPieces(chunk, { members: chunk.members, fromStage: chunk.stage, direction: 'forward', qty: chunk.qty });
+            setExpandedKey(null);
+          }}
+        >
+          Avanzar las {chunk.qty} a {STAGE_LABEL[chunk.nextStage]}
+        </button>
+      )}
+    </>
+  );
+
+  // Tarjeta normal (antes de Pintado, o producto sin variantes, o un color
+  // después de Pintado): contador −/cantidad/+ que empuja piezas.
+  const renderCounterCard = (chunk) => cardShell(chunk, ({ isExpanded }) => (
+    <>
+      <span className="prod-card-sede">
+        {chunk.kind === 'color'
+          ? `${chunk.qty} de ${chunk.color.required} del color`
+          : `${chunk.qty} de ${chunk.group.total_qty} del lote`}
+        {chunk.kind === 'pool' && chunk.group.is_variant_group && (
+          <> · {chunk.group.color_list.map((c) => `${c.label} ${c.required}`).join(' · ')}</>
+        )}
+      </span>
+      <div className="prod-card-foot">
+        <div className="prod-card-counter" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            aria-label={`Devolver una pieza a ${STAGE_LABEL[chunk.prevStage] || 'la etapa anterior'}`}
+            title={chunk.prevStage ? `Devolver 1 a ${STAGE_LABEL[chunk.prevStage]}` : 'Sin etapa anterior'}
+            disabled={!chunk.prevStage || chunk.qty <= 0 || Boolean(busyKey)}
+            onClick={() => pushPieces(chunk, { members: chunk.members, fromStage: chunk.stage, direction: 'back', qty: 1 })}
+          >
+            −
+          </button>
+          <span className="prod-chunk-qty">{chunk.qty}</span>
+          <button
+            type="button"
+            className="is-plus"
+            aria-label={`Empujar una pieza a ${STAGE_LABEL[chunk.nextStage] || 'la siguiente etapa'}`}
+            title={chunk.nextStage ? `Empujar 1 a ${STAGE_LABEL[chunk.nextStage]}` : 'Sin etapa siguiente'}
+            disabled={!chunk.nextStage || chunk.qty <= 0 || Boolean(busyKey)}
+            onClick={() => pushPieces(chunk, { members: chunk.members, fromStage: chunk.stage, direction: 'forward', qty: 1 })}
+          >
+            +
+          </button>
+        </div>
+        {renderMeta(chunk, isExpanded, chunk.nextStage ? `+ → ${STAGE_LABEL[chunk.nextStage]}` : null)}
+      </div>
+      {isExpanded && (
+        <div className="prod-card-extra" onClick={(e) => e.stopPropagation()}>
+          {renderExpandedCommon(chunk)}
+        </div>
+      )}
+    </>
+  ));
+
+  // Tarjeta de Pintado con variantes: pool de piezas sin pintar y un «+» por
+  // color — pintura decide el orden. El «−» devuelve una pieza sin pintar.
+  const renderPaintCard = (chunk) => cardShell(chunk, ({ isExpanded }) => (
+    <>
+      <span className="prod-card-sede">
+        {chunk.qty} sin pintar · lote de {chunk.group.total_qty}
+      </span>
+      <div className="prod-paint-rows" onClick={(e) => e.stopPropagation()}>
+        {chunk.colors.map((color) => (
+          <div key={color.sku} className="prod-card-color-row">
+            <span className="prod-card-color-name">{color.label || color.sku}</span>
+            <span
+              className="prod-card-color-count"
+              title={color.remaining > 0 ? `Faltan ${color.remaining} por pintar` : 'Color completo'}
+            >
+              {color.remaining > 0 ? color.remaining : '✓'}
+            </span>
+            <div className="prod-card-counter prod-paint-counter">
+              <button
+                type="button"
+                className="is-plus"
+                aria-label={`Pintar una pieza de ${color.label || color.sku}`}
+                title={`Pintar 1 ${color.label || color.sku} → ${STAGE_LABEL[chunk.nextStage] || 'siguiente'}`}
+                disabled={Boolean(busyKey) || chunk.qty <= 0 || color.remaining <= 0 || !chunk.nextStage}
+                onClick={() => pushPieces(chunk, { members: color.members, fromStage: 'pintado', direction: 'forward', qty: 1 })}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="prod-card-foot">
+        <div className="prod-card-counter" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            aria-label={`Devolver una pieza sin pintar a ${STAGE_LABEL[chunk.prevStage] || 'la etapa anterior'}`}
+            title={chunk.prevStage ? `Devolver 1 sin pintar a ${STAGE_LABEL[chunk.prevStage]}` : 'Sin etapa anterior'}
+            disabled={!chunk.prevStage || chunk.qty <= 0 || Boolean(busyKey)}
+            onClick={() => pushPieces(chunk, { members: chunk.members, fromStage: 'pintado', direction: 'back', qty: 1 })}
+          >
+            −
+          </button>
+        </div>
+        {renderMeta(chunk, isExpanded, `+ pinta → ${STAGE_LABEL[chunk.nextStage] || ''}`)}
+      </div>
+      {isExpanded && (
+        <div className="prod-card-extra" onClick={(e) => e.stopPropagation()}>
+          {renderExpandedCommon(chunk, { showAdvanceAll: false })}
+        </div>
+      )}
+    </>
+  ));
+
+  const renderChunkCard = (chunk) => (chunk.kind === 'paint' ? renderPaintCard(chunk) : renderCounterCard(chunk));
 
   return (
     <div className="container prod-page">

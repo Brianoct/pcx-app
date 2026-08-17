@@ -10975,3 +10975,37 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   font-size: 0.82rem;
   padding: 4px 0;
 }
+
+/* Pintado con variantes: filas por color con su propio «+» (pintura elige el
+   orden); el pool de piezas sin pintar se muestra arriba. */
+.prod-paint-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0;
+}
+.prod-paint-counter { width: auto; }
+.prod-paint-counter button {
+  flex: 0 0 auto;
+  min-width: 34px;
+  min-height: 30px;
+}
+
+/* Fila de color en una sola línea: nombre truncable + pendiente + botón. */
+.prod-paint-rows .prod-card-color-row {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.prod-paint-rows .prod-card-color-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prod-paint-rows .prod-card-color-count {
+  flex: 0 0 auto;
+  min-width: 0;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}

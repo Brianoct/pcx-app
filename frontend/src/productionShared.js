@@ -50,7 +50,7 @@ export const parseVariantSku = (sku = '') => {
 };
 
 // "Tablero 94x95 Negro" -> "Tablero 94x95" (strip the trailing color word).
-const stripColorFromName = (name = '', colorLabel = '') => {
+export const stripColorFromName = (name = '', colorLabel = '') => {
   const trimmed = String(name || '').trim();
   if (!colorLabel) return trimmed;
   const lower = trimmed.toLowerCase();
