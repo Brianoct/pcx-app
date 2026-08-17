@@ -14,6 +14,7 @@ const ComprasScan = lazy(() => import('./ComprasScan'));
 const LandingPage = lazy(() => import('./LandingPage'));
 const ContactPage = lazy(() => import('./ContactPage'));
 const CareersPage = lazy(() => import('./CareersPage'));
+const CatalogosPage = lazy(() => import('./CatalogosPage'));
 
 const routeFallback = <div className="route-loading" aria-label="Cargando">Cargando…</div>;
 
@@ -66,6 +67,7 @@ function App() {
             <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
             <Route path="/contacto" element={<ContactPage />} />
             <Route path="/carreras" element={<CareersPage />} />
+            <Route path="/catalogos" element={<CatalogosPage />} />
             {/* Visitors land on the splash page; the team enters via the
                 discreet "Ingresar" link (or any deep link, which still shows
                 the login directly). */}
@@ -118,6 +120,7 @@ function App() {
               <Route path="/menu/:shareToken" element={<PublicCustomerMenu />} />
               <Route path="/contacto" element={<ContactPage />} />
               <Route path="/carreras" element={<CareersPage />} />
+              <Route path="/catalogos" element={<CatalogosPage />} />
               <Route path="*" element={<Navigate to={defaultPath} replace />} />
             </Routes>
           </Suspense>
