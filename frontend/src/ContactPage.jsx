@@ -18,7 +18,7 @@ export default function ContactPage() {
         <p className="landing-eyebrow">Contacto</p>
         <h1 className="public-title">Hablemos</h1>
         <p className="landing-sub">
-          Estamos en Cochabamba y Santa Cruz (Bolivia) y en Lima (Perú).
+          Estamos en Cochabamba y Santa Cruz (Bolivia).
           Escríbenos y te respondemos en el día.
         </p>
 
@@ -37,7 +37,7 @@ export default function ContactPage() {
           <div className="public-card">
             <span className="public-card-icon">📍</span>
             <span className="public-card-title">Sedes</span>
-            <span className="public-card-text">Cochabamba · Santa Cruz · Lima</span>
+            <span className="public-card-text">Cochabamba · Santa Cruz</span>
           </div>
 
           <Link className="public-card is-careers" to="/carreras">
@@ -53,7 +53,7 @@ export default function ContactPage() {
       <footer className="landing-footer">
         <span>PCX · Hecho en Bolivia</span>
         <span className="landing-footer-dot">·</span>
-        <span>Cochabamba · Santa Cruz · Lima</span>
+        <span>Cochabamba · Santa Cruz</span>
       </footer>
     </div>
   );

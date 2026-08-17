@@ -90,7 +90,7 @@ export default function CareersPage() {
       <footer className="landing-footer">
         <span>PCX · Hecho en Bolivia</span>
         <span className="landing-footer-dot">·</span>
-        <span>Cochabamba · Santa Cruz · Lima</span>
+        <span>Cochabamba · Santa Cruz</span>
       </footer>
     </div>
   );
