@@ -57,6 +57,7 @@ router.get('/api/production/kanban', authenticateToken, requireRole(['Produccion
     for (const card of cards) {
       card.pending_tasks = pendingTasks.get(card.id) || 0;
     }
+    await attachStageDistributions(cards);
     const totalRequired = cards.reduce((sum, card) => sum + Number(card.required_qty || 0), 0);
     const byStage = Object.fromEntries(PRODUCTION_KANBAN_STAGES.map((stage) => [stage, 0]));
     for (const card of cards) {
@@ -109,6 +110,41 @@ const loadActiveCards = async (cardIds) => {
   return result.rows;
 };
 
+// Adjunta a cada tarjeta su distribución de piezas por etapa (stage_qty).
+// Tarjetas en fabricación que aún no tienen filas (activadas antes de esta
+// función) se siembran con todas sus piezas en la etapa actual.
+const attachStageDistributions = async (cards) => {
+  for (const card of cards) card.stage_qty = {};
+  const eligible = cards.filter((card) => card.stage && card.stage !== 'planificacion');
+  if (eligible.length === 0) return;
+  const res = await pool.query(
+    `SELECT card_id, stage, qty
+     FROM production_kanban_stage_qty
+     WHERE card_id = ANY($1::int[])`,
+    [eligible.map((card) => card.id)]
+  );
+  const byCard = new Map();
+  for (const row of res.rows) {
+    const cardId = Number(row.card_id);
+    if (!byCard.has(cardId)) byCard.set(cardId, {});
+    if (Number(row.qty) > 0) byCard.get(cardId)[row.stage] = Number(row.qty);
+  }
+  for (const card of eligible) {
+    let dist = byCard.get(Number(card.id)) || {};
+    const total = Object.values(dist).reduce((sum, qty) => sum + qty, 0);
+    if (total === 0 && Number(card.required_qty || 0) > 0) {
+      await pool.query(
+        `INSERT INTO production_kanban_stage_qty (card_id, stage, qty)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (card_id, stage) DO UPDATE SET qty = EXCLUDED.qty, updated_at = NOW()`,
+        [card.id, card.stage, Number(card.required_qty || 0)]
+      );
+      dist = { [card.stage]: Number(card.required_qty || 0) };
+    }
+    card.stage_qty = dist;
+  }
+};
+
 // Moves one or many cards (the board's "mother card" = all sede cards of one
 // SKU in the same stage) in a single transaction. Leaving Planificación
 // freezes the quantity: from then on it is a fixed production order.
@@ -132,6 +168,18 @@ const moveCardsToStage = async ({ cards, nextStage, userId }) => {
         [card.id, nextStage, leavingPlanning]
       );
       movedCards.push(updatedRes.rows[0]);
+      // Movimiento de lote completo: la distribución pieza-a-etapa se
+      // reinicia con todas las piezas en la nueva etapa (o vacía si vuelve a
+      // planificación, donde la cantidad sigue fluida).
+      await client.query('DELETE FROM production_kanban_stage_qty WHERE card_id = $1', [card.id]);
+      if (nextStage !== 'planificacion') {
+        await client.query(
+          `INSERT INTO production_kanban_stage_qty (card_id, stage, qty)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (card_id, stage) DO UPDATE SET qty = EXCLUDED.qty, updated_at = NOW()`,
+          [card.id, nextStage, Number(card.required_qty || 0)]
+        );
+      }
       if (card.stage !== nextStage) {
         // Movement log: durations per stage feed cost/throughput baselines.
         await client.query(
@@ -383,6 +431,12 @@ router.post('/api/production/kanban/qc-gate', authenticateToken, requireRole(['P
              WHERE id = $1`,
             [card.id, share]
           );
+          // La distribución pieza-a-etapa se reinicia: todo lo aprobado queda en embalado.
+          await client.query('DELETE FROM production_kanban_stage_qty WHERE card_id = $1', [card.id]);
+          await client.query(
+            `INSERT INTO production_kanban_stage_qty (card_id, stage, qty) VALUES ($1, 'embalado', $2)`,
+            [card.id, share]
+          );
           await client.query(
             `INSERT INTO production_stage_events (card_id, sku, store_location, from_stage, to_stage, qty, moved_by)
              VALUES ($1, $2, $3, $4, 'embalado', $5, $6)`,
@@ -397,6 +451,7 @@ router.post('/api/production/kanban/qc-gate', authenticateToken, requireRole(['P
              WHERE id = $1`,
             [card.id]
           );
+          await client.query('DELETE FROM production_kanban_stage_qty WHERE card_id = $1', [card.id]);
           await client.query(
             `INSERT INTO production_stage_events (card_id, sku, store_location, from_stage, to_stage, qty, moved_by)
              VALUES ($1, $2, $3, $4, 'rechazado', $5, $6)`,
@@ -423,6 +478,166 @@ router.post('/api/production/kanban/qc-gate', authenticateToken, requireRole(['P
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo registrar el control de calidad' });
+  }
+});
+
+// Empuje pieza a pieza: mueve `qty` piezas de la estación `from_stage` a la
+// siguiente de la ruta (o de vuelta a la anterior con direction: 'back').
+// Baja la cantidad en la estación de origen y la sube en la de destino; el
+// resto del lote no se mueve. La tarjeta conserva como etapa "oficial" su
+// borde trasero (la etapa más temprana con piezas), así Recepción recibe la
+// tarjeta cuando TODAS las piezas llegaron. La entrada a Embalado sigue
+// siendo la puerta de calidad: cada pieza empujada queda registrada como
+// aprobada (contarla ES aprobarla, igual que el flujo anterior).
+router.post('/api/production/kanban/push', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+  try {
+    if (!(await ensureKanbanAccess(req, res))) return;
+    const qty = Number.parseInt(req.body?.qty ?? 1, 10);
+    if (!Number.isInteger(qty) || qty <= 0 || qty > 10000) {
+      return res.status(400).json({ error: 'Cantidad inválida' });
+    }
+    const direction = req.body?.direction === 'back' ? 'back' : 'forward';
+    const fromStage = normalizeProductionKanbanStage(req.body?.from_stage || '');
+    if (!fromStage || fromStage === 'planificacion') {
+      return res.status(400).json({ error: 'Etapa de origen inválida' });
+    }
+    const cards = await loadActiveCards(req.body?.card_ids);
+    if (cards.length === 0) return res.status(404).json({ error: 'Tarjetas no encontradas o inactivas' });
+    if (!cardsShareVariantGroup(cards)) {
+      return res.status(400).json({ error: 'El empuje se registra por lote de un solo producto' });
+    }
+    if (cards.some((card) => card.stage === 'planificacion')) {
+      return res.status(400).json({ error: 'El lote debe estar en producción para mover piezas' });
+    }
+    const first = cards[0];
+    const route = await getRouteStagesForSku(first.sku, first.start_process || 'corte_laser');
+    const fromIdx = route.indexOf(fromStage);
+    if (fromIdx < 0) {
+      return res.status(400).json({ error: `La etapa ${fromStage} no aplica para este producto` });
+    }
+    const targetStage = direction === 'forward' ? route[fromIdx + 1] : route[fromIdx - 1];
+    if (!targetStage || targetStage === 'planificacion') {
+      return res.status(400).json({ error: direction === 'forward' ? 'No hay etapa siguiente en la ruta' : 'No hay etapa anterior en la ruta' });
+    }
+    const sku = String(first.sku || '').toUpperCase();
+    const productName = String(first.product_name || sku).trim() || sku;
+    if (direction === 'forward' && targetStage === 'embalado') await ensureQcProductSettingsSeeded();
+
+    const client = await pool.connect();
+    let result;
+    let firstArrival = false;
+    try {
+      await client.query('BEGIN');
+      const distRes = await client.query(
+        `SELECT card_id, stage, qty
+         FROM production_kanban_stage_qty
+         WHERE card_id = ANY($1::int[])
+         FOR UPDATE`,
+        [cards.map((card) => card.id)]
+      );
+      const distByCard = new Map(cards.map((card) => [Number(card.id), new Map()]));
+      for (const row of distRes.rows) {
+        distByCard.get(Number(row.card_id))?.set(row.stage, Number(row.qty));
+      }
+      // Tarjetas sin distribución todavía: todas sus piezas en su etapa actual.
+      for (const card of cards) {
+        const dist = distByCard.get(Number(card.id));
+        const total = [...dist.values()].reduce((sum, value) => sum + value, 0);
+        if (total === 0 && Number(card.required_qty || 0) > 0) {
+          dist.set(card.stage, Number(card.required_qty || 0));
+          await client.query(
+            `INSERT INTO production_kanban_stage_qty (card_id, stage, qty)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (card_id, stage) DO UPDATE SET qty = EXCLUDED.qty, updated_at = NOW()`,
+            [card.id, card.stage, Number(card.required_qty || 0)]
+          );
+        }
+      }
+      const availability = cards.map((card) => ({
+        card,
+        available: distByCard.get(Number(card.id)).get(fromStage) || 0
+      }));
+      const totalAvailable = availability.reduce((sum, entry) => sum + entry.available, 0);
+      if (totalAvailable < qty) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `Solo hay ${totalAvailable} pieza(s) en esta estación` });
+      }
+      // Reparto en orden de id, igual que el contador de avance anterior.
+      let remaining = qty;
+      const moves = [];
+      for (const entry of [...availability].sort((a, b) => Number(a.card.id) - Number(b.card.id))) {
+        if (remaining <= 0) break;
+        const share = Math.min(remaining, entry.available);
+        if (share <= 0) continue;
+        remaining -= share;
+        moves.push({ card: entry.card, share });
+      }
+      const updatedCards = [];
+      for (const { card, share } of moves) {
+        const dist = distByCard.get(Number(card.id));
+        if ((dist.get(targetStage) || 0) === 0) firstArrival = true;
+        dist.set(fromStage, (dist.get(fromStage) || 0) - share);
+        dist.set(targetStage, (dist.get(targetStage) || 0) + share);
+        await client.query(
+          `UPDATE production_kanban_stage_qty SET qty = $3, updated_at = NOW()
+           WHERE card_id = $1 AND stage = $2`,
+          [card.id, fromStage, dist.get(fromStage)]
+        );
+        await client.query(
+          `INSERT INTO production_kanban_stage_qty (card_id, stage, qty)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (card_id, stage) DO UPDATE SET qty = EXCLUDED.qty, updated_at = NOW()`,
+          [card.id, targetStage, dist.get(targetStage)]
+        );
+        const trailing = route.find((stage) => stage !== 'planificacion' && (dist.get(stage) || 0) > 0) || targetStage;
+        const updatedRes = await client.query(
+          `UPDATE production_kanban_cards
+           SET stage = $2, last_moved_at = NOW(), updated_at = NOW()
+           WHERE id = $1
+           RETURNING id, sku, product_name, store_location, current_stock, min_stock, required_qty,
+                     processed_count, qty_frozen, start_process, stage, source, planned_date, last_moved_at, created_at, updated_at`,
+          [card.id, trailing]
+        );
+        updatedCards.push(updatedRes.rows[0]);
+        await client.query(
+          `INSERT INTO production_stage_events (card_id, sku, store_location, from_stage, to_stage, qty, moved_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [card.id, sku, card.store_location, fromStage, targetStage, share, req.user.id]
+        );
+      }
+      if (direction === 'forward' && targetStage === 'embalado') {
+        await client.query(
+          `INSERT INTO quality_control_records (user_id, sku, product_name, quantity, result)
+           VALUES ($1, $2, $3, $4, 'passed')`,
+          [req.user.id, sku, productName, qty]
+        );
+      }
+      await client.query('COMMIT');
+      const mapped = updatedCards.map((row) => mapProductionKanbanCardRow(row));
+      await attachStageDistributions(mapped);
+      result = { moved: qty, from_stage: fromStage, to_stage: targetStage, cards: mapped };
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+    // La primera pieza que llega a una estación puede disparar una tarea de
+    // medición de materiales, igual que el movimiento de lote completo.
+    if (direction === 'forward' && firstArrival && result) {
+      const biggest = [...cards].sort((a, b) => Number(b.required_qty || 0) - Number(a.required_qty || 0))[0];
+      await maybeCreateSamplingTasks({
+        cardId: biggest.id,
+        sku: biggest.sku,
+        storeLocation: biggest.store_location,
+        process: targetStage,
+        batchQty: cards.reduce((sum, card) => sum + Number(card.required_qty || 0), 0)
+      }).catch(() => {});
+    }
+    res.json({ message: 'Piezas movidas', ...result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron mover las piezas' });
   }
 });
 
