@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- Página estática de "compartir" para los catálogos. El rastreador de
+     WhatsApp/Facebook no ejecuta JavaScript ni entra a rutas #/ de la app,
+     así que este archivo real en /catalogos/ le da el título, la descripción
+     y la imagen de la vista previa; a las personas las redirige de inmediato
+     a la página de catálogos de la app (/#/catalogos). -->
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Catálogos PCX 2026</title>
+    <meta name="description" content="Tableros metálicos y organización, hechos en Bolivia. Mira los catálogos de la Línea Industrial (Acero) y la Línea Hogar (Armonía) y pide el tuyo por WhatsApp." />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="PCX" />
+    <meta property="og:title" content="Catálogos PCX 2026" />
+    <meta property="og:description" content="Tableros metálicos y organización, hechos en Bolivia. Línea Industrial y Línea Hogar — míralos y pide el tuyo por WhatsApp." />
+    <meta property="og:url" content="https://pcxind.com/catalogos/" />
+    <meta property="og:image" content="https://pcxind.com/catalogos/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="es_BO" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Catálogos PCX 2026" />
+    <meta name="twitter:description" content="Tableros metálicos y organización, hechos en Bolivia." />
+    <meta name="twitter:image" content="https://pcxind.com/catalogos/og.jpg" />
+
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <meta name="theme-color" content="#161412" />
+
+    <!-- Redirección para personas (los rastreadores leen las etiquetas de arriba). -->
+    <meta http-equiv="refresh" content="0; url=/#/catalogos" />
+    <script>window.location.replace('/#/catalogos');</script>
+  </head>
+  <body style="margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;background:#161412;color:#e7e5e4;font-family:system-ui,sans-serif;">
+    <p>Abriendo los catálogos… <a href="/#/catalogos" style="color:#d6bb94;">toca aquí si no avanza</a>.</p>
+  </body>
+</html>
