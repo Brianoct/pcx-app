@@ -5406,10 +5406,10 @@ img, video, canvas { max-width: 100%; }
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 5px;
+  gap: 4px;
   width: 100%;
   text-align: left;
-  padding: 11px 12px;
+  padding: 8px 9px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-soft);
   border-left: 3px solid var(--accent-warm);
@@ -5450,7 +5450,7 @@ img, video, canvas { max-width: 100%; }
 .prod-card-counter button {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 36px;
+  min-height: 32px;
   padding: 0;
   border-radius: 9px;
   border: 1px solid var(--border);
@@ -5486,15 +5486,15 @@ img, video, canvas { max-width: 100%; }
 
 /* ── Landscape / tablet+ : full board, all 8 columns, hide the pill nav ──────
    Cada columna garantiza un ancho mínimo legible; si la pantalla no alcanza
-   (celular horizontal), el tablero scrollea a lo ancho en vez de aplastar las
-   tarjetas letra por letra. */
+   (celular horizontal / laptop chica), el tablero scrollea a lo ancho en vez
+   de aplastar las tarjetas letra por letra. */
 @media (orientation: landscape) and (max-width: 1024px), (min-width: 720px) {
   .prod-stage-nav { display: none; }
   .prod-columns {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: minmax(150px, 1fr);
-    gap: 8px;
+    grid-auto-columns: minmax(138px, 1fr);
+    gap: 6px;
     align-items: start;
     overflow-x: auto;
     padding-bottom: 6px;
@@ -5502,8 +5502,18 @@ img, video, canvas { max-width: 100%; }
   }
   .prod-col,
   .prod-col.is-active { display: flex; }
-  .prod-col-name { font-size: 0.7rem; }
-  .prod-card-name { font-size: 0.82rem; }
+  .prod-col-name { font-size: 0.68rem; }
+  .prod-card-name { font-size: 0.78rem; }
+  .prod-col-head { padding: 7px 9px; }
+}
+
+/* Escritorio: las 8 columnas caben sin scroll horizontal. */
+@media (min-width: 1180px) {
+  .prod-columns {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    overflow-x: visible;
+  }
 }
 
 /* ── Detail bottom sheet ──────────────────────────────────────────────────── */
@@ -10951,21 +10961,34 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 
 .prod-chunk-qty {
   flex: 0 0 auto;
-  min-width: 30px;
+  min-width: 26px;
   text-align: center;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
 }
 
 .prod-card-nexthint {
   color: #78716c;
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
 }
+
+/* Muestra del color real (Pintado y Embalado). */
+.prod-color-swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-left: 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(28, 25, 23, 0.25);
+  vertical-align: middle;
+}
+.prod-paint-rows .prod-color-swatch { margin-left: 0; }
 
 .prod-card-sede-detail {
   display: flex;
@@ -10991,10 +11014,11 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   min-height: 30px;
 }
 
-/* Fila de color en una sola línea: nombre truncable + pendiente + botón. */
+/* Fila de color en una sola línea: muestra + nombre (prioridad de espacio) +
+   pendiente + botón, todo compacto para columnas angostas. */
 .prod-paint-rows .prod-card-color-row {
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 4px;
 }
 .prod-paint-rows .prod-card-color-name {
   flex: 1 1 auto;
@@ -11002,12 +11026,18 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.72rem;
 }
 .prod-paint-rows .prod-card-color-count {
   flex: 0 0 auto;
   min-width: 0;
   font-size: 0.72rem;
   white-space: nowrap;
+}
+.prod-paint-counter button {
+  min-width: 30px;
+  min-height: 28px;
+  font-size: 0.95rem;
 }
 
 /* ── Página pública de catálogos ──────────────────────────────────────────── */
