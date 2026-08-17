@@ -2,7 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { getProductionKanbanAccessScope, resolveInventoryScopeByCity } = require('../lib/inventory');
-const { PRODUCTION_KANBAN_STAGES, cardsShareVariantGroup, getRouteStagesForSku, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, replaceProductProcessSteps, syncProductionKanbanFromInventory } = require('../lib/kanban');
+const { PRODUCTION_KANBAN_STAGES, cardsShareVariantGroup, getRouteStagesForSku, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, parseVariantSku, replaceProductProcessSteps, syncProductionKanbanFromInventory } = require('../lib/kanban');
 const { validateProductSku } = require('../lib/products');
 const { getProductStructure, loadProductionSettings, saveProductStructure, saveProductionSettings } = require('../lib/productStructure');
 const { countPendingTasksByCard, getVarianceReport, listCardTasks, maybeCreateSamplingTasks, resolveTask } = require('../lib/productionSampling');
@@ -523,6 +523,34 @@ router.post('/api/production/kanban/push', authenticateToken, requireRole(['Prod
     const productName = String(first.product_name || sku).trim() || sku;
     if (direction === 'forward' && targetStage === 'embalado') await ensureQcProductSettingsSeeded();
 
+    // Pintado es donde el color se materializa: antes de pintar, las piezas de
+    // los colores hermanos son el MISMO fierro. Si el color pedido no tiene
+    // suficientes piezas "asignadas" en Pintado pero el lote base sí tiene
+    // piezas sin pintar asignadas a otro color, se intercambian asignaciones
+    // (la pieza del hermano se pinta de este color y la contabilidad del
+    // hermano retrocede una pieza a la etapa donde estaba la de este color).
+    // Así el departamento de pintura elige libremente el orden de los colores.
+    let siblingCards = [];
+    const requestedIds = new Set(cards.map((card) => Number(card.id)));
+    if (direction === 'forward' && fromStage === 'pintado') {
+      const variant = parseVariantSku(sku);
+      if (variant) {
+        const sibRes = await pool.query(
+          `SELECT id, sku, product_name, store_location, required_qty, processed_count, qty_frozen, stage, start_process
+           FROM production_kanban_cards
+           WHERE is_active = TRUE
+             AND source = 'min_stock'
+             AND UPPER(sku) LIKE $1 || '%'`,
+          [variant.base]
+        );
+        siblingCards = sibRes.rows.filter((row) => {
+          const v = parseVariantSku(row.sku);
+          return v && v.base === variant.base && !requestedIds.has(Number(row.id));
+        });
+      }
+    }
+    const allCards = [...cards, ...siblingCards];
+
     const client = await pool.connect();
     let result;
     let firstArrival = false;
@@ -533,17 +561,17 @@ router.post('/api/production/kanban/push', authenticateToken, requireRole(['Prod
          FROM production_kanban_stage_qty
          WHERE card_id = ANY($1::int[])
          FOR UPDATE`,
-        [cards.map((card) => card.id)]
+        [allCards.map((card) => card.id)]
       );
-      const distByCard = new Map(cards.map((card) => [Number(card.id), new Map()]));
+      const distByCard = new Map(allCards.map((card) => [Number(card.id), new Map()]));
       for (const row of distRes.rows) {
         distByCard.get(Number(row.card_id))?.set(row.stage, Number(row.qty));
       }
       // Tarjetas sin distribución todavía: todas sus piezas en su etapa actual.
-      for (const card of cards) {
+      for (const card of allCards) {
         const dist = distByCard.get(Number(card.id));
         const total = [...dist.values()].reduce((sum, value) => sum + value, 0);
-        if (total === 0 && Number(card.required_qty || 0) > 0) {
+        if (total === 0 && Number(card.required_qty || 0) > 0 && card.stage !== 'planificacion') {
           dist.set(card.stage, Number(card.required_qty || 0));
           await client.query(
             `INSERT INTO production_kanban_stage_qty (card_id, stage, qty)
@@ -553,6 +581,47 @@ router.post('/api/production/kanban/push', authenticateToken, requireRole(['Prod
           );
         }
       }
+
+      const setStageQty = async (cardId, stage, value) => {
+        await client.query(
+          `INSERT INTO production_kanban_stage_qty (card_id, stage, qty)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (card_id, stage) DO UPDATE SET qty = EXCLUDED.qty, updated_at = NOW()`,
+          [cardId, stage, value]
+        );
+      };
+
+      const swappedSiblings = new Set();
+      let shortage = qty - cards.reduce(
+        (sum, card) => sum + (distByCard.get(Number(card.id)).get(fromStage) || 0),
+        0
+      );
+      if (shortage > 0 && direction === 'forward' && fromStage === 'pintado' && siblingCards.length > 0) {
+        const prePaintStages = route.filter((stage, i) => stage !== 'planificacion' && i < fromIdx);
+        while (shortage > 0) {
+          const donor = siblingCards.find((sib) => (distByCard.get(Number(sib.id)).get('pintado') || 0) > 0);
+          let receiver = null;
+          let receiverStage = null;
+          for (const stage of prePaintStages) {
+            receiver = cards.find((card) => (distByCard.get(Number(card.id)).get(stage) || 0) > 0);
+            if (receiver) { receiverStage = stage; break; }
+          }
+          if (!donor || !receiver) break;
+          const donorDist = distByCard.get(Number(donor.id));
+          const receiverDist = distByCard.get(Number(receiver.id));
+          donorDist.set('pintado', donorDist.get('pintado') - 1);
+          donorDist.set(receiverStage, (donorDist.get(receiverStage) || 0) + 1);
+          receiverDist.set(receiverStage, receiverDist.get(receiverStage) - 1);
+          receiverDist.set('pintado', (receiverDist.get('pintado') || 0) + 1);
+          await setStageQty(donor.id, 'pintado', donorDist.get('pintado'));
+          await setStageQty(donor.id, receiverStage, donorDist.get(receiverStage));
+          await setStageQty(receiver.id, receiverStage, receiverDist.get(receiverStage));
+          await setStageQty(receiver.id, 'pintado', receiverDist.get('pintado'));
+          swappedSiblings.add(Number(donor.id));
+          shortage -= 1;
+        }
+      }
+
       const availability = cards.map((card) => ({
         card,
         available: distByCard.get(Number(card.id)).get(fromStage) || 0
@@ -560,7 +629,11 @@ router.post('/api/production/kanban/push', authenticateToken, requireRole(['Prod
       const totalAvailable = availability.reduce((sum, entry) => sum + entry.available, 0);
       if (totalAvailable < qty) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ error: `Solo hay ${totalAvailable} pieza(s) en esta estación` });
+        return res.status(400).json({
+          error: fromStage === 'pintado' && direction === 'forward'
+            ? `No alcanzan las piezas: hay ${totalAvailable} disponible(s) para este color (sin pintar del lote + pendientes del color)`
+            : `Solo hay ${totalAvailable} pieza(s) en esta estación`
+        });
       }
       // Reparto en orden de id, igual que el contador de avance anterior.
       let remaining = qty;
@@ -604,6 +677,22 @@ router.post('/api/production/kanban/push', authenticateToken, requireRole(['Prod
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
           [card.id, sku, card.store_location, fromStage, targetStage, share, req.user.id]
         );
+      }
+      // Hermanos que prestaron piezas sin pintar: su contabilidad retrocedió,
+      // recalcular su etapa oficial y devolverlos también en la respuesta.
+      for (const sibId of swappedSiblings) {
+        const sib = siblingCards.find((s) => Number(s.id) === sibId);
+        const dist = distByCard.get(sibId);
+        const trailing = route.find((stage) => stage !== 'planificacion' && (dist.get(stage) || 0) > 0) || sib.stage;
+        const updatedRes = await client.query(
+          `UPDATE production_kanban_cards
+           SET stage = $2, updated_at = NOW()
+           WHERE id = $1
+           RETURNING id, sku, product_name, store_location, current_stock, min_stock, required_qty,
+                     processed_count, qty_frozen, start_process, stage, source, planned_date, last_moved_at, created_at, updated_at`,
+          [sibId, trailing]
+        );
+        updatedCards.push(updatedRes.rows[0]);
       }
       if (direction === 'forward' && targetStage === 'embalado') {
         await client.query(
