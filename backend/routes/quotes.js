@@ -2,7 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
 const { getPedidosAccessScope } = require('../lib/inventory');
-const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, getQuoteSaveIdempotencyCacheKey, lineItemsFingerprint, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftSelectionForQuote } = require('../lib/quotes');
+const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, effectiveGiftItems, getQuoteSaveIdempotencyCacheKey, giftItemsFingerprint, lineItemsFingerprint, normalizeGiftItems, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftItemsForQuote, resolveGiftSelectionForQuote } = require('../lib/quotes');
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { findCustomerOwnerByPhone, markCustomerWonByPhone, upsertCustomerFromQuote } = require('../lib/customers');
 const { applyPromosToNewQuote, refreshCodeAggregate, syncPromoTicketsForQuote, validateCouponForRedemption } = require('../lib/promos');
@@ -26,7 +26,7 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
   const quoteRes = await client.query(
     `SELECT id, user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes,
             alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
-            coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, payment_method, payment_cash_bs,
+            coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items, payment_method, payment_cash_bs,
             line_items, subtotal, total, status
      FROM quotes
      WHERE id = $1
@@ -100,6 +100,7 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
     gift_name,
     gift_sku,
     gift_qty,
+    gift_items,
     rows,
     subtotal,
     total,
@@ -215,11 +216,14 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       }
     }
 
-    const giftSelection = await resolveGiftSelectionForQuote(
-      client,
-      { sku: gift_sku, qty: gift_qty, name: gift_name },
-      gift_name
-    );
+    // Regalo: paquete multi-producto (promo «Regalo por compra») o, si no
+    // viene la lista, el regalo único legacy de la ruleta.
+    const giftSelection = (await resolveGiftItemsForQuote(client, gift_items))
+      || (await resolveGiftSelectionForQuote(
+        client,
+        { sku: gift_sku, qty: gift_qty, name: gift_name },
+        gift_name
+      ));
 
     // Cupón personal (motor de promos): validar servidor-side que existe, es
     // de ESTE cliente, está activo y no venció. El % sale del cupón, no del
@@ -252,8 +256,8 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       `INSERT INTO quotes (
         user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes,
         alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
-        coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, line_items, subtotal, total, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW())
+        coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items, line_items, subtotal, total, status, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW())
       RETURNING id`,
       [
         quoteOwnerId,
@@ -275,6 +279,7 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
         giftSelection.gift_name,
         giftSelection.gift_sku,
         giftSelection.gift_qty,
+        giftSelection.gift_items ? JSON.stringify(giftSelection.gift_items) : null,
         JSON.stringify(lineItemsWithDisplay),
         subtotalValue,
         totalValue,
@@ -292,7 +297,8 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       total: totalValue,
       status: normalizedStatus,
       customerPhone: customer_phone,
-      customerName: customer_name
+      customerName: customer_name,
+      hasGift: effectiveGiftItems(giftSelection).length > 0
     });
     if (promoSnapshot.length > 0) {
       await client.query('UPDATE quotes SET promos = $1 WHERE id = $2', [JSON.stringify(promoSnapshot), quoteId]);
@@ -300,10 +306,7 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
 
     // Only deduct stock if initial status is finalized.
     if (FINALIZED_QUOTE_STATUSES.includes(normalizedStatus)) {
-      await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay, {
-        gift_sku: giftSelection.gift_sku,
-        gift_qty: giftSelection.gift_qty
-      });
+      await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay, giftSelection);
     }
 
     await client.query('COMMIT');
@@ -387,7 +390,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
-                      q.gift_name, q.gift_sku, q.gift_qty, q.promos, q.ciudad, q.dest_geo_id,
+                      q.gift_name, q.gift_sku, q.gift_qty, q.gift_items, q.promos, q.ciudad, q.dest_geo_id,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -399,7 +402,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
-                      q.gift_name, q.gift_sku, q.gift_qty, q.promos, q.ciudad, q.dest_geo_id,
+                      q.gift_name, q.gift_sku, q.gift_qty, q.gift_items, q.promos, q.ciudad, q.dest_geo_id,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -412,7 +415,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
-                      q.gift_name, q.gift_sku, q.gift_qty, q.promos, q.ciudad, q.dest_geo_id,
+                      q.gift_name, q.gift_sku, q.gift_qty, q.gift_items, q.promos, q.ciudad, q.dest_geo_id,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -476,7 +479,7 @@ router.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT id, user_id, customer_name, customer_phone, department, provincia, ciudad, store_location,
               vendor, status, line_items, created_at, alternative_name, alternative_phone,
-              coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty
+              coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items
        FROM quotes WHERE id = $1`,
       [id]
     );
@@ -622,8 +625,22 @@ router.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
     }
 
     // The regalo must be PACKED, so it is a checkable line in the list — not
-    // just an informative chip that's easy to miss.
-    if (quote.gift_name || quote.gift_sku) {
+    // just an informative chip that's easy to miss. Un paquete de regalo
+    // (promo «Regalo por compra») genera una línea por producto.
+    const giftItemsList = normalizeGiftItems(quote.gift_items);
+    if (giftItemsList) {
+      for (const giftItem of giftItemsList) {
+        items.push({
+          displayName: `REGALO — ${giftItem.name || giftItem.sku}`,
+          sku: giftItem.sku,
+          qty: giftItem.qty,
+          isComboHeader: false,
+          isIndented: false,
+          isCheckable: true,
+          isGift: true
+        });
+      }
+    } else if (quote.gift_name || quote.gift_sku) {
       items.push({
         displayName: `REGALO — ${String(quote.gift_name || quote.gift_sku).trim()}`,
         sku: String(quote.gift_sku || '').trim().toUpperCase() || null,
@@ -648,7 +665,17 @@ router.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
           : `Cupón ${String(quote.coupon_code).trim().toUpperCase()}`
       });
     }
-    if (quote.gift_name || quote.gift_sku) {
+    if (giftItemsList) {
+      promoSections.push({
+        type: 'gift',
+        title: 'Regalo',
+        name: String(quote.gift_name || '').trim() || null,
+        sku: null,
+        qty: giftItemsList.reduce((sum, item) => sum + item.qty, 0),
+        items: giftItemsList,
+        label: `Regalo: ${giftItemsList.map((item) => `${item.qty}× ${item.name || item.sku}`).join(' + ')}`
+      });
+    } else if (quote.gift_name || quote.gift_sku) {
       promoSections.push({
         type: 'gift',
         title: 'Regalo',
@@ -679,6 +706,7 @@ router.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       gift_name: quote.gift_name,
       gift_sku: quote.gift_sku || null,
       gift_qty: Math.max(1, Number.parseInt(quote.gift_qty, 10) || 1),
+      gift_items: giftItemsList,
       promo_sections: promoSections,
       items
     });
@@ -708,7 +736,7 @@ router.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
     await client.query('BEGIN');
 
     const currentRes = await client.query(
-      'SELECT user_id, status, store_location, line_items, gift_sku, gift_qty, customer_phone FROM quotes WHERE id = $1',
+      'SELECT user_id, status, store_location, line_items, gift_sku, gift_qty, gift_items, customer_phone FROM quotes WHERE id = $1',
       [req.params.id]
     );
 
@@ -735,7 +763,8 @@ router.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
     if (currentStatus === 'Cotizado' && status !== 'Cotizado') {
       await deductStockForQuote(client, req.params.id, storeLocation, lineItems, {
         gift_sku: giftSku,
-        gift_qty: giftQty
+        gift_qty: giftQty,
+        gift_items: currentRes.rows[0].gift_items || null
       });
     }
 
@@ -874,6 +903,7 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     gift_name,
     gift_sku,
     gift_qty,
+    gift_items,
     rows,
     subtotal,
     total,
@@ -974,18 +1004,28 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    const hasAnyGiftField = hasGiftNameField || hasGiftSkuField || hasGiftQtyField;
-    const resolvedGift = hasAnyGiftField
-      ? await resolveGiftSelectionForQuote(
+    const hasGiftItemsField = hasBodyField('gift_items');
+    const hasAnyGiftField = hasGiftNameField || hasGiftSkuField || hasGiftQtyField || hasGiftItemsField;
+    let resolvedGift;
+    if (hasGiftItemsField) {
+      // Paquete nuevo (o [] / null para quitar el regalo).
+      resolvedGift = (await resolveGiftItemsForQuote(client, gift_items))
+        || { gift_name: null, gift_sku: null, gift_qty: 1, gift_items: null };
+    } else if (hasAnyGiftField) {
+      resolvedGift = await resolveGiftSelectionForQuote(
         client,
         { sku: gift_sku, qty: gift_qty, name: gift_name },
         gift_name
-      )
-      : {
+      );
+    } else {
+      // Sin campos de regalo en el body: el regalo actual se preserva intacto.
+      resolvedGift = {
         gift_name: String(currentQuote.gift_name || '').trim() || null,
         gift_sku: String(currentQuote.gift_sku || '').trim().toUpperCase() || null,
-        gift_qty: Math.max(1, Number.parseInt(currentQuote.gift_qty, 10) || 1)
+        gift_qty: Math.max(1, Number.parseInt(currentQuote.gift_qty, 10) || 1),
+        gift_items: normalizeGiftItems(currentQuote.gift_items)
       };
+    }
     const currentCouponCode = String(currentQuote.coupon_code || '').trim().toUpperCase() || null;
     const currentCouponDiscount = Number(currentQuote.coupon_discount_percent);
     let nextCouponCode = currentCouponCode;
@@ -1036,14 +1076,16 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     }
     const previousGiftSelection = {
       gift_sku: String(currentQuote.gift_sku || '').trim().toUpperCase() || null,
-      gift_qty: Number.parseInt(currentQuote.gift_qty, 10) || 1
+      gift_qty: Number.parseInt(currentQuote.gift_qty, 10) || 1,
+      gift_items: normalizeGiftItems(currentQuote.gift_items)
     };
     const nextGiftSelection = {
       gift_sku: resolvedGift.gift_sku,
-      gift_qty: resolvedGift.gift_qty
+      gift_qty: resolvedGift.gift_qty,
+      gift_items: resolvedGift.gift_items || null
     };
-    const giftChanged = `${previousGiftSelection.gift_sku || ''}:${previousGiftSelection.gift_qty}`
-      !== `${nextGiftSelection.gift_sku || ''}:${nextGiftSelection.gift_qty}`;
+    // La huella cubre paquete y regalo único por igual (sku:qty ordenados).
+    const giftChanged = giftItemsFingerprint(previousGiftSelection) !== giftItemsFingerprint(nextGiftSelection);
 
     if (wasFinalized && (!willBeFinalized || storeChanged || lineItemsChanged || giftChanged)) {
       await restockStockForQuote(client, oldStore, oldLineItems, previousGiftSelection);
@@ -1071,6 +1113,7 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
            gift_name = $15,
            gift_sku = $16,
            gift_qty = $17,
+           gift_items = $25,
            line_items = $18,
            subtotal = $19,
            total = $20,
@@ -1102,7 +1145,8 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         normalizedStatus,
         quoteId,
         destinoEdit.ciudad,
-        destinoEdit.dest_geo_id
+        destinoEdit.dest_geo_id,
+        resolvedGift.gift_items ? JSON.stringify(resolvedGift.gift_items) : null
       ]
     );
     await client.query('COMMIT');
@@ -1161,7 +1205,8 @@ router.delete('/api/quotes/:id', authenticateToken, async (req, res) => {
         Array.isArray(currentQuote.line_items) ? currentQuote.line_items : [],
         {
           gift_sku: String(currentQuote.gift_sku || '').trim().toUpperCase() || null,
-          gift_qty: Number.parseInt(currentQuote.gift_qty, 10) || 1
+          gift_qty: Number.parseInt(currentQuote.gift_qty, 10) || 1,
+          gift_items: normalizeGiftItems(currentQuote.gift_items)
         }
       );
     }
@@ -1267,15 +1312,14 @@ async function restockStockForQuote(client, storeLocation, lineItems, giftSelect
     );
   }
 
-  const giftSku = String(giftSelection?.gift_sku || '').trim().toUpperCase();
-  const giftQty = Number.parseInt(giftSelection?.gift_qty, 10);
-  if (giftSku && Number.isInteger(giftQty) && giftQty > 0) {
+  // Regalos: cada ítem del paquete (o el regalo único legacy) repone su stock.
+  for (const giftItem of effectiveGiftItems(giftSelection)) {
     await client.query(
       `UPDATE products
        SET ${warehouseField} = ${warehouseField} + $1,
            last_updated = NOW()
        WHERE sku = $2`,
-      [giftQty, giftSku]
+      [giftItem.qty, giftItem.sku]
     );
   }
 }
