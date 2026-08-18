@@ -54,6 +54,11 @@ export default function QuoteTool({ token, user }) {
   const [fallbackCiudad, setFallbackCiudad] = useState('');
   const [crmOpen, setCrmOpen] = useState(false);
   const [crmFollowUpsDue, setCrmFollowUpsDue] = useState(0);
+  // Regalo elegido de una promo activa: viaja en gift_sku/gift_qty/gift_name
+  // al guardar (mismo mecanismo que la ruleta retirada: descuenta stock y
+  // aparece en el checklist de pedidos).
+  const [selectedGift, setSelectedGift] = useState(null);
+
   // Toolchest de marketing: promos activas hoy (envío gratis, sorteo...).
   // El servidor decide qué aplica al guardar; esto es el aviso para el vendedor.
   const [activePromos, setActivePromos] = useState([]);
@@ -631,6 +636,7 @@ export default function QuoteTool({ token, user }) {
     setDiscountMode('percent');
     setDiscountInput(0);
     setSelectedCouponCode('');
+    setSelectedGift(null);
     setUseAlternativeName(false);
     setAlternativeName('');
     setAlternativePhone('');
@@ -729,6 +735,16 @@ export default function QuoteTool({ token, user }) {
     }
 
     const discountPercentForStorage = Math.round(effectiveDiscountPercent);
+    // El regalo solo viaja si su promo sigue activa y la compra alcanza el
+    // mínimo (por si el total bajó después de elegirlo).
+    const giftForSave = (() => {
+      if (!selectedGift) return null;
+      const giftPromo = activePromos.find((promo) => promo.tool === 'regalo' && promo.id === selectedGift.promoId);
+      if (!giftPromo) return null;
+      const giftMin = Number(giftPromo.config?.min_total || 0);
+      if (total <= 0 || total < giftMin) return null;
+      return selectedGift;
+    })();
     const payload = {
       customer_name: customerName,
       customer_phone: customerPhone,
@@ -745,6 +761,9 @@ export default function QuoteTool({ token, user }) {
       discount_percent: discountPercentForStorage,
       coupon_code: selectedCouponCode || null,
       seller_user_id: requiresSellerAssignment ? Number(assignedSellerId) : null,
+      gift_sku: giftForSave ? giftForSave.sku : null,
+      gift_qty: giftForSave ? 1 : null,
+      gift_name: giftForSave ? giftForSave.name : null,
       rows: rowsWithDisplay,
       subtotal,
       total
@@ -1240,6 +1259,37 @@ export default function QuoteTool({ token, user }) {
                       {minTotal > 0 && ` (desde ${minTotal} Bs)`}
                       {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
                       {reachesMin && total > 0 && ' ✓'}
+                    </div>
+                  );
+                }
+                if (promo.tool === 'regalo') {
+                  const gifts = Array.isArray(promo.gift_products) ? promo.gift_products : [];
+                  const earned = reachesMin && total > 0;
+                  const isMine = selectedGift && selectedGift.promoId === promo.id;
+                  return (
+                    <div key={promo.id} className={`quote-promo-chip is-regalo ${earned ? 'is-earned' : ''}`}>
+                      🎁 <strong>{promo.name}</strong>
+                      {minTotal > 0 && ` · desde ${minTotal} Bs`}
+                      {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
+                      {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
+                      {gifts.length > 0 && (
+                        <select
+                          className="quote-gift-select"
+                          value={isMine ? selectedGift.sku : ''}
+                          disabled={!earned}
+                          title={earned ? 'Elige el regalo que se lleva el cliente' : 'Se habilita al alcanzar la compra mínima'}
+                          onChange={(e) => {
+                            const gift = gifts.find((g) => g.sku === e.target.value);
+                            setSelectedGift(gift ? { promoId: promo.id, sku: gift.sku, name: gift.name } : null);
+                          }}
+                        >
+                          <option value="">— Elegir regalo —</option>
+                          {gifts.map((gift) => (
+                            <option key={gift.sku} value={gift.sku}>{gift.name}</option>
+                          ))}
+                        </select>
+                      )}
+                      {isMine && earned && ' ✓'}
                     </div>
                   );
                 }

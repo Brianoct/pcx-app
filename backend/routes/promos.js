@@ -37,7 +37,27 @@ const sanitizeConfig = (tool, rawConfig = {}) => {
     const validity = Number.parseInt(rawConfig.validity_days, 10);
     if (Number.isInteger(validity) && validity >= 1 && validity <= 365) config.validity_days = validity;
   }
+  if (tool === 'regalo') {
+    const rawSkus = Array.isArray(rawConfig.gift_skus) ? rawConfig.gift_skus : [];
+    const skus = [...new Set(rawSkus.map((sku) => String(sku || '').trim().toUpperCase()).filter(Boolean))].slice(0, 20);
+    if (skus.length > 0) config.gift_skus = skus;
+  }
   return config;
+};
+
+// Regalo: los SKUs elegidos deben ser productos reales y activos del catálogo.
+// Devuelve un mensaje de error o null si todo está bien.
+const validateRegaloConfig = async (config = {}) => {
+  const skus = Array.isArray(config.gift_skus) ? config.gift_skus : [];
+  if (skus.length === 0) return 'Elige al menos un producto de regalo';
+  const res = await pool.query(
+    `SELECT UPPER(sku) AS sku FROM products WHERE UPPER(sku) = ANY($1::text[]) AND is_active = TRUE`,
+    [skus]
+  );
+  const found = new Set(res.rows.map((row) => row.sku));
+  const missing = skus.filter((sku) => !found.has(sku));
+  if (missing.length > 0) return `Productos de regalo no válidos o inactivos: ${missing.join(', ')}`;
+  return null;
 };
 
 // ─── Activas (para Cotizar) ─────────────────────────────────────────────────
@@ -51,7 +71,29 @@ router.get('/api/promos/active', authenticateToken, async (_req, res) => {
          AND (ends_on IS NULL OR ends_on >= (NOW() AT TIME ZONE 'America/La_Paz')::date)
        ORDER BY id`
     );
-    res.json({ promos: result.rows });
+    const rows = result.rows;
+    // Regalo: Cotizar necesita nombre y sku de cada producto elegible para el
+    // dropdown. Solo productos aún activos — si Marketing eligió algo que
+    // luego se desactivó, desaparece de la lista sin romper la promo.
+    const giftSkus = [...new Set(
+      rows
+        .filter((row) => row.tool === 'regalo')
+        .flatMap((row) => (Array.isArray(row.config?.gift_skus) ? row.config.gift_skus : []))
+    )];
+    if (giftSkus.length > 0) {
+      const prodRes = await pool.query(
+        `SELECT UPPER(sku) AS sku, name FROM products WHERE UPPER(sku) = ANY($1::text[]) AND is_active = TRUE`,
+        [giftSkus]
+      );
+      const nameBySku = new Map(prodRes.rows.map((row) => [row.sku, row.name]));
+      for (const row of rows) {
+        if (row.tool !== 'regalo') continue;
+        row.gift_products = (Array.isArray(row.config?.gift_skus) ? row.config.gift_skus : [])
+          .filter((sku) => nameBySku.has(sku))
+          .map((sku) => ({ sku, name: nameBySku.get(sku) }));
+      }
+    }
+    res.json({ promos: rows });
   } catch (err) {
     console.error('Error cargando promos activas:', err);
     res.status(500).json({ error: 'No se pudieron cargar promociones activas' });
@@ -141,6 +183,10 @@ router.post('/api/promos', authenticateToken, requireRole(MANAGE_ROLES), async (
 
   try {
     const config = sanitizeConfig(tool, req.body?.config || {});
+    if (tool === 'regalo') {
+      const problem = await validateRegaloConfig(config);
+      if (problem) return res.status(400).json({ error: problem });
+    }
     const result = await pool.query(
       `INSERT INTO promo_tools (tool, name, campaign_id, active, starts_on, ends_on, config, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
@@ -185,6 +231,10 @@ router.patch('/api/promos/:id', authenticateToken, requireRole(MANAGE_ROLES), as
       : current.campaign_id;
     const active = has('active') ? Boolean(req.body.active) : current.active;
     const config = has('config') ? sanitizeConfig(current.tool, req.body.config || {}) : current.config;
+    if (has('config') && current.tool === 'regalo') {
+      const problem = await validateRegaloConfig(config);
+      if (problem) return res.status(400).json({ error: problem });
+    }
 
     await pool.query(
       `UPDATE promo_tools
