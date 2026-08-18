@@ -11197,3 +11197,64 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   .catalog-help-text { text-align: center; }
   .catalog-wa-btn { justify-content: center; }
 }
+
+/* ── Promo Regalo ─────────────────────────────────────────────────────────── */
+
+.quote-promo-chip.is-regalo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quote-gift-select {
+  margin-left: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #ddd9d3;
+  background: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+  max-width: 260px;
+}
+
+.quote-gift-select:disabled { opacity: 0.55; }
+
+.promo-gift-picker { grid-column: 1 / -1; }
+
+.promo-gift-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.promo-gift-add select { flex: 1; min-width: 0; }
+
+.promo-gift-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.promo-gift-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #fdf3e7;
+  border: 1px solid #f0d9bb;
+  color: #7c4a12;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.promo-gift-chip button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #b45309;
+  font-weight: 800;
+  padding: 0 2px;
+}

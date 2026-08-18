@@ -10,7 +10,8 @@ import { apiRequest } from './apiClient';
 const TOOL_META = {
   envio_gratis: { icon: '🚚', label: 'Envío gratis' },
   sorteo: { icon: '🎟️', label: 'Sorteo' },
-  cupon: { icon: '🎫', label: 'Cupón próxima compra' }
+  cupon: { icon: '🎫', label: 'Cupón próxima compra' },
+  regalo: { icon: '🎁', label: 'Regalo por compra' }
 };
 
 // Tickets físicos para el sorteo en vivo (TikTok): un talón recortable por
@@ -106,6 +107,10 @@ const configSummary = (tool) => {
     parts.push(`${Number(config.discount_percent || 0)}% dcto en la próxima compra`);
     parts.push(`válido ${Number(config.validity_days || 30)} días desde el pago`);
   }
+  if (tool.tool === 'regalo') {
+    const skus = Array.isArray(config.gift_skus) ? config.gift_skus : [];
+    parts.push(`${skus.length} producto${skus.length === 1 ? '' : 's'} de regalo: ${skus.join(', ')}`);
+  }
   return parts.join(' · ');
 };
 
@@ -130,7 +135,9 @@ const EMPTY_FORM = {
   bs_per_ticket: '',
   max_tickets: '5',
   discount_percent: '10',
-  validity_days: '30'
+  validity_days: '30',
+  gift_skus: [],
+  gift_pick: ''
 };
 
 export default function PromosPanel({ token, role }) {
@@ -162,6 +169,31 @@ export default function PromosPanel({ token, role }) {
       .catch(() => {});
   }, [token]);
 
+  // Catálogo para el picker de regalos (sku + nombre alcanza).
+  const [products, setProducts] = useState([]);
+  useEffect(() => {
+    apiRequest('/api/product-catalog', { token })
+      .then((data) => {
+        const rows = Array.isArray(data) ? data : (Array.isArray(data?.products) ? data.products : []);
+        setProducts(rows.map((row) => ({ sku: String(row.sku || '').toUpperCase(), name: row.name || row.sku })));
+      })
+      .catch(() => {});
+  }, [token]);
+
+  const addGiftSku = () => {
+    setForm((prev) => {
+      const sku = String(prev.gift_pick || '').trim().toUpperCase();
+      if (!sku || prev.gift_skus.includes(sku)) return { ...prev, gift_pick: '' };
+      return { ...prev, gift_skus: [...prev.gift_skus, sku], gift_pick: '' };
+    });
+  };
+
+  const removeGiftSku = (sku) => {
+    setForm((prev) => ({ ...prev, gift_skus: prev.gift_skus.filter((item) => item !== sku) }));
+  };
+
+  const productName = (sku) => products.find((p) => p.sku === sku)?.name || sku;
+
   const setField = (field) => (event) => setForm((prev) => ({ ...prev, [field]: event.target.value }));
 
   const createTool = async (event) => {
@@ -179,6 +211,14 @@ export default function PromosPanel({ token, role }) {
       if (form.tool === 'cupon') {
         config.discount_percent = Number(form.discount_percent || 10);
         config.validity_days = Number(form.validity_days || 30);
+      }
+      if (form.tool === 'regalo') {
+        if (form.gift_skus.length === 0) {
+          setError('Elige al menos un producto de regalo');
+          setSaving(false);
+          return;
+        }
+        config.gift_skus = form.gift_skus;
       }
       await apiRequest('/api/promos', {
         method: 'POST',
@@ -312,6 +352,7 @@ export default function PromosPanel({ token, role }) {
                 <option value="envio_gratis">🚚 Envío gratis</option>
                 <option value="sorteo">🎟️ Sorteo</option>
                 <option value="cupon">🎫 Cupón próxima compra</option>
+                <option value="regalo">🎁 Regalo por compra</option>
               </select>
             </label>
             <label>
@@ -370,6 +411,36 @@ export default function PromosPanel({ token, role }) {
                   <input type="number" min="1" max="365" step="1" value={form.validity_days} onChange={setField('validity_days')} />
                 </label>
               </>
+            )}
+            {form.tool === 'regalo' && (
+              <div className="promo-gift-picker">
+                <label>
+                  Productos de regalo (el vendedor elige UNO por venta)
+                  <div className="promo-gift-add">
+                    <select value={form.gift_pick} onChange={setField('gift_pick')}>
+                      <option value="">— Elegir producto —</option>
+                      {products
+                        .filter((product) => !form.gift_skus.includes(product.sku))
+                        .map((product) => (
+                          <option key={product.sku} value={product.sku}>{product.name} ({product.sku})</option>
+                        ))}
+                    </select>
+                    <button type="button" className="btn btn-secondary" onClick={addGiftSku} disabled={!form.gift_pick}>
+                      + Agregar
+                    </button>
+                  </div>
+                </label>
+                {form.gift_skus.length > 0 && (
+                  <div className="promo-gift-chips">
+                    {form.gift_skus.map((sku) => (
+                      <span key={sku} className="promo-gift-chip">
+                        🎁 {productName(sku)}
+                        <button type="button" aria-label={`Quitar ${sku}`} onClick={() => removeGiftSku(sku)}>✕</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <button type="submit" className="btn btn-primary" disabled={saving}>

@@ -9,7 +9,7 @@
 const crypto = require('crypto');
 const { pool } = require('../db');
 
-const PROMO_TOOL_TYPES = ['envio_gratis', 'sorteo', 'cupon'];
+const PROMO_TOOL_TYPES = ['envio_gratis', 'sorteo', 'cupon', 'regalo'];
 const PAID_QUOTE_STATUSES = ['Pagado', 'Embalado', 'Enviado'];
 const QUOTE_VALIDITY_DAYS = 7; // "Cotización válida por 7 días" en la proforma
 
@@ -249,6 +249,21 @@ const applyPromosToNewQuote = async (client, { quoteId, total, status, customerP
         validity_days: Number(storedMeta.validity_days || validityDays),
         min_total: minTotal
       });
+    } else if (tool.tool === 'regalo') {
+      // La promesa impresa: esta compra incluye un regalo a elegir. El regalo
+      // concreto elegido por el vendedor viaja en los campos gift_* de la
+      // cotización (mismo mecanismo que la ruleta retirada: descuenta stock y
+      // aparece en el checklist de pedidos).
+      const minTotal = Number(config.min_total || 0);
+      if (amount >= minTotal && amount > 0) {
+        snapshot.push({
+          tool: 'regalo',
+          name: tool.name,
+          min_total: minTotal,
+          gift_skus: Array.isArray(config.gift_skus) ? config.gift_skus : [],
+          valid_until: promoValidUntil(tool.ends_on)
+        });
+      }
     }
   }
   return snapshot;
