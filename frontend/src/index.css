@@ -11258,3 +11258,26 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   font-weight: 800;
   padding: 0 2px;
 }
+
+/* Checkbox «Incluir regalo» dentro del chip de promo. */
+.quote-gift-include {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #f0d9bb;
+  color: #7c4a12;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.quote-gift-include input { accent-color: #b45309; }
+
+.promo-gift-qty {
+  width: 74px;
+  flex: 0 0 auto;
+  text-align: center;
+}

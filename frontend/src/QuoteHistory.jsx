@@ -788,6 +788,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       status: quote.status || 'Cotizado',
       gift_sku: String(quote.gift_sku || '').trim().toUpperCase(),
       gift_qty: Math.max(1, Number.parseInt(quote.gift_qty, 10) || 1),
+      gift_name: String(quote.gift_name || '').trim(),
       line_items: Array.isArray(quote.line_items) ? quote.line_items : []
     };
 
@@ -1729,7 +1730,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                   type="text"
                   value={editingQuote.gift_sku
                     ? `${availableProducts.find((item) => String(item.sku || '').toUpperCase() === String(editingQuote.gift_sku).toUpperCase())?.name || editingQuote.gift_sku} (x${Math.max(1, Number.parseInt(editingQuote.gift_qty, 10) || 1)})`
-                    : 'Sin regalo'}
+                    : (editingQuote.gift_name || 'Sin regalo')}
                   disabled
                   title="Regalo histórico de esta cotización; se conserva al editar"
                 />

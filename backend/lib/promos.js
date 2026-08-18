@@ -179,7 +179,7 @@ const validateCouponForRedemption = async (client, code, customerPhone) => {
 
 // Al guardar una cotización: construye el snapshot para la proforma y registra
 // el código de sorteo si corresponde. Corre dentro de la transacción del guardado.
-const applyPromosToNewQuote = async (client, { quoteId, total, status, customerPhone, customerName }) => {
+const applyPromosToNewQuote = async (client, { quoteId, total, status, customerPhone, customerName, hasGift = false }) => {
   const tools = await getActivePromoTools(client);
   if (tools.length === 0) return [];
   const snapshot = [];
@@ -250,17 +250,17 @@ const applyPromosToNewQuote = async (client, { quoteId, total, status, customerP
         min_total: minTotal
       });
     } else if (tool.tool === 'regalo') {
-      // La promesa impresa: esta compra incluye un regalo a elegir. El regalo
-      // concreto elegido por el vendedor viaja en los campos gift_* de la
-      // cotización (mismo mecanismo que la ruleta retirada: descuenta stock y
-      // aparece en el checklist de pedidos).
+      // La promesa impresa: esta compra incluye el paquete de regalo. Solo se
+      // estampa si la cotización realmente lleva el regalo (el vendedor pudo
+      // quitarlo); los ítems concretos viajan en quotes.gift_items y son los
+      // que descuentan stock y aparecen en el checklist de pedidos.
       const minTotal = Number(config.min_total || 0);
-      if (amount >= minTotal && amount > 0) {
+      if (hasGift && amount >= minTotal && amount > 0) {
         snapshot.push({
           tool: 'regalo',
           name: tool.name,
           min_total: minTotal,
-          gift_skus: Array.isArray(config.gift_skus) ? config.gift_skus : [],
+          gift_items: Array.isArray(config.gift_items) ? config.gift_items : [],
           valid_until: promoValidUntil(tool.ends_on)
         });
       }

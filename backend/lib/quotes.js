@@ -140,6 +140,74 @@ const normalizeGiftSelection = (giftPayload = null) => {
   };
 };
 
+// Paquete de regalo (promo «Regalo por compra»): lista [{sku, qty, name}].
+const MAX_GIFT_ITEMS = 10;
+
+const normalizeGiftItems = (payload = null) => {
+  if (!Array.isArray(payload)) return null;
+  const merged = new Map();
+  for (const item of payload) {
+    const sku = String(item?.sku || '').trim().toUpperCase();
+    const qty = Number.parseInt(item?.qty, 10);
+    if (!sku || !Number.isInteger(qty) || qty <= 0) continue;
+    const existing = merged.get(sku);
+    merged.set(sku, {
+      sku,
+      qty: (existing?.qty || 0) + qty,
+      name: String(item?.name || existing?.name || '').trim() || null
+    });
+  }
+  const items = [...merged.values()].slice(0, MAX_GIFT_ITEMS);
+  return items.length > 0 ? items : null;
+};
+
+// Valida el paquete contra el catálogo (productos reales y activos) y arma la
+// selección completa: gift_items + gift_name como resumen legible («6× Gancho
+// J + 1× Bandeja») para todos los lugares que muestran un solo texto.
+const resolveGiftItemsForQuote = async (client, rawItems) => {
+  const items = normalizeGiftItems(rawItems);
+  if (!items) return null;
+  const res = await client.query(
+    `SELECT UPPER(sku) AS sku, name, is_active
+     FROM products
+     WHERE UPPER(sku) = ANY($1::text[])`,
+    [items.map((item) => item.sku)]
+  );
+  const bySku = new Map(res.rows.map((row) => [row.sku, row]));
+  const resolved = items.map((item) => {
+    const product = bySku.get(item.sku);
+    if (!product) throw createHttpError(400, `El producto de regalo ${item.sku} no existe`);
+    if (!product.is_active) throw createHttpError(400, `El producto de regalo ${item.sku} está inactivo`);
+    return { sku: item.sku, qty: item.qty, name: String(product.name || '').trim() || item.sku };
+  });
+  const summary = resolved.map((item) => `${item.qty}× ${item.name}`).join(' + ');
+  return {
+    gift_name: summary,
+    // gift_sku queda en null: el descuento de stock usa gift_items y así no
+    // se descuenta dos veces.
+    gift_sku: null,
+    gift_qty: 1,
+    gift_items: resolved
+  };
+};
+
+// Lista efectiva de regalos a mover en stock: el paquete nuevo o, para
+// cotizaciones históricas, el regalo único de la ruleta.
+const effectiveGiftItems = (giftSelection = null) => {
+  const items = normalizeGiftItems(giftSelection?.gift_items);
+  if (items) return items;
+  const sku = String(giftSelection?.gift_sku || '').trim().toUpperCase();
+  const qty = Number.parseInt(giftSelection?.gift_qty, 10);
+  if (sku && Number.isInteger(qty) && qty > 0) return [{ sku, qty, name: null }];
+  return [];
+};
+
+const giftItemsFingerprint = (giftSelection = null) =>
+  effectiveGiftItems(giftSelection)
+    .map((item) => `${item.sku}:${item.qty}`)
+    .sort()
+    .join('|');
+
 const resolveGiftSelectionForQuote = async (client, giftSelection, giftNameLegacy) => {
   const normalizedGift = normalizeGiftSelection(giftSelection);
   if (normalizedGift) {
@@ -161,7 +229,8 @@ const resolveGiftSelectionForQuote = async (client, giftSelection, giftNameLegac
     return {
       gift_name: String(giftProduct.name || '').trim() || normalizedGift.name || null,
       gift_sku: String(giftProduct.sku || '').trim().toUpperCase(),
-      gift_qty: normalizedGift.qty
+      gift_qty: normalizedGift.qty,
+      gift_items: null
     };
   }
 
@@ -170,13 +239,15 @@ const resolveGiftSelectionForQuote = async (client, giftSelection, giftNameLegac
     return {
       gift_name: legacyGiftName,
       gift_sku: null,
-      gift_qty: 1
+      gift_qty: 1,
+      gift_items: null
     };
   }
   return {
     gift_name: null,
     gift_sku: null,
-    gift_qty: 1
+    gift_qty: 1,
+    gift_items: null
   };
 };
 
@@ -303,19 +374,19 @@ async function deductStockForQuote(client, quoteId, storeLocation, lineItems, gi
     );
   }
 
-  const giftSku = String(giftSelection?.gift_sku || '').trim().toUpperCase();
-  const giftQty = Number.parseInt(giftSelection?.gift_qty, 10);
-  if (giftSku && Number.isInteger(giftQty) && giftQty > 0) {
+  // Regalos: cada ítem del paquete (o el regalo único legacy) descuenta su
+  // propio stock, con la misma validación que las líneas de venta.
+  for (const giftItem of effectiveGiftItems(giftSelection)) {
     const stockCheck = await client.query(
       `SELECT ${warehouseField} FROM products WHERE sku = $1 FOR UPDATE`,
-      [giftSku]
+      [giftItem.sku]
     );
-    if (stockCheck.rowCount === 0) throw new Error(`Producto de regalo ${giftSku} no encontrado`);
+    if (stockCheck.rowCount === 0) throw new Error(`Producto de regalo ${giftItem.sku} no encontrado`);
     const currentStock = Number(stockCheck.rows[0][warehouseField] || 0);
-    if (currentStock < giftQty) throw new Error(`Stock insuficiente para regalo ${giftSku}`);
+    if (currentStock < giftItem.qty) throw new Error(`Stock insuficiente para regalo ${giftItem.sku}`);
     await client.query(
       `UPDATE products SET ${warehouseField} = ${warehouseField} - $1, last_updated = NOW() WHERE sku = $2`,
-      [giftQty, giftSku]
+      [giftItem.qty, giftItem.sku]
     );
   }
 }
@@ -327,10 +398,14 @@ module.exports = {
   QUOTE_SAVE_IDEMPOTENCY_TTL_MS,
   QUOTE_STATUSES,
   deductStockForQuote,
+  effectiveGiftItems,
   flattenQuoteLineItemsToSkuQtyMap,
   getQuoteSaveIdempotencyCacheKey,
+  giftItemsFingerprint,
   lineItemsFingerprint,
+  normalizeGiftItems,
   normalizeGiftSelection,
+  resolveGiftItemsForQuote,
   normalizeQuotePaymentMethod,
   parseAndNormalizeQuoteRows,
   pruneQuoteSaveIdempotencyCache,

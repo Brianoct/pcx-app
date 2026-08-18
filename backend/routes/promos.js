@@ -38,25 +38,39 @@ const sanitizeConfig = (tool, rawConfig = {}) => {
     if (Number.isInteger(validity) && validity >= 1 && validity <= 365) config.validity_days = validity;
   }
   if (tool === 'regalo') {
-    const rawSkus = Array.isArray(rawConfig.gift_skus) ? rawConfig.gift_skus : [];
-    const skus = [...new Set(rawSkus.map((sku) => String(sku || '').trim().toUpperCase()).filter(Boolean))].slice(0, 20);
-    if (skus.length > 0) config.gift_skus = skus;
+    // Paquete de regalo: lista de {sku, qty}. Acepta el formato viejo
+    // gift_skus (solo skus) como qty 1.
+    const rawItems = Array.isArray(rawConfig.gift_items)
+      ? rawConfig.gift_items
+      : (Array.isArray(rawConfig.gift_skus) ? rawConfig.gift_skus.map((sku) => ({ sku, qty: 1 })) : []);
+    const merged = new Map();
+    for (const item of rawItems) {
+      const sku = String(item?.sku || '').trim().toUpperCase();
+      const qty = Number.parseInt(item?.qty, 10);
+      if (!sku || !Number.isInteger(qty) || qty < 1 || qty > 100) continue;
+      merged.set(sku, { sku, qty: (merged.get(sku)?.qty || 0) + qty });
+    }
+    const items = [...merged.values()].slice(0, 10);
+    if (items.length > 0) config.gift_items = items;
   }
   return config;
 };
 
 // Regalo: los SKUs elegidos deben ser productos reales y activos del catálogo.
 // Devuelve un mensaje de error o null si todo está bien.
+// Además de validar, adjunta el nombre de cada producto al config: así la
+// promo estampa y la proforma imprime el paquete sin más consultas.
 const validateRegaloConfig = async (config = {}) => {
-  const skus = Array.isArray(config.gift_skus) ? config.gift_skus : [];
-  if (skus.length === 0) return 'Elige al menos un producto de regalo';
+  const items = Array.isArray(config.gift_items) ? config.gift_items : [];
+  if (items.length === 0) return 'Elige al menos un producto de regalo';
   const res = await pool.query(
-    `SELECT UPPER(sku) AS sku FROM products WHERE UPPER(sku) = ANY($1::text[]) AND is_active = TRUE`,
-    [skus]
+    `SELECT UPPER(sku) AS sku, name FROM products WHERE UPPER(sku) = ANY($1::text[]) AND is_active = TRUE`,
+    [items.map((item) => item.sku)]
   );
-  const found = new Set(res.rows.map((row) => row.sku));
-  const missing = skus.filter((sku) => !found.has(sku));
+  const bySku = new Map(res.rows.map((row) => [row.sku, row.name]));
+  const missing = items.filter((item) => !bySku.has(item.sku)).map((item) => item.sku);
   if (missing.length > 0) return `Productos de regalo no válidos o inactivos: ${missing.join(', ')}`;
+  config.gift_items = items.map((item) => ({ ...item, name: bySku.get(item.sku) || item.sku }));
   return null;
 };
 
@@ -75,22 +89,33 @@ router.get('/api/promos/active', authenticateToken, async (_req, res) => {
     // Regalo: Cotizar necesita nombre y sku de cada producto elegible para el
     // dropdown. Solo productos aún activos — si Marketing eligió algo que
     // luego se desactivó, desaparece de la lista sin romper la promo.
-    const giftSkus = [...new Set(
-      rows
-        .filter((row) => row.tool === 'regalo')
-        .flatMap((row) => (Array.isArray(row.config?.gift_skus) ? row.config.gift_skus : []))
-    )];
+    const regaloRows = rows.filter((row) => row.tool === 'regalo');
+    const giftSkus = [...new Set(regaloRows.flatMap((row) => {
+      const config = row.config || {};
+      const items = Array.isArray(config.gift_items)
+        ? config.gift_items
+        : (Array.isArray(config.gift_skus) ? config.gift_skus.map((sku) => ({ sku, qty: 1 })) : []);
+      return items.map((item) => String(item?.sku || '').trim().toUpperCase()).filter(Boolean);
+    }))];
     if (giftSkus.length > 0) {
       const prodRes = await pool.query(
         `SELECT UPPER(sku) AS sku, name FROM products WHERE UPPER(sku) = ANY($1::text[]) AND is_active = TRUE`,
         [giftSkus]
       );
       const nameBySku = new Map(prodRes.rows.map((row) => [row.sku, row.name]));
-      for (const row of rows) {
-        if (row.tool !== 'regalo') continue;
-        row.gift_products = (Array.isArray(row.config?.gift_skus) ? row.config.gift_skus : [])
-          .filter((sku) => nameBySku.has(sku))
-          .map((sku) => ({ sku, name: nameBySku.get(sku) }));
+      for (const row of regaloRows) {
+        const config = row.config || {};
+        const items = Array.isArray(config.gift_items)
+          ? config.gift_items
+          : (Array.isArray(config.gift_skus) ? config.gift_skus.map((sku) => ({ sku, qty: 1 })) : []);
+        row.gift_products = items
+          .map((item) => ({
+            sku: String(item?.sku || '').trim().toUpperCase(),
+            qty: Math.max(1, Number.parseInt(item?.qty, 10) || 1),
+            name: null
+          }))
+          .filter((item) => item.sku && nameBySku.has(item.sku))
+          .map((item) => ({ ...item, name: nameBySku.get(item.sku) }));
       }
     }
     res.json({ promos: rows });

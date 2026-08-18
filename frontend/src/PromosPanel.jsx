@@ -108,8 +108,10 @@ const configSummary = (tool) => {
     parts.push(`válido ${Number(config.validity_days || 30)} días desde el pago`);
   }
   if (tool.tool === 'regalo') {
-    const skus = Array.isArray(config.gift_skus) ? config.gift_skus : [];
-    parts.push(`${skus.length} producto${skus.length === 1 ? '' : 's'} de regalo: ${skus.join(', ')}`);
+    const items = Array.isArray(config.gift_items)
+      ? config.gift_items
+      : (Array.isArray(config.gift_skus) ? config.gift_skus.map((sku) => ({ sku, qty: 1 })) : []);
+    parts.push(`regalo: ${items.map((item) => `${item.qty}× ${item.name || item.sku}`).join(' + ')}`);
   }
   return parts.join(' · ');
 };
@@ -136,8 +138,9 @@ const EMPTY_FORM = {
   max_tickets: '5',
   discount_percent: '10',
   validity_days: '30',
-  gift_skus: [],
-  gift_pick: ''
+  gift_items: [],
+  gift_pick: '',
+  gift_pick_qty: '1'
 };
 
 export default function PromosPanel({ token, role }) {
@@ -180,16 +183,19 @@ export default function PromosPanel({ token, role }) {
       .catch(() => {});
   }, [token]);
 
-  const addGiftSku = () => {
+  const addGiftItem = () => {
     setForm((prev) => {
       const sku = String(prev.gift_pick || '').trim().toUpperCase();
-      if (!sku || prev.gift_skus.includes(sku)) return { ...prev, gift_pick: '' };
-      return { ...prev, gift_skus: [...prev.gift_skus, sku], gift_pick: '' };
+      const qty = Math.max(1, Math.min(100, Number.parseInt(prev.gift_pick_qty, 10) || 1));
+      if (!sku || prev.gift_items.some((item) => item.sku === sku)) {
+        return { ...prev, gift_pick: '', gift_pick_qty: '1' };
+      }
+      return { ...prev, gift_items: [...prev.gift_items, { sku, qty }], gift_pick: '', gift_pick_qty: '1' };
     });
   };
 
-  const removeGiftSku = (sku) => {
-    setForm((prev) => ({ ...prev, gift_skus: prev.gift_skus.filter((item) => item !== sku) }));
+  const removeGiftItem = (sku) => {
+    setForm((prev) => ({ ...prev, gift_items: prev.gift_items.filter((item) => item.sku !== sku) }));
   };
 
   const productName = (sku) => products.find((p) => p.sku === sku)?.name || sku;
@@ -213,12 +219,12 @@ export default function PromosPanel({ token, role }) {
         config.validity_days = Number(form.validity_days || 30);
       }
       if (form.tool === 'regalo') {
-        if (form.gift_skus.length === 0) {
+        if (form.gift_items.length === 0) {
           setError('Elige al menos un producto de regalo');
           setSaving(false);
           return;
         }
-        config.gift_skus = form.gift_skus;
+        config.gift_items = form.gift_items;
       }
       await apiRequest('/api/promos', {
         method: 'POST',
@@ -415,27 +421,36 @@ export default function PromosPanel({ token, role }) {
             {form.tool === 'regalo' && (
               <div className="promo-gift-picker">
                 <label>
-                  Productos de regalo (el vendedor elige UNO por venta)
+                  Paquete de regalo (cada venta que califica se lleva TODO el paquete)
                   <div className="promo-gift-add">
                     <select value={form.gift_pick} onChange={setField('gift_pick')}>
                       <option value="">— Elegir producto —</option>
                       {products
-                        .filter((product) => !form.gift_skus.includes(product.sku))
+                        .filter((product) => !form.gift_items.some((item) => item.sku === product.sku))
                         .map((product) => (
                           <option key={product.sku} value={product.sku}>{product.name} ({product.sku})</option>
                         ))}
                     </select>
-                    <button type="button" className="btn btn-secondary" onClick={addGiftSku} disabled={!form.gift_pick}>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      className="promo-gift-qty"
+                      title="Cantidad de este producto en el paquete"
+                      value={form.gift_pick_qty}
+                      onChange={setField('gift_pick_qty')}
+                    />
+                    <button type="button" className="btn btn-secondary" onClick={addGiftItem} disabled={!form.gift_pick}>
                       + Agregar
                     </button>
                   </div>
                 </label>
-                {form.gift_skus.length > 0 && (
+                {form.gift_items.length > 0 && (
                   <div className="promo-gift-chips">
-                    {form.gift_skus.map((sku) => (
-                      <span key={sku} className="promo-gift-chip">
-                        🎁 {productName(sku)}
-                        <button type="button" aria-label={`Quitar ${sku}`} onClick={() => removeGiftSku(sku)}>✕</button>
+                    {form.gift_items.map((item) => (
+                      <span key={item.sku} className="promo-gift-chip">
+                        🎁 {item.qty}× {productName(item.sku)}
+                        <button type="button" aria-label={`Quitar ${item.sku}`} onClick={() => removeGiftItem(item.sku)}>✕</button>
                       </span>
                     ))}
                   </div>

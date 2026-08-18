@@ -338,6 +338,25 @@ export function generateModernQuotePdf({
         promoY + 10.8
       );
       promoY += 17;
+    } else if (promo.tool === 'regalo') {
+      const items = Array.isArray(promo.gift_items) ? promo.gift_items : [];
+      const itemsLabel = items.map((item) => `${item.qty}x ${item.name || item.sku}`).join(' + ');
+      doc.setFillColor(254, 243, 231);
+      doc.setDrawColor(180, 83, 9);
+      doc.roundedRect(left, promoY, promoW, 14, 2, 2, 'FD');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(180, 83, 9);
+      doc.text('REGALO INCLUIDO', left + 4, promoY + 5.8);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(124, 74, 18);
+      doc.text(
+        `${itemsLabel || promo.name}${itemsLabel ? ` · ${promo.name}` : ''}`,
+        left + 4,
+        promoY + 10.8
+      );
+      promoY += 17;
     } else if (promo.tool === 'sorteo') {
       doc.setFillColor(255, 251, 235);
       doc.setDrawColor(180, 83, 9);
