@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from './apiClient';
 import { useToast } from './ui/toastContext';
+import VentasComisiones from './VentasComisiones';
 
 const formatBs = (value) => `${Math.round(Number(value || 0)).toLocaleString('es-BO')} Bs`;
 
@@ -270,6 +271,8 @@ export default function VentasDashboard({ token, user }) {
       </div>
 
       <div className="home-grid">
+        <VentasComisiones token={token} />
+
         <section className="home-card vdp-card">
           <div className="home-card-head">
             <div>

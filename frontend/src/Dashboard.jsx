@@ -113,6 +113,7 @@ function GeneralDashboard({ token, user, role, access }) {
     const delta = overview.quotes_today.count - (overview.quotes_today.yesterday_count || 0);
     tiles.push({
       key: 'quotes',
+      icon: '🧾',
       label: overview.quotes_today.scope === 'team' ? 'Cotizaciones · equipo' : 'Mis cotizaciones',
       value: overview.quotes_today.count,
       detail: overview.quotes_today.sold_count > 0
@@ -127,6 +128,7 @@ function GeneralDashboard({ token, user, role, access }) {
   if (overview?.pipeline) {
     tiles.push({
       key: 'prepare',
+      icon: '📦',
       label: 'Por preparar',
       value: overview.pipeline.pagado,
       detail: `${overview.pipeline.embalado} embalados · ${overview.pipeline.enviado_hoy} enviados hoy`,
@@ -138,6 +140,7 @@ function GeneralDashboard({ token, user, role, access }) {
     const sinStock = Number(overview.stock_sin_stock || 0);
     tiles.push({
       key: 'stock',
+      icon: '📉',
       label: 'Bajo mínimo',
       value: overview.stock_alerts,
       detail: sinStock > 0 ? `${sinStock} sin stock` : 'ninguno agotado',
@@ -148,6 +151,7 @@ function GeneralDashboard({ token, user, role, access }) {
   if (overview?.crm_due !== null && overview?.crm_due !== undefined) {
     tiles.push({
       key: 'crm',
+      icon: '📞',
       label: 'Seguimientos',
       value: overview.crm_due,
       detail: 'vencen hoy o antes',
@@ -158,6 +162,7 @@ function GeneralDashboard({ token, user, role, access }) {
   if (overview?.production) {
     tiles.push({
       key: 'prod',
+      icon: '🏭',
       label: 'En producción',
       value: overview.production.active_cards,
       detail: `${overview.production.por_recibir} por recibir`,
@@ -270,6 +275,7 @@ function GeneralDashboard({ token, user, role, access }) {
             <div className="home-tiles">
               {tiles.map((tile) => (
                 <button key={tile.key} type="button" className={`home-tile ${tile.warn ? 'is-warn' : ''}`} onClick={() => navigate(tile.to)}>
+                  {tile.icon && <span className="vd-tile-icon" aria-hidden="true">{tile.icon}</span>}
                   <span className="home-tile-value">{tile.value}</span>
                   <span className="home-tile-label">{tile.label}</span>
                   <span className="home-tile-detail">{tile.detail}</span>

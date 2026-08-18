@@ -5,7 +5,7 @@ const { loadCommissionSettings } = require('../lib/commission');
 const { computeTeamCommissions } = require('../lib/commissionTeam');
 const { resolveInventoryScopeByCity } = require('../lib/inventory');
 const { ROLE_KEYS, normalizeRole, sanitizePanelAccess } = require('../lib/rbac');
-const { COMPLETED_STATUSES, buildDateFilter } = require('../lib/reporting');
+const { COMPLETED_STATUSES, buildDateFilter, buildReportingCreatedAtExpr } = require('../lib/reporting');
 const { loadUserContext } = require('../lib/users');
 
 const router = express.Router();
@@ -425,6 +425,225 @@ router.get('/api/commission/current/orders', authenticateToken, async (req, res)
   } catch (err) {
     console.error('Commission orders endpoint error:', err.stack);
     res.status(500).json({ error: 'Error interno al obtener pedidos de comisión: ' + err.message });
+  }
+});
+
+// ─── Resumen de comisiones del área de Ventas (Inicio) ──────────────────────
+// Un solo viaje para el panel «Rendimiento de ventas» del Inicio comercial:
+// KPIs del mes elegido, ranking del equipo (solo líderes/global) y los últimos
+// 6 meses para comparar. Mismas reglas de comisión que /api/commission/current
+// y Pagos: mejor en ventas → ventas_top_percent, asesor → ventas_regular_percent,
+// líder → ventas_lider_percent × (equipo + propias).
+const MONTHS_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const HISTORY_MONTHS = 6;
+
+router.get('/api/ventas/comisiones', authenticateToken, async (req, res) => {
+  try {
+    const userContext = await loadUserContext(req.user.id);
+    if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
+    const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+    const isAdmin = normalizeRole(userContext.role || '') === ROLE_KEYS.admin;
+    const canOwn = Boolean(access.cotizar || access.historial_individual || access.rendimiento_individual);
+    const canTeam = Boolean(isAdmin || access.historial_global || access.rendimiento_global);
+    if (!canOwn && !canTeam) {
+      return res.status(403).json({ error: 'No tienes acceso al resumen de comisiones' });
+    }
+
+    const now = new Date();
+    const monthNum = Number.parseInt(req.query.month ?? (now.getMonth() + 1), 10);
+    const yearNum = Number.parseInt(req.query.year ?? now.getFullYear(), 10);
+    if (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12) {
+      return res.status(400).json({ error: 'Mes inválido. Debe estar entre 1 y 12' });
+    }
+    if (!Number.isInteger(yearNum) || yearNum < 2000 || yearNum > 3000) {
+      return res.status(400).json({ error: 'Año inválido' });
+    }
+
+    // Ventana: los 6 meses que terminan en el mes elegido (hora Bolivia).
+    const windowStart = new Date(Date.UTC(yearNum, monthNum - 1 - (HISTORY_MONTHS - 1), 1));
+    const windowEnd = new Date(Date.UTC(yearNum, monthNum, 1)); // exclusivo
+    const toDateStr = (d) => d.toISOString().slice(0, 10);
+    const monthKey = (y, m) => `${y}-${String(m).padStart(2, '0')}`;
+
+    const createdExpr = buildReportingCreatedAtExpr('q');
+    const result = await pool.query(
+      `SELECT u.id AS user_id, u.email, u.display_name, u.role,
+              to_char(date_trunc('month', ${createdExpr}), 'YYYY-MM') AS month_start,
+              COUNT(q.id) AS closed_count,
+              COALESCE(SUM(q.total), 0) AS total_sales
+       FROM users u
+       LEFT JOIN quotes q ON q.user_id = u.id
+         AND q.status = ANY($1::text[])
+         AND date_trunc('month', ${createdExpr}) >= $2::date
+         AND date_trunc('month', ${createdExpr}) < $3::date
+       WHERE u.is_active = TRUE
+         AND (u.role ILIKE '%ventas%' OR u.role ILIKE '%sales%' OR u.role ILIKE '%vendedor%')
+       GROUP BY u.id, u.email, u.display_name, u.role, month_start`,
+      [COMPLETED_STATUSES, toDateStr(windowStart), toDateStr(windowEnd)]
+    );
+
+    const settings = await loadCommissionSettings();
+    const topPercent = Number(settings.ventas_top_percent || 0);
+    const regularPercent = Number(settings.ventas_regular_percent || 0);
+    const liderPercent = Number(settings.ventas_lider_percent || 0);
+
+    const isSeller = (role) => {
+      const r = normalizeRole(role || '');
+      return r === ROLE_KEYS.ventas || r === 'sales' || r === 'vendedor';
+    };
+    const isLider = (role) => normalizeRole(role || '') === ROLE_KEYS.ventasLider;
+
+    // users y ventas por (usuario, mes)
+    const usersById = new Map();
+    const salesByUserMonth = new Map(); // `${userId}|${yyyy-mm}` -> {sales, closed}
+    for (const row of result.rows) {
+      const id = Number(row.user_id);
+      if (!usersById.has(id)) {
+        usersById.set(id, {
+          user_id: id,
+          email: String(row.email || '').trim(),
+          name: String(row.display_name || '').trim() || String(row.email || '').trim(),
+          role: String(row.role || '').trim()
+        });
+      }
+      if (row.month_start) {
+        const key = `${id}|${row.month_start}`;
+        salesByUserMonth.set(key, {
+          sales: Number(row.total_sales || 0),
+          closed: Number(row.closed_count || 0)
+        });
+      }
+    }
+    const users = [...usersById.values()];
+
+    // Comisiones de UN mes con las reglas por rol (mismo criterio que Pagos).
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const computeMonth = (key) => {
+      const get = (id) => salesByUserMonth.get(`${id}|${key}`) || { sales: 0, closed: 0 };
+      const sellers = users.filter((u) => isSeller(u.role))
+        .map((u) => ({ id: u.user_id, sales: get(u.user_id).sales }))
+        .sort((a, b) => (b.sales - a.sales) || (a.id - b.id));
+      const topSellerId = sellers.length > 0 && sellers[0].sales > 0 ? sellers[0].id : null;
+      const sellersTotal = sellers.reduce((sum, s) => sum + s.sales, 0);
+      const perUser = new Map();
+      let teamSales = 0;
+      let teamClosed = 0;
+      let teamCommission = 0;
+      for (const u of users) {
+        const { sales, closed } = get(u.user_id);
+        let commission = 0;
+        let rule = 'Sin comisión configurada';
+        if (isSeller(u.role)) {
+          const isTop = topSellerId === u.user_id;
+          commission = sales * (isTop ? topPercent : regularPercent) / 100;
+          rule = isTop ? `Mejor en ventas (${topPercent}%)` : `Asesor de ventas (${regularPercent}%)`;
+        } else if (isLider(u.role)) {
+          commission = (sellersTotal + sales) * liderPercent / 100;
+          rule = `Líder de ventas (${liderPercent}% equipo + propias)`;
+        }
+        perUser.set(u.user_id, {
+          sales: round2(sales),
+          closed,
+          commission: round2(commission),
+          rule,
+          is_top: topSellerId === u.user_id,
+          is_lider: isLider(u.role)
+        });
+        teamSales += sales;
+        teamClosed += closed;
+        teamCommission += commission;
+      }
+      return {
+        perUser,
+        topSellerId,
+        team: { sales: round2(teamSales), closed: teamClosed, commission: round2(teamCommission) }
+      };
+    };
+
+    // Meses de la ventana en orden cronológico.
+    const monthKeys = [];
+    for (let i = HISTORY_MONTHS - 1; i >= 0; i -= 1) {
+      const d = new Date(Date.UTC(yearNum, monthNum - 1 - i, 1));
+      monthKeys.push({
+        key: monthKey(d.getUTCFullYear(), d.getUTCMonth() + 1),
+        year: d.getUTCFullYear(),
+        month: d.getUTCMonth() + 1,
+        label: `${MONTHS_ES[d.getUTCMonth()]}${d.getUTCFullYear() !== yearNum ? ` ${String(d.getUTCFullYear()).slice(2)}` : ''}`
+      });
+    }
+    const byMonth = new Map(monthKeys.map((m) => [m.key, computeMonth(m.key)]));
+    const currentKey = monthKey(yearNum, monthNum);
+    const current = byMonth.get(currentKey);
+
+    const myId = Number(req.user.id);
+    const meMonth = current.perUser.get(myId) || null;
+
+    // Historia para comparar: totales del equipo (líder) o propios (vendedor).
+    const history = monthKeys.map((m) => {
+      const data = byMonth.get(m.key);
+      const mine = data.perUser.get(myId) || { sales: 0, closed: 0, commission: 0 };
+      return {
+        year: m.year,
+        month: m.month,
+        label: m.label,
+        team_sales: data.team.sales,
+        team_commission: data.team.commission,
+        team_closed: data.team.closed,
+        my_sales: mine.sales,
+        my_commission: mine.commission,
+        my_closed: mine.closed
+      };
+    });
+
+    const topUser = current.topSellerId ? usersById.get(current.topSellerId) : null;
+    const response = {
+      scope: canTeam ? 'team' : 'own',
+      month: monthNum,
+      year: yearNum,
+      settings: { top_percent: topPercent, regular_percent: regularPercent, lider_percent: liderPercent },
+      me: meMonth ? { ...meMonth, name: usersById.get(myId)?.name || '' } : null,
+      history,
+      team: null,
+      rows: null
+    };
+
+    if (canTeam) {
+      response.team = {
+        sales: current.team.sales,
+        closed: current.team.closed,
+        commission: current.team.commission,
+        active_sellers: users.filter((u) => isSeller(u.role) || isLider(u.role)).length,
+        top_seller: topUser
+          ? { name: topUser.name, sales: current.perUser.get(topUser.user_id)?.sales || 0 }
+          : null
+      };
+      // Posición por VENTAS del mes (no por comisión pagada).
+      response.rows = users
+        .map((u) => {
+          const data = current.perUser.get(u.user_id);
+          return {
+            user_id: u.user_id,
+            name: u.name,
+            role_label: data.is_lider ? 'Líder de ventas' : (data.is_top ? 'Mejor en ventas' : 'Asesor de ventas'),
+            closed: data.closed,
+            sales: data.sales,
+            commission: data.commission,
+            rule: data.rule,
+            is_top: data.is_top,
+            is_lider: data.is_lider,
+            monthly: monthKeys.map((m) => ({
+              label: m.label,
+              sales: byMonth.get(m.key).perUser.get(u.user_id)?.sales || 0
+            }))
+          };
+        })
+        .sort((a, b) => (b.sales - a.sales) || (a.user_id - b.user_id));
+    }
+
+    res.json(response);
+  } catch (err) {
+    console.error('Ventas comisiones endpoint error:', err.stack);
+    res.status(500).json({ error: 'Error interno al obtener el resumen de comisiones' });
   }
 });
 
