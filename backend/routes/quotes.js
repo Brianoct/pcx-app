@@ -101,11 +101,20 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
     gift_sku,
     gift_qty,
     gift_items,
+    selected_promo_id,
     rows,
     subtotal,
     total,
     status = 'Cotizado'
   } = req.body || {};
+  // Elección de promo del vendedor: null = sin promo; ausente = legacy (todas).
+  const hasSelectedPromoField = Object.prototype.hasOwnProperty.call(req.body || {}, 'selected_promo_id');
+  const selectedPromoIdValue = !hasSelectedPromoField
+    ? undefined
+    : (selected_promo_id === null || selected_promo_id === '' ? null : Number.parseInt(selected_promo_id, 10));
+  if (selectedPromoIdValue !== undefined && selectedPromoIdValue !== null && !Number.isInteger(selectedPromoIdValue)) {
+    return res.status(400).json({ error: 'Promoción seleccionada inválida' });
+  }
 
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
@@ -298,7 +307,8 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       status: normalizedStatus,
       customerPhone: customer_phone,
       customerName: customer_name,
-      hasGift: effectiveGiftItems(giftSelection).length > 0
+      hasGift: effectiveGiftItems(giftSelection).length > 0,
+      selectedPromoId: selectedPromoIdValue
     });
     if (promoSnapshot.length > 0) {
       await client.query('UPDATE quotes SET promos = $1 WHERE id = $2', [JSON.stringify(promoSnapshot), quoteId]);
