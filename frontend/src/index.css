@@ -11259,7 +11259,9 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   padding: 0 2px;
 }
 
-/* Checkbox «Incluir regalo» dentro del chip de promo. */
+/* Selector de promo dentro del chip: marcar una desmarca la anterior
+   (el cliente se lleva UNA promo). Mismo pill que el viejo «Incluir regalo». */
+.quote-promo-apply,
 .quote-gift-include {
   display: inline-flex;
   align-items: center;
@@ -11274,7 +11276,20 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   font-size: 0.82rem;
   cursor: pointer;
 }
+.quote-promo-apply input,
 .quote-gift-include input { accent-color: #b45309; }
+
+.quote-promo-picker-hint {
+  flex-basis: 100%;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.quote-promo-chip.is-selected {
+  border-color: #b45309;
+  box-shadow: 0 0 0 2px rgba(180, 83, 9, 0.18);
+}
 
 .promo-gift-qty {
   width: 74px;

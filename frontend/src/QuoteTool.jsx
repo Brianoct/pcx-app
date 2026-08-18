@@ -54,10 +54,11 @@ export default function QuoteTool({ token, user }) {
   const [fallbackCiudad, setFallbackCiudad] = useState('');
   const [crmOpen, setCrmOpen] = useState(false);
   const [crmFollowUpsDue, setCrmFollowUpsDue] = useState(0);
-  // Regalo de promo activa: la venta que califica incluye el PAQUETE completo
-  // por defecto; el vendedor puede quitarlo con el checkbox del chip. Viaja en
-  // gift_items al guardar (descuenta stock y aparece en el checklist).
-  const [excludedGiftPromos, setExcludedGiftPromos] = useState({});
+  // Las promos NO se acumulan: el vendedor elige CUÁL se lleva el cliente.
+  // Con una sola promo activa se preselecciona; con varias, el vendedor marca
+  // una (o ninguna). La elección viaja en selected_promo_id y el servidor solo
+  // estampa esa. Si la elegida es un regalo, su paquete viaja en gift_items.
+  const [selectedPromoId, setSelectedPromoId] = useState(null);
 
   // Toolchest de marketing: promos activas hoy (envío gratis, sorteo...).
   // El servidor decide qué aplica al guardar; esto es el aviso para el vendedor.
@@ -118,7 +119,14 @@ export default function QuoteTool({ token, user }) {
   useEffect(() => {
     let active = true;
     apiRequest('/api/promos/active', { token })
-      .then((data) => { if (active) setActivePromos(Array.isArray(data?.promos) ? data.promos : []); })
+      .then((data) => {
+        if (!active) return;
+        const promos = Array.isArray(data?.promos) ? data.promos : [];
+        setActivePromos(promos);
+        // Una sola promo vigente: se aplica sola (mismo comportamiento de
+        // siempre). Con varias, el vendedor elige cuál en los chips.
+        setSelectedPromoId(promos.length === 1 ? promos[0].id : null);
+      })
       .catch(() => {});
     return () => { active = false; };
   }, [token]);
@@ -636,7 +644,7 @@ export default function QuoteTool({ token, user }) {
     setDiscountMode('percent');
     setDiscountInput(0);
     setSelectedCouponCode('');
-    setExcludedGiftPromos({});
+    setSelectedPromoId(activePromos.length === 1 ? activePromos[0].id : null);
     setUseAlternativeName(false);
     setAlternativeName('');
     setAlternativePhone('');
@@ -735,16 +743,17 @@ export default function QuoteTool({ token, user }) {
     }
 
     const discountPercentForStorage = Math.round(effectiveDiscountPercent);
-    // Paquetes de regalo de las promos que esta compra ganó (y el vendedor no
-    // quitó). Se rechequea el mínimo aquí por si el total bajó después.
-    const giftItemsForSave = activePromos
-      .filter((promo) => promo.tool === 'regalo' && !excludedGiftPromos[promo.id])
-      .filter((promo) => {
-        const giftMin = Number(promo.config?.min_total || 0);
-        return total > 0 && total >= giftMin
-          && Array.isArray(promo.gift_products) && promo.gift_products.length > 0;
-      })
-      .flatMap((promo) => promo.gift_products.map((gift) => ({ sku: gift.sku, qty: gift.qty, name: gift.name })));
+    // El paquete de regalo solo viaja si la promo ELEGIDA es un regalo y la
+    // compra alcanza su mínimo (se rechequea aquí por si el total bajó después).
+    const selectedPromo = activePromos.find((promo) => promo.id === selectedPromoId) || null;
+    const giftItemsForSave = (
+      selectedPromo
+      && selectedPromo.tool === 'regalo'
+      && total > 0 && total >= Number(selectedPromo.config?.min_total || 0)
+      && Array.isArray(selectedPromo.gift_products) && selectedPromo.gift_products.length > 0
+    )
+      ? selectedPromo.gift_products.map((gift) => ({ sku: gift.sku, qty: gift.qty, name: gift.name }))
+      : [];
     const payload = {
       customer_name: customerName,
       customer_phone: customerPhone,
@@ -762,6 +771,7 @@ export default function QuoteTool({ token, user }) {
       coupon_code: selectedCouponCode || null,
       seller_user_id: requiresSellerAssignment ? Number(assignedSellerId) : null,
       gift_items: giftItemsForSave.length > 0 ? giftItemsForSave : null,
+      selected_promo_id: selectedPromo ? selectedPromo.id : null,
       rows: rowsWithDisplay,
       subtotal,
       total
@@ -1234,55 +1244,67 @@ export default function QuoteTool({ token, user }) {
           <h3 className="quote-section-title">2. Productos</h3>
           {activePromos.length > 0 && (
             <div className="quote-promo-chips">
+              {activePromos.length > 1 && (
+                <div className="quote-promo-picker-hint">
+                  Hay {activePromos.length} promos vigentes — marca la que se lleva esta venta (solo una).
+                </div>
+              )}
               {activePromos.map((promo) => {
                 const config = promo.config || {};
                 const minTotal = Number(config.min_total || 0);
                 const reachesMin = minTotal <= 0 || total >= minTotal;
+                const isSelected = selectedPromoId === promo.id;
+                // Marcar una promo desmarca la anterior: el cliente se lleva UNA.
+                const applyControl = (label) => (
+                  <label
+                    className="quote-promo-apply"
+                    title="Solo la promo marcada se imprime en la proforma y aplica a esta venta"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => setSelectedPromoId(e.target.checked ? promo.id : null)}
+                    />
+                    {label}
+                  </label>
+                );
                 if (promo.tool === 'envio_gratis') {
                   return (
-                    <div key={promo.id} className={`quote-promo-chip ${reachesMin ? 'is-earned' : ''}`}>
+                    <div key={promo.id} className={`quote-promo-chip ${isSelected ? 'is-selected' : ''} ${isSelected && reachesMin ? 'is-earned' : ''}`}>
                       🚚 <strong>{promo.name}</strong>
                       {minTotal > 0 && ` · desde ${minTotal} Bs`}
                       {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
                       {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
-                      {reachesMin && total > 0 && ' ✓'}
+                      {applyControl('Aplicar')}
+                      {isSelected && reachesMin && total > 0 && ' ✓'}
                     </div>
                   );
                 }
                 if (promo.tool === 'cupon') {
                   return (
-                    <div key={promo.id} className={`quote-promo-chip is-cupon ${reachesMin && total > 0 ? 'is-earned' : ''}`}>
+                    <div key={promo.id} className={`quote-promo-chip is-cupon ${isSelected ? 'is-selected' : ''} ${isSelected && reachesMin && total > 0 ? 'is-earned' : ''}`}>
                       🎫 <strong>{promo.name}</strong>
                       {` · esta compra gana un cupón del ${Number(config.discount_percent || 0)}% para la próxima`}
                       {minTotal > 0 && ` (desde ${minTotal} Bs)`}
                       {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
-                      {reachesMin && total > 0 && ' ✓'}
+                      {applyControl('Aplicar')}
+                      {isSelected && reachesMin && total > 0 && ' ✓'}
                     </div>
                   );
                 }
                 if (promo.tool === 'regalo') {
                   const gifts = Array.isArray(promo.gift_products) ? promo.gift_products : [];
                   const earned = reachesMin && total > 0;
-                  const included = !excludedGiftPromos[promo.id];
                   const bundleLabel = gifts.map((gift) => `${gift.qty}× ${gift.name}`).join(' + ');
                   return (
-                    <div key={promo.id} className={`quote-promo-chip is-regalo ${earned && included ? 'is-earned' : ''}`}>
+                    <div key={promo.id} className={`quote-promo-chip is-regalo ${isSelected ? 'is-selected' : ''} ${isSelected && earned ? 'is-earned' : ''}`}>
                       🎁 <strong>{promo.name}</strong>
                       {bundleLabel && ` · incluye ${bundleLabel}`}
                       {minTotal > 0 && ` · desde ${minTotal} Bs`}
                       {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
                       {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
-                      {gifts.length > 0 && earned && (
-                        <label className="quote-gift-include" title="El paquete de regalo se agrega a esta venta y descuenta stock al finalizarla">
-                          <input
-                            type="checkbox"
-                            checked={included}
-                            onChange={(e) => setExcludedGiftPromos((prev) => ({ ...prev, [promo.id]: !e.target.checked }))}
-                          />
-                          Incluir regalo
-                        </label>
-                      )}
-                      {earned && included && gifts.length > 0 && ' ✓'}
+                      {gifts.length > 0 && applyControl('Incluir regalo')}
+                      {isSelected && earned && gifts.length > 0 && ' ✓'}
                     </div>
                   );
                 }
@@ -1293,13 +1315,14 @@ export default function QuoteTool({ token, user }) {
                     ? 0
                     : (perTicket > 0 ? Math.max(1, Math.min(cap, Math.floor(total / perTicket))) : 1);
                   return (
-                    <div key={promo.id} className={`quote-promo-chip is-sorteo ${earned > 0 ? 'is-earned' : ''}`}>
+                    <div key={promo.id} className={`quote-promo-chip is-sorteo ${isSelected ? 'is-selected' : ''} ${isSelected && earned > 0 ? 'is-earned' : ''}`}>
                       🎟️ <strong>{promo.name}</strong>
                       {minTotal > 0 && ` · participa desde ${minTotal} Bs`}
                       {perTicket > 0 && ` · 1 ticket por cada ${perTicket} Bs`}
-                      {earned > 0
+                      {earned > 0 && isSelected
                         ? ` — este pedido gana ${earned} ticket${earned > 1 ? 's' : ''} 🎉`
-                        : (minTotal > 0 && total > 0 ? ` — faltan ${(minTotal - total).toFixed(0)} Bs` : '')}
+                        : (minTotal > 0 && total > 0 && !reachesMin ? ` — faltan ${(minTotal - total).toFixed(0)} Bs` : '')}
+                      {applyControl('Aplicar')}
                     </div>
                   );
                 }

@@ -179,8 +179,24 @@ const validateCouponForRedemption = async (client, code, customerPhone) => {
 
 // Al guardar una cotización: construye el snapshot para la proforma y registra
 // el código de sorteo si corresponde. Corre dentro de la transacción del guardado.
-const applyPromosToNewQuote = async (client, { quoteId, total, status, customerPhone, customerName, hasGift = false }) => {
-  const tools = await getActivePromoTools(client);
+// Las promos NO se acumulan: el vendedor elige cuál se lleva el cliente y esa
+// elección viaja en selectedPromoId (null = ninguna). Si el campo viene
+// undefined (clientes/scripts viejos que no eligen), se mantiene el
+// comportamiento histórico de aplicar todas las que califican.
+const applyPromosToNewQuote = async (client, { quoteId, total, status, customerPhone, customerName, hasGift = false, selectedPromoId }) => {
+  if (selectedPromoId === null) return [];
+  let tools = await getActivePromoTools(client);
+  if (selectedPromoId !== undefined) {
+    const selectedId = Number.parseInt(selectedPromoId, 10);
+    tools = tools.filter((tool) => Number(tool.id) === selectedId);
+    if (tools.length === 0) {
+      // La promo elegida expiró o se desactivó entre cargar la página y
+      // guardar: mejor frenar que imprimir una promesa que ya no existe.
+      const err = new Error('La promoción seleccionada ya no está activa. Recarga la página y vuelve a intentar.');
+      err.statusCode = 400;
+      throw err;
+    }
+  }
   if (tools.length === 0) return [];
   const snapshot = [];
   const amount = Number(total || 0);
