@@ -11486,8 +11486,27 @@ button.vc-kpi {
 .els-add { align-self: flex-start; padding: 6px 12px; font-size: 0.82rem; }
 .els-note { color: #a8a29e; font-size: 0.76rem; margin: 0; }
 
-/* ─── Envío local en Cotizar ────────────────────────────────────────────── */
-.quote-delivery-cell { display: flex; flex-direction: column; gap: 6px; }
+/* ─── Envío local en Cotizar ──────────────────────────────────────────────
+   Sub-tarjeta propia dentro de «Cliente»: borde y fondo azules para que no
+   se confunda con los datos del cliente. */
+.quote-delivery-cell {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: #f0f7ff;
+  border: 1.5px solid #93c5fd;
+  border-radius: 12px;
+}
+.quote-delivery-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+}
+.quote-delivery-title { font-weight: 800; color: #1d4ed8; font-size: 0.92rem; }
+.quote-delivery-hint { color: #1e40af; font-size: 0.8rem; font-weight: 600; }
 .quote-delivery-row { display: flex; gap: 8px; }
 .quote-delivery-row .form-input { flex: 1; min-width: 0; }
 .quote-delivery-btn { white-space: nowrap; flex: 0 0 auto; }

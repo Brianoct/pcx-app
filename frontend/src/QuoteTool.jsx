@@ -1264,13 +1264,43 @@ export default function QuoteTool({ token, user }) {
               )}
             </div>
 
+            <div className="quote-altname-cell">
+              <label className="form-check-label">
+                <input type="checkbox" checked={useAlternativeName} onChange={(e) => setUseAlternativeName(e.target.checked)} />
+                Enviar a nombre diferente
+              </label>
+              {useAlternativeName && (
+                <div className="quote-altname-inputs">
+                  <input
+                    type="text"
+                    maxLength={80}
+                    placeholder="Nombre alternativo para envío"
+                    value={alternativeName}
+                    onChange={(e) => setAlternativeName(e.target.value)}
+                    className="form-input"
+                  />
+                  <input
+                    type="tel"
+                    maxLength={40}
+                    placeholder="Teléfono alternativo para envío"
+                    value={alternativePhone}
+                    onChange={(e) => setAlternativePhone(e.target.value)}
+                    className="form-input"
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="quote-delivery-cell">
-              <label className="form-label">🛵 Envío local (GPS del cliente)</label>
+              <div className="quote-delivery-head">
+                <span className="quote-delivery-title">🛵 Envío local (GPS del cliente)</span>
+                <span className="quote-delivery-hint">✅ Lo seguro: pega «lat, lng» — ej. -17.4066, -66.1450</span>
+              </div>
               <div className="quote-delivery-row">
                 <input
                   type="text"
                   maxLength={200}
-                  placeholder="Pega la ubicación de WhatsApp: lat, lng o link de Maps"
+                  placeholder="-17.4066, -66.1450 (o un link de Maps)"
                   value={deliveryInput}
                   onChange={(e) => setDeliveryInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); requestDeliveryQuote(deliveryInput); } }}
@@ -1316,33 +1346,6 @@ export default function QuoteTool({ token, user }) {
                     )}
                   </div>
                 )
-              )}
-            </div>
-
-            <div className="quote-altname-cell">
-              <label className="form-check-label">
-                <input type="checkbox" checked={useAlternativeName} onChange={(e) => setUseAlternativeName(e.target.checked)} />
-                Enviar a nombre diferente
-              </label>
-              {useAlternativeName && (
-                <div className="quote-altname-inputs">
-                  <input
-                    type="text"
-                    maxLength={80}
-                    placeholder="Nombre alternativo para envío"
-                    value={alternativeName}
-                    onChange={(e) => setAlternativeName(e.target.value)}
-                    className="form-input"
-                  />
-                  <input
-                    type="tel"
-                    maxLength={40}
-                    placeholder="Teléfono alternativo para envío"
-                    value={alternativePhone}
-                    onChange={(e) => setAlternativePhone(e.target.value)}
-                    className="form-input"
-                  />
-                </div>
               )}
             </div>
           </div>
