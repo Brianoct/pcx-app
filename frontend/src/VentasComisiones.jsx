@@ -3,6 +3,7 @@
 // (líderes) con avatar y tendencia de 6 meses, y selector de período.
 // La posición se calcula por VENTAS del mes, no por comisión pagada.
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiRequest } from './apiClient';
 
 const AVATAR_COLORS = ['#f59e0b', '#3b82f6', '#8b5cf6', '#10b981', '#ec4899', '#06b6d4', '#f97316', '#6366f1'];
@@ -52,9 +53,13 @@ function TrendBars({ points, highlightLast, money = true }) {
   );
 }
 
-function KpiCard({ icon, iconBg, label, value, hint, delta, prevLabel, progress }) {
+function KpiCard({ icon, iconBg, label, value, hint, delta, prevLabel, progress, warn = false, onClick = null }) {
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className="vc-kpi">
+    <Tag
+      className={`vc-kpi ${warn ? 'is-warn' : ''} ${onClick ? 'is-clickable' : ''}`}
+      {...(onClick ? { type: 'button', onClick } : {})}
+    >
       <span className="vc-kpi-icon" style={{ background: iconBg }} aria-hidden="true">{icon}</span>
       <span className="vc-kpi-body">
         <span className="vc-kpi-label">{label}</span>
@@ -65,11 +70,12 @@ function KpiCard({ icon, iconBg, label, value, hint, delta, prevLabel, progress 
         )}
         <DeltaBadge pct={delta} prevLabel={prevLabel} />
       </span>
-    </div>
+    </Tag>
   );
 }
 
-export default function VentasComisiones({ token, goals = null }) {
+export default function VentasComisiones({ token, goals = null, panel = null }) {
+  const navigate = useNavigate();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -206,6 +212,37 @@ export default function VentasComisiones({ token, goals = null }) {
                   label="Mi plan de comisión"
                   value={data.me?.is_top ? `${data.settings?.top_percent}%` : `${data.settings?.regular_percent}%`}
                   hint={data.me?.is_top ? '¡Eres quien va mejor en ventas!' : `Mejor en ventas gana ${data.settings?.top_percent}%`}
+                />
+              </>
+            )}
+            {panel && (
+              <>
+                {/* Estado de HOY (no depende del mes elegido): lo que antes
+                    eran los tiles de arriba del panel, ahora en la tarjeta. */}
+                <KpiCard
+                  icon="🧾" iconBg="#fee2e2"
+                  label="Mis cotizaciones pendientes"
+                  value={String(panel.sales?.pending_count ?? 0)}
+                  hint={`${formatBs(panel.sales?.pending_bs)} por cerrar`}
+                  warn={Number(panel.sales?.pending_stale || 0) > 0}
+                  onClick={() => navigate('/history')}
+                />
+                <KpiCard
+                  icon="📞" iconBg="#fce7f3"
+                  label={panel.scope === 'team' ? 'Seguimientos · equipo' : 'Mis seguimientos'}
+                  value={String(Number(panel.seguimientos?.hoy || 0) + Number(panel.seguimientos?.vencidos || 0))}
+                  hint={Number(panel.seguimientos?.vencidos || 0) > 0
+                    ? `${panel.seguimientos.vencidos} vencidos`
+                    : 'para hoy'}
+                  warn={Number(panel.seguimientos?.vencidos || 0) > 0}
+                  onClick={() => navigate('/crm')}
+                />
+                <KpiCard
+                  icon="📆" iconBg="#e0f2fe"
+                  label="Mi semana"
+                  value={String(panel.sales?.sold_week ?? 0)}
+                  hint={`${formatBs(panel.sales?.sold_week_bs)} · hoy ${panel.sales?.sold_today ?? 0}`}
+                  onClick={() => navigate('/history')}
                 />
               </>
             )}
