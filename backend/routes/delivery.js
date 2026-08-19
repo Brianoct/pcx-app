@@ -99,7 +99,7 @@ const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) 
       response = await fetch(current.href, {
         method: 'GET',
         redirect: 'manual',
-        signal: AbortSignal.timeout(6000),
+        signal: AbortSignal.timeout(8000),
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) pcx-app' }
       });
     } catch {
@@ -114,9 +114,63 @@ const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) 
         return { error: 'El link redirige a una dirección inválida' };
       }
     }
-    // Sin más redirecciones: último intento sobre el URL final.
+
+    // Fin de las redirecciones. Los links de LUGARES (negocios) suelen
+    // terminar en un URL sin coordenadas: el punto está en el HTML de la
+    // página. Se lee el cuerpo (acotado) y se buscan ahí.
     const finalCoords = parseCoordsFromMapsUrl(current.href);
     if (finalCoords) return finalCoords;
+
+    let body = '';
+    try {
+      body = (await response.text()).slice(0, 1_500_000);
+    } catch { /* cuerpo ilegible: se sigue con lo que hay */ }
+
+    // Google a veces frena IPs de datacenter con su página de captcha:
+    // eso explica fallas intermitentes. Mensaje claro para reintentar.
+    if (current.pathname.startsWith('/sorry') || body.includes('unusual traffic')) {
+      console.warn('delivery/resolve: Google sirvió captcha para', current.href);
+      return { error: 'Google bloqueó la consulta temporalmente: reintenta en unos segundos o pega "lat, lng"' };
+    }
+
+    // Redirección por meta-refresh (algunas páginas intermedias la usan).
+    const metaRefresh = body.match(/http-equiv=["']refresh["'][^>]*url=([^"'>\s]+)/i);
+    if (metaRefresh) {
+      try {
+        current = new URL(metaRefresh[1].replace(/&amp;/g, '&'), current.href);
+        continue;
+      } catch { /* refresh inválido: seguir buscando en el cuerpo */ }
+    }
+
+    if (body) {
+      // 1) Coordenadas directas en el HTML (og:image center=, @lat,lng, !3d!4d).
+      const bodyPatterns = [
+        /center=(-?\d{1,2}\.\d+)%2C(-?\d{1,3}\.\d+)/,
+        /center=(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/,
+        /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/,
+        /@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/
+      ];
+      for (const pattern of bodyPatterns) {
+        const match = body.match(pattern);
+        if (match) {
+          const lat = Number(match[1]);
+          const lng = Number(match[2]);
+          if (isValidLat(lat) && isValidLng(lng)) return { lat, lng };
+        }
+      }
+      // 2) Un URL de Maps incrustado en la página que sí traiga coordenadas.
+      const embedded = body.match(/https:\/\/(?:www\.)?google\.[a-z.]+\/maps[^"'\\\s<>]+/g) || [];
+      for (const embeddedUrl of embedded.slice(0, 20)) {
+        const coords = parseCoordsFromMapsUrl(embeddedUrl);
+        if (coords) return coords;
+      }
+    }
+
+    console.warn('delivery/resolve: sin coordenadas —', {
+      final_url: current.href.slice(0, 300),
+      status: response.status,
+      body_bytes: body.length
+    });
     return { error: 'El link no trae coordenadas: comparte la ubicación como pin (Ubicación → Enviar) o pega "lat, lng"' };
   }
   return { error: 'El link redirige demasiadas veces' };
