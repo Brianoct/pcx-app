@@ -26,6 +26,7 @@ const InversionPanel = lazy(() => import('./InversionPanel'));
 const PromosPanel = lazy(() => import('./PromosPanel'));
 const ForjaPanel = lazy(() => import('./ForjaPanel'));
 const CrmPanel = lazy(() => import('./CrmPanel'));
+const EnvioLocalPage = lazy(() => import('./EnvioLocalSettings'));
 
 /**
  * Single source of truth for every internal destination.
@@ -119,6 +120,15 @@ export const NAV_ITEMS = [
     render: (ctx) => <ProductionReception token={ctx.token} />
   },
   {
+    path: '/envio-local',
+    label: 'Envío local',
+    // Vive en el menú de Almacén: mismos permisos que Inventario (editar
+    // los precios lo exige el servidor: solo Almacén/Admin).
+    routeAccess: ['inventario_global', 'inventario_individual', 'admin'],
+    navAccess: ['inventario_global', 'inventario_individual'],
+    render: (ctx) => <EnvioLocalPage token={ctx.token} />
+  },
+  {
     path: '/mejoras',
     label: 'Mejoras',
     routeAccess: ['proyectos_panel', 'admin'],
@@ -201,7 +211,7 @@ export const NAV_ITEMS = [
 const SIDEBAR_SECTIONS = [
   { key: 'principal', label: 'Principal', paths: ['/', '/calendario'] },
   { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/crm', '/history'] },
-  { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion'] },
+  { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion', '/envio-local'] },
   { key: 'produccion', label: 'Producción', paths: ['/produccion-planificacion', '/produccion-kanban'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras'] },
   { key: 'marketing', label: 'Marketing', paths: ['/marketing-calendario', '/campanas', '/live', '/promos', '/marketing-inversion', '/combos'] },

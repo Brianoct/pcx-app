@@ -11536,3 +11536,23 @@ button.vc-kpi {
 }
 .sia-delivery-result.is-ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
 .sia-delivery-result.is-out { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+
+/* Página «Envío local» (menú Almacén). */
+.els-page { padding-top: 24px; }
+.els-page-head { margin-bottom: 18px; }
+.els-page-head h2 { margin: 0 0 4px; color: #1c1917; }
+.els-page-head p { margin: 0; color: #78716c; font-size: 0.9rem; max-width: 640px; }
+.els-body-page { padding: 0; margin-bottom: 16px; }
+.els-body-page .els-city { background: #fff; }
+.els-tester { padding: 16px; }
+.els-tester-title { margin: 0 0 2px; }
+.els-tester-sub { margin: 0 0 10px; color: #78716c; font-size: 0.85rem; }
+.els-tester-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.els-tester-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid #e7e0d8;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
