@@ -2,7 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
 const { getPedidosAccessScope } = require('../lib/inventory');
-const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, effectiveGiftItems, getQuoteSaveIdempotencyCacheKey, giftItemsFingerprint, lineItemsFingerprint, normalizeGiftItems, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftItemsForQuote, resolveGiftSelectionForQuote } = require('../lib/quotes');
+const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, effectiveGiftItems, getQuoteSaveIdempotencyCacheKey, giftItemsFingerprint, lineItemsFingerprint, normalizeDeliveryFields, normalizeGiftItems, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftItemsForQuote, resolveGiftSelectionForQuote } = require('../lib/quotes');
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { findCustomerOwnerByPhone, markCustomerWonByPhone, upsertCustomerFromQuote } = require('../lib/customers');
 const { applyPromosToNewQuote, refreshCodeAggregate, syncPromoTicketsForQuote, validateCouponForRedemption } = require('../lib/promos');
@@ -27,7 +27,7 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
     `SELECT id, user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes,
             alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
             coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items, payment_method, payment_cash_bs,
-            line_items, subtotal, total, status
+            line_items, subtotal, total, status, delivery_fee_bs, delivery_label, delivery_gps
      FROM quotes
      WHERE id = $1
      FOR UPDATE`,
@@ -102,11 +102,16 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
     gift_qty,
     gift_items,
     selected_promo_id,
+    delivery_fee_bs,
+    delivery_label,
+    delivery_gps,
     rows,
     subtotal,
     total,
     status = 'Cotizado'
   } = req.body || {};
+  const deliveryFields = normalizeDeliveryFields({ delivery_fee_bs, delivery_label, delivery_gps });
+  if (deliveryFields.error) return res.status(400).json({ error: deliveryFields.error });
   // Elección de promo del vendedor: null = sin promo; ausente = legacy (todas).
   const hasSelectedPromoField = Object.prototype.hasOwnProperty.call(req.body || {}, 'selected_promo_id');
   const selectedPromoIdValue = !hasSelectedPromoField
@@ -151,7 +156,9 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
     }
     // La columna guarda NUMERIC(7,4): normalizar a 4 decimales.
     discountPercentValue = Math.round(discountPercentValue * 10000) / 10000;
-    if (totalValue - subtotalValue > 0.01) {
+    // El envío local se suma al total DESPUÉS del descuento: el tope es
+    // subtotal + cargo de envío.
+    if (totalValue - subtotalValue - (deliveryFields.fee || 0) > 0.01) {
       throw createHttpError(400, 'El total no puede ser mayor al subtotal');
     }
   } catch (err) {
@@ -265,8 +272,9 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       `INSERT INTO quotes (
         user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes,
         alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
-        coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items, line_items, subtotal, total, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW())
+        coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items, line_items, subtotal, total, status,
+        delivery_fee_bs, delivery_label, delivery_gps, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, NOW())
       RETURNING id`,
       [
         quoteOwnerId,
@@ -292,7 +300,10 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
         JSON.stringify(lineItemsWithDisplay),
         subtotalValue,
         totalValue,
-        normalizedStatus
+        normalizedStatus,
+        deliveryFields.fee,
+        deliveryFields.label,
+        deliveryFields.gps
       ]
     );
 
@@ -401,6 +412,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
                       q.gift_name, q.gift_sku, q.gift_qty, q.gift_items, q.promos, q.ciudad, q.dest_geo_id,
+                      q.delivery_fee_bs, q.delivery_label, q.delivery_gps,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -413,6 +425,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
                       q.gift_name, q.gift_sku, q.gift_qty, q.gift_items, q.promos, q.ciudad, q.dest_geo_id,
+                      q.delivery_fee_bs, q.delivery_label, q.delivery_gps,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -426,6 +439,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
                       q.gift_name, q.gift_sku, q.gift_qty, q.gift_items, q.promos, q.ciudad, q.dest_geo_id,
+                      q.delivery_fee_bs, q.delivery_label, q.delivery_gps,
                       q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
                FROM quotes q
                LEFT JOIN users u ON u.id = q.user_id
@@ -489,7 +503,8 @@ router.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT id, user_id, customer_name, customer_phone, department, provincia, ciudad, store_location,
               vendor, status, line_items, created_at, alternative_name, alternative_phone,
-              coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items
+              coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items,
+              delivery_fee_bs, delivery_label, delivery_gps
        FROM quotes WHERE id = $1`,
       [id]
     );
@@ -718,6 +733,17 @@ router.get('/api/quotes/:id/checklist', authenticateToken, async (req, res) => {
       gift_qty: Math.max(1, Number.parseInt(quote.gift_qty, 10) || 1),
       gift_items: giftItemsList,
       promo_sections: promoSections,
+      // Envío local: Almacén ve el cargo y abre el punto exacto en el mapa.
+      delivery: quote.delivery_fee_bs !== null && quote.delivery_fee_bs !== undefined
+        ? {
+          fee_bs: Number(quote.delivery_fee_bs),
+          label: quote.delivery_label || 'Envío local',
+          gps: quote.delivery_gps || null,
+          maps_url: quote.delivery_gps
+            ? `https://www.google.com/maps?q=${encodeURIComponent(quote.delivery_gps)}`
+            : null
+        }
+        : null,
       items
     });
   } catch (err) {
@@ -914,11 +940,20 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     gift_sku,
     gift_qty,
     gift_items,
+    delivery_fee_bs,
+    delivery_label,
+    delivery_gps,
     rows,
     subtotal,
     total,
     status
   } = requestBody;
+  // Envío local: si la edición no manda los campos, se preserva lo guardado.
+  const hasDeliveryFields = hasBodyField('delivery_fee_bs');
+  const deliveryFieldsUpdate = hasDeliveryFields
+    ? normalizeDeliveryFields({ delivery_fee_bs, delivery_label, delivery_gps })
+    : null;
+  if (deliveryFieldsUpdate?.error) return res.status(400).json({ error: deliveryFieldsUpdate.error });
   const hasCouponCodeField = hasBodyField('coupon_code');
   const hasCouponDiscountField = hasBodyField('coupon_discount_percent');
   const hasGiftNameField = hasBodyField('gift_name');
@@ -958,7 +993,8 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     }
     // La columna guarda NUMERIC(7,4): normalizar a 4 decimales.
     discountPercentValue = Math.round(discountPercentValue * 10000) / 10000;
-    if (totalValue - subtotalValue > 0.01) {
+    // Con envío local en la edición, el tope del total es subtotal + cargo.
+    if (totalValue - subtotalValue - (deliveryFieldsUpdate?.fee || 0) > 0.01) {
       throw createHttpError(400, 'El total no puede ser mayor al subtotal');
     }
   } catch (err) {
@@ -1129,7 +1165,10 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
            total = $20,
            status = $21,
            ciudad = $23,
-           dest_geo_id = $24
+           dest_geo_id = $24,
+           delivery_fee_bs = $26,
+           delivery_label = $27,
+           delivery_gps = $28
       WHERE id = $22`,
       [
         customer_name,
@@ -1156,7 +1195,10 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         quoteId,
         destinoEdit.ciudad,
         destinoEdit.dest_geo_id,
-        resolvedGift.gift_items ? JSON.stringify(resolvedGift.gift_items) : null
+        resolvedGift.gift_items ? JSON.stringify(resolvedGift.gift_items) : null,
+        deliveryFieldsUpdate ? deliveryFieldsUpdate.fee : (currentQuote.delivery_fee_bs ?? null),
+        deliveryFieldsUpdate ? deliveryFieldsUpdate.label : (currentQuote.delivery_label || null),
+        deliveryFieldsUpdate ? deliveryFieldsUpdate.gps : (currentQuote.delivery_gps || null)
       ]
     );
     await client.query('COMMIT');

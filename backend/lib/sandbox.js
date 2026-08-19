@@ -124,7 +124,8 @@ const REFERENCE_TABLES = [
   'quality_control_settings',
   'geo_destinations',
   'feature_flags',
-  'promo_tools'
+  'promo_tools',
+  'local_delivery_settings'
 ];
 
 const quoteIdent = (name) => `"${String(name).replace(/"/g, '""')}"`;

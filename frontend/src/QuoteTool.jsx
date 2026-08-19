@@ -8,6 +8,7 @@ import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
 import QuoteCatalogPicker from './QuoteCatalogPicker';
 import CustomerHub, { CustomerSearchField } from './crm/CustomerHub';
+import { parseGpsInput } from './gps';
 
 const PRODUCTS_VIEW_STORAGE_KEY = 'pcx.quoteProductsView';
 
@@ -148,6 +149,14 @@ export default function QuoteTool({ token, user }) {
   // When set, the quote came from a WhatsApp conversation and the PDF is
   // sent back into that thread after saving.
   const [whatsappConversationId, setWhatsappConversationId] = useState(null);
+
+  // Envío local: el vendedor pega el GPS que mandó el cliente (o llega solo
+  // desde el chat de WhatsApp) y el servidor lo cotiza con los anillos que
+  // configuró Almacén. El cargo se suma DESPUÉS del descuento negociado.
+  const [deliveryInput, setDeliveryInput] = useState('');
+  const [deliveryQuote, setDeliveryQuote] = useState(null);
+  const [deliveryIncluded, setDeliveryIncluded] = useState(true);
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
   const isSavingRef = useRef(false);
   const restoredDraftKeyRef = useRef('');
   const [draftNotice, setDraftNotice] = useState('');
@@ -472,6 +481,31 @@ export default function QuoteTool({ token, user }) {
   const discountAmountApplied = discountMetrics.discountAmount;
   const effectiveDiscountPercent = discountMetrics.discountPercent;
   const total = discountMetrics.targetTotal;
+  // El envío local se suma después del descuento: no participa de la
+  // negociación ni de los mínimos de promos (esos miran solo productos).
+  const deliveryFee = deliveryQuote?.in_range && deliveryIncluded ? Number(deliveryQuote.price_bs || 0) : 0;
+  const grandTotal = total + deliveryFee;
+
+  const requestDeliveryQuote = async (rawInput) => {
+    const gps = parseGpsInput(rawInput);
+    if (!gps) {
+      toast.error('Pega la ubicación como "lat, lng" o un link de Google Maps');
+      return;
+    }
+    setDeliveryLoading(true);
+    try {
+      const body = { lat: gps.lat, lng: gps.lng };
+      if (almacen === 'Cochabamba' || almacen === 'Santa Cruz') body.city = almacen;
+      const data = await apiRequest('/api/delivery/quote', { method: 'POST', token, body });
+      setDeliveryQuote({ ...data, gps: `${gps.lat},${gps.lng}` });
+      setDeliveryIncluded(true);
+    } catch (err) {
+      setDeliveryQuote(null);
+      toast.error(err.message || 'No se pudo cotizar el envío');
+    } finally {
+      setDeliveryLoading(false);
+    }
+  };
 
   useEffect(() => {
     setRows(prev => prev.map(row => {
@@ -555,6 +589,8 @@ export default function QuoteTool({ token, user }) {
       if (prefill?.customerName) setCustomerName(String(prefill.customerName).slice(0, 80));
       if (prefill?.customerPhone) setCustomerPhone(String(prefill.customerPhone).slice(0, 40));
       if (prefill?.conversationId) setWhatsappConversationId(Number(prefill.conversationId));
+      // GPS del chat de WhatsApp: llega listo para cotizar el envío local.
+      if (prefill?.gps) setDeliveryInput(String(prefill.gps).slice(0, 120));
     } catch {
       // malformed prefill; start the quote empty
     }
@@ -645,6 +681,9 @@ export default function QuoteTool({ token, user }) {
     setDiscountInput(0);
     setSelectedCouponCode('');
     setSelectedPromoId(activePromos.length === 1 ? activePromos[0].id : null);
+    setDeliveryInput('');
+    setDeliveryQuote(null);
+    setDeliveryIncluded(true);
     setUseAlternativeName(false);
     setAlternativeName('');
     setAlternativePhone('');
@@ -772,9 +811,12 @@ export default function QuoteTool({ token, user }) {
       seller_user_id: requiresSellerAssignment ? Number(assignedSellerId) : null,
       gift_items: giftItemsForSave.length > 0 ? giftItemsForSave : null,
       selected_promo_id: selectedPromo ? selectedPromo.id : null,
+      delivery_fee_bs: deliveryFee > 0 ? deliveryFee : null,
+      delivery_label: deliveryFee > 0 ? (deliveryQuote?.label || 'Envío local') : null,
+      delivery_gps: deliveryFee > 0 ? (deliveryQuote?.gps || null) : null,
       rows: rowsWithDisplay,
       subtotal,
-      total
+      total: grandTotal
     };
 
     try {
@@ -858,7 +900,8 @@ export default function QuoteTool({ token, user }) {
         subtotal,
         discountPercent: effectiveDiscountPercent,
         discountAmount: discountAmountApplied,
-        total,
+        total: grandTotal,
+        deliveryFee: deliveryFee > 0 ? deliveryFee : null,
         promos: savedPromos
       });
 
@@ -1206,6 +1249,51 @@ export default function QuoteTool({ token, user }) {
               />
               {shippingNotes.length >= 110 && (
                 <div className="form-counter limit">{shippingNotes.length}/120</div>
+              )}
+            </div>
+
+            <div className="quote-delivery-cell">
+              <label className="form-label">🛵 Envío local (GPS del cliente)</label>
+              <div className="quote-delivery-row">
+                <input
+                  type="text"
+                  maxLength={200}
+                  placeholder="Pega la ubicación de WhatsApp: lat, lng o link de Maps"
+                  value={deliveryInput}
+                  onChange={(e) => setDeliveryInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); requestDeliveryQuote(deliveryInput); } }}
+                  className="form-input"
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary quote-delivery-btn"
+                  disabled={deliveryLoading || !deliveryInput.trim()}
+                  onClick={() => requestDeliveryQuote(deliveryInput)}
+                >
+                  {deliveryLoading ? 'Calculando…' : 'Cotizar envío'}
+                </button>
+              </div>
+              {deliveryQuote && (
+                deliveryQuote.in_range ? (
+                  <div className="quote-delivery-result is-ok">
+                    <span>
+                      ✅ {deliveryQuote.city} · {deliveryQuote.distance_km} km del almacén →{' '}
+                      <strong>{Number(deliveryQuote.price_bs).toFixed(2)} Bs</strong>
+                    </span>
+                    <label className="quote-delivery-include">
+                      <input
+                        type="checkbox"
+                        checked={deliveryIncluded}
+                        onChange={(e) => setDeliveryIncluded(e.target.checked)}
+                      />
+                      Sumar al total
+                    </label>
+                  </div>
+                ) : (
+                  <div className="quote-delivery-result is-out">
+                    ⚠️ {deliveryQuote.message || 'Fuera de cobertura: cotizar manual'}
+                  </div>
+                )
               )}
             </div>
 
@@ -1637,10 +1725,15 @@ export default function QuoteTool({ token, user }) {
               </div>
 
               <div>
-                <small style={{ color: '#78716c' }}>Total negociado</small>
+                <small style={{ color: '#78716c' }}>{deliveryFee > 0 ? 'Total con envío' : 'Total negociado'}</small>
                 <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#e11d48' }}>
-                  {total.toFixed(2)} Bs
+                  {grandTotal.toFixed(2)} Bs
                 </div>
+                {deliveryFee > 0 && (
+                  <small style={{ color: '#78716c' }}>
+                    incluye envío local {deliveryFee.toFixed(2)} Bs
+                  </small>
+                )}
               </div>
             </div>
 

@@ -11449,3 +11449,90 @@ button.vc-kpi {
   .vc-compare-chart { height: 90px; }
   .vc-col-value { display: none; }
 }
+
+/* ─── Envío local: configuración de Almacén (Inventario) ────────────────── */
+.els-card { margin-bottom: 16px; padding: 0; overflow: hidden; }
+.els-toggle {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.els-toggle > span:first-child { font-weight: 800; color: #1c1917; }
+.els-toggle-sub { color: #78716c; font-size: 0.82rem; }
+.els-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  padding: 0 16px 16px;
+}
+.els-city { border: 1px solid #e7e0d8; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.els-city-head { display: flex; justify-content: space-between; align-items: center; }
+.els-active { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #57534e; cursor: pointer; }
+.els-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; color: #57534e; }
+.els-field input { padding: 8px 10px; border: 1px solid #e7e0d8; border-radius: 8px; font-size: 0.9rem; }
+.els-rings { display: flex; flex-direction: column; gap: 6px; }
+.els-rings-title { font-size: 0.82rem; font-weight: 700; color: #57534e; }
+.els-ring-row { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: #57534e; }
+.els-ring-row input { width: 78px; padding: 6px 8px; border: 1px solid #e7e0d8; border-radius: 8px; text-align: center; }
+.els-ring-remove { background: none; border: none; color: #dc2626; font-weight: 800; cursor: pointer; padding: 2px 6px; }
+.els-add { align-self: flex-start; padding: 6px 12px; font-size: 0.82rem; }
+.els-note { color: #a8a29e; font-size: 0.76rem; margin: 0; }
+
+/* ─── Envío local en Cotizar ────────────────────────────────────────────── */
+.quote-delivery-cell { display: flex; flex-direction: column; gap: 6px; }
+.quote-delivery-row { display: flex; gap: 8px; }
+.quote-delivery-row .form-input { flex: 1; min-width: 0; }
+.quote-delivery-btn { white-space: nowrap; flex: 0 0 auto; }
+.quote-delivery-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.86rem;
+}
+.quote-delivery-result.is-ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.quote-delivery-result.is-out { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+.quote-delivery-include { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; cursor: pointer; }
+
+/* ─── Envío local en el checklist de Pedidos ────────────────────────────── */
+.pedidos-delivery {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+.pedidos-delivery-title { font-weight: 800; color: #1d4ed8; }
+.pedidos-delivery-label { color: #57534e; }
+.pedidos-delivery-map { color: #1d4ed8; font-weight: 700; text-decoration: none; }
+.pedidos-delivery-map:hover { text-decoration: underline; }
+
+/* ─── Envío local en el chat de WhatsApp ────────────────────────────────── */
+.sia-delivery { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.sia-delivery-map { color: #1d4ed8; font-size: 0.82rem; font-weight: 600; text-decoration: none; }
+.sia-delivery-map:hover { text-decoration: underline; }
+.sia-delivery-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+.sia-delivery-result.is-ok { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.sia-delivery-result.is-out { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }

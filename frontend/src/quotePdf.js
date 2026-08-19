@@ -75,6 +75,7 @@ export function generateModernQuotePdf({
   discountPercent = 0,
   discountAmount,
   total = 0,
+  deliveryFee = null,
   promos = [],
   autoSave = true
 }) {
@@ -282,6 +283,11 @@ export function generateModernQuotePdf({
     { label: 'Subtotal', value: `${toMoney(subtotal)} Bs` },
     ...(Number(discountPercent || 0) > 0
       ? [{ label: `Descuento (${Number(discountPercent)}%)`, value: `${toMoney(discountValue)} Bs` }]
+      : []),
+    // Envío local cotizado desde el GPS del cliente: línea propia, después
+    // del descuento (el descuento aplica solo a productos).
+    ...(Number(deliveryFee || 0) > 0
+      ? [{ label: 'Envío local', value: `${toMoney(deliveryFee)} Bs` }]
       : [])
   ];
   const summaryH = 10 + summaryLines.length * 7 + 13;
