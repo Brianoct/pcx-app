@@ -11296,3 +11296,133 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   flex: 0 0 auto;
   text-align: center;
 }
+
+/* ─── Rendimiento de ventas (resumen de comisiones del Inicio comercial) ── */
+.vc-card { grid-column: 1 / -1; }
+.vc-head { align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.vc-period { display: flex; gap: 8px; }
+.vc-period select {
+  padding: 7px 10px;
+  border: 1px solid #e7e0d8;
+  border-radius: 8px;
+  background: #fff;
+  color: #292524;
+  font-size: 0.88rem;
+}
+
+.vc-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.vc-kpi {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #e7e0d8;
+  border-radius: 12px;
+  padding: 12px;
+}
+.vc-kpi-icon {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 1.1rem;
+}
+.vc-kpi-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vc-kpi-label { color: #78716c; font-size: 0.8rem; font-weight: 600; }
+.vc-kpi-value { color: #1c1917; font-weight: 800; font-size: 1.15rem; line-height: 1.2; overflow-wrap: anywhere; }
+.vc-kpi-hint { color: #a8a29e; font-size: 0.75rem; }
+.vc-delta { font-size: 0.75rem; font-weight: 700; margin-top: 2px; }
+.vc-delta.is-up { color: #16a34a; }
+.vc-delta.is-down { color: #dc2626; }
+.vc-delta.is-flat { color: #78716c; }
+
+/* Comparación con meses anteriores: dos mini gráficos de barras. */
+.vc-compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.vc-compare-block {
+  background: #fafaf9;
+  border: 1px solid #efe9e1;
+  border-radius: 12px;
+  padding: 12px;
+}
+.vc-compare-title { display: block; color: #57534e; font-size: 0.8rem; font-weight: 700; margin-bottom: 10px; }
+.vc-compare-chart { display: flex; align-items: stretch; gap: 8px; height: 110px; }
+.vc-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.vc-col-value { font-size: 0.68rem; color: #78716c; font-weight: 700; }
+.vc-col-track { flex: 1; width: 100%; max-width: 34px; display: flex; align-items: flex-end; background: #f1efec; border-radius: 6px; overflow: hidden; }
+.vc-col-bar { width: 100%; background: #cbd5e1; border-radius: 6px 6px 0 0; transition: height 0.25s ease; }
+.vc-col.is-current .vc-col-bar { background: #16a34a; }
+.vc-compare-chart.is-commission .vc-col.is-current .vc-col-bar { background: #2563eb; }
+.vc-col.is-current .vc-col-value { color: #1c1917; }
+.vc-col-label { font-size: 0.68rem; color: #a8a29e; font-weight: 600; white-space: nowrap; }
+.vc-col.is-current .vc-col-label { color: #1c1917; font-weight: 800; }
+
+/* Ranking del equipo. */
+.vc-table-wrap { overflow-x: auto; border: 1px solid #efe9e1; border-radius: 12px; }
+.vc-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; min-width: 720px; }
+.vc-table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: #78716c;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #efe9e1;
+  background: #fafaf9;
+}
+.vc-table td { padding: 10px 12px; border-bottom: 1px solid #f3efe9; vertical-align: middle; }
+.vc-table tbody tr:last-child td { border-bottom: none; }
+.vc-table tr.is-top td { background: #fffbeb; }
+.vc-th-pos { width: 46px; }
+.vc-th-num, .vc-td-num { text-align: right; white-space: nowrap; }
+.vc-td-commission { color: #047857; font-weight: 800; }
+.vc-pos {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 800;
+  font-size: 0.8rem;
+}
+.vc-pos.is-first { background: #fef3c7; color: #b45309; }
+.vc-seller { display: inline-flex; align-items: center; gap: 10px; }
+.vc-avatar {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+.vc-seller-info { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.vc-seller-info small { color: #a8a29e; }
+.vc-td-rule { color: #78716c; }
+.vc-trend { display: inline-flex; align-items: flex-end; gap: 3px; height: 26px; }
+.vc-trend-bar { width: 7px; background: #d6d3d1; border-radius: 2px 2px 0 0; }
+.vc-trend-bar.is-current { background: #16a34a; }
+.vc-note { margin-top: 12px; color: #78716c; font-size: 0.78rem; }
+
+@media (max-width: 720px) {
+  .vc-compare-chart { height: 90px; }
+  .vc-col-value { display: none; }
+}
