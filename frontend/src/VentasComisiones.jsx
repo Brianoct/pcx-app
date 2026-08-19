@@ -52,7 +52,7 @@ function TrendBars({ points, highlightLast, money = true }) {
   );
 }
 
-function KpiCard({ icon, iconBg, label, value, hint, delta, prevLabel }) {
+function KpiCard({ icon, iconBg, label, value, hint, delta, prevLabel, progress }) {
   return (
     <div className="vc-kpi">
       <span className="vc-kpi-icon" style={{ background: iconBg }} aria-hidden="true">{icon}</span>
@@ -60,13 +60,16 @@ function KpiCard({ icon, iconBg, label, value, hint, delta, prevLabel }) {
         <span className="vc-kpi-label">{label}</span>
         <span className="vc-kpi-value">{value}</span>
         {hint && <span className="vc-kpi-hint">{hint}</span>}
+        {Number.isFinite(progress) && (
+          <span className="vc-kpi-bar"><span style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} /></span>
+        )}
         <DeltaBadge pct={delta} prevLabel={prevLabel} />
       </span>
     </div>
   );
 }
 
-export default function VentasComisiones({ token }) {
+export default function VentasComisiones({ token, goals = null }) {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -86,6 +89,14 @@ export default function VentasComisiones({ token }) {
   const currentMonth = history[history.length - 1] || null;
   const previousMonth = history[history.length - 2] || null;
   const prevLabel = previousMonth ? previousMonth.label.toLowerCase() : '';
+  // Las metas aplican al mes en curso: mirando un mes pasado no se muestran.
+  const isCurrentPeriod = month === now.getMonth() + 1 && year === now.getFullYear();
+  const metaBsPct = goals && Number(goals.monthly_target_bs) > 0
+    ? Math.round((Number(data?.me?.sales || 0) / Number(goals.monthly_target_bs)) * 100)
+    : null;
+  const metaUnitsPct = goals && Number(goals.monthly_units_expected) > 0
+    ? Math.round((Number(data?.me?.closed || 0) / Number(goals.monthly_units_expected)) * 100)
+    : null;
 
   // Serie del gráfico de comparación: equipo para líderes, propia para asesores.
   const seriesKey = isTeam ? 'team' : 'my';
@@ -156,6 +167,10 @@ export default function VentasComisiones({ token }) {
                   icon="📈" iconBg="#dcfce7"
                   label="Mis ventas"
                   value={formatBs(data.me?.sales)}
+                  hint={goals && isCurrentPeriod
+                    ? `Meta ${Math.round(Number(goals.monthly_target_bs)).toLocaleString('es-BO')} Bs (${metaBsPct ?? 0}%)`
+                    : undefined}
+                  progress={goals && isCurrentPeriod ? metaBsPct : undefined}
                   delta={deltaPct(currentMonth?.my_sales, previousMonth?.my_sales)}
                   prevLabel={prevLabel}
                 />
@@ -171,7 +186,19 @@ export default function VentasComisiones({ token }) {
                   icon="🤝" iconBg="#fef3c7"
                   label="Mis cierres"
                   value={String(data.me?.closed ?? 0)}
+                  hint={goals && isCurrentPeriod
+                    ? `Meta ${goals.monthly_units_expected} · mín ${goals.monthly_units_min} · sobresaliente ${goals.monthly_units_high}`
+                    : undefined}
+                  progress={goals && isCurrentPeriod ? metaUnitsPct : undefined}
                   delta={deltaPct(currentMonth?.my_closed, previousMonth?.my_closed)}
+                  prevLabel={prevLabel}
+                />
+                <KpiCard
+                  icon="🏪" iconBg="#ede9fe"
+                  label="Ventas del área"
+                  value={formatBs(currentMonth?.team_sales)}
+                  hint={`${currentMonth?.team_closed ?? 0} cierres del área`}
+                  delta={deltaPct(currentMonth?.team_sales, previousMonth?.team_sales)}
                   prevLabel={prevLabel}
                 />
                 <KpiCard

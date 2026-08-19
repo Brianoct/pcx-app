@@ -143,28 +143,10 @@ export default function VentasDashboard({ token, user }) {
     team: scope === 'team'
   };
 
+  // Ventas del mes, cierres y ventas del área viven en la tarjeta
+  // «Rendimiento de ventas» (con comisión y comparación mensual) — los tiles
+  // solo muestran lo que esa tarjeta no cubre, para no repetir números.
   const tiles = [
-    {
-      key: 'mes_bs',
-      icon: '💰',
-      label: 'Mis ventas del mes',
-      value: formatBs(sales.sold_month_bs),
-      detail: goals ? `Meta ${formatBs(goals.monthly_target_bs)} (${sales.goal_bs_pct ?? 0}%)` : `${sales.sold_month} cerradas`,
-      to: '/history',
-      progress: sales.goal_bs_pct
-    },
-    {
-      key: 'mes_units',
-      icon: '✅',
-      label: 'Mis ventas cerradas',
-      value: sales.sold_month,
-      detail: goals
-        ? `Meta ${goals.monthly_units_expected} · mín ${goals.monthly_units_min} · sobresaliente ${goals.monthly_units_high}`
-        : 'este mes',
-      to: '/history',
-      progress: sales.goal_units_pct,
-      warn: goals ? sales.sold_month < goals.monthly_units_min : false
-    },
     {
       key: 'pendientes',
       icon: '🧾',
@@ -185,11 +167,11 @@ export default function VentasDashboard({ token, user }) {
     },
     ...(scope === 'team' ? [seguimientosTile] : []),
     {
-      key: 'equipo_mes',
+      key: 'pendientes_area',
       icon: '🏪',
-      label: 'Ventas del área · mes',
-      value: formatBs(team.sold_month_bs),
-      detail: `${team.sold_month} cerradas · ${team.pending_count} pendientes (${formatBs(team.pending_bs)})`,
+      label: 'Pendientes del área',
+      value: team.pending_count,
+      detail: `${formatBs(team.pending_bs)} por cerrar en el área`,
       to: '/history',
       team: true
     },
@@ -271,7 +253,7 @@ export default function VentasDashboard({ token, user }) {
       </div>
 
       <div className="home-grid">
-        <VentasComisiones token={token} />
+        <VentasComisiones token={token} goals={goals} />
 
         <section className="home-card vdp-card">
           <div className="home-card-head">

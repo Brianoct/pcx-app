@@ -11339,6 +11339,17 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 .vc-kpi-label { color: #78716c; font-size: 0.8rem; font-weight: 600; }
 .vc-kpi-value { color: #1c1917; font-weight: 800; font-size: 1.15rem; line-height: 1.2; overflow-wrap: anywhere; }
 .vc-kpi-hint { color: #a8a29e; font-size: 0.75rem; }
+.vc-kpi-bar {
+  display: block;
+  width: 100%;
+  max-width: 150px;
+  height: 5px;
+  margin-top: 4px;
+  background: #f1efec;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.vc-kpi-bar > span { display: block; height: 100%; background: #16a34a; border-radius: 999px; }
 .vc-delta { font-size: 0.75rem; font-weight: 700; margin-top: 2px; }
 .vc-delta.is-up { color: #16a34a; }
 .vc-delta.is-down { color: #dc2626; }
