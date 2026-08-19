@@ -8,7 +8,7 @@ import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
 import QuoteCatalogPicker from './QuoteCatalogPicker';
 import CustomerHub, { CustomerSearchField } from './crm/CustomerHub';
-import { parseGpsInput } from './gps';
+import { looksLikeMapsLink, parseGpsInput } from './gps';
 
 const PRODUCTS_VIEW_STORAGE_KEY = 'pcx.quoteProductsView';
 
@@ -487,13 +487,25 @@ export default function QuoteTool({ token, user }) {
   const grandTotal = total + deliveryFee;
 
   const requestDeliveryQuote = async (rawInput) => {
-    const gps = parseGpsInput(rawInput);
-    if (!gps) {
-      toast.error('Pega la ubicación como "lat, lng" o un link de Google Maps');
-      return;
-    }
+    let gps = parseGpsInput(rawInput);
     setDeliveryLoading(true);
     try {
+      // Link corto de compartir (goo.gl/maps/…): no trae coordenadas, el
+      // servidor lo expande siguiendo la redirección de Google.
+      if (!gps && looksLikeMapsLink(rawInput)) {
+        const resolved = await apiRequest('/api/delivery/resolve', {
+          method: 'POST',
+          token,
+          body: { link: String(rawInput).trim() }
+        });
+        if (Number.isFinite(Number(resolved?.lat)) && Number.isFinite(Number(resolved?.lng))) {
+          gps = { lat: Number(resolved.lat), lng: Number(resolved.lng) };
+        }
+      }
+      if (!gps) {
+        toast.error('Pega la ubicación como "lat, lng" o un link de Google Maps');
+        return;
+      }
       const body = { lat: gps.lat, lng: gps.lng };
       if (almacen === 'Cochabamba' || almacen === 'Santa Cruz') body.city = almacen;
       const data = await apiRequest('/api/delivery/quote', { method: 'POST', token, body });
