@@ -44,30 +44,56 @@ const isAllowedMapsHost = (host) => {
     || /^(www\.|maps\.|consent\.)?google\.[a-z]{2,3}(\.[a-z]{2})?$/.test(h);
 };
 
-const parseCoordsFromMapsUrl = (rawUrl) => {
-  let text = String(rawUrl || '');
-  try { text = decodeURIComponent(text); } catch { /* se parsea tal cual */ }
-  // Orden: marcador del lugar (!3d!4d) > pin compartido (q=/ll=) > centro del mapa (@).
-  const patterns = [
-    /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/,
-    /[?&]q=(?:loc:)?\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i,
-    /[?&]ll=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i,
-    /[?&](?:destination|daddr)=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i,
-    /@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/
-  ];
-  for (const pattern of patterns) {
+// Coordenadas CONFIABLES en un URL: parámetros que expresan el punto elegido
+// por el usuario (pin compartido, destino) o el marcador del lugar.
+const TRUSTED_URL_PATTERNS = [
+  /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/,
+  /[?&]q=(?:loc:)?\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i,
+  /[?&]ll=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i,
+  /[?&](?:destination|daddr)=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i
+];
+// @lat,lng es solo el ENCUADRE del mapa: sirve como candidato, nunca como
+// respuesta directa (las páginas intermedias traen encuadres ajenos).
+const VIEWPORT_URL_PATTERN = /@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/;
+
+const matchToCoords = (match) => {
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  return isValidLat(lat) && isValidLng(lng) ? { lat, lng } : null;
+};
+
+const decodeLoose = (text) => {
+  try { return decodeURIComponent(String(text || '')); } catch { return String(text || ''); }
+};
+
+const parseTrustedCoordsFromUrl = (rawUrl) => {
+  const text = decodeLoose(rawUrl);
+  for (const pattern of TRUSTED_URL_PATTERNS) {
     const match = text.match(pattern);
     if (match) {
-      const lat = Number(match[1]);
-      const lng = Number(match[2]);
-      if (isValidLat(lat) && isValidLng(lng)) return { lat, lng };
+      const coords = matchToCoords(match);
+      if (coords) return coords;
     }
   }
   return null;
 };
 
+// Compatibilidad con pruebas/llamadas viejas: confiable primero, encuadre después.
+const parseCoordsFromMapsUrl = (rawUrl) => {
+  const trusted = parseTrustedCoordsFromUrl(rawUrl);
+  if (trusted) return trusted;
+  const match = decodeLoose(rawUrl).match(VIEWPORT_URL_PATTERN);
+  return match ? matchToCoords(match) : null;
+};
+
 const MAX_LINK_HOPS = 6;
-const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) => {
+// Un candidato leído de una página solo es creíble si cae a menos de este
+// radio de alguno de nuestros almacenes. Las páginas intermedias de Google
+// traen coordenadas propias (p. ej. su oficina de Nueva York en el preview
+// genérico): sin este filtro, eso se cotizaba como si fuera el cliente.
+const CANDIDATE_SANITY_KM = 300;
+
+const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost, anchors = [] } = {}) => {
   // Lo pegado suele traer texto alrededor («Mira mi ubicación: https://…»):
   // se rescata el primer URL del texto y se limpia la puntuación colgante.
   const urlMatch = String(rawLink || '').match(/https?:\/\/[^\s"'<>]+/i);
@@ -79,6 +105,19 @@ const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) 
   } catch {
     return { error: 'Link inválido' };
   }
+
+  // Candidatos de señales NO confiables (encuadres, previews, incrustados):
+  // se juntan todos y al final gana el más cercano a nuestros almacenes.
+  const candidates = [];
+  const pushCandidate = (coords, source) => {
+    if (coords) candidates.push({ ...coords, source });
+  };
+  const logOk = (via, coords) => {
+    console.log('delivery/resolve ok:', { via, ...coords, final_url: current.href.slice(0, 200) });
+  };
+
+  let lastResponseStatus = null;
+  let lastBodyBytes = 0;
   for (let hop = 0; hop < MAX_LINK_HOPS; hop += 1) {
     if (!/^https?:$/.test(current.protocol)) return { error: 'Solo se aceptan links http(s)' };
     if (!allowHost(current.hostname)) {
@@ -87,15 +126,16 @@ const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) 
     // La página de consentimiento envuelve el destino real en ?continue=
     const continueParam = current.searchParams.get('continue');
     if (continueParam) {
-      const coords = parseCoordsFromMapsUrl(continueParam);
-      if (coords) return coords;
+      const coords = parseTrustedCoordsFromUrl(continueParam);
+      if (coords) { logOk('url:continue', coords); return coords; }
       try { current = new URL(continueParam); continue; } catch { /* seguir normal */ }
     }
-    const direct = parseCoordsFromMapsUrl(current.href);
-    if (direct) {
-      console.log('delivery/resolve ok:', { via: 'url', ...direct, final_url: current.href.slice(0, 200) });
-      return direct;
-    }
+    // Coordenadas confiables en el URL (pin compartido, destino, marcador).
+    const trusted = parseTrustedCoordsFromUrl(current.href);
+    if (trusted) { logOk('url', trusted); return trusted; }
+    // El encuadre @lat,lng del URL es solo un candidato.
+    const viewportMatch = decodeLoose(current.href).match(VIEWPORT_URL_PATTERN);
+    if (viewportMatch) pushCandidate(matchToCoords(viewportMatch), 'url:viewport');
 
     let response;
     try {
@@ -108,6 +148,7 @@ const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) 
     } catch {
       return { error: 'No se pudo abrir el link (sin conexión con Google Maps)' };
     }
+    lastResponseStatus = response.status;
     const location = response.headers.get('location');
     if (response.status >= 300 && response.status < 400 && location) {
       try {
@@ -118,16 +159,12 @@ const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) 
       }
     }
 
-    // Fin de las redirecciones. Los links de LUGARES (negocios) suelen
-    // terminar en un URL sin coordenadas: el punto está en el HTML de la
-    // página. Se lee el cuerpo (acotado) y se buscan ahí.
-    const finalCoords = parseCoordsFromMapsUrl(current.href);
-    if (finalCoords) return finalCoords;
-
+    // Fin de las redirecciones HTTP: leer el cuerpo (acotado) de la página.
     let body = '';
     try {
       body = (await response.text()).slice(0, 1_500_000);
     } catch { /* cuerpo ilegible: se sigue con lo que hay */ }
+    lastBodyBytes = body.length;
 
     // Google a veces frena IPs de datacenter con su página de captcha:
     // eso explica fallas intermitentes. Mensaje claro para reintentar.
@@ -146,48 +183,75 @@ const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) 
     }
 
     if (body) {
-      // Coordenadas en el HTML, de la señal más confiable a la menos:
-      //  1) center= de la imagen de preview (og:image/twitter:image): es el
-      //     staticmap DEL lugar compartido.
-      //  2) marcador !3d!4d en el cuerpo.
-      // OJO: nada de @lat,lng suelto aquí — una página de Maps trae decenas
-      // de pares de coordenadas ajenos (viewport, lugares relacionados) y el
-      // primer match puede ser cualquiera: eso cotiza puntos equivocados.
+      // URLs de Maps incrustados: los que traen coordenadas confiables
+      // responden directo; los demás quedan de candidatos o de próximo salto.
+      const embedded = (body.match(/https:\/\/(?:www\.)?google\.[a-z.]+\/maps[^"'\\\s<>]+/g) || []).slice(0, 20);
+      for (const embeddedUrl of embedded) {
+        const coords = parseTrustedCoordsFromUrl(embeddedUrl);
+        if (coords) { logOk('body:embedded-url', coords); return coords; }
+      }
+
+      // Señales del HTML como candidatos (matchAll: pueden venir varias).
       const bodyPatterns = [
-        { re: /(?:og|twitter):image["'][^>]*center=(-?\d{1,2}\.\d+)(?:%2C|,)(-?\d{1,3}\.\d+)/i, source: 'preview' },
-        { re: /center=(-?\d{1,2}\.\d+)(?:%2C|,)(-?\d{1,3}\.\d+)/, source: 'center' },
-        { re: /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/, source: 'marker' }
+        { re: /(?:og|twitter):image["'][^>]*center=(-?\d{1,2}\.\d+)(?:%2C|,)(-?\d{1,3}\.\d+)/gi, source: 'body:preview' },
+        { re: /center=(-?\d{1,2}\.\d+)(?:%2C|,)(-?\d{1,3}\.\d+)/g, source: 'body:center' },
+        { re: /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/g, source: 'body:marker' }
       ];
       for (const { re, source } of bodyPatterns) {
-        const match = body.match(re);
-        if (match) {
-          const lat = Number(match[1]);
-          const lng = Number(match[2]);
-          if (isValidLat(lat) && isValidLng(lng)) {
-            console.log('delivery/resolve ok:', { via: `body:${source}`, lat, lng, final_url: current.href.slice(0, 200) });
-            return { lat, lng };
-          }
+        for (const match of body.matchAll(re)) {
+          pushCandidate(matchToCoords(match), source);
+          if (candidates.length > 40) break;
         }
       }
-      // Último recurso: un URL de Maps incrustado que sí traiga coordenadas.
-      const embedded = body.match(/https:\/\/(?:www\.)?google\.[a-z.]+\/maps[^"'\\\s<>]+/g) || [];
-      for (const embeddedUrl of embedded.slice(0, 20)) {
-        const coords = parseCoordsFromMapsUrl(embeddedUrl);
-        if (coords) {
-          console.log('delivery/resolve ok:', { via: 'body:embedded-url', ...coords, final_url: current.href.slice(0, 200) });
-          return coords;
-        }
+      for (const embeddedUrl of embedded) {
+        const viewport = decodeLoose(embeddedUrl).match(VIEWPORT_URL_PATTERN);
+        if (viewport) pushCandidate(matchToCoords(viewport), 'body:embedded-viewport');
+      }
+
+      // Página interstitial («abrir en la app») sin candidatos: seguir el
+      // primer URL de Maps incrustado como si fuera la redirección.
+      if (candidates.length === 0 && embedded.length > 0 && embedded[0] !== current.href) {
+        try { current = new URL(embedded[0].replace(/&amp;/g, '&')); continue; } catch { /* sin salto */ }
       }
     }
+    break; // sin más saltos: decidir con los candidatos juntados
+  }
 
+  if (candidates.length === 0) {
     console.warn('delivery/resolve: sin coordenadas —', {
       final_url: current.href.slice(0, 300),
-      status: response.status,
-      body_bytes: body.length
+      status: lastResponseStatus,
+      body_bytes: lastBodyBytes
     });
     return { error: 'El link no trae coordenadas: comparte la ubicación como pin (Ubicación → Enviar) o pega "lat, lng"' };
   }
-  return { error: 'El link redirige demasiadas veces' };
+
+  // Con almacenes configurados: gana el candidato más cercano a alguno, y si
+  // hasta el mejor queda absurdamente lejos, mejor decirlo que cobrar mal.
+  const validAnchors = (anchors || []).filter((a) => isValidLat(Number(a?.lat)) && isValidLng(Number(a?.lng)));
+  if (validAnchors.length > 0) {
+    let best = null;
+    for (const candidate of candidates) {
+      const distance = Math.min(...validAnchors.map((a) => haversineKm(candidate.lat, candidate.lng, Number(a.lat), Number(a.lng))));
+      if (!best || distance < best.distance) best = { ...candidate, distance };
+    }
+    if (best.distance > CANDIDATE_SANITY_KM) {
+      console.warn('delivery/resolve: candidatos implausibles —', {
+        best: { lat: best.lat, lng: best.lng, source: best.source, distance_km: Math.round(best.distance) },
+        candidates: candidates.length,
+        final_url: current.href.slice(0, 300)
+      });
+      return { error: `El link se leyó como un punto a ${Math.round(best.distance)} km de nuestras ciudades: seguramente no es la ubicación real del cliente. Pide el pin de ubicación (Ubicación → Enviar) o pega "lat, lng"` };
+    }
+    logOk(`${best.source} (a ${Math.round(best.distance)} km del almacén)`, best);
+    return { lat: best.lat, lng: best.lng };
+  }
+
+  // Sin almacenes configurados: primer candidato en orden de confiabilidad.
+  const priority = ['body:preview', 'body:marker', 'body:center', 'body:embedded-viewport', 'url:viewport'];
+  candidates.sort((a, b) => priority.indexOf(a.source) - priority.indexOf(b.source));
+  logOk(candidates[0].source, candidates[0]);
+  return { lat: candidates[0].lat, lng: candidates[0].lng };
 };
 
 // Anillos: [{max_km, price_bs}] ordenados por distancia, sin solaparse.
@@ -297,7 +361,15 @@ router.post('/api/delivery/resolve', authenticateToken, async (req, res) => {
   try {
     const link = String(req.body?.link || '').trim();
     if (!link) return res.status(400).json({ error: 'Falta el link' });
-    const result = await resolveMapsLink(link);
+    // Los almacenes configurados anclan la lectura: entre varios candidatos
+    // de la página gana el más cercano a nuestras ciudades.
+    let anchors = [];
+    try {
+      anchors = (await loadSettings())
+        .filter((s) => s.active && isValidLat(s.origin_lat) && isValidLng(s.origin_lng))
+        .map((s) => ({ lat: s.origin_lat, lng: s.origin_lng }));
+    } catch { /* sin anclas: el resolvedor usa el orden de confiabilidad */ }
+    const result = await resolveMapsLink(link, { anchors });
     if (result.error) return res.status(422).json({ error: result.error });
     res.json({ lat: result.lat, lng: result.lng });
   } catch (err) {
