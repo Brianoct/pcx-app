@@ -68,9 +68,14 @@ const parseCoordsFromMapsUrl = (rawUrl) => {
 
 const MAX_LINK_HOPS = 6;
 const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) => {
+  // Lo pegado suele traer texto alrededor («Mira mi ubicación: https://…»):
+  // se rescata el primer URL del texto y se limpia la puntuación colgante.
+  const urlMatch = String(rawLink || '').match(/https?:\/\/[^\s"'<>]+/i);
+  if (!urlMatch) return { error: 'Link inválido: no se encontró un http(s)://…' };
+  const cleaned = urlMatch[0].replace(/[),.;!¡¿?\]]+$/, '');
   let current;
   try {
-    current = new URL(String(rawLink || '').trim());
+    current = new URL(cleaned);
   } catch {
     return { error: 'Link inválido' };
   }
