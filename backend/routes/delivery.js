@@ -139,11 +139,20 @@ const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost, anchors
 
     let response;
     try {
+      // Cabeceras de navegador real + cookies de consentimiento de Google:
+      // a IPs de datacenter Google les sirve páginas intermedias (consent,
+      // «abrir en la app») sin datos del lugar; así se obtiene la
+      // redirección de verdad en la mayoría de los casos.
       response = await fetch(current.href, {
         method: 'GET',
         redirect: 'manual',
         signal: AbortSignal.timeout(8000),
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) pcx-app' }
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'es-BO,es;q=0.9,en;q=0.8',
+          Cookie: 'SOCS=CAI; CONSENT=YES+cb.20240101-01-p0.es+FX+410'
+        }
       });
     } catch {
       return { error: 'No se pudo abrir el link (sin conexión con Google Maps)' };

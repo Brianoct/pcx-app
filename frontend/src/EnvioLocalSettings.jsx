@@ -162,7 +162,11 @@ function DeliveryTester({ token }) {
   return (
     <section className="card els-tester">
       <h3 className="els-tester-title">🧪 Probar un punto</h3>
-      <p className="els-tester-sub">Pega una ubicación de cliente y mira qué cobraría el sistema con los anillos guardados.</p>
+      <p className="els-tester-sub">
+        Pega una ubicación de cliente y mira qué cobraría el sistema con los anillos guardados.
+        Lo infalible es el <strong>pin de WhatsApp</strong> o «lat, lng»; los links de Google a veces
+        no se dejan leer desde el servidor.
+      </p>
       <div className="els-tester-row">
         <input
           type="text"
