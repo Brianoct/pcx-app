@@ -3,7 +3,6 @@ import { buildAccessForUser, canAccessPanel } from './roleAccess';
 import { sortProductsByCatalogOrder } from './productCatalog';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
-import EnvioLocalSettings from './EnvioLocalSettings';
 
 function InventoryPanel({ token, role, access }) {
   const [products, setProducts] = useState([]);
@@ -468,16 +467,11 @@ function InventoryPanel({ token, role, access }) {
     </>
   );
 
-  const normalizedRole = String(role || '').toLowerCase();
-  const canManageDelivery = normalizedRole.includes('almac') || normalizedRole.includes('admin');
-
   return (
     <div className="container inv-page" ref={pageRef}>
       <p className="inv-view-note">
         Vista: {canViewGlobalInventory ? 'Global' : `Individual (${individualStore?.location || 'Ciudad no configurada'})`}
       </p>
-
-      {canManageDelivery && <EnvioLocalSettings token={token} />}
 
       <div className="inv-toolbar" ref={toolbarRef}>
         {canViewGlobalInventory && (

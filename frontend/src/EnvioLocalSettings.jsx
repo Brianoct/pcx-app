@@ -1,7 +1,8 @@
-// Configuración del envío local (Almacén): por ciudad, el punto GPS del
-// almacén y los anillos de distancia con su precio. Cotizar y el chat de
-// WhatsApp usan esto para cotizar el delivery desde la ubicación del cliente.
+// Página «Envío local» (menú Almacén): por ciudad, el punto GPS del almacén
+// y los anillos de distancia con su precio. Cotizar y el chat de WhatsApp
+// usan esto para cotizar el delivery desde la ubicación del cliente.
 // La distancia es en línea recta: los anillos se calibran sabiendo eso.
+// Editar es de Almacén/Admin (el servidor lo exige); el resto puede mirar.
 import { useEffect, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { useToast } from './ui/toastContext';
@@ -118,9 +119,75 @@ function CityEditor({ city, token, onSaved }) {
   );
 }
 
-export default function EnvioLocalSettings({ token }) {
+// Probador: pega una ubicación de cliente y mira qué cobraría el sistema con
+// los anillos guardados — para calibrar precios sin salir de la página.
+function DeliveryTester({ token }) {
+  const toast = useToast();
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const test = async () => {
+    let gps = parseGpsInput(input);
+    setLoading(true);
+    try {
+      if (!gps && looksLikeMapsLink(input)) {
+        const resolved = await apiRequest('/api/delivery/resolve', {
+          method: 'POST',
+          token,
+          body: { link: input.trim() }
+        });
+        if (Number.isFinite(Number(resolved?.lat)) && Number.isFinite(Number(resolved?.lng))) {
+          gps = { lat: Number(resolved.lat), lng: Number(resolved.lng) };
+        }
+      }
+      if (!gps) {
+        toast.error('Pega "lat, lng" o un link de Google Maps');
+        return;
+      }
+      const data = await apiRequest('/api/delivery/quote', {
+        method: 'POST',
+        token,
+        body: { lat: gps.lat, lng: gps.lng }
+      });
+      setResult(data);
+    } catch (err) {
+      setResult(null);
+      toast.error(err.message || 'No se pudo cotizar');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <section className="card els-tester">
+      <h3 className="els-tester-title">🧪 Probar un punto</h3>
+      <p className="els-tester-sub">Pega una ubicación de cliente y mira qué cobraría el sistema con los anillos guardados.</p>
+      <div className="els-tester-row">
+        <input
+          type="text"
+          value={input}
+          placeholder="-17.4066, -66.1450 o link de Maps"
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') test(); }}
+        />
+        <button type="button" className="btn btn-primary" disabled={loading || !input.trim()} onClick={test}>
+          {loading ? 'Calculando…' : 'Probar'}
+        </button>
+      </div>
+      {result && (
+        <div className={`quote-delivery-result ${result.in_range ? 'is-ok' : 'is-out'}`}>
+          {result.in_range
+            ? <span>✅ {result.city} · {result.distance_km} km del almacén → <strong>{Number(result.price_bs).toFixed(2)} Bs</strong> (anillo hasta {result.ring_max_km} km)</span>
+            : <span>⚠️ {result.message || 'Fuera de cobertura'}</span>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export default function EnvioLocalPage({ token }) {
   const [cities, setCities] = useState(null);
-  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let activeFlag = true;
@@ -130,28 +197,32 @@ export default function EnvioLocalSettings({ token }) {
     return () => { activeFlag = false; };
   }, [token]);
 
-  if (cities === null) return null;
-
   return (
-    <section className="card els-card">
-      <button type="button" className="els-toggle" onClick={() => setOpen((prev) => !prev)}>
-        <span>🛵 Envío local — precios por zona</span>
-        <span className="els-toggle-sub">
-          {open ? 'Cerrar' : 'Configurar los anillos de precio que usa Ventas al cotizar delivery'}
-        </span>
-      </button>
-      {open && (
-        <div className="els-body">
-          {cities.map((city) => (
-            <CityEditor
-              key={`${city.city}-${city.updated_at || ''}`}
-              city={city}
-              token={token}
-              onSaved={(next) => { if (next) setCities(next); }}
-            />
-          ))}
-        </div>
+    <div className="container els-page">
+      <header className="els-page-head">
+        <h2>🛵 Envío local</h2>
+        <p>
+          Precios del delivery dentro de la ciudad. El cliente manda su GPS por WhatsApp,
+          Ventas lo pega en Cotizar y el precio sale de estos anillos.
+        </p>
+      </header>
+      {cities === null ? (
+        <p className="dashboard-muted">Cargando configuración…</p>
+      ) : (
+        <>
+          <div className="els-body els-body-page">
+            {cities.map((city) => (
+              <CityEditor
+                key={`${city.city}-${city.updated_at || ''}`}
+                city={city}
+                token={token}
+                onSaved={(next) => { if (next) setCities(next); }}
+              />
+            ))}
+          </div>
+          <DeliveryTester token={token} />
+        </>
       )}
-    </section>
+    </div>
   );
 }
