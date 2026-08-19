@@ -1292,6 +1292,11 @@ export default function QuoteTool({ token, user }) {
                       ✅ {deliveryQuote.city} · {deliveryQuote.distance_km} km del almacén →{' '}
                       <strong>{Number(deliveryQuote.price_bs).toFixed(2)} Bs</strong>
                     </span>
+                    {deliveryQuote.maps_url && (
+                      <a href={deliveryQuote.maps_url} target="_blank" rel="noopener noreferrer" className="quote-delivery-verify">
+                        📍 verificar punto ↗
+                      </a>
+                    )}
                     <label className="quote-delivery-include">
                       <input
                         type="checkbox"
@@ -1303,7 +1308,12 @@ export default function QuoteTool({ token, user }) {
                   </div>
                 ) : (
                   <div className="quote-delivery-result is-out">
-                    ⚠️ {deliveryQuote.message || 'Fuera de cobertura: cotizar manual'}
+                    <span>⚠️ {deliveryQuote.message || 'Fuera de cobertura: cotizar manual'}</span>
+                    {deliveryQuote.maps_url && (
+                      <a href={deliveryQuote.maps_url} target="_blank" rel="noopener noreferrer" className="quote-delivery-verify">
+                        📍 ver el punto leído ↗
+                      </a>
+                    )}
                   </div>
                 )
               )}

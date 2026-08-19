@@ -180,6 +180,11 @@ function DeliveryTester({ token }) {
           {result.in_range
             ? <span>✅ {result.city} · {result.distance_km} km del almacén → <strong>{Number(result.price_bs).toFixed(2)} Bs</strong> (anillo hasta {result.ring_max_km} km)</span>
             : <span>⚠️ {result.message || 'Fuera de cobertura'}</span>}
+          {result.maps_url && (
+            <a href={result.maps_url} target="_blank" rel="noopener noreferrer" className="quote-delivery-verify">
+              📍 ver el punto leído ↗
+            </a>
+          )}
         </div>
       )}
     </section>

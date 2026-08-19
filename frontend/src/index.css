@@ -11556,3 +11556,7 @@ button.vc-kpi {
   border-radius: 8px;
   font-size: 0.9rem;
 }
+
+/* Link de verificación del punto leído (Cotizar y probador de Envío local). */
+.quote-delivery-verify { color: #1d4ed8; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.quote-delivery-verify:hover { text-decoration: underline; }
