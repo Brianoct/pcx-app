@@ -128,63 +128,8 @@ export default function VentasDashboard({ token, user }) {
   if (error) return <div className="container home-page"><p className="dashboard-muted">{error}</p></div>;
   if (!data) return <div className="container home-page"><p className="dashboard-muted">Cargando panel de ventas…</p></div>;
 
-  const { sales, team, funnel, seguimientos, alerts, goals, per_vendor: perVendor, scope } = data;
+  const { sales, funnel, seguimientos, alerts, goals, per_vendor: perVendor, scope } = data;
   const today = todayText();
-
-  // Primero lo del vendedor que inició sesión; al final lo global del área.
-  const seguimientosTile = {
-    key: 'seguimientos',
-    icon: '📞',
-    label: scope === 'team' ? 'Seguimientos · equipo' : 'Mis seguimientos',
-    value: seguimientos.hoy + seguimientos.vencidos,
-    detail: seguimientos.vencidos > 0 ? `${seguimientos.vencidos} vencidos` : 'para hoy',
-    to: '/crm',
-    warn: seguimientos.vencidos > 0,
-    team: scope === 'team'
-  };
-
-  // Ventas del mes, cierres y ventas del área viven en la tarjeta
-  // «Rendimiento de ventas» (con comisión y comparación mensual) — los tiles
-  // solo muestran lo que esa tarjeta no cubre, para no repetir números.
-  const tiles = [
-    {
-      key: 'pendientes',
-      icon: '🧾',
-      label: 'Mis cotizaciones pendientes',
-      value: sales.pending_count,
-      detail: `${formatBs(sales.pending_bs)} por cerrar`,
-      to: '/history',
-      warn: sales.pending_stale > 0
-    },
-    ...(scope === 'own' ? [seguimientosTile] : []),
-    {
-      key: 'semana',
-      icon: '📆',
-      label: 'Mi semana',
-      value: sales.sold_week,
-      detail: `${formatBs(sales.sold_week_bs)} · hoy ${sales.sold_today}`,
-      to: '/history'
-    },
-    ...(scope === 'team' ? [seguimientosTile] : []),
-    {
-      key: 'pendientes_area',
-      icon: '🏪',
-      label: 'Pendientes del área',
-      value: team.pending_count,
-      detail: `${formatBs(team.pending_bs)} por cerrar en el área`,
-      to: '/history',
-      team: true
-    },
-    {
-      key: 'nuevos',
-      icon: '👥',
-      label: 'Clientes nuevos · área',
-      value: team.nuevos_mes,
-      detail: goals ? `Meta ${goals.monthly_new_customers} este mes` : 'este mes',
-      to: '/crm',
-      team: true
-    }
-  ];
 
   const funnelRows = [
     { key: 'contactado', label: 'Contactados', value: funnel.contactado, color: FUNNEL_COLORS.contactado },
@@ -235,25 +180,10 @@ export default function VentasDashboard({ token, user }) {
         </div>
       </header>
 
-      <div className="home-tiles vd-tiles">
-        {tiles.map((tile) => (
-          <button key={tile.key} type="button" className={`home-tile ${tile.warn ? 'is-warn' : ''} ${tile.team ? 'is-team' : ''}`} onClick={() => navigate(tile.to)}>
-            <span className="vd-tile-top">
-              <span className="vd-tile-icon" aria-hidden="true">{tile.icon}</span>
-              {tile.team && <span className="vd-tile-chip">EQUIPO</span>}
-            </span>
-            <span className="home-tile-value">{tile.value}</span>
-            <span className="home-tile-label">{tile.label}</span>
-            <span className="home-tile-detail">{tile.detail}</span>
-            {Number.isFinite(tile.progress) && (
-              <span className="vd-tile-bar"><span style={{ width: `${Math.min(100, Math.max(0, tile.progress))}%` }} /></span>
-            )}
-          </button>
-        ))}
-      </div>
-
       <div className="home-grid">
-        <VentasComisiones token={token} goals={goals} />
+        {/* Los tiles de arriba se fusionaron aquí: pendientes, seguimientos y
+            mi semana viven como KPIs dentro de «Rendimiento de ventas». */}
+        <VentasComisiones token={token} goals={goals} panel={{ scope, sales, seguimientos }} />
 
         <section className="home-card vdp-card">
           <div className="home-card-head">

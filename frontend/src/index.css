@@ -11325,6 +11325,18 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   border-radius: 12px;
   padding: 12px;
 }
+/* Los KPIs que vienen de los viejos tiles navegan al hacer clic. */
+button.vc-kpi {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.vc-kpi.is-clickable:hover {
+  border-color: #d6cfc4;
+  box-shadow: 0 2px 8px rgba(28, 25, 23, 0.08);
+}
+.vc-kpi.is-warn .vc-kpi-value { color: #dc2626; }
 .vc-kpi-icon {
   flex: 0 0 auto;
   width: 38px;
