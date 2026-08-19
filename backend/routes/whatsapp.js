@@ -1093,6 +1093,20 @@ router.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, 
         from_phone: String(row.from_phone || '').trim() || null,
         to_phone: String(row.to_phone || '').trim() || null,
         raw_payload: row.raw_payload || null,
+        // Ubicación compartida por el cliente, ya parseada: alimenta el botón
+        // «Cotizar envío» del chat sin que el frontend escarbe el payload.
+        location: (() => {
+          const loc = row.raw_payload?.location;
+          const lat = Number(loc?.latitude);
+          const lng = Number(loc?.longitude);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+          return {
+            lat,
+            lng,
+            name: String(loc?.name || '').trim() || null,
+            address: String(loc?.address || '').trim() || null
+          };
+        })(),
         created_at: row.created_at || null,
         updated_at: row.updated_at || null
       }))

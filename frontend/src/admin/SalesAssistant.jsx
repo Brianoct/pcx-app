@@ -5,6 +5,93 @@ import CustomerHub from '../crm/CustomerHub';
 
 const MEDIA_TYPES = ['image', 'video', 'audio', 'document'];
 
+// Ubicación compartida por el cliente: botón para cotizar el envío local al
+// instante (anillos de Almacén) y saltar a Cotizar con el GPS ya cargado.
+function LocationDeliveryQuote({ message, token, conversation }) {
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const loc = message?.location;
+  if (!loc || !Number.isFinite(Number(loc.lat)) || !Number.isFinite(Number(loc.lng))) return null;
+
+  const quoteDelivery = async () => {
+    setLoading(true);
+    try {
+      const data = await apiRequest('/api/delivery/quote', {
+        method: 'POST',
+        token,
+        body: { lat: Number(loc.lat), lng: Number(loc.lng) }
+      });
+      setResult(data);
+    } catch (err) {
+      setResult({ in_range: false, message: err?.message || 'No se pudo cotizar el envío' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const replyText = result?.in_range
+    ? `El costo del envío hasta tu ubicación es de ${Number(result.price_bs).toFixed(0)} Bs (${result.city}, a ${result.distance_km} km). 🛵`
+    : '';
+
+  const copyReply = async () => {
+    try {
+      await navigator.clipboard.writeText(replyText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard bloqueado: el texto queda visible para copiar a mano */ }
+  };
+
+  const openCotizar = () => {
+    try {
+      sessionStorage.setItem('pcx.quotePrefill', JSON.stringify({
+        customerName: String(conversation?.contact_name || '').trim(),
+        customerPhone: String(conversation?.contact_phone || '').trim(),
+        conversationId: conversation?.id || null,
+        gps: `${Number(loc.lat)}, ${Number(loc.lng)}`
+      }));
+    } catch { /* sin sessionStorage: Cotizar abre vacío */ }
+    window.location.hash = '#/cotizar';
+  };
+
+  return (
+    <div className="sia-delivery">
+      <a
+        className="sia-delivery-map"
+        href={`https://www.google.com/maps?q=${Number(loc.lat)},${Number(loc.lng)}`}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        📍 {loc.name || loc.address || `${Number(loc.lat).toFixed(5)}, ${Number(loc.lng).toFixed(5)}`}
+      </a>
+      {!result && (
+        <button type="button" className="admin-ai-pill" onClick={quoteDelivery} disabled={loading}>
+          {loading ? 'Calculando…' : '🛵 Cotizar envío'}
+        </button>
+      )}
+      {result && (
+        <div className={`sia-delivery-result ${result.in_range ? 'is-ok' : 'is-out'}`}>
+          {result.in_range ? (
+            <>
+              <span>
+                ✅ {result.city} · {result.distance_km} km → <strong>{Number(result.price_bs).toFixed(2)} Bs</strong>
+              </span>
+              <button type="button" className="admin-ai-pill" onClick={copyReply}>
+                {copied ? '✓ Copiado' : 'Copiar respuesta'}
+              </button>
+            </>
+          ) : (
+            <span>⚠️ {result.message || 'Fuera de cobertura: cotizar manual'}</span>
+          )}
+          <button type="button" className="admin-ai-pill" onClick={openCotizar}>
+            Cotizar con este GPS →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Outbound messages store raw_payload as { request, response }; inbound store
 // the webhook object directly.
 const normalizeMessagePayload = (message = {}) => {
@@ -524,6 +611,7 @@ function SalesAssistant({ token, user }) {
                     </span>
                     <div>{m.text_body || `[${m.message_type || 'mensaje'}]`}</div>
                     <MediaAttachment message={m} token={token} />
+                    <LocationDeliveryQuote message={m} token={token} conversation={conversation} />
                   </div>
                 ))}
               </div>

@@ -450,6 +450,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
       items,
       checked,
       promoSections,
+      delivery: checklistPayload?.delivery || null,
       packed: quote.status === 'Embalado' || quote.status === 'Enviado'
     });
   };
@@ -947,6 +948,23 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {prepModal.delivery && (
+                    <div className="pedidos-delivery">
+                      <span className="pedidos-delivery-title">🛵 Envío local · {Number(prepModal.delivery.fee_bs).toFixed(2)} Bs</span>
+                      <span className="pedidos-delivery-label">{prepModal.delivery.label}</span>
+                      {prepModal.delivery.maps_url && (
+                        <a
+                          href={prepModal.delivery.maps_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="pedidos-delivery-map"
+                        >
+                          📍 Abrir punto de entrega en Maps
+                        </a>
+                      )}
                     </div>
                   )}
 

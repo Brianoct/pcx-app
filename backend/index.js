@@ -42,6 +42,7 @@ const routers = [
   require('./routes/areaPanels'),
   require('./routes/overview'),
   require('./routes/geo'),
+  require('./routes/delivery'),
   require('./routes/sandbox')
 ];
 

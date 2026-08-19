@@ -140,6 +140,32 @@ const normalizeGiftSelection = (giftPayload = null) => {
   };
 };
 
+// Envío local cotizado desde el GPS del cliente: cargo en Bs, etiqueta para
+// la proforma y las coordenadas "lat,lng" (Almacén abre el mapa al despachar).
+// Los tres van juntos: sin cargo no se guarda etiqueta ni GPS.
+const normalizeDeliveryFields = ({ delivery_fee_bs, delivery_label, delivery_gps } = {}) => {
+  const empty = { fee: null, label: null, gps: null };
+  if (delivery_fee_bs === undefined || delivery_fee_bs === null || delivery_fee_bs === '') return empty;
+  const fee = Number(delivery_fee_bs);
+  if (!Number.isFinite(fee) || fee < 0 || fee > 100000) {
+    return { error: 'Cargo de envío local inválido' };
+  }
+  const label = String(delivery_label || '').trim().slice(0, 160) || null;
+  let gps = null;
+  const gpsText = String(delivery_gps || '').trim();
+  if (gpsText) {
+    const match = gpsText.match(/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/);
+    if (!match) return { error: 'GPS de envío inválido: usa "lat,lng"' };
+    const lat = Number(match[1]);
+    const lng = Number(match[2]);
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return { error: 'GPS de envío fuera de rango' };
+    }
+    gps = `${lat},${lng}`;
+  }
+  return { fee: Math.round(fee * 100) / 100, label, gps };
+};
+
 // Paquete de regalo (promo «Regalo por compra»): lista [{sku, qty, name}].
 const MAX_GIFT_ITEMS = 10;
 
@@ -403,6 +429,7 @@ module.exports = {
   getQuoteSaveIdempotencyCacheKey,
   giftItemsFingerprint,
   lineItemsFingerprint,
+  normalizeDeliveryFields,
   normalizeGiftItems,
   normalizeGiftSelection,
   resolveGiftItemsForQuote,

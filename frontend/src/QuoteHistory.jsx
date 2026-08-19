@@ -555,14 +555,16 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     });
   }, [editingQuote]);
 
-  const recalcEditTotals = (nextRows, nextDiscountPercent = null) => {
+  const recalcEditTotals = (nextRows, nextDiscountPercent = null, deliveryFeeOverride = null) => {
     const safeRows = Array.isArray(nextRows) ? nextRows : [];
     const subtotal = safeRows.reduce((sum, row) => sum + Number(row?.lineTotal || 0), 0);
     const discountPercent = Number(
       nextDiscountPercent === null ? editingQuote?.discount_percent || 0 : nextDiscountPercent
     );
     const discountAmount = subtotal * (Math.max(0, Math.min(100, discountPercent)) / 100);
-    const total = Math.max(0, subtotal - discountAmount);
+    // El envío local se suma después del descuento (el descuento es solo de productos).
+    const deliveryFee = Number(deliveryFeeOverride ?? editingQuote?.delivery_fee_bs ?? 0) || 0;
+    const total = Math.max(0, subtotal - discountAmount) + deliveryFee;
     // discount_bs es el texto que muestra el campo "Descuento Bs"; se deriva
     // del % salvo mientras el usuario está escribiendo en ese campo.
     return { subtotal, total, discount_bs: discountAmount.toFixed(2) };
@@ -789,6 +791,11 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       gift_sku: String(quote.gift_sku || '').trim().toUpperCase(),
       gift_qty: Math.max(1, Number.parseInt(quote.gift_qty, 10) || 1),
       gift_name: String(quote.gift_name || '').trim(),
+      delivery_fee_bs: quote.delivery_fee_bs !== null && quote.delivery_fee_bs !== undefined
+        ? Number(quote.delivery_fee_bs)
+        : null,
+      delivery_label: quote.delivery_label || null,
+      delivery_gps: quote.delivery_gps || null,
       line_items: Array.isArray(quote.line_items) ? quote.line_items : []
     };
 
@@ -821,7 +828,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     const finalRows = normalizedRows.length > 0
       ? normalizedRows
       : [createDefaultEditRow(availableProducts[0]?.sku, draft.venta_type || 'sf')];
-    const { subtotal, total, discount_bs } = recalcEditTotals(finalRows, draft.discount_percent);
+    const { subtotal, total, discount_bs } = recalcEditTotals(finalRows, draft.discount_percent, draft.delivery_fee_bs || 0);
     setEditingQuote({
       ...draft,
       line_items: finalRows,
@@ -920,7 +927,14 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         })),
         subtotal: Number(editingQuote.subtotal || 0),
         total: Number(editingQuote.total || 0),
-        status: editingQuote.status || 'Cotizado'
+        status: editingQuote.status || 'Cotizado',
+        // Envío local: viaja siempre para que el total (que lo incluye) y el
+        // cargo guardado se mantengan consistentes tras la edición.
+        delivery_fee_bs: editingQuote.delivery_fee_bs !== null && editingQuote.delivery_fee_bs !== undefined
+          ? Number(editingQuote.delivery_fee_bs)
+          : null,
+        delivery_label: editingQuote.delivery_label || null,
+        delivery_gps: editingQuote.delivery_gps || null
       };
       const editPath = `/api/quotes/${editingQuote.id}`;
       const applyLocalEdit = () => {
@@ -1735,6 +1749,31 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                   title="Regalo histórico de esta cotización; se conserva al editar"
                 />
               </label>
+              {editingQuote.delivery_fee_bs !== null && editingQuote.delivery_fee_bs !== undefined && (
+                <label>
+                  Envío local (se suma al total)
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={`${Number(editingQuote.delivery_fee_bs).toFixed(2)} Bs`}
+                      disabled
+                      title={editingQuote.delivery_label || 'Envío local'}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ whiteSpace: 'nowrap' }}
+                      onClick={() => setEditingQuote((prev) => {
+                        if (!prev) return prev;
+                        const { total } = recalcEditTotals(prev.line_items, prev.discount_percent, 0);
+                        return { ...prev, delivery_fee_bs: null, delivery_label: null, delivery_gps: null, total };
+                      })}
+                    >
+                      Quitar envío
+                    </button>
+                  </div>
+                </label>
+              )}
               <label style={{ display: 'none' }}>
                 Subtotal
                 <input
