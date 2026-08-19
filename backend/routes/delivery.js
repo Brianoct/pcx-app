@@ -92,7 +92,10 @@ const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) 
       try { current = new URL(continueParam); continue; } catch { /* seguir normal */ }
     }
     const direct = parseCoordsFromMapsUrl(current.href);
-    if (direct) return direct;
+    if (direct) {
+      console.log('delivery/resolve ok:', { via: 'url', ...direct, final_url: current.href.slice(0, 200) });
+      return direct;
+    }
 
     let response;
     try {
@@ -143,26 +146,37 @@ const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) 
     }
 
     if (body) {
-      // 1) Coordenadas directas en el HTML (og:image center=, @lat,lng, !3d!4d).
+      // Coordenadas en el HTML, de la señal más confiable a la menos:
+      //  1) center= de la imagen de preview (og:image/twitter:image): es el
+      //     staticmap DEL lugar compartido.
+      //  2) marcador !3d!4d en el cuerpo.
+      // OJO: nada de @lat,lng suelto aquí — una página de Maps trae decenas
+      // de pares de coordenadas ajenos (viewport, lugares relacionados) y el
+      // primer match puede ser cualquiera: eso cotiza puntos equivocados.
       const bodyPatterns = [
-        /center=(-?\d{1,2}\.\d+)%2C(-?\d{1,3}\.\d+)/,
-        /center=(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/,
-        /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/,
-        /@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/
+        { re: /(?:og|twitter):image["'][^>]*center=(-?\d{1,2}\.\d+)(?:%2C|,)(-?\d{1,3}\.\d+)/i, source: 'preview' },
+        { re: /center=(-?\d{1,2}\.\d+)(?:%2C|,)(-?\d{1,3}\.\d+)/, source: 'center' },
+        { re: /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/, source: 'marker' }
       ];
-      for (const pattern of bodyPatterns) {
-        const match = body.match(pattern);
+      for (const { re, source } of bodyPatterns) {
+        const match = body.match(re);
         if (match) {
           const lat = Number(match[1]);
           const lng = Number(match[2]);
-          if (isValidLat(lat) && isValidLng(lng)) return { lat, lng };
+          if (isValidLat(lat) && isValidLng(lng)) {
+            console.log('delivery/resolve ok:', { via: `body:${source}`, lat, lng, final_url: current.href.slice(0, 200) });
+            return { lat, lng };
+          }
         }
       }
-      // 2) Un URL de Maps incrustado en la página que sí traiga coordenadas.
+      // Último recurso: un URL de Maps incrustado que sí traiga coordenadas.
       const embedded = body.match(/https:\/\/(?:www\.)?google\.[a-z.]+\/maps[^"'\\\s<>]+/g) || [];
       for (const embeddedUrl of embedded.slice(0, 20)) {
         const coords = parseCoordsFromMapsUrl(embeddedUrl);
-        if (coords) return coords;
+        if (coords) {
+          console.log('delivery/resolve ok:', { via: 'body:embedded-url', ...coords, final_url: current.href.slice(0, 200) });
+          return coords;
+        }
       }
     }
 
@@ -323,13 +337,22 @@ router.post('/api/delivery/quote', authenticateToken, async (req, res) => {
     }
 
     const best = candidates[0];
+    // El punto interpretado viaja SIEMPRE en la respuesta (con link a Maps):
+    // si un link se leyó mal, el vendedor lo ve de inmediato en vez de
+    // confiar en un precio equivocado.
+    const point = {
+      lat,
+      lng,
+      maps_url: `https://www.google.com/maps?q=${lat},${lng}`
+    };
     if (!requestedCity && best.distance_km > CITY_MATCH_KM) {
       return res.json({
         in_range: false,
         city: null,
         distance_km: Math.round(best.distance_km * 10) / 10,
         price_bs: null,
-        message: 'El punto queda lejos de ambas ciudades: no es un envío local'
+        ...point,
+        message: `El punto queda a ${Math.round(best.distance_km)} km del almacén de ${best.city}: no es un envío local. Verifica el punto en el link`
       });
     }
 
@@ -341,6 +364,7 @@ router.post('/api/delivery/quote', authenticateToken, async (req, res) => {
       distance_km: distanceKm,
       price_bs: ring ? Number(ring.price_bs) : null,
       ring_max_km: ring ? Number(ring.max_km) : null,
+      ...point,
       label: ring
         ? `Envío local ${best.city} · ${distanceKm} km (hasta ${ring.max_km} km)`
         : null,
