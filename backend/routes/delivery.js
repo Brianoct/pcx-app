@@ -29,6 +29,94 @@ const haversineKm = (lat1, lng1, lat2, lng2) => {
 const isValidLat = (v) => Number.isFinite(v) && v >= -90 && v <= 90;
 const isValidLng = (v) => Number.isFinite(v) && v >= -180 && v <= 180;
 
+// ── Links cortos de Google Maps (goo.gl/maps, maps.app.goo.gl) ──────────────
+// El link que comparte WhatsApp no trae coordenadas: es una redirección al
+// URL completo de Maps que sí las trae. El servidor sigue esa cadena (solo
+// dominios de Google, máx. 6 saltos) y saca las coordenadas del URL final.
+const isAllowedMapsHost = (host) => {
+  const h = String(host || '').toLowerCase();
+  return h === 'goo.gl'
+    || h === 'maps.app.goo.gl'
+    || h === 'app.goo.gl'
+    || h === 'g.co'
+    || h === 'google.com'
+    || h.endsWith('.google.com')
+    || /^(www\.|maps\.|consent\.)?google\.[a-z]{2,3}(\.[a-z]{2})?$/.test(h);
+};
+
+const parseCoordsFromMapsUrl = (rawUrl) => {
+  let text = String(rawUrl || '');
+  try { text = decodeURIComponent(text); } catch { /* se parsea tal cual */ }
+  // Orden: marcador del lugar (!3d!4d) > pin compartido (q=/ll=) > centro del mapa (@).
+  const patterns = [
+    /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/,
+    /[?&]q=(?:loc:)?\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i,
+    /[?&]ll=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i,
+    /[?&](?:destination|daddr)=(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i,
+    /@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const lat = Number(match[1]);
+      const lng = Number(match[2]);
+      if (isValidLat(lat) && isValidLng(lng)) return { lat, lng };
+    }
+  }
+  return null;
+};
+
+const MAX_LINK_HOPS = 6;
+const resolveMapsLink = async (rawLink, { allowHost = isAllowedMapsHost } = {}) => {
+  let current;
+  try {
+    current = new URL(String(rawLink || '').trim());
+  } catch {
+    return { error: 'Link inválido' };
+  }
+  for (let hop = 0; hop < MAX_LINK_HOPS; hop += 1) {
+    if (!/^https?:$/.test(current.protocol)) return { error: 'Solo se aceptan links http(s)' };
+    if (!allowHost(current.hostname)) {
+      return { error: 'Solo se aceptan links de Google Maps (goo.gl, maps.app.goo.gl, google.com/maps)' };
+    }
+    // La página de consentimiento envuelve el destino real en ?continue=
+    const continueParam = current.searchParams.get('continue');
+    if (continueParam) {
+      const coords = parseCoordsFromMapsUrl(continueParam);
+      if (coords) return coords;
+      try { current = new URL(continueParam); continue; } catch { /* seguir normal */ }
+    }
+    const direct = parseCoordsFromMapsUrl(current.href);
+    if (direct) return direct;
+
+    let response;
+    try {
+      response = await fetch(current.href, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(6000),
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) pcx-app' }
+      });
+    } catch {
+      return { error: 'No se pudo abrir el link (sin conexión con Google Maps)' };
+    }
+    const location = response.headers.get('location');
+    if (response.status >= 300 && response.status < 400 && location) {
+      try {
+        current = new URL(location, current.href);
+        continue;
+      } catch {
+        return { error: 'El link redirige a una dirección inválida' };
+      }
+    }
+    // Sin más redirecciones: último intento sobre el URL final.
+    const finalCoords = parseCoordsFromMapsUrl(current.href);
+    if (finalCoords) return finalCoords;
+    return { error: 'El link no trae coordenadas: comparte la ubicación como pin (Ubicación → Enviar) o pega "lat, lng"' };
+  }
+  return { error: 'El link redirige demasiadas veces' };
+};
+
 // Anillos: [{max_km, price_bs}] ordenados por distancia, sin solaparse.
 const normalizeRings = (raw) => {
   if (!Array.isArray(raw)) return null;
@@ -129,6 +217,22 @@ router.patch('/api/delivery/settings/:city', authenticateToken, async (req, res)
   }
 });
 
+// ─── Resolver un link de Maps a coordenadas ──────────────────────────────────
+// El frontend manda el link corto tal cual lo pegó el vendedor; el servidor
+// lo expande y devuelve lat/lng listos para /api/delivery/quote.
+router.post('/api/delivery/resolve', authenticateToken, async (req, res) => {
+  try {
+    const link = String(req.body?.link || '').trim();
+    if (!link) return res.status(400).json({ error: 'Falta el link' });
+    const result = await resolveMapsLink(link);
+    if (result.error) return res.status(422).json({ error: result.error });
+    res.json({ lat: result.lat, lng: result.lng });
+  } catch (err) {
+    console.error('Error resolving maps link:', err);
+    res.status(500).json({ error: 'No se pudo leer el link' });
+  }
+});
+
 // ─── Cotizar un envío desde un punto GPS ─────────────────────────────────────
 // city es opcional: sin ella se usa el almacén más cercano (el caso WhatsApp,
 // donde el vendedor aún no eligió sede).
@@ -192,3 +296,6 @@ router.post('/api/delivery/quote', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
+// Expuestos para pruebas (scripts locales): no son parte del API HTTP.
+module.exports.parseCoordsFromMapsUrl = parseCoordsFromMapsUrl;
+module.exports.resolveMapsLink = resolveMapsLink;

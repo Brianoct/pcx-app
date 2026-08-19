@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { useToast } from './ui/toastContext';
-import { parseGpsInput } from './gps';
+import { looksLikeMapsLink, parseGpsInput } from './gps';
 
 function CityEditor({ city, token, onSaved }) {
   const toast = useToast();
@@ -26,7 +26,24 @@ function CityEditor({ city, token, onSaved }) {
 
   const save = async () => {
     const body = { active };
-    const gps = parseGpsInput(originText);
+    let gps = parseGpsInput(originText);
+    // Link corto (goo.gl/maps/…): el servidor lo expande a coordenadas.
+    if (originText.trim() && !gps && looksLikeMapsLink(originText)) {
+      try {
+        const resolved = await apiRequest('/api/delivery/resolve', {
+          method: 'POST',
+          token,
+          body: { link: originText.trim() }
+        });
+        if (Number.isFinite(Number(resolved?.lat)) && Number.isFinite(Number(resolved?.lng))) {
+          gps = { lat: Number(resolved.lat), lng: Number(resolved.lng) };
+          setOriginText(`${gps.lat}, ${gps.lng}`);
+        }
+      } catch (err) {
+        toast.error(err.message || 'No se pudo leer el link de Maps');
+        return;
+      }
+    }
     if (originText.trim() && !gps) {
       toast.error('Punto del almacén inválido: pega "lat, lng" o un link de Google Maps');
       return;

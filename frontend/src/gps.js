@@ -18,3 +18,9 @@ export const parseGpsInput = (text) => {
   }
   return null;
 };
+
+// Link de Maps sin coordenadas visibles (los cortos de compartir:
+// goo.gl/maps/…, maps.app.goo.gl/…): el servidor lo expande y saca el punto.
+export const looksLikeMapsLink = (text) => (
+  /https?:\/\/(goo\.gl|maps\.app\.goo\.gl|app\.goo\.gl|g\.co|([a-z0-9-]+\.)*google\.[a-z.]{2,6})\//i.test(String(text || '').trim())
+);
