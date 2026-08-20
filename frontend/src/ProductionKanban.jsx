@@ -428,6 +428,11 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         <span className="prod-card-sede">
           {lot.qty} pza{lot.qty === 1 ? '' : 's'}
           {splitLot ? ` · lote de ${group.total_qty}` : ''}
+          {lot.processed > 0 && (
+            <span className={`prod-lot-done ${lot.processed >= lot.qty ? 'is-complete' : ''}`} title="Hechas en esta estación">
+              {' '}· ✓ {lot.processed}/{lot.qty}
+            </span>
+          )}
         </span>
 
         {lot.colors && (
@@ -448,29 +453,10 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         )}
 
         <div className="prod-card-foot">
-          <div className="prod-lot-progress" onClick={(e) => e.stopPropagation()} title="Avance en esta estación (no mueve piezas)">
-            <button
-              type="button"
-              aria-label="Restar una pieza hecha"
-              disabled={Boolean(busyKey) || lot.processed <= 0}
-              onClick={() => tickProgress(lot, -1)}
-            >
-              −
-            </button>
-            <span className={`prod-lot-progress-count ${lot.processed >= lot.qty && lot.qty > 0 ? 'is-done' : ''}`}>
-              {lot.processed}/{lot.qty}
-            </span>
-            <button
-              type="button"
-              className="is-plus"
-              aria-label="Marcar una pieza hecha"
-              disabled={Boolean(busyKey) || lot.processed >= lot.qty}
-              onClick={() => tickProgress(lot, 1)}
-            >
-              +
-            </button>
-          </div>
           <span className="prod-card-meta">
+            {lot.nextStage && (
+              <span className="prod-card-nexthint">→ {STAGE_LABEL[lot.nextStage]}</span>
+            )}
             {lot.pendingTasks > 0 && (
               <span className="prod-card-task-badge" title="Tareas de medición pendientes">
                 {lot.pendingTasks} tarea{lot.pendingTasks > 1 ? 's' : ''}
@@ -480,21 +466,31 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
           </span>
         </div>
 
-        {lot.nextStage && (
-          <button
-            type="button"
-            className="btn btn-primary prod-advance-btn"
-            disabled={Boolean(busyKey)}
-            onClick={(e) => { e.stopPropagation(); advanceLot(lot); }}
-          >
-            {lot.nextStage === 'embalado'
-              ? `Calidad → ${STAGE_LABEL[lot.nextStage]}`
-              : `Avanzar lote → ${STAGE_LABEL[lot.nextStage]}`}
-          </button>
-        )}
-
         {isExpanded && (
           <div className="prod-card-extra" onClick={(e) => e.stopPropagation()}>
+            <div className="prod-lot-tick">
+              <span className="prod-lot-tick-label">Hechas en esta estación</span>
+              <div className="prod-card-counter">
+                <button
+                  type="button"
+                  aria-label="Restar una pieza hecha"
+                  disabled={Boolean(busyKey) || lot.processed <= 0}
+                  onClick={() => tickProgress(lot, -1)}
+                >
+                  −
+                </button>
+                <span className="prod-chunk-qty">{lot.processed}/{lot.qty}</span>
+                <button
+                  type="button"
+                  className="is-plus"
+                  aria-label="Marcar una pieza hecha"
+                  disabled={Boolean(busyKey) || lot.processed >= lot.qty}
+                  onClick={() => tickProgress(lot, 1)}
+                >
+                  +
+                </button>
+              </div>
+            </div>
             {chunkTasks.map((task) => (
               <div key={task.id} className="prod-task">
                 <div className="prod-task-question">
@@ -532,6 +528,18 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                 </div>
               </div>
             ))}
+            {lot.nextStage && (
+              <button
+                type="button"
+                className="btn btn-primary prod-advance-btn"
+                disabled={Boolean(busyKey)}
+                onClick={() => advanceLot(lot)}
+              >
+                {lot.nextStage === 'embalado'
+                  ? `Calidad → ${STAGE_LABEL[lot.nextStage]}`
+                  : `Avanzar lote → ${STAGE_LABEL[lot.nextStage]}`}
+              </button>
+            )}
             {lot.prevStage && (
               <button
                 type="button"
