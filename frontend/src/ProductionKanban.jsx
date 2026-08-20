@@ -96,6 +96,7 @@ const colorMixOf = (members) => {
     }
     const row = mix.get(sku);
     row.qty += Number(member.required_qty || 0);
+    row.done = (row.done || 0) + Number(member.processed_count || 0);
     row.members.push(member);
   }
   return [...mix.values()].sort((a, b) => String(a.label || '').localeCompare(String(b.label || '')));
@@ -294,19 +295,20 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     }
   };
 
-  // «Hechas n/N»: avance dentro de la estación, sin mover piezas.
-  const tickProgress = async (lot, delta) => {
+  // «Hechas n/N»: avance dentro de la estación, sin mover piezas. En lotes
+  // multicolor se registra POR COLOR: `members` son las tarjetas de ese color.
+  const tickProgress = async (lot, members, delta) => {
     if (busyKey) return;
     setBusyKey(`${lot.key}::progress`);
     try {
       const res = await apiRequest('/api/production/kanban/batch-progress', {
         method: 'PATCH',
         token,
-        body: { card_ids: lot.members.map((m) => m.id), delta }
+        body: { card_ids: members.map((m) => m.id), delta }
       });
       // El backend reparte el total llenando por id: replicar para no recargar.
       const target = Number(res?.processed || 0);
-      const ordered = [...lot.members].sort((a, b) => Number(a.id) - Number(b.id));
+      const ordered = [...members].sort((a, b) => Number(a.id) - Number(b.id));
       let remaining = target;
       const shares = new Map();
       for (const member of ordered) {
@@ -436,11 +438,11 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         </span>
 
         {lot.colors && (
-          <div className="prod-lot-colors" title="Colores del lote">
+          <div className="prod-lot-colors" title="Colores del lote (hechas/total)">
             {lot.colors.map((color) => (
               <span key={color.sku} className="prod-lot-color">
                 <ColorSwatch code={color.code} label={color.label} />
-                {color.qty}
+                {(color.done || 0) > 0 ? `${color.done}/${color.qty}` : color.qty}
               </span>
             ))}
           </div>
@@ -470,26 +472,58 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
           <div className="prod-card-extra" onClick={(e) => e.stopPropagation()}>
             <div className="prod-lot-tick">
               <span className="prod-lot-tick-label">Hechas en esta estación</span>
-              <div className="prod-card-counter">
-                <button
-                  type="button"
-                  aria-label="Restar una pieza hecha"
-                  disabled={Boolean(busyKey) || lot.processed <= 0}
-                  onClick={() => tickProgress(lot, -1)}
-                >
-                  −
-                </button>
-                <span className="prod-chunk-qty">{lot.processed}/{lot.qty}</span>
-                <button
-                  type="button"
-                  className="is-plus"
-                  aria-label="Marcar una pieza hecha"
-                  disabled={Boolean(busyKey) || lot.processed >= lot.qty}
-                  onClick={() => tickProgress(lot, 1)}
-                >
-                  +
-                </button>
-              </div>
+              {lot.colors && lot.colors.length > 1 ? (
+                // Lote multicolor (desde Pintado): un contador por color.
+                lot.colors.map((color) => (
+                  <div key={color.sku} className="prod-lot-tick-row">
+                    <span className="prod-lot-tick-color">
+                      <ColorSwatch code={color.code} label={color.label} />
+                      {color.label || color.sku}
+                    </span>
+                    <div className="prod-card-counter prod-lot-tick-counter">
+                      <button
+                        type="button"
+                        aria-label={`Restar una pieza hecha de ${color.label || color.sku}`}
+                        disabled={Boolean(busyKey) || (color.done || 0) <= 0}
+                        onClick={() => tickProgress(lot, color.members, -1)}
+                      >
+                        −
+                      </button>
+                      <span className="prod-chunk-qty">{color.done || 0}/{color.qty}</span>
+                      <button
+                        type="button"
+                        className="is-plus"
+                        aria-label={`Marcar una pieza hecha de ${color.label || color.sku}`}
+                        disabled={Boolean(busyKey) || (color.done || 0) >= color.qty}
+                        onClick={() => tickProgress(lot, color.members, 1)}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="prod-card-counter">
+                  <button
+                    type="button"
+                    aria-label="Restar una pieza hecha"
+                    disabled={Boolean(busyKey) || lot.processed <= 0}
+                    onClick={() => tickProgress(lot, lot.members, -1)}
+                  >
+                    −
+                  </button>
+                  <span className="prod-chunk-qty">{lot.processed}/{lot.qty}</span>
+                  <button
+                    type="button"
+                    className="is-plus"
+                    aria-label="Marcar una pieza hecha"
+                    disabled={Boolean(busyKey) || lot.processed >= lot.qty}
+                    onClick={() => tickProgress(lot, lot.members, 1)}
+                  >
+                    +
+                  </button>
+                </div>
+              )}
             </div>
             {chunkTasks.map((task) => (
               <div key={task.id} className="prod-task">
