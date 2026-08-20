@@ -13,9 +13,9 @@ import { boliviaToday } from './campaignShared';
 //    separar qué va a cada almacén.
 //  - «Hechas n/N» registra avance DENTRO de la estación sin mover piezas
 //    (se reinicia al cambiar de etapa).
-//  - Entrar a Embalado pasa por el control de calidad: un modal registra
-//    aprobadas/rechazadas por color (alimenta comisiones de QC, de ahí
-//    `onCommissionChanged`).
+//  - Entrar a Embalado registra el lote como aprobado en el servidor
+//    (alimenta comisiones de QC, de ahí `onCommissionChanged`) — sin paso
+//    visible de calidad.
 // Planificación vive en /produccion-planificacion y Recepción en /recepcion.
 
 // "2026-06-04" → "4 jun" sin pasar por Date (evita corrimientos de zona horaria).
@@ -151,9 +151,6 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
   const [chunkTasks, setChunkTasks] = useState([]);
   const [taskInputs, setTaskInputs] = useState({});
   const [taskBusyId, setTaskBusyId] = useState(null);
-  // Modal de control de calidad al entrar a Embalado: filas por color.
-  const [qcModal, setQcModal] = useState(null);
-  const [qcBusy, setQcBusy] = useState(false);
 
   const loadBoard = async () => {
     setLoading(true);
@@ -283,6 +280,9 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         body: { card_ids: lot.members.map((m) => m.id), stage: targetStage }
       });
       if (Array.isArray(res?.cards)) mergeServerCards(res.cards);
+      if (targetStage === 'embalado' && typeof onCommissionChanged === 'function') {
+        onCommissionChanged();
+      }
       if (targetStage === 'recepcion') {
         setNotice(`${lot.group.display_name}: ${lot.qty} pza${lot.qty === 1 ? '' : 's'} → Recepción ✓`);
       }
@@ -326,71 +326,9 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     }
   };
 
-  // ── Control de calidad: la puerta de entrada a Embalado ──
-  const openQcModal = (lot) => {
-    const rows = (lot.colors || colorMixOf(lot.members)).map((color) => ({
-      sku: color.sku,
-      label: color.label,
-      code: color.code,
-      qty: color.qty,
-      members: color.members,
-      rejected: 0
-    }));
-    setQcModal({ lot, rows });
-  };
-
-  const setQcRejected = (index, value) => {
-    setQcModal((prev) => {
-      if (!prev) return prev;
-      const rows = prev.rows.map((row, i) => {
-        if (i !== index) return row;
-        const rejected = Math.max(0, Math.min(row.qty, Number.parseInt(value, 10) || 0));
-        return { ...row, rejected };
-      });
-      return { ...prev, rows };
-    });
-  };
-
-  const submitQc = async () => {
-    if (!qcModal || qcBusy) return;
-    setQcBusy(true);
-    setError('');
-    try {
-      // Una llamada por color: calidad se registra por producto (SKU).
-      for (const row of qcModal.rows) {
-        if (row.qty <= 0) continue;
-        await apiRequest('/api/production/kanban/qc-gate', {
-          method: 'POST',
-          token,
-          body: {
-            card_ids: row.members.map((m) => m.id),
-            passed: row.qty - row.rejected,
-            rejected: row.rejected
-          }
-        });
-      }
-      const totalRejected = qcModal.rows.reduce((sum, row) => sum + row.rejected, 0);
-      setNotice(totalRejected > 0
-        ? `${qcModal.lot.group.display_name}: calidad registrada (${totalRejected} rechazada${totalRejected === 1 ? '' : 's'}) → Embalado`
-        : `${qcModal.lot.group.display_name}: lote aprobado → Embalado ✓`);
-      setQcModal(null);
-      if (typeof onCommissionChanged === 'function') onCommissionChanged();
-      await loadBoard();
-    } catch (err) {
-      setError(err.message || 'No se pudo registrar el control de calidad');
-      setQcModal(null);
-      loadBoard();
-    } finally {
-      setQcBusy(false);
-    }
-  };
 
   const advanceLot = (lot) => {
     if (!lot.nextStage) return;
-    if (lot.nextStage === 'embalado') {
-      openQcModal(lot);
-      return;
-    }
     moveLot(lot, lot.nextStage);
   };
 
@@ -569,9 +507,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
                 disabled={Boolean(busyKey)}
                 onClick={() => advanceLot(lot)}
               >
-                {lot.nextStage === 'embalado'
-                  ? `Calidad → ${STAGE_LABEL[lot.nextStage]}`
-                  : `Avanzar lote → ${STAGE_LABEL[lot.nextStage]}`}
+                Avanzar lote → {STAGE_LABEL[lot.nextStage]}
               </button>
             )}
             {lot.prevStage && (
@@ -653,47 +589,6 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         </div>
       )}
 
-      {qcModal && (
-        <div className="prod-qc-overlay" role="dialog" aria-modal="true" onClick={() => { if (!qcBusy) setQcModal(null); }}>
-          <div className="prod-qc-modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="prod-qc-title">🔍 Control de calidad — {qcModal.lot.group.display_name}</h3>
-            <p className="prod-qc-sub">
-              Revisa el lote antes de embalarlo. Lo aprobado pasa a Embalado; lo
-              rechazado cierra su parte y Planificación regenera la necesidad.
-            </p>
-            <div className="prod-qc-rows">
-              {qcModal.rows.map((row, index) => (
-                <div key={row.sku} className="prod-qc-row">
-                  <span className="prod-qc-row-name">
-                    {row.code && <ColorSwatch code={row.code} label={row.label} />}
-                    {row.label || row.sku}
-                  </span>
-                  <span className="prod-qc-row-qty">{row.qty} pzas</span>
-                  <label className="prod-qc-row-field">
-                    Rechazadas
-                    <input
-                      type="number"
-                      min="0"
-                      max={row.qty}
-                      value={row.rejected}
-                      onChange={(e) => setQcRejected(index, e.target.value)}
-                    />
-                  </label>
-                  <span className="prod-qc-row-pass">✓ {row.qty - row.rejected} aprobadas</span>
-                </div>
-              ))}
-            </div>
-            <div className="prod-qc-actions">
-              <button type="button" className="btn btn-secondary" disabled={qcBusy} onClick={() => setQcModal(null)}>
-                Cancelar
-              </button>
-              <button type="button" className="btn btn-primary" disabled={qcBusy} onClick={submitQc}>
-                {qcBusy ? 'Registrando…' : 'Registrar calidad y embalar'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
