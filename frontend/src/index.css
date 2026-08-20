@@ -11600,29 +11600,12 @@ button.vc-kpi {
   font-weight: 800;
   color: #1d4ed8;
 }
-.prod-lot-progress {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-}
-.prod-lot-progress button {
-  flex: 1;
-  min-width: 0;
-  height: 26px;
-  border: 1px solid #e7e0d8;
-  border-radius: 6px;
-  background: #fff;
-  color: #57534e;
-  font-weight: 800;
-  line-height: 1;
-  cursor: pointer;
-}
-.prod-lot-progress button.is-plus { color: #16a34a; border-color: #bbf7d0; }
-.prod-lot-progress button:disabled { opacity: 0.35; cursor: default; }
-.prod-lot-progress-count { font-size: 0.74rem; font-weight: 700; color: #78716c; min-width: 34px; text-align: center; }
-.prod-lot-progress-count.is-done { color: #16a34a; }
+/* Avance en estación: en la CARA solo un texto discreto («✓ 3/12»); el
+   contador con botones vive en la tarjeta expandida. */
+.prod-lot-done { color: #b45309; font-weight: 700; }
+.prod-lot-done.is-complete { color: #16a34a; }
+.prod-lot-tick { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.prod-lot-tick-label { font-size: 0.72rem; font-weight: 700; color: #78716c; }
 .prod-return-btn { width: 100%; margin-top: 8px; font-size: 0.8rem; }
 
 .prod-qc-overlay {
