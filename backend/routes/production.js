@@ -148,11 +148,33 @@ const attachStageDistributions = async (cards) => {
 // Moves one or many cards (the board's "mother card" = all sede cards of one
 // SKU in the same stage) in a single transaction. Leaving Planificación
 // freezes the quantity: from then on it is a fixed production order.
+// Entrar a Embalado registra el lote como aprobado en quality_control_records
+// (sin paso visible de calidad — el registro alimenta las comisiones de QC).
 const moveCardsToStage = async ({ cards, nextStage, userId }) => {
+  const enteringEmbalado = cards.filter((card) => nextStage === 'embalado' && card.stage !== 'embalado');
+  if (enteringEmbalado.length > 0) await ensureQcProductSettingsSeeded();
   const client = await pool.connect();
   const movedCards = [];
   try {
     await client.query('BEGIN');
+    if (enteringEmbalado.length > 0) {
+      // Un registro 'passed' por SKU (color): mover el lote a embalar ES
+      // aprobarlo, igual que en el flujo de conteo anterior.
+      const bySku = new Map();
+      for (const card of enteringEmbalado) {
+        const sku = String(card.sku || '').toUpperCase();
+        if (!bySku.has(sku)) bySku.set(sku, { qty: 0, name: String(card.product_name || sku).trim() || sku });
+        bySku.get(sku).qty += Number(card.required_qty || 0);
+      }
+      for (const [sku, info] of bySku.entries()) {
+        if (info.qty <= 0) continue;
+        await client.query(
+          `INSERT INTO quality_control_records (user_id, sku, product_name, quantity, result)
+           VALUES ($1, $2, $3, $4, 'passed')`,
+          [userId, sku, info.name, info.qty]
+        );
+      }
+    }
     for (const card of cards) {
       const leavingPlanning = card.stage === 'planificacion' && nextStage !== 'planificacion';
       const updatedRes = await client.query(
@@ -219,10 +241,6 @@ const validateStageMove = async ({ cards, nextStage }) => {
   if (!allowedStages.includes(nextStage)) {
     return `La etapa ${nextStage} no aplica para este producto (${first.start_process || 'corte_laser'})`;
   }
-  // The quality stop: entering Embalado only happens through the QC gate.
-  if (nextStage === 'embalado' && cards.some((card) => card.stage !== 'embalado')) {
-    return 'QC_GATE_REQUIRED';
-  }
   return null;
 };
 
@@ -233,9 +251,6 @@ router.patch('/api/production/kanban/cards/:id/stage', authenticateToken, requir
     if (!nextStage) return res.status(400).json({ error: 'Etapa inválida' });
     const cards = await loadActiveCards([req.params.id]);
     const problem = await validateStageMove({ cards, nextStage });
-    if (problem === 'QC_GATE_REQUIRED') {
-      return res.status(409).json({ error: 'Para pasar a embalado registra primero el control de calidad', code: 'qc_gate_required' });
-    }
     if (problem) return res.status(cards.length === 0 ? 404 : 400).json({ error: problem });
     const moved = await moveCardsToStage({ cards, nextStage, userId: req.user.id });
     res.json({ message: 'Etapa actualizada', card: mapProductionKanbanCardRow(moved[0]) });
@@ -253,9 +268,6 @@ router.patch('/api/production/kanban/batch-stage', authenticateToken, requireRol
     if (!nextStage) return res.status(400).json({ error: 'Etapa inválida' });
     const cards = await loadActiveCards(req.body?.card_ids);
     const problem = await validateStageMove({ cards, nextStage });
-    if (problem === 'QC_GATE_REQUIRED') {
-      return res.status(409).json({ error: 'Para pasar a embalado registra primero el control de calidad', code: 'qc_gate_required' });
-    }
     if (problem) return res.status(cards.length === 0 ? 404 : 400).json({ error: problem });
     const moved = await moveCardsToStage({ cards, nextStage, userId: req.user.id });
     res.json({ message: 'Etapa actualizada', cards: moved.map((row) => mapProductionKanbanCardRow(row)) });
@@ -353,133 +365,7 @@ const parseCount = (value) => {
   return Number.isInteger(n) && n >= 0 ? n : NaN;
 };
 
-// Largest-remainder split: distribute `amount` across cards proportionally to
-// their required_qty, never exceeding each card's own quantity.
-const distributeAcrossCards = (cards, amount) => {
-  const total = cards.reduce((sum, card) => sum + Number(card.required_qty || 0), 0);
-  if (total <= 0) return cards.map(() => 0);
-  const exact = cards.map((card) => (amount * Number(card.required_qty || 0)) / total);
-  const shares = exact.map((value, i) => Math.min(Math.floor(value), Number(cards[i].required_qty || 0)));
-  let remainder = amount - shares.reduce((sum, value) => sum + value, 0);
-  const order = exact
-    .map((value, i) => ({ i, frac: value - Math.floor(value) }))
-    .sort((a, b) => b.frac - a.frac);
-  for (const { i } of order) {
-    if (remainder <= 0) break;
-    if (shares[i] < Number(cards[i].required_qty || 0)) {
-      shares[i] += 1;
-      remainder -= 1;
-    }
-  }
-  return shares;
-};
 
-// The quality stop: inspecting the batch is what lets it into Embalado.
-// Records aprobadas/rechazadas in quality_control_records (production
-// commissions keep reading the same table), sets each sede card's quantity to
-// its approved share and moves the batch to embalado. Fully-rejected shares
-// close their card — the next inventory sync regenerates the need.
-// Stock is NOT touched here: it enters at Recepción.
-router.post('/api/production/kanban/qc-gate', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
-  try {
-    if (!(await ensureKanbanAccess(req, res))) return;
-    const passed = parseCount(req.body?.passed);
-    const rejected = parseCount(req.body?.rejected);
-    if (Number.isNaN(passed) || Number.isNaN(rejected)) {
-      return res.status(400).json({ error: 'Cantidades inválidas. Usa enteros mayores o iguales a 0' });
-    }
-    if (passed <= 0 && rejected <= 0) {
-      return res.status(400).json({ error: 'Registra al menos una pieza aprobada o rechazada' });
-    }
-    const cards = await loadActiveCards(req.body?.card_ids);
-    if (cards.length === 0) return res.status(404).json({ error: 'Tarjetas no encontradas o inactivas' });
-    const skus = new Set(cards.map((card) => String(card.sku || '').toUpperCase()));
-    if (skus.size > 1) return res.status(400).json({ error: 'El control de calidad se registra por producto' });
-    if (cards.some((card) => ['planificacion', 'embalado', 'recepcion'].includes(card.stage))) {
-      return res.status(400).json({ error: 'El lote debe estar en una etapa de fabricación para pasar por calidad' });
-    }
-    const totalQty = cards.reduce((sum, card) => sum + Number(card.required_qty || 0), 0);
-    if (passed > totalQty) {
-      return res.status(400).json({ error: `Aprobadas (${passed}) no puede superar las piezas del lote (${totalQty})` });
-    }
-
-    const sku = String(cards[0].sku || '').toUpperCase();
-    const productName = String(cards[0].product_name || sku).trim() || sku;
-    await ensureQcProductSettingsSeeded();
-
-    const shares = distributeAcrossCards(cards, passed);
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const inserts = [];
-      if (passed > 0) inserts.push(['passed', passed]);
-      if (rejected > 0) inserts.push(['rejected', rejected]);
-      for (const [result, quantity] of inserts) {
-        await client.query(
-          `INSERT INTO quality_control_records (user_id, sku, product_name, quantity, result)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [req.user.id, sku, productName, quantity, result]
-        );
-      }
-      for (let i = 0; i < cards.length; i++) {
-        const card = cards[i];
-        const share = shares[i];
-        if (share > 0) {
-          await client.query(
-            `UPDATE production_kanban_cards
-             SET required_qty = $2, stage = 'embalado', processed_count = 0, last_moved_at = NOW(), updated_at = NOW()
-             WHERE id = $1`,
-            [card.id, share]
-          );
-          // La distribución pieza-a-etapa se reinicia: todo lo aprobado queda en embalado.
-          await client.query('DELETE FROM production_kanban_stage_qty WHERE card_id = $1', [card.id]);
-          await client.query(
-            `INSERT INTO production_kanban_stage_qty (card_id, stage, qty) VALUES ($1, 'embalado', $2)`,
-            [card.id, share]
-          );
-          await client.query(
-            `INSERT INTO production_stage_events (card_id, sku, store_location, from_stage, to_stage, qty, moved_by)
-             VALUES ($1, $2, $3, $4, 'embalado', $5, $6)`,
-            [card.id, sku, card.store_location, card.stage || null, share, req.user.id]
-          );
-        } else {
-          // This sede's whole share was rejected: nothing to pack. The card
-          // closes and the next sync re-opens the need in Planificación.
-          await client.query(
-            `UPDATE production_kanban_cards
-             SET is_active = FALSE, qty_frozen = FALSE, updated_at = NOW()
-             WHERE id = $1`,
-            [card.id]
-          );
-          await client.query('DELETE FROM production_kanban_stage_qty WHERE card_id = $1', [card.id]);
-          await client.query(
-            `INSERT INTO production_stage_events (card_id, sku, store_location, from_stage, to_stage, qty, moved_by)
-             VALUES ($1, $2, $3, $4, 'rechazado', $5, $6)`,
-            [card.id, sku, card.store_location, card.stage || null, Number(card.required_qty || 0), req.user.id]
-          );
-        }
-      }
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-
-    res.status(201).json({
-      message: passed > 0 ? 'Calidad registrada: el lote pasa a embalado' : 'Calidad registrada: lote rechazado por completo',
-      sku,
-      product_name: productName,
-      passed,
-      rejected,
-      shares: cards.map((card, i) => ({ card_id: card.id, store_location: card.store_location, approved_qty: shares[i] }))
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'No se pudo registrar el control de calidad' });
-  }
-});
 
 // Warehouse reception: the end of the card's life. Only pieces confirmed
 // intact enter the sede's stock; transit damage is logged, and the next
