@@ -347,9 +347,16 @@ export function generateModernQuotePdf({
     } else if (promo.tool === 'regalo') {
       const items = Array.isArray(promo.gift_items) ? promo.gift_items : [];
       const itemsLabel = items.map((item) => `${item.qty}x ${item.name || item.sku}`).join(' + ');
+      // El detalle del paquete puede ser largo: se parte al ancho de la caja
+      // y la caja crece con las líneas (nada de texto desbordado).
+      const detailText = `${itemsLabel || promo.name}${itemsLabel ? ` · ${promo.name}` : ''}`;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      const detailLines = doc.splitTextToSize(detailText, promoW - 8);
+      const boxH = 8.5 + detailLines.length * 4.2;
       doc.setFillColor(254, 243, 231);
       doc.setDrawColor(180, 83, 9);
-      doc.roundedRect(left, promoY, promoW, 14, 2, 2, 'FD');
+      doc.roundedRect(left, promoY, promoW, boxH, 2, 2, 'FD');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10.5);
       doc.setTextColor(180, 83, 9);
@@ -357,12 +364,8 @@ export function generateModernQuotePdf({
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(124, 74, 18);
-      doc.text(
-        `${itemsLabel || promo.name}${itemsLabel ? ` · ${promo.name}` : ''}`,
-        left + 4,
-        promoY + 10.8
-      );
-      promoY += 17;
+      doc.text(detailLines, left + 4, promoY + 10.8, { lineHeightFactor: 1.4 });
+      promoY += boxH + 3;
     } else if (promo.tool === 'sorteo') {
       doc.setFillColor(255, 251, 235);
       doc.setDrawColor(180, 83, 9);
