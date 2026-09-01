@@ -7373,7 +7373,7 @@ img, video, canvas { max-width: 100%; }
   border-right: 1px solid var(--border);
 }
 
-.dayplan-time-spacer { height: 46px; }
+.dayplan-time-spacer { height: 54px; }
 
 .dayplan-hour-label {
   font-size: 0.68rem;
@@ -7384,26 +7384,53 @@ img, video, canvas { max-width: 100%; }
 }
 
 .dayplan-col {
-  flex: 1 0 160px;
-  min-width: 160px;
+  flex: 1 0 172px;
+  min-width: 172px;
   border-right: 1px dashed var(--border);
 }
 
 .dayplan-col.is-mine { background: rgba(59, 130, 246, 0.035); }
 
 .dayplan-col-head {
-  height: 46px;
+  height: 54px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  gap: 2px;
   padding: 4px 10px;
   border-top: 3px solid transparent;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
-  background: inherit;
+  /* El degradado del color de la persona llega inline como background-image;
+     este color de fondo evita que los bloques se vean al pasar por debajo. */
+  background-color: var(--bg-secondary);
 }
 
+.dayplan-col.is-mine .dayplan-col-head { background-color: #eef4fe; }
+
+.dayplan-col-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.dayplan-col-avatar {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.25);
+}
+
+/* El nombre cede espacio (elipsis) pero el rol siempre queda visible. */
 .dayplan-col-name {
   font-size: 0.82rem;
   font-weight: 800;
@@ -7411,6 +7438,29 @@ img, video, canvas { max-width: 100%; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.dayplan-col-role {
+  flex: 0 0 auto;
+  font-size: 0.67rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.dayplan-col-me {
+  flex: 0 0 auto;
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--text-primary);
+  color: #ffffff;
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
 }
 
 .dayplan-col-count { font-size: 0.7rem; color: var(--text-muted); font-weight: 700; }
@@ -7448,15 +7498,32 @@ img, video, canvas { max-width: 100%; }
 
 .dayplan-task {
   position: absolute;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 4px 8px;
   color: #ffffff;
   overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 2px 7px rgba(28, 25, 23, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   display: flex;
   flex-direction: column;
   gap: 0;
   z-index: 1;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+/* Brillo sutil en el borde superior: da volumen sin cambiar el color. */
+.dayplan-task::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+.dayplan-task.is-editable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(28, 25, 23, 0.3);
 }
 
 .dayplan-task.is-done { opacity: 0.55; }

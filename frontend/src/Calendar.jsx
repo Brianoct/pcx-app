@@ -10,9 +10,21 @@ const DAY_END = 19 * 60;    // … to 19:00
 const HOUR_PX = 56;
 const REFRESH_MS = 45000;   // meeting mode: keep everyone's board fresh
 
+// Paleta industrial, sin rosados: cada persona recibe un par [color, sombra]
+// — el color manda en su columna y el par forma el degradado de sus bloques.
 const USER_COLORS = [
-  '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4',
-  '#f97316', '#84cc16', '#6366f1', '#14b8a6', '#e11d48', '#0ea5e9'
+  ['#2563eb', '#1e40af'], // azul
+  ['#059669', '#065f46'], // esmeralda
+  ['#d97706', '#92400e'], // ámbar
+  ['#0891b2', '#155e75'], // cian
+  ['#ea580c', '#9a3412'], // naranja
+  ['#4f46e5', '#3730a3'], // índigo
+  ['#4d7c0f', '#365314'], // oliva
+  ['#0d9488', '#134e4a'], // teal
+  ['#b45309', '#78350f'], // cobre
+  ['#475569', '#1e293b'], // acero
+  ['#166534', '#14532d'], // bosque
+  ['#1e3a8a', '#172554']  // marino
 ];
 
 // Meeting categories: regular work keeps the person's color; Lean 3S and
@@ -448,15 +460,32 @@ export default function Calendar({ token, user }) {
           </div>
           {columns.map((member) => {
             const memberTasks = assignLanes(tasksByUser.get(member.id) || []);
-            const color = colorByUserId.get(member.id) || USER_COLORS[0];
+            const [color, colorDark] = colorByUserId.get(member.id) || USER_COLORS[0];
             const isMine = member.id === myId;
             const memberDone = memberTasks.filter((t) => t.is_done).length;
             const has3s = memberTasks.some((t) => t.task_type === '3s');
             const hasKaizen = memberTasks.some((t) => t.task_type === 'kaizen');
             return (
               <div key={member.id} className={`dayplan-col ${isMine ? 'is-mine' : ''}`}>
-                <div className="dayplan-col-head" style={{ borderTopColor: color }}>
-                  <span className="dayplan-col-name">{member.name}{isMine ? ' (yo)' : ''}</span>
+                <div
+                  className="dayplan-col-head"
+                  style={{
+                    borderTopColor: color,
+                    backgroundImage: `linear-gradient(180deg, ${color}1c, ${color}00)`
+                  }}
+                >
+                  <span className="dayplan-col-title">
+                    <span
+                      className="dayplan-col-avatar"
+                      style={{ background: `linear-gradient(150deg, ${color}, ${colorDark})` }}
+                      aria-hidden="true"
+                    >
+                      {member.name.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="dayplan-col-name">{member.name}</span>
+                    {member.role && <span className="dayplan-col-role">({member.role})</span>}
+                    {isMine && <span className="dayplan-col-me">yo</span>}
+                  </span>
                   <span className="dayplan-col-sub">
                     <span className={`dayplan-col-count ${memberTasks.length === 0 ? 'is-empty' : ''}`}>
                       {memberTasks.length === 0 ? 'por planificar' : `${memberDone}/${memberTasks.length} ✓`}
@@ -502,9 +531,12 @@ export default function Calendar({ token, user }) {
                           height,
                           left: `${task.lane * width}%`,
                           width: `calc(${width}% - 4px)`,
-                          // Regular tasks wear the person's color; 3S/Kaizen and
-                          // planning tasks use the fixed team-wide look from CSS.
-                          background: type === 'tarea' && !isPlan ? color : undefined
+                          // Regular tasks wear the person's gradient; 3S/Kaizen
+                          // and planning tasks use the fixed team-wide look
+                          // from CSS.
+                          background: type === 'tarea' && !isPlan
+                            ? `linear-gradient(165deg, ${color} 0%, ${colorDark} 130%)`
+                            : undefined
                         }}
                         title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${isPlan ? 'Planificación · ' : typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}${canEdit ? ' · clic para editar · arrastra para mover' : ''}`}
                         onClick={canEdit ? () => { if (!suppressClickRef.current) openEditor(task); } : undefined}
