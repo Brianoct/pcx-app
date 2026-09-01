@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest } from './apiClient';
+import { getDeviceId } from './deviceId';
 import logo from './assets/logo.png';
 
 function Login({ onLogin }) {
@@ -15,9 +16,11 @@ function Login({ onLogin }) {
     setError('');
     setSubmitting(true);
     try {
+      const deviceId = getDeviceId();
       const data = await apiRequest('/api/login', {
         method: 'POST',
         body: { email, password },
+        headers: deviceId ? { 'X-PCX-Device': deviceId } : {},
         retries: 0
       });
       onLogin(data.token, data.user);

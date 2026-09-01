@@ -6,8 +6,22 @@ const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { canAccessPanel } = require('../lib/rbac');
 const { buildUserPayload, loadUserContext, normalizeDisplayName, resolveUserDisplayName } = require('../lib/users');
+const { deviceLabelFromUserAgent } = require('../lib/deviceInfo');
 
 const router = express.Router();
+
+// Auditoría de accesos: nunca bloquea el login — si el INSERT falla solo se
+// registra en el log del servidor.
+const recordLoginAttempt = (req, { userId, email, success }) => {
+  const userAgent = String(req.headers['user-agent'] || '').slice(0, 500);
+  const deviceId = String(req.headers['x-pcx-device'] || '').slice(0, 64) || null;
+  pool.query(
+    `INSERT INTO login_history (user_id, email, success, ip, device_id, device_label, user_agent)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [userId || null, String(email || '').slice(0, 255), success, req.ip || null,
+     deviceId, deviceLabelFromUserAgent(userAgent), userAgent]
+  ).catch((err) => console.error('login_history insert failed:', err.message));
+};
 
 // Brute-force protection: only FAILED attempts count against the limit, so
 // normal logins (and CI) are unaffected.
@@ -56,11 +70,14 @@ router.post('/api/login', loginLimiter, async (req, res) => {
     const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     const user = result.rows[0];
     if (user && user.is_active === false) {
+      recordLoginAttempt(req, { userId: user.id, email, success: false });
       return res.status(403).json({ error: 'Tu cuenta está desactivada. Contacta a un administrador.' });
     }
     if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      recordLoginAttempt(req, { userId: user ? user.id : null, email, success: false });
       return res.status(401).json({ error: 'Credenciales inválidas' });
     }
+    recordLoginAttempt(req, { userId: user.id, email, success: true });
 
     const tokenUser = buildUserPayload(user);
     const token = jwt.sign(
