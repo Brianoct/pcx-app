@@ -25,6 +25,10 @@ const sanitizeConfig = (tool, rawConfig = {}) => {
   };
   const minTotal = num(rawConfig.min_total);
   if (minTotal !== null) config.min_total = minTotal;
+  // Grupo de exclusión (cualquier herramienta): dos promos del mismo grupo no
+  // se combinan en una venta; sin grupo, la promo combina libremente.
+  const group = String(rawConfig.exclusion_group || '').trim().slice(0, 40);
+  if (group) config.exclusion_group = group;
   if (tool === 'sorteo') {
     const perTicket = num(rawConfig.bs_per_ticket);
     if (perTicket !== null) config.bs_per_ticket = perTicket;
@@ -42,6 +46,9 @@ const sanitizeConfig = (tool, rawConfig = {}) => {
     if (Number.isInteger(discount) && discount >= 1 && discount <= 100) config.discount_percent = discount;
   }
   if (tool === 'regalo') {
+    // Modo del regalo: 'paquete' (cada venta se lleva TODO, comportamiento
+    // histórico) o 'eleccion' (el vendedor elige UN producto de la lista).
+    if (rawConfig.gift_mode === 'eleccion') config.gift_mode = 'eleccion';
     // Paquete de regalo: lista de {sku, qty}. Acepta el formato viejo
     // gift_skus (solo skus) como qty 1.
     const rawItems = Array.isArray(rawConfig.gift_items)

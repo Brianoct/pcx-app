@@ -179,22 +179,43 @@ const validateCouponForRedemption = async (client, code, customerPhone) => {
 
 // Al guardar una cotización: construye el snapshot para la proforma y registra
 // el código de sorteo si corresponde. Corre dentro de la transacción del guardado.
-// Las promos NO se acumulan: el vendedor elige cuál se lleva el cliente y esa
-// elección viaja en selectedPromoId (null = ninguna). Si el campo viene
-// undefined (clientes/scripts viejos que no eligen), se mantiene el
-// comportamiento histórico de aplicar todas las que califican.
-const applyPromosToNewQuote = async (client, { quoteId, total, status, customerPhone, customerName, hasGift = false, selectedPromoId, lineItems = [] }) => {
-  if (selectedPromoId === null) return [];
+// Combinación de promos: el vendedor marca las que se lleva el cliente
+// (selectedPromoIds). Dos promos con el mismo config.exclusion_group NO se
+// combinan (el servidor lo rechaza); sin grupo, combinan libremente. Se
+// mantienen los contratos viejos: selectedPromoId (una sola) y undefined
+// (clientes/scripts legacy = aplicar todas las que califican).
+const applyPromosToNewQuote = async (client, { quoteId, total, status, customerPhone, customerName, hasGift = false, selectedPromoId, selectedPromoIds, lineItems = [], giftItems = [] }) => {
+  let requestedIds;
+  if (Array.isArray(selectedPromoIds)) {
+    requestedIds = [...new Set(selectedPromoIds.map((value) => Number.parseInt(value, 10)))];
+    if (requestedIds.length === 0) return [];
+  } else if (selectedPromoId === null) {
+    return [];
+  } else if (selectedPromoId !== undefined) {
+    requestedIds = [Number.parseInt(selectedPromoId, 10)];
+  }
+
   let tools = await getActivePromoTools(client);
-  if (selectedPromoId !== undefined) {
-    const selectedId = Number.parseInt(selectedPromoId, 10);
-    tools = tools.filter((tool) => Number(tool.id) === selectedId);
-    if (tools.length === 0) {
-      // La promo elegida expiró o se desactivó entre cargar la página y
+  if (requestedIds !== undefined) {
+    tools = tools.filter((tool) => requestedIds.includes(Number(tool.id)));
+    if (tools.length !== requestedIds.length) {
+      // Alguna promo elegida expiró o se desactivó entre cargar la página y
       // guardar: mejor frenar que imprimir una promesa que ya no existe.
-      const err = new Error('La promoción seleccionada ya no está activa. Recarga la página y vuelve a intentar.');
+      const err = new Error('Una promoción seleccionada ya no está activa. Recarga la página y vuelve a intentar.');
       err.statusCode = 400;
       throw err;
+    }
+    // Exclusividad por grupo: dos promos del mismo grupo no viajan juntas.
+    const groupOwner = new Map();
+    for (const tool of tools) {
+      const group = String(tool.config?.exclusion_group || '').trim().toLowerCase();
+      if (!group) continue;
+      if (groupOwner.has(group)) {
+        const err = new Error(`«${groupOwner.get(group)}» y «${tool.name}» no se combinan (grupo «${group}»). Elige una de las dos.`);
+        err.statusCode = 400;
+        throw err;
+      }
+      groupOwner.set(group, tool.name);
     }
   }
   if (tools.length === 0) return [];
@@ -307,11 +328,17 @@ const applyPromosToNewQuote = async (client, { quoteId, total, status, customerP
       // que descuentan stock y aparecen en el checklist de pedidos.
       const minTotal = Number(config.min_total || 0);
       if (hasGift && amount >= minTotal && amount > 0) {
+        // La promesa impresa muestra lo que ESTA venta se lleva de verdad:
+        // en modo «elección» es el producto que eligió el vendedor, no toda
+        // la lista de candidatos del config.
+        const actualGifts = Array.isArray(giftItems) ? giftItems.filter((item) => item && item.sku) : [];
         snapshot.push({
           tool: 'regalo',
           name: tool.name,
           min_total: minTotal,
-          gift_items: Array.isArray(config.gift_items) ? config.gift_items : [],
+          gift_items: actualGifts.length > 0
+            ? actualGifts
+            : (Array.isArray(config.gift_items) ? config.gift_items : []),
           valid_until: promoValidUntil(tool.ends_on)
         });
       }
