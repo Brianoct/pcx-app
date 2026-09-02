@@ -115,8 +115,12 @@ const configSummary = (tool) => {
     const items = Array.isArray(config.gift_items)
       ? config.gift_items
       : (Array.isArray(config.gift_skus) ? config.gift_skus.map((sku) => ({ sku, qty: 1 })) : []);
-    parts.push(`regalo: ${items.map((item) => `${item.qty}× ${item.name || item.sku}`).join(' + ')}`);
+    const itemsLabel = items.map((item) => `${item.qty}× ${item.name || item.sku}`).join(config.gift_mode === 'eleccion' ? ' / ' : ' + ');
+    parts.push(config.gift_mode === 'eleccion'
+      ? `el vendedor elige 1 de: ${itemsLabel}`
+      : `regalo: ${itemsLabel}`);
   }
+  if (config.exclusion_group) parts.push(`grupo «${config.exclusion_group}» (no combina con su grupo)`);
   return parts.join(' · ');
 };
 
@@ -138,10 +142,12 @@ const EMPTY_FORM = {
   ends_on: '',
   campaign_id: '',
   min_total: '',
+  exclusion_group: '',
   bs_per_ticket: '',
   max_tickets: '5',
   discount_percent: '10',
   validity_days: '30',
+  gift_mode: 'paquete',
   gift_items: [],
   gift_pick: '',
   gift_pick_qty: '1'
@@ -214,6 +220,7 @@ export default function PromosPanel({ token, role }) {
     try {
       const config = {};
       if (form.min_total !== '') config.min_total = Number(form.min_total);
+      if (form.exclusion_group.trim()) config.exclusion_group = form.exclusion_group.trim();
       if (form.tool === 'sorteo') {
         if (form.bs_per_ticket !== '') config.bs_per_ticket = Number(form.bs_per_ticket);
         if (form.max_tickets !== '') config.max_tickets = Number(form.max_tickets);
@@ -232,6 +239,7 @@ export default function PromosPanel({ token, role }) {
           return;
         }
         config.gift_items = form.gift_items;
+        config.gift_mode = form.gift_mode === 'eleccion' ? 'eleccion' : 'paquete';
       }
       await apiRequest('/api/promos', {
         method: 'POST',
@@ -402,6 +410,20 @@ export default function PromosPanel({ token, role }) {
               Compra mínima (Bs{form.tool === 'sorteo' ? ', para participar' : form.tool === 'cupon' ? ', para ganar el cupón' : ', 0 = siempre'})
               <input type="number" min="0" step="1" placeholder="0" value={form.min_total} onChange={setField('min_total')} />
             </label>
+            <label>
+              Grupo de exclusión (opcional)
+              <input
+                type="text"
+                maxLength={40}
+                placeholder="ej. descuentos"
+                value={form.exclusion_group}
+                onChange={setField('exclusion_group')}
+              />
+              <small className="promo-field-hint">
+                Las promos del MISMO grupo no se combinan en una venta (el vendedor elige una).
+                Sin grupo, la promo se puede combinar con las demás.
+              </small>
+            </label>
             {form.tool === 'sorteo' && (
               <>
                 <label>
@@ -438,7 +460,16 @@ export default function PromosPanel({ token, role }) {
             {form.tool === 'regalo' && (
               <div className="promo-gift-picker">
                 <label>
-                  Paquete de regalo (cada venta que califica se lleva TODO el paquete)
+                  ¿Cómo se entrega el regalo?
+                  <select value={form.gift_mode} onChange={setField('gift_mode')}>
+                    <option value="paquete">📦 Paquete completo: cada venta se lleva TODA la lista</option>
+                    <option value="eleccion">👉 A elección: el vendedor elige UN producto de la lista</option>
+                  </select>
+                </label>
+                <label>
+                  {form.gift_mode === 'eleccion'
+                    ? 'Lista de regalos posibles (el vendedor elige uno por venta)'
+                    : 'Paquete de regalo (cada venta que califica se lleva TODO el paquete)'}
                   <div className="promo-gift-add">
                     <select value={form.gift_pick} onChange={setField('gift_pick')}>
                       <option value="">— Elegir producto —</option>

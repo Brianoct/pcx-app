@@ -120,6 +120,24 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
   if (selectedPromoIdValue !== undefined && selectedPromoIdValue !== null && !Number.isInteger(selectedPromoIdValue)) {
     return res.status(400).json({ error: 'Promoción seleccionada inválida' });
   }
+  // Formato nuevo (combinables): lista de ids. Tiene prioridad sobre el campo
+  // singular; [] o null = sin promo. La exclusividad por grupo la valida el
+  // motor de promos al estampar.
+  const hasSelectedPromosField = Object.prototype.hasOwnProperty.call(req.body || {}, 'selected_promo_ids');
+  let selectedPromoIdsValue;
+  if (hasSelectedPromosField) {
+    const rawIds = req.body.selected_promo_ids;
+    if (rawIds === null) {
+      selectedPromoIdsValue = [];
+    } else if (!Array.isArray(rawIds)) {
+      return res.status(400).json({ error: 'Promociones seleccionadas inválidas' });
+    } else {
+      selectedPromoIdsValue = rawIds.map((value) => Number.parseInt(value, 10));
+      if (selectedPromoIdsValue.some((value) => !Number.isInteger(value))) {
+        return res.status(400).json({ error: 'Promociones seleccionadas inválidas' });
+      }
+    }
+  }
 
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) return res.status(401).json({ error: 'Usuario no encontrado' });
@@ -320,7 +338,9 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       customerName: customer_name,
       hasGift: effectiveGiftItems(giftSelection).length > 0,
       selectedPromoId: selectedPromoIdValue,
-      lineItems: lineItemsWithDisplay
+      selectedPromoIds: selectedPromoIdsValue,
+      lineItems: lineItemsWithDisplay,
+      giftItems: effectiveGiftItems(giftSelection)
     });
     if (promoSnapshot.length > 0) {
       await client.query('UPDATE quotes SET promos = $1 WHERE id = $2', [JSON.stringify(promoSnapshot), quoteId]);

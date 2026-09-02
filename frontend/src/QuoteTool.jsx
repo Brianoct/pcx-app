@@ -55,11 +55,14 @@ export default function QuoteTool({ token, user }) {
   const [fallbackCiudad, setFallbackCiudad] = useState('');
   const [crmOpen, setCrmOpen] = useState(false);
   const [crmFollowUpsDue, setCrmFollowUpsDue] = useState(0);
-  // Las promos NO se acumulan: el vendedor elige CUÁL se lleva el cliente.
-  // Con una sola promo activa se preselecciona; con varias, el vendedor marca
-  // una (o ninguna). La elección viaja en selected_promo_id y el servidor solo
-  // estampa esa. Si la elegida es un regalo, su paquete viaja en gift_items.
-  const [selectedPromoId, setSelectedPromoId] = useState(null);
+  // Promos combinables: el vendedor marca las que se lleva el cliente. Dos
+  // promos del MISMO grupo de exclusión no se combinan (marcar una desmarca
+  // la otra); sin grupo, combinan libremente. La elección viaja en
+  // selected_promo_ids y el servidor estampa solo esas (y revalida grupos).
+  const [selectedPromoIds, setSelectedPromoIds] = useState([]);
+  // Regalo en modo «elección»: qué producto de la lista eligió el vendedor,
+  // por promo (promoId -> sku).
+  const [giftChoiceByPromo, setGiftChoiceByPromo] = useState({});
 
   // Toolchest de marketing: promos activas hoy (envío gratis, sorteo...).
   // El servidor decide qué aplica al guardar; esto es el aviso para el vendedor.
@@ -125,8 +128,8 @@ export default function QuoteTool({ token, user }) {
         const promos = Array.isArray(data?.promos) ? data.promos : [];
         setActivePromos(promos);
         // Una sola promo vigente: se aplica sola (mismo comportamiento de
-        // siempre). Con varias, el vendedor elige cuál en los chips.
-        setSelectedPromoId(promos.length === 1 ? promos[0].id : null);
+        // siempre). Con varias, el vendedor marca cuáles en los chips.
+        setSelectedPromoIds(promos.length === 1 ? [promos[0].id] : []);
       })
       .catch(() => {});
     return () => { active = false; };
@@ -272,6 +275,21 @@ export default function QuoteTool({ token, user }) {
     }, 400);
     return () => { active = false; clearTimeout(timer); };
   }, [token, customerPhone]);
+
+  const promoGroupOf = (promo) => String(promo?.config?.exclusion_group || '').trim().toLowerCase();
+
+  // Marcar una promo desmarca solo a las de SU MISMO grupo de exclusión; las
+  // demás siguen marcadas (se combinan). Sin grupo no desplaza a nadie.
+  const togglePromo = (promo, checked) => {
+    setSelectedPromoIds((prev) => {
+      if (!checked) return prev.filter((id) => id !== promo.id);
+      const group = promoGroupOf(promo);
+      const kept = group
+        ? prev.filter((id) => promoGroupOf(activePromos.find((p) => p.id === id)) !== group)
+        : prev;
+      return [...kept, promo.id];
+    });
+  };
 
   const allItems = [
     ...products.map((p) => ({ ...p, displayName: p.name })),
@@ -492,12 +510,14 @@ export default function QuoteTool({ token, user }) {
     const item = findItem(row.sku);
     return item?.product_type === 'accesorio' ? sum + (row.lineTotal || 0) : sum;
   }, 0);
-  const selectedPromoForTotals = activePromos.find((promo) => promo.id === selectedPromoId) || null;
+  const selectedAccessoryPromo = activePromos.find(
+    (promo) => selectedPromoIds.includes(promo.id) && promo.tool === 'descuento_accesorios'
+  ) || null;
   const accessoryPromoPercent = (
-    selectedPromoForTotals?.tool === 'descuento_accesorios'
+    selectedAccessoryPromo
     && total > 0
-    && total >= Number(selectedPromoForTotals.config?.min_total || 0)
-  ) ? Number(selectedPromoForTotals.config?.discount_percent || 0) : 0;
+    && total >= Number(selectedAccessoryPromo.config?.min_total || 0)
+  ) ? Number(selectedAccessoryPromo.config?.discount_percent || 0) : 0;
   const accessoryDiscountBs = Math.round(accessoriesSubtotal * accessoryPromoPercent) / 100;
   const grandTotal = Math.max(0, total - accessoryDiscountBs) + deliveryFee;
 
@@ -707,7 +727,8 @@ export default function QuoteTool({ token, user }) {
     setDiscountMode('percent');
     setDiscountInput(0);
     setSelectedCouponCode('');
-    setSelectedPromoId(activePromos.length === 1 ? activePromos[0].id : null);
+    setSelectedPromoIds(activePromos.length === 1 ? [activePromos[0].id] : []);
+    setGiftChoiceByPromo({});
     setDeliveryInput('');
     setDeliveryQuote(null);
     setDeliveryIncluded(true);
@@ -809,17 +830,25 @@ export default function QuoteTool({ token, user }) {
     }
 
     const discountPercentForStorage = Math.round(effectiveDiscountPercent);
-    // El paquete de regalo solo viaja si la promo ELEGIDA es un regalo y la
-    // compra alcanza su mínimo (se rechequea aquí por si el total bajó después).
-    const selectedPromo = activePromos.find((promo) => promo.id === selectedPromoId) || null;
-    const giftItemsForSave = (
-      selectedPromo
-      && selectedPromo.tool === 'regalo'
-      && total > 0 && total >= Number(selectedPromo.config?.min_total || 0)
-      && Array.isArray(selectedPromo.gift_products) && selectedPromo.gift_products.length > 0
-    )
-      ? selectedPromo.gift_products.map((gift) => ({ sku: gift.sku, qty: gift.qty, name: gift.name }))
-      : [];
+    // El regalo solo viaja si hay una promo de regalo MARCADA y la compra
+    // alcanza su mínimo (se rechequea aquí por si el total bajó después).
+    // Modo «paquete»: viaja todo el paquete. Modo «elección»: viaja solo el
+    // producto que eligió el vendedor en el chip.
+    const giftItemsMap = new Map();
+    for (const promo of activePromos) {
+      if (!selectedPromoIds.includes(promo.id) || promo.tool !== 'regalo') continue;
+      if (!(total > 0 && total >= Number(promo.config?.min_total || 0))) continue;
+      const gifts = Array.isArray(promo.gift_products) ? promo.gift_products : [];
+      if (gifts.length === 0) continue;
+      const chosen = promo.config?.gift_mode === 'eleccion'
+        ? [gifts.find((gift) => gift.sku === giftChoiceByPromo[promo.id]) || gifts[0]]
+        : gifts;
+      for (const gift of chosen) {
+        const prev = giftItemsMap.get(gift.sku);
+        giftItemsMap.set(gift.sku, { sku: gift.sku, qty: (prev?.qty || 0) + gift.qty, name: gift.name });
+      }
+    }
+    const giftItemsForSave = [...giftItemsMap.values()];
     const payload = {
       customer_name: customerName,
       customer_phone: customerPhone,
@@ -837,7 +866,7 @@ export default function QuoteTool({ token, user }) {
       coupon_code: selectedCouponCode || null,
       seller_user_id: requiresSellerAssignment ? Number(assignedSellerId) : null,
       gift_items: giftItemsForSave.length > 0 ? giftItemsForSave : null,
-      selected_promo_id: selectedPromo ? selectedPromo.id : null,
+      selected_promo_ids: selectedPromoIds,
       delivery_fee_bs: deliveryFee > 0 ? deliveryFee : null,
       delivery_label: deliveryFee > 0 ? (deliveryQuote?.label || 'Envío local') : null,
       delivery_gps: deliveryFee > 0 ? (deliveryQuote?.gps || null) : null,
@@ -1377,24 +1406,24 @@ export default function QuoteTool({ token, user }) {
             <div className="quote-promo-chips">
               {activePromos.length > 1 && (
                 <div className="quote-promo-picker-hint">
-                  Hay {activePromos.length} promos vigentes — marca la que se lleva esta venta (solo una).
+                  Hay {activePromos.length} promos vigentes — marca las que se lleva esta venta.
+                  Las del mismo grupo no se combinan: marcar una desmarca la otra.
                 </div>
               )}
               {activePromos.map((promo) => {
                 const config = promo.config || {};
                 const minTotal = Number(config.min_total || 0);
                 const reachesMin = minTotal <= 0 || total >= minTotal;
-                const isSelected = selectedPromoId === promo.id;
-                // Marcar una promo desmarca la anterior: el cliente se lleva UNA.
+                const isSelected = selectedPromoIds.includes(promo.id);
                 const applyControl = (label) => (
                   <label
                     className="quote-promo-apply"
-                    title="Solo la promo marcada se imprime en la proforma y aplica a esta venta"
+                    title="Solo las promos marcadas se imprimen en la proforma y aplican a esta venta"
                   >
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={(e) => setSelectedPromoId(e.target.checked ? promo.id : null)}
+                      onChange={(e) => togglePromo(promo, e.target.checked)}
                     />
                     {label}
                   </label>
@@ -1426,15 +1455,33 @@ export default function QuoteTool({ token, user }) {
                 if (promo.tool === 'regalo') {
                   const gifts = Array.isArray(promo.gift_products) ? promo.gift_products : [];
                   const earned = reachesMin && total > 0;
-                  const bundleLabel = gifts.map((gift) => `${gift.qty}× ${gift.name}`).join(' + ');
+                  const isChoiceMode = config.gift_mode === 'eleccion';
+                  const chosenSku = giftChoiceByPromo[promo.id] || gifts[0]?.sku || '';
+                  const bundleLabel = isChoiceMode
+                    ? `el cliente elige 1 de ${gifts.length} regalos`
+                    : gifts.map((gift) => `${gift.qty}× ${gift.name}`).join(' + ');
                   return (
                     <div key={promo.id} className={`quote-promo-chip is-regalo ${isSelected ? 'is-selected' : ''} ${isSelected && earned ? 'is-earned' : ''}`}>
                       🎁 <strong>{promo.name}</strong>
-                      {bundleLabel && ` · incluye ${bundleLabel}`}
+                      {bundleLabel && ` · ${isChoiceMode ? '' : 'incluye '}${bundleLabel}`}
                       {minTotal > 0 && ` · desde ${minTotal} Bs`}
                       {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
                       {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
                       {gifts.length > 0 && applyControl('Incluir regalo')}
+                      {isChoiceMode && isSelected && gifts.length > 0 && (
+                        <select
+                          className="quote-gift-select"
+                          value={chosenSku}
+                          onChange={(e) => setGiftChoiceByPromo((prev) => ({ ...prev, [promo.id]: e.target.value }))}
+                          title="Regalo que se lleva este cliente"
+                        >
+                          {gifts.map((gift) => (
+                            <option key={gift.sku} value={gift.sku}>
+                              {gift.qty > 1 ? `${gift.qty}× ` : ''}{gift.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                       {isSelected && earned && gifts.length > 0 && ' ✓'}
                     </div>
                   );
