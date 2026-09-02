@@ -11,7 +11,8 @@ const TOOL_META = {
   envio_gratis: { icon: '🚚', label: 'Envío gratis' },
   sorteo: { icon: '🎟️', label: 'Sorteo' },
   cupon: { icon: '🎫', label: 'Cupón próxima compra' },
-  regalo: { icon: '🎁', label: 'Regalo por compra' }
+  regalo: { icon: '🎁', label: 'Regalo por compra' },
+  descuento_accesorios: { icon: '🔩', label: 'Descuento en accesorios' }
 };
 
 // Tickets físicos para el sorteo en vivo (TikTok): un talón recortable por
@@ -106,6 +107,9 @@ const configSummary = (tool) => {
   if (tool.tool === 'cupon') {
     parts.push(`${Number(config.discount_percent || 0)}% dcto en la próxima compra`);
     parts.push(`válido ${Number(config.validity_days || 30)} días desde el pago`);
+  }
+  if (tool.tool === 'descuento_accesorios') {
+    parts.push(`${Number(config.discount_percent || 0)}% dcto en todos los accesorios de la compra`);
   }
   if (tool.tool === 'regalo') {
     const items = Array.isArray(config.gift_items)
@@ -217,6 +221,9 @@ export default function PromosPanel({ token, role }) {
       if (form.tool === 'cupon') {
         config.discount_percent = Number(form.discount_percent || 10);
         config.validity_days = Number(form.validity_days || 30);
+      }
+      if (form.tool === 'descuento_accesorios') {
+        config.discount_percent = Number(form.discount_percent || 10);
       }
       if (form.tool === 'regalo') {
         if (form.gift_items.length === 0) {
@@ -359,6 +366,7 @@ export default function PromosPanel({ token, role }) {
                 <option value="sorteo">🎟️ Sorteo</option>
                 <option value="cupon">🎫 Cupón próxima compra</option>
                 <option value="regalo">🎁 Regalo por compra</option>
+                <option value="descuento_accesorios">🔩 Descuento en accesorios</option>
               </select>
             </label>
             <label>
@@ -417,6 +425,15 @@ export default function PromosPanel({ token, role }) {
                   <input type="number" min="1" max="365" step="1" value={form.validity_days} onChange={setField('validity_days')} />
                 </label>
               </>
+            )}
+            {form.tool === 'descuento_accesorios' && (
+              <label>
+                Descuento sobre accesorios (%)
+                <input type="number" min="1" max="100" step="1" value={form.discount_percent} onChange={setField('discount_percent')} />
+                <small className="promo-field-hint">
+                  Aplica a TODOS los accesorios que entren en la compra (los tableros y combos pagan precio normal).
+                </small>
+              </label>
             )}
             {form.tool === 'regalo' && (
               <div className="promo-gift-picker">

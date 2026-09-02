@@ -37,6 +37,10 @@ const sanitizeConfig = (tool, rawConfig = {}) => {
     const validity = Number.parseInt(rawConfig.validity_days, 10);
     if (Number.isInteger(validity) && validity >= 1 && validity <= 365) config.validity_days = validity;
   }
+  if (tool === 'descuento_accesorios') {
+    const discount = Number.parseInt(rawConfig.discount_percent, 10);
+    if (Number.isInteger(discount) && discount >= 1 && discount <= 100) config.discount_percent = discount;
+  }
   if (tool === 'regalo') {
     // Paquete de regalo: lista de {sku, qty}. Acepta el formato viejo
     // gift_skus (solo skus) como qty 1.
