@@ -331,104 +331,106 @@ export function generateModernQuotePdf({
     const parts = String(iso || '').slice(0, 10).split('-');
     return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : '';
   };
+  // Caja de promo a prueba de desbordes: título, línea de código (opcional) y
+  // detalle se parten al ancho de la caja y la caja CRECE con las líneas.
+  // Toda promo nueva debe pasar por aquí — nada de alturas fijas.
+  const drawPromoBox = ({ fill, stroke, titleColor, title, codeLine, detail, detailColor, detailSize = 8.5 }) => {
+    const TITLE_STEP = 4.8;
+    const DETAIL_STEP = 4.2;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    const titleLines = doc.splitTextToSize(String(title || ''), promoW - 8);
+    doc.setFontSize(11);
+    const codeLines = codeLine ? doc.splitTextToSize(String(codeLine), promoW - 8) : [];
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(detailSize);
+    const detailLines = detail ? doc.splitTextToSize(String(detail), promoW - 8) : [];
+
+    let contentH = 5.8 + (titleLines.length - 1) * TITLE_STEP;
+    if (codeLines.length > 0) contentH += 5.6 + (codeLines.length - 1) * TITLE_STEP;
+    if (detailLines.length > 0) contentH += (codeLines.length > 0 ? 4.8 : 5.0) + (detailLines.length - 1) * DETAIL_STEP;
+    const boxH = contentH + 3.4;
+
+    doc.setFillColor(...fill);
+    doc.setDrawColor(...stroke);
+    doc.roundedRect(left, promoY, promoW, boxH, 2, 2, 'FD');
+
+    let y = promoY + 5.8;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(...titleColor);
+    doc.text(titleLines, left + 4, y, { lineHeightFactor: 1.3 });
+    y += (titleLines.length - 1) * TITLE_STEP;
+    if (codeLines.length > 0) {
+      y += 5.6;
+      doc.setFontSize(11);
+      doc.setTextColor(...TEXT_DARK);
+      doc.text(codeLines, left + 4, y, { lineHeightFactor: 1.2 });
+      y += (codeLines.length - 1) * TITLE_STEP;
+    }
+    if (detailLines.length > 0) {
+      y += codeLines.length > 0 ? 4.8 : 5.0;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(detailSize);
+      doc.setTextColor(...detailColor);
+      doc.text(detailLines, left + 4, y, { lineHeightFactor: 1.4 });
+    }
+    promoY += boxH + 3;
+  };
+
   promoList.forEach((promo) => {
     if (promo.tool === 'envio_gratis') {
-      doc.setFillColor(236, 253, 245);
-      doc.setDrawColor(4, 120, 87);
-      doc.roundedRect(left, promoY, promoW, 14, 2, 2, 'FD');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
-      doc.setTextColor(4, 120, 87);
-      doc.text('ENVÍO GRATIS', left + 4, promoY + 5.8);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(6, 95, 70);
-      doc.text(
-        `${promo.name || 'Promoción de envío'} · válido hasta el ${toDdMm(promo.valid_until)}`,
-        left + 4,
-        promoY + 10.8
-      );
-      promoY += 17;
+      drawPromoBox({
+        fill: [236, 253, 245],
+        stroke: [4, 120, 87],
+        titleColor: [4, 120, 87],
+        title: 'ENVÍO GRATIS',
+        detail: `${promo.name || 'Promoción de envío'} · válido hasta el ${toDdMm(promo.valid_until)}`,
+        detailColor: [6, 95, 70]
+      });
     } else if (promo.tool === 'regalo') {
       const items = Array.isArray(promo.gift_items) ? promo.gift_items : [];
       const itemsLabel = items.map((item) => `${item.qty}x ${item.name || item.sku}`).join(' + ');
-      // El detalle del paquete puede ser largo: se parte al ancho de la caja
-      // y la caja crece con las líneas (nada de texto desbordado).
-      const detailText = `${itemsLabel || promo.name}${itemsLabel ? ` · ${promo.name}` : ''}`;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      const detailLines = doc.splitTextToSize(detailText, promoW - 8);
-      const boxH = 8.5 + detailLines.length * 4.2;
-      doc.setFillColor(254, 243, 231);
-      doc.setDrawColor(180, 83, 9);
-      doc.roundedRect(left, promoY, promoW, boxH, 2, 2, 'FD');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
-      doc.setTextColor(180, 83, 9);
-      doc.text('REGALO INCLUIDO', left + 4, promoY + 5.8);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(124, 74, 18);
-      doc.text(detailLines, left + 4, promoY + 10.8, { lineHeightFactor: 1.4 });
-      promoY += boxH + 3;
+      drawPromoBox({
+        fill: [254, 243, 231],
+        stroke: [180, 83, 9],
+        titleColor: [180, 83, 9],
+        title: 'REGALO INCLUIDO',
+        detail: `${itemsLabel || promo.name}${itemsLabel ? ` · ${promo.name}` : ''}`,
+        detailColor: [124, 74, 18]
+      });
     } else if (promo.tool === 'descuento_accesorios') {
-      doc.setFillColor(240, 253, 250);
-      doc.setDrawColor(15, 118, 110);
-      doc.roundedRect(left, promoY, promoW, 14, 2, 2, 'FD');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
-      doc.setTextColor(15, 118, 110);
-      doc.text(`${Number(promo.discount_percent || 0)}% DCTO EN ACCESORIOS`, left + 4, promoY + 5.8);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(17, 94, 89);
-      doc.text(
-        `${promo.name || 'Promoción'} · ahorras ${toMoney(promo.discount_bs)} Bs en esta compra`,
-        left + 4,
-        promoY + 10.8
-      );
-      promoY += 17;
+      drawPromoBox({
+        fill: [240, 253, 250],
+        stroke: [15, 118, 110],
+        titleColor: [15, 118, 110],
+        title: `${Number(promo.discount_percent || 0)}% DCTO EN ACCESORIOS`,
+        detail: `${promo.name || 'Promoción'} · ahorras ${toMoney(promo.discount_bs)} Bs en esta compra`,
+        detailColor: [17, 94, 89]
+      });
     } else if (promo.tool === 'sorteo') {
-      doc.setFillColor(255, 251, 235);
-      doc.setDrawColor(180, 83, 9);
-      doc.roundedRect(left, promoY, promoW, 19, 2, 2, 'FD');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
-      doc.setTextColor(180, 83, 9);
-      doc.text(String(promo.name || 'SORTEO').toUpperCase(), left + 4, promoY + 5.8);
-      doc.setFontSize(11);
-      doc.setTextColor(...TEXT_DARK);
       const ticketsLabel = Number(promo.tickets || 0) > 1 ? ` (${promo.tickets} tickets)` : '';
-      doc.text(`Tu código: ${promo.code || ''}${ticketsLabel}`, left + 4, promoY + 11.4);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(120, 113, 108);
-      doc.text(
-        `Participas al pagar tu pedido${promo.ends_on ? ` · sorteo válido hasta el ${toDdMm(promo.ends_on)}` : ''}`,
-        left + 4,
-        promoY + 16.2
-      );
-      promoY += 22;
+      drawPromoBox({
+        fill: [255, 251, 235],
+        stroke: [180, 83, 9],
+        titleColor: [180, 83, 9],
+        title: String(promo.name || 'SORTEO').toUpperCase(),
+        codeLine: `Tu código: ${promo.code || ''}${ticketsLabel}`,
+        detail: `Participas al pagar tu pedido${promo.ends_on ? ` · sorteo válido hasta el ${toDdMm(promo.ends_on)}` : ''}`,
+        detailColor: [120, 113, 108],
+        detailSize: 8
+      });
     } else if (promo.tool === 'cupon') {
-      doc.setFillColor(239, 246, 255);
-      doc.setDrawColor(29, 78, 216);
-      doc.roundedRect(left, promoY, promoW, 19, 2, 2, 'FD');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
-      doc.setTextColor(29, 78, 216);
-      doc.text(`CUPÓN ${Number(promo.discount_percent || 0)}% · PRÓXIMA COMPRA`, left + 4, promoY + 5.8);
-      doc.setFontSize(11);
-      doc.setTextColor(...TEXT_DARK);
-      doc.text(`Tu código: ${promo.code || ''}`, left + 4, promoY + 11.4);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(120, 113, 108);
-      doc.text(
-        `Se activa al pagar este pedido · válido ${Number(promo.validity_days || 30)} días desde el pago`,
-        left + 4,
-        promoY + 16.2
-      );
-      promoY += 22;
+      drawPromoBox({
+        fill: [239, 246, 255],
+        stroke: [29, 78, 216],
+        titleColor: [29, 78, 216],
+        title: `CUPÓN ${Number(promo.discount_percent || 0)}% · PRÓXIMA COMPRA`,
+        codeLine: `Tu código: ${promo.code || ''}`,
+        detail: `Se activa al pagar este pedido · válido ${Number(promo.validity_days || 30)} días desde el pago`,
+        detailColor: [120, 113, 108],
+        detailSize: 8
+      });
     }
   });
 
