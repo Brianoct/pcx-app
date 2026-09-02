@@ -319,7 +319,8 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       customerPhone: customer_phone,
       customerName: customer_name,
       hasGift: effectiveGiftItems(giftSelection).length > 0,
-      selectedPromoId: selectedPromoIdValue
+      selectedPromoId: selectedPromoIdValue,
+      lineItems: lineItemsWithDisplay
     });
     if (promoSnapshot.length > 0) {
       await client.query('UPDATE quotes SET promos = $1 WHERE id = $2', [JSON.stringify(promoSnapshot), quoteId]);

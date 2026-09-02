@@ -484,7 +484,22 @@ export default function QuoteTool({ token, user }) {
   // El envío local se suma después del descuento: no participa de la
   // negociación ni de los mínimos de promos (esos miran solo productos).
   const deliveryFee = deliveryQuote?.in_range && deliveryIncluded ? Number(deliveryQuote.price_bs || 0) : 0;
-  const grandTotal = total + deliveryFee;
+  // Promo "descuento en accesorios": % SOLO sobre las líneas cuyo producto es
+  // tipo accesorio en el catálogo (tableros y combos pagan precio normal).
+  // Se descuenta después del descuento negociado y antes del envío.
+  const accessoriesSubtotal = rows.reduce((sum, row) => {
+    if (!row.sku || row.isCombo) return sum;
+    const item = findItem(row.sku);
+    return item?.product_type === 'accesorio' ? sum + (row.lineTotal || 0) : sum;
+  }, 0);
+  const selectedPromoForTotals = activePromos.find((promo) => promo.id === selectedPromoId) || null;
+  const accessoryPromoPercent = (
+    selectedPromoForTotals?.tool === 'descuento_accesorios'
+    && total > 0
+    && total >= Number(selectedPromoForTotals.config?.min_total || 0)
+  ) ? Number(selectedPromoForTotals.config?.discount_percent || 0) : 0;
+  const accessoryDiscountBs = Math.round(accessoriesSubtotal * accessoryPromoPercent) / 100;
+  const grandTotal = Math.max(0, total - accessoryDiscountBs) + deliveryFee;
 
   const requestDeliveryQuote = async (rawInput) => {
     let gps = parseGpsInput(rawInput);
@@ -912,6 +927,9 @@ export default function QuoteTool({ token, user }) {
         subtotal,
         discountPercent: effectiveDiscountPercent,
         discountAmount: discountAmountApplied,
+        accessoryDiscount: accessoryDiscountBs > 0
+          ? { percent: accessoryPromoPercent, amount: accessoryDiscountBs }
+          : null,
         total: grandTotal,
         deliveryFee: deliveryFee > 0 ? deliveryFee : null,
         promos: savedPromos
@@ -1421,6 +1439,24 @@ export default function QuoteTool({ token, user }) {
                     </div>
                   );
                 }
+                if (promo.tool === 'descuento_accesorios') {
+                  const pct = Number(config.discount_percent || 0);
+                  const chipDiscount = Math.round(accessoriesSubtotal * pct) / 100;
+                  const earned = isSelected && reachesMin && accessoriesSubtotal > 0;
+                  return (
+                    <div key={promo.id} className={`quote-promo-chip is-dcto-acc ${isSelected ? 'is-selected' : ''} ${earned ? 'is-earned' : ''}`}>
+                      🔩 <strong>{promo.name}</strong>
+                      {` · ${pct}% de descuento en todos los accesorios`}
+                      {minTotal > 0 && ` · desde ${minTotal} Bs`}
+                      {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
+                      {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
+                      {reachesMin && total > 0 && accessoriesSubtotal <= 0 && ' — la orden aún no tiene accesorios'}
+                      {reachesMin && chipDiscount > 0 && ` — descuenta ${chipDiscount.toFixed(2)} Bs`}
+                      {applyControl('Aplicar')}
+                      {earned && ' ✓'}
+                    </div>
+                  );
+                }
                 if (promo.tool === 'sorteo') {
                   const perTicket = Number(config.bs_per_ticket || 0);
                   const cap = Math.max(1, Number(config.max_tickets || 5));
@@ -1754,6 +1790,11 @@ export default function QuoteTool({ token, user }) {
                 <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#e11d48' }}>
                   {grandTotal.toFixed(2)} Bs
                 </div>
+                {accessoryDiscountBs > 0 && (
+                  <small style={{ color: '#0f766e', display: 'block', fontWeight: 600 }}>
+                    promo accesorios −{accessoryDiscountBs.toFixed(2)} Bs ({accessoryPromoPercent}%)
+                  </small>
+                )}
                 {deliveryFee > 0 && (
                   <small style={{ color: '#78716c' }}>
                     incluye envío local {deliveryFee.toFixed(2)} Bs

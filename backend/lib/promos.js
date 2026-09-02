@@ -9,7 +9,7 @@
 const crypto = require('crypto');
 const { pool } = require('../db');
 
-const PROMO_TOOL_TYPES = ['envio_gratis', 'sorteo', 'cupon', 'regalo'];
+const PROMO_TOOL_TYPES = ['envio_gratis', 'sorteo', 'cupon', 'regalo', 'descuento_accesorios'];
 const PAID_QUOTE_STATUSES = ['Pagado', 'Embalado', 'Enviado'];
 const QUOTE_VALIDITY_DAYS = 7; // "Cotización válida por 7 días" en la proforma
 
@@ -183,7 +183,7 @@ const validateCouponForRedemption = async (client, code, customerPhone) => {
 // elección viaja en selectedPromoId (null = ninguna). Si el campo viene
 // undefined (clientes/scripts viejos que no eligen), se mantiene el
 // comportamiento histórico de aplicar todas las que califican.
-const applyPromosToNewQuote = async (client, { quoteId, total, status, customerPhone, customerName, hasGift = false, selectedPromoId }) => {
+const applyPromosToNewQuote = async (client, { quoteId, total, status, customerPhone, customerName, hasGift = false, selectedPromoId, lineItems = [] }) => {
   if (selectedPromoId === null) return [];
   let tools = await getActivePromoTools(client);
   if (selectedPromoId !== undefined) {
@@ -264,6 +264,41 @@ const applyPromosToNewQuote = async (client, { quoteId, total, status, customerP
         discount_percent: Number(storedMeta.discount_percent || discountPercent),
         validity_days: Number(storedMeta.validity_days || validityDays),
         min_total: minTotal
+      });
+    } else if (tool.tool === 'descuento_accesorios') {
+      // % de descuento SOLO sobre las líneas de accesorios de esta compra
+      // (el tipo viene del catálogo: products.product_type = 'accesorio').
+      // El monto se calcula aquí con las líneas reales y queda estampado:
+      // la proforma imprime exactamente lo que se descontó.
+      const minTotal = Number(config.min_total || 0);
+      const discountPercent = Number(config.discount_percent || 0);
+      if (discountPercent <= 0 || amount <= 0 || amount < minTotal) continue;
+      const items = Array.isArray(lineItems) ? lineItems : [];
+      const skus = [...new Set(
+        items.map((item) => String(item?.sku || '').trim().toUpperCase()).filter(Boolean)
+      )];
+      if (skus.length === 0) continue;
+      const accRes = await client.query(
+        `SELECT UPPER(sku) AS sku FROM products
+         WHERE UPPER(sku) = ANY($1::text[]) AND product_type = 'accesorio'`,
+        [skus]
+      );
+      const accessorySkus = new Set(accRes.rows.map((row) => row.sku));
+      const accessoriesSubtotal = items.reduce((sum, item) => {
+        const sku = String(item?.sku || '').trim().toUpperCase();
+        if (!accessorySkus.has(sku)) return sum;
+        const line = Number(item?.lineTotal ?? item?.line_total ?? 0);
+        return sum + (Number.isFinite(line) && line > 0 ? line : 0);
+      }, 0);
+      if (accessoriesSubtotal <= 0) continue;
+      snapshot.push({
+        tool: 'descuento_accesorios',
+        name: tool.name,
+        discount_percent: discountPercent,
+        accessories_subtotal: Math.round(accessoriesSubtotal * 100) / 100,
+        discount_bs: Math.round(accessoriesSubtotal * discountPercent) / 100,
+        min_total: minTotal,
+        valid_until: promoValidUntil(tool.ends_on)
       });
     } else if (tool.tool === 'regalo') {
       // La promesa impresa: esta compra incluye el paquete de regalo. Solo se

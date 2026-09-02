@@ -74,6 +74,7 @@ export function generateModernQuotePdf({
   subtotal = 0,
   discountPercent = 0,
   discountAmount,
+  accessoryDiscount = null,
   total = 0,
   deliveryFee = null,
   promos = [],
@@ -284,6 +285,10 @@ export function generateModernQuotePdf({
     ...(Number(discountPercent || 0) > 0
       ? [{ label: `Descuento (${Number(discountPercent)}%)`, value: `${toMoney(discountValue)} Bs` }]
       : []),
+    // Promo de accesorios: % aplicado solo a las líneas de accesorios.
+    ...(accessoryDiscount && Number(accessoryDiscount.amount || 0) > 0
+      ? [{ label: `Dcto accesorios (${Number(accessoryDiscount.percent || 0)}%)`, value: `-${toMoney(accessoryDiscount.amount)} Bs` }]
+      : []),
     // Envío local cotizado desde el GPS del cliente: línea propia, después
     // del descuento (el descuento aplica solo a productos).
     ...(Number(deliveryFee || 0) > 0
@@ -366,6 +371,23 @@ export function generateModernQuotePdf({
       doc.setTextColor(124, 74, 18);
       doc.text(detailLines, left + 4, promoY + 10.8, { lineHeightFactor: 1.4 });
       promoY += boxH + 3;
+    } else if (promo.tool === 'descuento_accesorios') {
+      doc.setFillColor(240, 253, 250);
+      doc.setDrawColor(15, 118, 110);
+      doc.roundedRect(left, promoY, promoW, 14, 2, 2, 'FD');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10.5);
+      doc.setTextColor(15, 118, 110);
+      doc.text(`${Number(promo.discount_percent || 0)}% DCTO EN ACCESORIOS`, left + 4, promoY + 5.8);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(17, 94, 89);
+      doc.text(
+        `${promo.name || 'Promoción'} · ahorras ${toMoney(promo.discount_bs)} Bs en esta compra`,
+        left + 4,
+        promoY + 10.8
+      );
+      promoY += 17;
     } else if (promo.tool === 'sorteo') {
       doc.setFillColor(255, 251, 235);
       doc.setDrawColor(180, 83, 9);

@@ -978,6 +978,24 @@ button, .btn {
   color: #92400e;
 }
 
+.quote-promo-chip.is-dcto-acc {
+  border-color: #0f766e;
+  background: rgba(240, 253, 250, 0.85);
+  color: #115e59;
+}
+
+.quote-promo-chip.is-dcto-acc.is-earned {
+  box-shadow: 0 0 0 1px rgba(15, 118, 110, 0.18);
+}
+
+.promo-field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
 .quote-promo-chip.is-earned {
   border-style: solid;
   box-shadow: 0 0 0 1px rgba(4, 120, 87, 0.15);
