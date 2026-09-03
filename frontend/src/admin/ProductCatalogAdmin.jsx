@@ -1,6 +1,90 @@
 import { useState, useEffect } from 'react';
+import jsPDF from 'jspdf';
 import { apiRequest, API_BASE } from '../apiClient';
 import { useOutbox } from '../OutboxProvider';
+
+// Lista de precios en PDF: SKU, producto y precio FACTURADO de todo el
+// catálogo activo, con los precios vigentes del sistema. Pensada para el
+// registro de productos en Impuestos (SIAT): lo que dice este PDF es lo que
+// imprimen las proformas, así la factura siempre cuadra.
+const downloadPriceListPdf = (products) => {
+  const rows = products
+    .filter((row) => row.is_active)
+    .map((row) => ({
+      sku: String(row.sku || '').toUpperCase(),
+      name: String(row.name || '').trim(),
+      cf: Number(row.cf ?? row.cf_price ?? 0)
+    }))
+    .sort((a, b) => a.sku.localeCompare(b.sku));
+  if (rows.length === 0) return 0;
+
+  const doc = new jsPDF();
+  const pageW = 210;
+  const pageH = 297;
+  const left = 14;
+  const right = 196;
+  const COL_SKU = left + 4;
+  const COL_NAME = left + 38;
+  const COL_PRICE = right - 4;
+  const NAME_W = COL_PRICE - COL_NAME - 24;
+  const dateLabel = new Date().toLocaleDateString('es-BO', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  let page = 1;
+  const drawPageChrome = () => {
+    doc.setFillColor(225, 29, 72);
+    doc.rect(0, 0, pageW, 4, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.setTextColor(28, 25, 23);
+    doc.text('Lista de precios — Catálogo PCX', left, 14);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(120, 113, 108);
+    doc.text(`Precio facturado (con factura) · ${rows.length} productos activos · generado el ${dateLabel}`, left, 19.5);
+    doc.setFontSize(8);
+    doc.text(`Página ${page}`, right, 19.5, { align: 'right' });
+    // Encabezado de la tabla
+    doc.setFillColor(28, 25, 23);
+    doc.rect(left, 23, right - left, 7, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text('SKU', COL_SKU, 27.8);
+    doc.text('Producto', COL_NAME, 27.8);
+    doc.text('Precio CF (Bs)', COL_PRICE, 27.8, { align: 'right' });
+    return 30;
+  };
+
+  let y = drawPageChrome();
+  rows.forEach((row, index) => {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    const nameLines = doc.splitTextToSize(row.name || row.sku, NAME_W);
+    const rowH = Math.max(6.4, nameLines.length * 4.4 + 2.4);
+    if (y + rowH > pageH - 14) {
+      page += 1;
+      doc.addPage();
+      y = drawPageChrome();
+    }
+    if (index % 2 === 1) {
+      doc.setFillColor(245, 245, 244);
+      doc.rect(left, y, right - left, rowH, 'F');
+    }
+    doc.setTextColor(28, 25, 23);
+    doc.setFont('helvetica', 'bold');
+    doc.text(row.sku, COL_SKU, y + 4.4);
+    doc.setFont('helvetica', 'normal');
+    doc.text(nameLines, COL_NAME, y + 4.4, { lineHeightFactor: 1.25 });
+    doc.text(row.cf.toFixed(2), COL_PRICE, y + 4.4, { align: 'right' });
+    y += rowH;
+  });
+  doc.setDrawColor(231, 224, 216);
+  doc.line(left, y, right, y);
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  doc.save(`lista-precios-pcx-${stamp}.pdf`);
+  return rows.length;
+};
 
 // Catalog images are relative capability URLs (/api/product-assets/...); the
 // <img> tag needs the absolute backend origin.
@@ -508,6 +592,27 @@ function ProductCatalogAdmin({ token }) {
 
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
+      <div className="card">
+        <h3 style={{ marginBottom: '8px' }}>Lista de precios (PDF)</h3>
+        <p style={{ color: '#555', fontSize: '0.9em', marginBottom: '12px' }}>
+          Descarga el catálogo activo con SKU, producto y precio FACTURADO vigente — listo para
+          registrar los productos en Impuestos (SIAT). Vuelve a descargarla cada vez que cambien
+          los precios para que la factura siempre cuadre con la proforma.
+        </p>
+        <button
+          type="button"
+          disabled={loading || products.filter((row) => row.is_active).length === 0}
+          onClick={() => {
+            const count = downloadPriceListPdf(products);
+            setMessage(count > 0
+              ? `Lista de precios descargada: ${count} productos activos.`
+              : 'No hay productos activos para listar.');
+          }}
+        >
+          Descargar lista de precios (PDF)
+        </button>
+      </div>
+
       <div className="card">
         <h3 style={{ marginBottom: '8px' }}>Detalles de productos (CSV)</h3>
         <p style={{ color: '#555', fontSize: '0.9em', marginBottom: '12px' }}>
