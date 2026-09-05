@@ -35,6 +35,26 @@ const TASK_TYPE_META = {
   kaizen: { label: 'Kaizen (mejora)', icon: '💡', badge: 'KAIZEN' }
 };
 
+// Icono del bloque, deducido del título: hace el tablero legible de un
+// vistazo en la reunión de la mañana sin pedirle nada extra al equipo.
+// 3S/Kaizen/Plan no pasan por aquí (llevan su insignia fija).
+const TASK_ICON_RULES = [
+  [/reuni/i, '👥'],
+  [/llama|atenci|cliente|whatsapp|telef/i, '📞'],
+  [/env[ií]o|envio|embal|pedido|entrega|despach/i, '📦'],
+  [/video|reel|foto|pauta|tiktok|live|guion|public/i, '🎬'],
+  [/cotiz|venta|segui|cobr/i, '📈'],
+  [/inventario|stock|recepci|conteo/i, '🗃️'],
+  [/pint|sold|dobl|cort|plega|lava|arma|taller|produc|pieza/i, '🔧'],
+  [/limpi|orden/i, '🧹'],
+  [/compra|proveedor|material/i, '🛒']
+];
+const taskIconFor = (title = '') => {
+  const text = String(title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const rule = TASK_ICON_RULES.find(([pattern]) => pattern.test(text));
+  return rule ? rule[1] : '🗒️';
+};
+
 const pad2 = (n) => String(n).padStart(2, '0');
 const toDateText = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 const minuteLabel = (minute) => `${pad2(Math.floor(minute / 60))}:${pad2(minute % 60)}`;
@@ -383,7 +403,13 @@ export default function Calendar({ token, user }) {
   return (
     <div className="container dayplan-page">
       <div className="dayplan-head">
-        <p className="dayplan-subtitle">{dateLabel}{isToday ? ' · hoy' : ''}</p>
+        <div className="dayplan-title-block">
+          <span className="dayplan-title-icon" aria-hidden="true">📅</span>
+          <div>
+            <p className="dayplan-subtitle">{dateLabel}{isToday ? ' · hoy' : ''}</p>
+            <p className="dayplan-tagline">Organiza hoy, logra más</p>
+          </div>
+        </div>
         <div className="dayplan-nav">
           <button type="button" className="btn btn-secondary" onClick={() => shiftDay(-1)} aria-label="Día anterior">‹</button>
           <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
@@ -536,6 +562,11 @@ export default function Calendar({ token, user }) {
                           // from CSS.
                           background: type === 'tarea' && !isPlan
                             ? `linear-gradient(165deg, ${color} 0%, ${colorDark} 130%)`
+                            : undefined,
+                          // Sombra teñida con el color de la persona: da la
+                          // profundidad «glossy» del rediseño sin recargar.
+                          boxShadow: type === 'tarea' && !isPlan
+                            ? `0 3px 10px ${color}55`
                             : undefined
                         }}
                         title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${isPlan ? 'Planificación · ' : typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}${canEdit ? ' · clic para editar · arrastra para mover' : ''}`}
@@ -544,6 +575,9 @@ export default function Calendar({ token, user }) {
                         role={canEdit ? 'button' : undefined}
                       >
                         <span className="dayplan-task-toprow">
+                          {type === 'tarea' && !isPlan && (
+                            <span className="dayplan-task-icon" aria-hidden="true">{taskIconFor(task.title)}</span>
+                          )}
                           <span className="dayplan-task-time">{minuteLabel(dispStart)}–{minuteLabel(dispEnd)}</span>
                           {isPlan ? (
                             <span className="dayplan-task-badge is-plan">📋 PLAN</span>
