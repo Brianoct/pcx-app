@@ -4,6 +4,16 @@ import { apiRequest } from './apiClient';
 import { getDeviceId } from './deviceId';
 import logo from './assets/logo.png';
 
+// Arte del login (opcional): si existe frontend/src/assets/login-art.jpg
+// (o .png/.webp), aparece como panel lateral; si no, el panel muestra un
+// fondo cálido con el logo. Así el diseño no depende de que el archivo esté.
+const loginArtModules = import.meta.glob('./assets/login-art.{jpg,jpeg,png,webp}', {
+  eager: true,
+  query: '?url',
+  import: 'default'
+});
+const loginArtUrl = Object.values(loginArtModules)[0] || null;
+
 function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,7 +43,17 @@ function Login({ onLogin }) {
 
   return (
     <div className="login-shell">
-      <div className="login-card">
+      <div className="login-split">
+        <div
+          className={`login-art ${loginArtUrl ? '' : 'no-art'}`}
+          style={loginArtUrl ? { backgroundImage: `url(${loginArtUrl})` } : undefined}
+          aria-hidden="true"
+        >
+          {!loginArtUrl && <img src={logo} alt="" className="login-art-fallback-logo" />}
+          <p className="login-art-caption">Hecho a mano. Hecho para durar.</p>
+        </div>
+        <div className="login-pane">
+          <div className="login-card">
         <div className="login-brand">
           <img src={logo} alt="PCX" className="login-logo" />
           <p className="login-brand-sub">Panel del equipo</p>
@@ -75,6 +95,8 @@ function Login({ onLogin }) {
             {submitting ? 'Ingresando…' : 'Iniciar Sesión'}
           </button>
         </form>
+          </div>
+        </div>
       </div>
       <Link to="/" className="login-back">← Volver a la página principal</Link>
     </div>

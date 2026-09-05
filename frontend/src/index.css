@@ -1837,6 +1837,80 @@ button, .btn {
   background-size: 34px 34px;
 }
 
+/* Login a dos paneles: arte a la izquierda, tarjeta de acceso a la derecha.
+   El arte carga desde assets/login-art.{jpg,png,webp}; sin archivo, el panel
+   muestra un fondo cálido con el logo (nunca un hueco roto). */
+.login-split {
+  position: relative;
+  display: flex;
+  width: min(100%, 920px);
+  min-height: 540px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(214, 204, 192, 0.55);
+  box-shadow: 0 24px 60px rgba(28, 25, 23, 0.18);
+}
+
+/* La barra roja de marca pasa de la tarjeta al contenedor completo. */
+.login-split::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: #e11d48;
+  z-index: 2;
+}
+
+.login-art {
+  position: relative;
+  flex: 1 1 55%;
+  min-width: 0;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-art.no-art {
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.05) 1.6px, transparent 1.6px) 0 0 / 34px 34px,
+    linear-gradient(160deg, #78350f 0%, #1c1917 85%);
+}
+
+.login-art-fallback-logo {
+  width: 46%;
+  max-width: 220px;
+  opacity: 0.35;
+  filter: grayscale(1) brightness(3);
+}
+
+.login-art-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  padding: 42px 22px 16px;
+  color: #f5f0e8;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(180deg, rgba(20, 14, 8, 0) 0%, rgba(20, 14, 8, 0.62) 100%);
+}
+
+.login-pane {
+  flex: 1 1 45%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 34px 28px;
+}
+
 .login-card {
   position: relative;
   width: min(100%, 400px);
@@ -1845,6 +1919,30 @@ button, .btn {
   border-radius: 20px;
   padding: 34px 30px 30px;
   box-shadow: 0 24px 60px rgba(28, 25, 23, 0.14);
+}
+
+/* Dentro del split la tarjeta vive en el panel blanco: sin doble marco. */
+.login-split .login-card {
+  border: none;
+  box-shadow: none;
+  padding: 10px 4px;
+  border-radius: 0;
+}
+
+.login-split .login-card::before { display: none; }
+
+@media (max-width: 760px) {
+  .login-split {
+    flex-direction: column;
+    min-height: 0;
+    width: min(100%, 430px);
+  }
+  .login-art {
+    flex: none;
+    height: 168px;
+  }
+  .login-art-fallback-logo { max-width: 130px; }
+  .login-pane { padding: 20px 22px 26px; }
 }
 
 /* Brand-red accent bar across the top of the card, echoing the app. */
