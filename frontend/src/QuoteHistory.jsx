@@ -533,6 +533,16 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       discountPercent,
       discountAmount,
       total: Number(quote.total || 0),
+      // Promo de accesorios estampada: línea propia en el resumen del PDF,
+      // igual que cuando la cotización se generó desde Cotizar.
+      accessoryDiscount: (() => {
+        const promo = Array.isArray(quote.promos)
+          ? quote.promos.find((p) => p?.tool === 'descuento_accesorios')
+          : null;
+        return promo && Number(promo.discount_bs || 0) > 0
+          ? { percent: Number(promo.discount_percent || 0), amount: Number(promo.discount_bs || 0) }
+          : null;
+      })(),
       promos: Array.isArray(quote.promos) ? quote.promos : []
     });
   };
@@ -555,16 +565,43 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     });
   }, [editingQuote]);
 
-  const recalcEditTotals = (nextRows, nextDiscountPercent = null, deliveryFeeOverride = null) => {
+  // Promo «descuento en accesorios» estampada en la cotización al venderse:
+  // su monto debe SOBREVIVIR la edición, recalculado con las líneas nuevas
+  // (mismo % de la promo sobre el subtotal de accesorios editado).
+  const accessoryPromoOf = (quote) => (
+    Array.isArray(quote?.promos)
+      ? quote.promos.find((p) => p?.tool === 'descuento_accesorios') || null
+      : null
+  );
+
+  const accessoriesSubtotalOf = (rows) => (Array.isArray(rows) ? rows : []).reduce((sum, row) => {
+    if (!row?.sku || row.isCombo || isComboSku(row.sku)) return sum;
+    const product = availableProducts.find(
+      (item) => String(item?.sku || '').trim().toUpperCase() === String(row.sku).trim().toUpperCase()
+    );
+    return product?.product_type === 'accesorio' ? sum + Number(row.lineTotal || 0) : sum;
+  }, 0);
+
+  const accessoryDiscountFor = (quote, rows) => {
+    const promo = accessoryPromoOf(quote);
+    const percent = Number(promo?.discount_percent || 0);
+    if (percent <= 0) return 0;
+    return Math.round(accessoriesSubtotalOf(rows) * percent) / 100;
+  };
+
+  // quoteContext: normalmente el estado editingQuote; openEditModal pasa el
+  // borrador recién armado porque el estado aún no existe en ese momento.
+  const recalcEditTotals = (nextRows, nextDiscountPercent = null, deliveryFeeOverride = null, quoteContext = editingQuote) => {
     const safeRows = Array.isArray(nextRows) ? nextRows : [];
     const subtotal = safeRows.reduce((sum, row) => sum + Number(row?.lineTotal || 0), 0);
     const discountPercent = Number(
-      nextDiscountPercent === null ? editingQuote?.discount_percent || 0 : nextDiscountPercent
+      nextDiscountPercent === null ? quoteContext?.discount_percent || 0 : nextDiscountPercent
     );
     const discountAmount = subtotal * (Math.max(0, Math.min(100, discountPercent)) / 100);
+    const promoDiscount = accessoryDiscountFor(quoteContext, safeRows);
     // El envío local se suma después del descuento (el descuento es solo de productos).
-    const deliveryFee = Number(deliveryFeeOverride ?? editingQuote?.delivery_fee_bs ?? 0) || 0;
-    const total = Math.max(0, subtotal - discountAmount) + deliveryFee;
+    const deliveryFee = Number(deliveryFeeOverride ?? quoteContext?.delivery_fee_bs ?? 0) || 0;
+    const total = Math.max(0, subtotal - discountAmount - promoDiscount) + deliveryFee;
     // discount_bs es el texto que muestra el campo "Descuento Bs"; se deriva
     // del % salvo mientras el usuario está escribiendo en ese campo.
     return { subtotal, total, discount_bs: discountAmount.toFixed(2) };
@@ -632,13 +669,17 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
       const parsed = Number(String(value).replace(',', '.'));
       const bs = Math.max(0, Math.min(subtotal, Number.isFinite(parsed) ? parsed : 0));
       const percent = subtotal > 0 ? Math.round((bs / subtotal) * 1000000) / 10000 : 0;
+      // El total conserva la promo de accesorios y el envío local, igual que
+      // recalcEditTotals — este campo solo mueve el descuento negociado.
+      const promoDiscount = accessoryDiscountFor(prev, rows);
+      const deliveryFee = Number(prev.delivery_fee_bs ?? 0) || 0;
       return {
         ...prev,
         discount_percent: percent,
         // Conservar lo tecleado para que el campo no "salte" mientras escribe.
         discount_bs: value,
         subtotal,
-        total: Math.max(0, subtotal - bs)
+        total: Math.max(0, subtotal - bs - promoDiscount) + deliveryFee
       };
     });
   };
@@ -796,6 +837,9 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         : null,
       delivery_label: quote.delivery_label || null,
       delivery_gps: quote.delivery_gps || null,
+      // El snapshot de promos viaja al borrador: la promo de accesorios
+      // estampada participa del recálculo del total durante la edición.
+      promos: Array.isArray(quote.promos) ? quote.promos : null,
       line_items: Array.isArray(quote.line_items) ? quote.line_items : []
     };
 
@@ -828,7 +872,7 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
     const finalRows = normalizedRows.length > 0
       ? normalizedRows
       : [createDefaultEditRow(availableProducts[0]?.sku, draft.venta_type || 'sf')];
-    const { subtotal, total, discount_bs } = recalcEditTotals(finalRows, draft.discount_percent, draft.delivery_fee_bs || 0);
+    const { subtotal, total, discount_bs } = recalcEditTotals(finalRows, draft.discount_percent, draft.delivery_fee_bs || 0, draft);
     setEditingQuote({
       ...draft,
       line_items: finalRows,
@@ -937,11 +981,28 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
         delivery_gps: editingQuote.delivery_gps || null
       };
       const editPath = `/api/quotes/${editingQuote.id}`;
+      // El servidor recalcula la promo de accesorios del snapshot con las
+      // líneas nuevas; espejamos ese cálculo localmente para que el PDF
+      // descargado justo después de editar ya salga cuadrado.
+      const localPromos = (() => {
+        if (!accessoryPromoOf(editingQuote)) return editingQuote.promos;
+        const accSubtotal = accessoriesSubtotalOf(payload.rows);
+        return editingQuote.promos.map((p) => (
+          p?.tool === 'descuento_accesorios'
+            ? {
+                ...p,
+                accessories_subtotal: Math.round(accSubtotal * 100) / 100,
+                discount_bs: Math.round(accSubtotal * Number(p.discount_percent || 0)) / 100
+              }
+            : p
+        ));
+      })();
       const applyLocalEdit = () => {
         setQuotes((prev) => prev.map((quote) => (
           quote.id === editingQuote.id
             ? {
                 ...quote,
+                ...(Array.isArray(localPromos) ? { promos: localPromos } : {}),
                 customer_name: payload.customer_name,
                 customer_phone: payload.customer_phone,
                 vendor: payload.vendor,
@@ -1894,9 +1955,18 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
             <div style={{ marginTop: '10px', color: '#57534e', display: 'flex', justifyContent: 'flex-end', gap: '16px', fontWeight: 600, flexWrap: 'wrap' }}>
               <span>Subtotal: {Number(editingQuote.subtotal || 0).toFixed(2)} Bs</span>
               <span>
-                Descuento: −{Math.max(0, Number(editingQuote.subtotal || 0) - Number(editingQuote.total || 0)).toFixed(2)} Bs
+                Descuento: −{(Number(editingQuote.subtotal || 0) * Math.max(0, Math.min(100, Number(editingQuote.discount_percent || 0))) / 100).toFixed(2)} Bs
                 {' '}({Number(editingQuote.discount_percent || 0).toFixed(2)}%)
               </span>
+              {accessoryPromoOf(editingQuote) && (
+                <span style={{ color: '#0f766e' }}>
+                  Promo accesorios: −{accessoryDiscountFor(editingQuote, editingQuote.line_items).toFixed(2)} Bs
+                  {' '}({Number(accessoryPromoOf(editingQuote).discount_percent || 0)}%)
+                </span>
+              )}
+              {Number(editingQuote.delivery_fee_bs || 0) > 0 && (
+                <span>Envío local: +{Number(editingQuote.delivery_fee_bs).toFixed(2)} Bs</span>
+              )}
               <span>Total: {Number(editingQuote.total || 0).toFixed(2)} Bs</span>
             </div>
 

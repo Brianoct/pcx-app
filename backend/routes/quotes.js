@@ -5,7 +5,7 @@ const { getPedidosAccessScope } = require('../lib/inventory');
 const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, effectiveGiftItems, getQuoteSaveIdempotencyCacheKey, giftItemsFingerprint, lineItemsFingerprint, normalizeDeliveryFields, normalizeGiftItems, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftItemsForQuote, resolveGiftSelectionForQuote } = require('../lib/quotes');
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { findCustomerOwnerByPhone, markCustomerWonByPhone, upsertCustomerFromQuote } = require('../lib/customers');
-const { applyPromosToNewQuote, refreshCodeAggregate, syncPromoTicketsForQuote, validateCouponForRedemption } = require('../lib/promos');
+const { applyPromosToNewQuote, refreshAccessoryDiscountSnapshot, refreshCodeAggregate, syncPromoTicketsForQuote, validateCouponForRedemption } = require('../lib/promos');
 const { resolveGeoDestination } = require('../lib/geo');
 const { loadUserContext, resolveUserDisplayName } = require('../lib/users');
 const { createHttpError, getUserDisplayName } = require('../lib/util');
@@ -27,7 +27,7 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
     `SELECT id, user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes,
             alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
             coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items, payment_method, payment_cash_bs,
-            line_items, subtotal, total, status, delivery_fee_bs, delivery_label, delivery_gps
+            line_items, subtotal, total, status, delivery_fee_bs, delivery_label, delivery_gps, promos
      FROM quotes
      WHERE id = $1
      FOR UPDATE`,
@@ -1222,6 +1222,14 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         deliveryFieldsUpdate ? deliveryFieldsUpdate.gps : (currentQuote.delivery_gps || null)
       ]
     );
+
+    // La promo de accesorios estampada se recalcula con las líneas nuevas:
+    // el monto impreso en la proforma siempre cuadra con los ítems editados.
+    const refreshedPromos = await refreshAccessoryDiscountSnapshot(client, currentQuote.promos, lineItemsWithDisplay);
+    if (refreshedPromos) {
+      await client.query('UPDATE quotes SET promos = $1 WHERE id = $2', [JSON.stringify(refreshedPromos), quoteId]);
+    }
+
     await client.query('COMMIT');
 
     // CRM: corrected name/phone on edit also refreshes the customer book.
