@@ -177,6 +177,47 @@ const validateCouponForRedemption = async (client, code, customerPhone) => {
   };
 };
 
+// Subtotal de las líneas de accesorios de una lista de ítems: el tipo lo
+// decide el catálogo (products.product_type = 'accesorio'); combos y tableros
+// quedan fuera.
+const computeAccessoriesSubtotal = async (client, lineItems) => {
+  const items = Array.isArray(lineItems) ? lineItems : [];
+  const skus = [...new Set(
+    items.map((item) => String(item?.sku || '').trim().toUpperCase()).filter(Boolean)
+  )];
+  if (skus.length === 0) return 0;
+  const res = await client.query(
+    `SELECT UPPER(sku) AS sku FROM products
+     WHERE UPPER(sku) = ANY($1::text[]) AND product_type = 'accesorio'`,
+    [skus]
+  );
+  const accessorySkus = new Set(res.rows.map((row) => row.sku));
+  return items.reduce((sum, item) => {
+    const sku = String(item?.sku || '').trim().toUpperCase();
+    if (!accessorySkus.has(sku)) return sum;
+    const line = Number(item?.lineTotal ?? item?.line_total ?? 0);
+    return sum + (Number.isFinite(line) && line > 0 ? line : 0);
+  }, 0);
+};
+
+// Al EDITAR una cotización: si el snapshot estampado incluye un descuento en
+// accesorios, su monto se recalcula con las líneas nuevas para que la promesa
+// impresa siga cuadrando con los ítems. Devuelve el snapshot actualizado, o
+// null si no hay promo de accesorios que refrescar.
+const refreshAccessoryDiscountSnapshot = async (client, promos, lineItems) => {
+  if (!Array.isArray(promos) || !promos.some((p) => p?.tool === 'descuento_accesorios')) return null;
+  const accessoriesSubtotal = await computeAccessoriesSubtotal(client, lineItems);
+  return promos.map((p) => (
+    p?.tool === 'descuento_accesorios'
+      ? {
+          ...p,
+          accessories_subtotal: Math.round(accessoriesSubtotal * 100) / 100,
+          discount_bs: Math.round(accessoriesSubtotal * Number(p.discount_percent || 0)) / 100
+        }
+      : p
+  ));
+};
+
 // Al guardar una cotización: construye el snapshot para la proforma y registra
 // el código de sorteo si corresponde. Corre dentro de la transacción del guardado.
 // Combinación de promos: el vendedor marca las que se lleva el cliente
@@ -294,23 +335,7 @@ const applyPromosToNewQuote = async (client, { quoteId, total, status, customerP
       const minTotal = Number(config.min_total || 0);
       const discountPercent = Number(config.discount_percent || 0);
       if (discountPercent <= 0 || amount <= 0 || amount < minTotal) continue;
-      const items = Array.isArray(lineItems) ? lineItems : [];
-      const skus = [...new Set(
-        items.map((item) => String(item?.sku || '').trim().toUpperCase()).filter(Boolean)
-      )];
-      if (skus.length === 0) continue;
-      const accRes = await client.query(
-        `SELECT UPPER(sku) AS sku FROM products
-         WHERE UPPER(sku) = ANY($1::text[]) AND product_type = 'accesorio'`,
-        [skus]
-      );
-      const accessorySkus = new Set(accRes.rows.map((row) => row.sku));
-      const accessoriesSubtotal = items.reduce((sum, item) => {
-        const sku = String(item?.sku || '').trim().toUpperCase();
-        if (!accessorySkus.has(sku)) return sum;
-        const line = Number(item?.lineTotal ?? item?.line_total ?? 0);
-        return sum + (Number.isFinite(line) && line > 0 ? line : 0);
-      }, 0);
+      const accessoriesSubtotal = await computeAccessoriesSubtotal(client, lineItems);
       if (accessoriesSubtotal <= 0) continue;
       snapshot.push({
         tool: 'descuento_accesorios',
@@ -414,6 +439,7 @@ module.exports = {
   PAID_QUOTE_STATUSES,
   PROMO_TOOL_TYPES,
   applyPromosToNewQuote,
+  refreshAccessoryDiscountSnapshot,
   getActivePromoTools,
   normalizePromoPhone,
   promoValidUntil,
