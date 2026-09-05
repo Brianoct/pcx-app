@@ -7312,7 +7312,23 @@ img, video, canvas { max-width: 100%; }
 }
 
 .dayplan-title { margin: 0; }
-.dayplan-subtitle { margin: 0; color: var(--text-secondary); font-size: 1.02rem; font-weight: 700; }
+.dayplan-subtitle { margin: 0; color: var(--text-primary); font-size: 1.08rem; font-weight: 800; }
+
+.dayplan-title-block { display: flex; align-items: center; gap: 10px; }
+
+.dayplan-title-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  background: linear-gradient(150deg, #2563eb, #1e40af);
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.35);
+}
+
+.dayplan-tagline { margin: 0; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; }
 
 .dayplan-nav { display: flex; align-items: center; gap: 8px; }
 .dayplan-nav .btn { min-height: 38px; padding: 6px 14px; }
@@ -7363,12 +7379,21 @@ img, video, canvas { max-width: 100%; }
 .dayplan-meta {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 0;
   flex-wrap: wrap;
   margin-bottom: 10px;
   font-size: 0.83rem;
   color: var(--text-muted);
 }
+
+/* Segmentos separados como en el rediseño: 4/10 con plan | 22 tareas | ... */
+.dayplan-meta > span:not(.dayplan-legend) {
+  padding: 2px 14px;
+  border-left: 1px solid var(--border);
+}
+
+.dayplan-meta > span:first-child { border-left: none; padding-left: 0; }
+.dayplan-meta strong { color: var(--text-primary); font-size: 0.95rem; }
 
 .dayplan-meta-hint { margin-left: auto; font-size: 0.75rem; }
 
@@ -7378,7 +7403,9 @@ img, video, canvas { max-width: 100%; }
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
+  /* Lavado cálido sutil: da profundidad al tablero sin costarle contraste a
+     los bloques (los teléfonos del equipo mandan). */
+  background: linear-gradient(180deg, #fdfbf8 0%, #f6f1ea 100%);
   padding-bottom: 8px;
 }
 
@@ -7516,12 +7543,12 @@ img, video, canvas { max-width: 100%; }
 
 .dayplan-task {
   position: absolute;
-  border-radius: 10px;
-  padding: 4px 8px;
+  border-radius: 12px;
+  padding: 5px 9px;
   color: #ffffff;
   overflow: hidden;
   box-shadow: 0 2px 7px rgba(28, 25, 23, 0.22);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -7529,19 +7556,26 @@ img, video, canvas { max-width: 100%; }
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-/* Brillo sutil en el borde superior: da volumen sin cambiar el color. */
+/* Brillo superior «glossy»: da volumen sin cambiar el color de la persona. */
 .dayplan-task::before {
   content: '';
   position: absolute;
   inset: 0 0 auto 0;
-  height: 40%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0));
+  height: 45%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0));
   pointer-events: none;
 }
 
 .dayplan-task.is-editable:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(28, 25, 23, 0.3);
+  box-shadow: 0 6px 16px rgba(28, 25, 23, 0.32) !important;
+}
+
+.dayplan-task-icon {
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(28, 25, 23, 0.35));
 }
 
 .dayplan-task.is-done { opacity: 0.55; }
@@ -8686,15 +8720,18 @@ img, video, canvas { max-width: 100%; }
 
 /* Leyenda en la barra de resumen. */
 .dayplan-legend { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+/* Píldoras sólidas con degradado (rediseño): un botón-etiqueta por categoría. */
 .dayplan-legend-chip {
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 800;
-  padding: 2px 8px;
+  padding: 3px 11px;
   border-radius: 999px;
   color: #ffffff;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 5px rgba(28, 25, 23, 0.22);
 }
-.dayplan-legend-chip.is-3s { background: repeating-linear-gradient(135deg, #d97706 0 8px, #b45309 8px 16px); }
-.dayplan-legend-chip.is-kaizen { background: repeating-linear-gradient(135deg, #7c3aed 0 8px, #6d28d9 8px 16px); }
+.dayplan-legend-chip.is-3s { background: linear-gradient(150deg, #f59e0b, #b45309); }
+.dayplan-legend-chip.is-kaizen { background: linear-gradient(150deg, #8b5cf6, #6d28d9); }
 .dayplan-legend-note { font-size: 0.72rem; color: var(--text-muted); }
 
 /* Indicadores por persona en el encabezado de su columna: gris = le falta,
@@ -10146,7 +10183,7 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   border-left: 4px solid #134e4a;
 }
 .dayplan-task-badge.is-plan { color: #0f766e; }
-.dayplan-legend-chip.is-plan { background: repeating-linear-gradient(135deg, #0f766e 0 8px, #115e59 8px 16px); }
+.dayplan-legend-chip.is-plan { background: linear-gradient(150deg, #14b8a6, #0f766e); }
 .dayplan-task-checkline { display: flex; align-items: flex-start; gap: 6px; min-width: 0; cursor: pointer; }
 .dayplan-task-checkline input[type="checkbox"] {
   width: 15px; height: 15px; margin: 1px 0 0; flex-shrink: 0;
