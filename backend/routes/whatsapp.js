@@ -1,9 +1,9 @@
 const express = require('express');
 const { pool } = require('../db');
-const { authenticateToken, requireRole } = require('../lib/authMiddleware');
+const { authenticateToken } = require('../lib/authMiddleware');
 const { resolveUserDisplayName } = require('../lib/users');
 const { createHttpError, parseJsonInput, parseOptionalBoolean } = require('../lib/util');
-const { WHATSAPP_MEDIA_UPLOAD_MAX_BYTES, WHATSAPP_PIPELINE_STAGES, WHATSAPP_VERIFY_TOKEN, assignConversationRoundRobin, buildOutboundWhatsAppPayload, fetchWhatsAppMediaBinary, fetchWhatsAppMediaMeta, guessWhatsAppMessageTypeFromMime, loadEligibleWhatsAppSalesUsers, normalizeWhatsAppFollowupStatus, normalizeWhatsAppPhone, normalizeWhatsAppPipelineStage, notifyWhatsAppInboxRealtime, processInboundWhatsAppMessage, processWhatsAppStatusUpdates, sendWhatsAppMessage, uploadMediaToWhatsApp, verifyWhatsAppWebhookSignature, whatsappMediaUpload } = require('../lib/whatsapp');
+const { WHATSAPP_CALLBACK_NO_ID, WHATSAPP_CALLBACK_YES_ID, WHATSAPP_MEDIA_UPLOAD_MAX_BYTES, WHATSAPP_PIPELINE_STAGES, WHATSAPP_VERIFY_TOKEN, assignConversationRoundRobin, buildOutboundWhatsAppPayload, fetchWhatsAppMediaBinary, fetchWhatsAppMediaMeta, guessWhatsAppMessageTypeFromMime, loadEligibleWhatsAppSalesUsers, normalizeWhatsAppFollowupStatus, normalizeWhatsAppPhone, normalizeWhatsAppPipelineStage, notifyWhatsAppInboxRealtime, processInboundWhatsAppMessage, processWhatsAppAppStateSync, processWhatsAppHistorySync, processWhatsAppMessageEchoes, processWhatsAppStatusUpdates, requireWhatsAppInboxAccess, sendWhatsAppMessage, uploadMediaToWhatsApp, verifyWhatsAppWebhookSignature, whatsappMediaUpload } = require('../lib/whatsapp');
 
 const router = express.Router();
 
@@ -27,8 +27,28 @@ router.post('/api/whatsapp/webhook', async (req, res) => {
     for (const entry of entries) {
       const changes = Array.isArray(entry?.changes) ? entry.changes : [];
       for (const change of changes) {
-        if (String(change?.field || '').trim() !== 'messages') continue;
+        const field = String(change?.field || '').trim();
         const value = change?.value || {};
+        // Coexistencia (número compartido con la app del teléfono): estos
+        // campos traen lo que el equipo escribe desde el celular, el
+        // historial inicial y los contactos guardados en la app.
+        if (field === 'smb_message_echoes') {
+          await processWhatsAppMessageEchoes(value?.message_echoes || value?.messages || []);
+          continue;
+        }
+        if (field === 'history') {
+          await processWhatsAppHistorySync(value?.history || [], value?.metadata?.display_phone_number || '');
+          continue;
+        }
+        if (field === 'smb_app_state_sync') {
+          await processWhatsAppAppStateSync(value?.state_sync || []);
+          continue;
+        }
+        if (field !== 'messages') {
+          // Campo no manejado: queda en el log para la prueba en vivo.
+          console.log(`WhatsApp webhook: campo «${field}» ignorado (claves: ${Object.keys(value || {}).join(', ')})`);
+          continue;
+        }
         const contactsByWaId = new Map();
         for (const contact of (Array.isArray(value?.contacts) ? value.contacts : [])) {
           const waId = normalizeWhatsAppPhone(contact?.wa_id || '');
@@ -51,11 +71,76 @@ router.post('/api/whatsapp/webhook', async (req, res) => {
   }
 });
 
+// ─── SOLICITAR LLAMADA ───────────────────────────────────────────────────────
+// Manda al cliente «¿Prefieres que te llamemos?» con dos botones. Si toca
+// «Sí, llámenme», el webhook crea una tarea de devolver llamada para el
+// vendedor asignado (kind = 'callback'); el rep la ve en el encabezado del
+// chat y llama desde el WhatsApp de PCX en su teléfono.
+router.post('/api/whatsapp/inbox/conversations/:id/callback-request', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
+  try {
+    const conversationId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(conversationId) || conversationId <= 0) {
+      return res.status(400).json({ error: 'ID de conversación inválido' });
+    }
+    const conversationRes = await pool.query(
+      `SELECT ct.wa_phone AS contact_phone
+       FROM whatsapp_conversations c JOIN whatsapp_contacts ct ON ct.id = c.contact_id
+       WHERE c.id = $1`,
+      [conversationId]
+    );
+    if (conversationRes.rowCount === 0) return res.status(404).json({ error: 'Conversación no encontrada' });
+    const contactPhone = normalizeWhatsAppPhone(conversationRes.rows[0].contact_phone || '');
+    if (!contactPhone) return res.status(400).json({ error: 'La conversación no tiene teléfono válido' });
+
+    const bodyText = String(req.body?.text || '').trim()
+      || '¿Prefieres que te llamemos? Toca «Sí, llámenme» y un asesor de PCX te llama en breve desde este mismo número.';
+    const outbound = buildOutboundWhatsAppPayload({
+      toPhone: contactPhone,
+      body: {
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: { text: bodyText },
+          action: {
+            buttons: [
+              { type: 'reply', reply: { id: WHATSAPP_CALLBACK_YES_ID, title: 'Sí, llámenme' } },
+              { type: 'reply', reply: { id: WHATSAPP_CALLBACK_NO_ID, title: 'Prefiero escribir' } }
+            ]
+          }
+        }
+      }
+    });
+    const sendResult = await sendWhatsAppMessage({ payload: outbound.payload });
+    await pool.query(
+      `INSERT INTO whatsapp_messages (
+         conversation_id, wa_message_id, direction, message_type, text_body, status,
+         from_phone, to_phone, raw_payload, source, sent_by_user_id, created_at, updated_at
+       ) VALUES ($1, $2, 'outbound', 'interactive', $3, 'sent', NULL, $4, $5::jsonb, 'panel', $6, NOW(), NOW())`,
+      [conversationId, sendResult.wa_message_id, bodyText, contactPhone,
+       JSON.stringify({ request: outbound.payload, response: sendResult.raw_response || {} }), Number(req.user.id)]
+    );
+    await pool.query(
+      `UPDATE whatsapp_conversations SET last_message_preview = $2, last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [conversationId, bodyText]
+    );
+    notifyWhatsAppInboxRealtime('message_created', {
+      conversation_id: conversationId, wa_message_id: String(sendResult.wa_message_id || '').trim() || null,
+      direction: 'outbound', message_type: 'interactive'
+    });
+    notifyWhatsAppInboxRealtime('conversation_updated', { conversation_id: conversationId, reason: 'callback_request_sent' });
+    return res.status(201).json({ message: 'Solicitud de llamada enviada al cliente' });
+  } catch (err) {
+    console.error(err);
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    return res.status(500).json({ error: 'No se pudo enviar la solicitud de llamada' });
+  }
+});
+
 // ─── WHATSAPP ADMIN INBOX ────────────────────────────────────────────────────
 router.post(
   '/api/whatsapp/inbox/media/upload',
   authenticateToken,
-  requireRole(['admin']),
+  requireWhatsAppInboxAccess,
   (req, res, next) => {
     whatsappMediaUpload.single('file')(req, res, (err) => {
       if (!err) return next();
@@ -99,7 +184,7 @@ router.post(
   }
 );
 
-router.get('/api/whatsapp/inbox/media/:id/meta', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/api/whatsapp/inbox/media/:id/meta', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const mediaId = String(req.params.id || '').trim();
     if (!mediaId) return res.status(400).json({ error: 'media_id inválido' });
@@ -118,7 +203,7 @@ router.get('/api/whatsapp/inbox/media/:id/meta', authenticateToken, requireRole(
   }
 });
 
-router.get('/api/whatsapp/inbox/media/:id/content', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/api/whatsapp/inbox/media/:id/content', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const mediaId = String(req.params.id || '').trim();
     if (!mediaId) return res.status(400).json({ error: 'media_id inválido' });
@@ -143,7 +228,7 @@ router.get('/api/whatsapp/inbox/media/:id/content', authenticateToken, requireRo
   }
 });
 
-router.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/api/whatsapp/inbox/conversations', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const searchRaw = String(req.query.search || '').trim();
     const searchLike = `%${searchRaw}%`;
@@ -192,9 +277,11 @@ router.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole([
            WHERE t.conversation_id = c.id
          ) fu ON TRUE
          WHERE ($1 = '' OR ct.wa_phone ILIKE $2 OR COALESCE(ct.profile_name, '') ILIKE $2)
+           AND ($5::int IS NULL OR c.assigned_user_id = $5)
          ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC, c.id DESC
          LIMIT $3 OFFSET $4`,
-        [searchRaw, searchLike, limit, offset]
+        // Vendedores (fase 3): solo sus conversaciones asignadas.
+        [searchRaw, searchLike, limit, offset, req.inboxAccess?.scope === 'assigned' ? Number(req.user.id) : null]
       ),
       loadEligibleWhatsAppSalesUsers()
     ]);
@@ -227,6 +314,12 @@ router.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole([
     res.json({
       page,
       limit,
+      // Lo que puede hacer quien mira: el frontend esconde asignar/reasignar
+      // cuando no corresponde y avisa si solo ve lo suyo.
+      access: {
+        scope: req.inboxAccess?.scope || 'all',
+        can_assign: Boolean(req.inboxAccess?.can_assign)
+      },
       conversations,
       sales_users: salesUsers.map((row) => ({
         id: Number(row.id),
@@ -242,7 +335,7 @@ router.get('/api/whatsapp/inbox/conversations', authenticateToken, requireRole([
   }
 });
 
-router.patch('/api/whatsapp/inbox/conversations/:id/pipeline', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.patch('/api/whatsapp/inbox/conversations/:id/pipeline', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
@@ -283,7 +376,7 @@ router.patch('/api/whatsapp/inbox/conversations/:id/pipeline', authenticateToken
   }
 });
 
-router.get('/api/whatsapp/inbox/shortcuts', authenticateToken, requireRole(['admin']), async (_req, res) => {
+router.get('/api/whatsapp/inbox/shortcuts', authenticateToken, requireWhatsAppInboxAccess, async (_req, res) => {
   try {
     const shortcutsRes = await pool.query(
       `SELECT id, title, reply_type, body_text, template_name, template_language_code, template_components,
@@ -314,7 +407,7 @@ router.get('/api/whatsapp/inbox/shortcuts', authenticateToken, requireRole(['adm
   }
 });
 
-router.post('/api/whatsapp/inbox/shortcuts', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.post('/api/whatsapp/inbox/shortcuts', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const title = String(req.body?.title || '').trim();
     const replyType = String(req.body?.reply_type || 'text').trim().toLowerCase();
@@ -378,7 +471,7 @@ router.post('/api/whatsapp/inbox/shortcuts', authenticateToken, requireRole(['ad
   }
 });
 
-router.patch('/api/whatsapp/inbox/shortcuts/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.patch('/api/whatsapp/inbox/shortcuts/:id', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const shortcutId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(shortcutId) || shortcutId <= 0) return res.status(400).json({ error: 'ID inválido' });
@@ -461,7 +554,7 @@ router.patch('/api/whatsapp/inbox/shortcuts/:id', authenticateToken, requireRole
   }
 });
 
-router.get('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
@@ -478,6 +571,7 @@ router.get('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken,
          t.note,
          t.due_at,
          t.status,
+         t.kind,
          t.completed_at,
          t.created_by,
          cu.email AS created_by_email,
@@ -509,6 +603,7 @@ router.get('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken,
         note: String(row.note || '').trim() || '',
         due_at: row.due_at || null,
         status: normalizeWhatsAppFollowupStatus(row.status),
+        kind: String(row.kind || 'followup').trim() || 'followup',
         completed_at: row.completed_at || null,
         created_by: row.created_by !== null ? Number(row.created_by) : null,
         created_by_name: row.created_by
@@ -528,7 +623,7 @@ router.get('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken,
   }
 });
 
-router.post('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.post('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
@@ -603,7 +698,7 @@ router.post('/api/whatsapp/inbox/conversations/:id/followups', authenticateToken
   }
 });
 
-router.patch('/api/whatsapp/inbox/followups/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.patch('/api/whatsapp/inbox/followups/:id', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const followupId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(followupId) || followupId <= 0) {
@@ -694,7 +789,7 @@ router.patch('/api/whatsapp/inbox/followups/:id', authenticateToken, requireRole
   }
 });
 
-router.get('/api/whatsapp/inbox/conversations/:id/customer-360', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/api/whatsapp/inbox/conversations/:id/customer-360', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
@@ -831,7 +926,11 @@ router.get('/api/whatsapp/inbox/conversations/:id/customer-360', authenticateTok
   }
 });
 
-router.get('/api/whatsapp/inbox/kpis', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/api/whatsapp/inbox/kpis', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
+  // Los KPIs son del equipo completo: solo para quien ve todas las conversaciones.
+  if (req.inboxAccess?.scope !== 'all') {
+    return res.status(403).json({ error: 'Los indicadores de la bandeja son solo para líder y Admin.' });
+  }
   try {
     const daysRaw = Number.parseInt(req.query.days, 10);
     const days = Math.min(90, Math.max(1, Number.isInteger(daysRaw) ? daysRaw : 7));
@@ -987,7 +1086,7 @@ router.get('/api/whatsapp/inbox/kpis', authenticateToken, requireRole(['admin'])
   }
 });
 
-router.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
@@ -1039,21 +1138,34 @@ router.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, 
 
     const messagesRes = await pool.query(
       `SELECT
-         id,
-         wa_message_id,
-         direction,
-         message_type,
-         text_body,
-         status,
-         from_phone,
-         to_phone,
-         raw_payload,
-         created_at,
-         updated_at
-       FROM whatsapp_messages
-       WHERE conversation_id = $1
-       ORDER BY created_at ASC, id ASC
+         m.id,
+         m.wa_message_id,
+         m.direction,
+         m.message_type,
+         m.text_body,
+         m.status,
+         m.from_phone,
+         m.to_phone,
+         m.raw_payload,
+         m.source,
+         m.sent_by_user_id,
+         su.email AS sent_by_email,
+         su.display_name AS sent_by_display_name,
+         m.created_at,
+         m.updated_at
+       FROM whatsapp_messages m
+       LEFT JOIN users su ON su.id = m.sent_by_user_id
+       WHERE m.conversation_id = $1
+       ORDER BY m.created_at ASC, m.id ASC
        LIMIT 500`,
+      [conversationId]
+    );
+    // Llamada pendiente (el cliente pidió que lo llamen): el encabezado del
+    // chat la muestra con un botón para marcarla hecha.
+    const callbackRes = await pool.query(
+      `SELECT id, due_at, created_at FROM whatsapp_followup_tasks
+       WHERE conversation_id = $1 AND kind = 'callback' AND status = 'pending'
+       ORDER BY created_at DESC LIMIT 1`,
       [conversationId]
     );
 
@@ -1081,7 +1193,14 @@ router.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, 
         last_outbound_at: conversationRow.last_outbound_at || null,
         next_followup_due_at: conversationRow.next_followup_due_at || null,
         has_overdue_followup: Boolean(conversationRow.has_overdue_followup),
+        pending_callback: callbackRes.rowCount > 0
+          ? { id: Number(callbackRes.rows[0].id), due_at: callbackRes.rows[0].due_at, created_at: callbackRes.rows[0].created_at }
+          : null,
         updated_at: conversationRow.updated_at || null
+      },
+      access: {
+        scope: req.inboxAccess?.scope || 'all',
+        can_assign: Boolean(req.inboxAccess?.can_assign)
       },
       messages: (messagesRes.rows || []).map((row) => ({
         id: Number(row.id),
@@ -1090,6 +1209,12 @@ router.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, 
         message_type: String(row.message_type || '').trim() || 'text',
         text_body: String(row.text_body || '').trim(),
         status: String(row.status || '').trim() || null,
+        // 'api' cliente · 'panel' enviado desde aquí · 'phone' desde la app
+        // del teléfono · 'history' sincronización inicial.
+        source: String(row.source || 'api').trim() || 'api',
+        sent_by_name: row.sent_by_user_id
+          ? resolveUserDisplayName({ display_name: row.sent_by_display_name, email: row.sent_by_email }, 'Ventas')
+          : null,
         from_phone: String(row.from_phone || '').trim() || null,
         to_phone: String(row.to_phone || '').trim() || null,
         raw_payload: row.raw_payload || null,
@@ -1117,7 +1242,7 @@ router.get('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, 
   }
 });
 
-router.patch('/api/whatsapp/inbox/conversations/:id/read', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.patch('/api/whatsapp/inbox/conversations/:id/read', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
@@ -1149,7 +1274,7 @@ router.patch('/api/whatsapp/inbox/conversations/:id/read', authenticateToken, re
   }
 });
 
-router.patch('/api/whatsapp/inbox/conversations/:id/status', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.patch('/api/whatsapp/inbox/conversations/:id/status', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   try {
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
@@ -1186,12 +1311,16 @@ router.patch('/api/whatsapp/inbox/conversations/:id/status', authenticateToken, 
   }
 });
 
-router.patch('/api/whatsapp/inbox/conversations/:id/assign', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.patch('/api/whatsapp/inbox/conversations/:id/assign', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   let client;
   try {
     const conversationId = Number.parseInt(req.params.id, 10);
     if (!Number.isInteger(conversationId) || conversationId <= 0) {
       return res.status(400).json({ error: 'ID de conversación inválido' });
+    }
+    // Asignar/reasignar es del líder y Admin; un vendedor no se reparte solo.
+    if (!req.inboxAccess?.can_assign) {
+      return res.status(403).json({ error: 'Solo el líder de ventas o Admin pueden asignar conversaciones.' });
     }
     const assignMode = String(req.body?.mode || '').trim().toLowerCase();
     const requestedUserIdRaw = req.body?.assigned_user_id;
@@ -1288,7 +1417,7 @@ router.patch('/api/whatsapp/inbox/conversations/:id/assign', authenticateToken, 
   }
 });
 
-router.post('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.post('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken, requireWhatsAppInboxAccess, async (req, res) => {
   let client;
   try {
     const conversationId = Number.parseInt(req.params.id, 10);
@@ -1337,11 +1466,13 @@ router.post('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken,
          from_phone,
          to_phone,
          raw_payload,
+         source,
+         sent_by_user_id,
          created_at,
          updated_at
        )
-       VALUES ($1, $2, 'outbound', $3, $4, 'sent', NULL, $5, $6::jsonb, NOW(), NOW())
-       RETURNING id, wa_message_id, direction, message_type, text_body, status, from_phone, to_phone, created_at, updated_at`,
+       VALUES ($1, $2, 'outbound', $3, $4, 'sent', NULL, $5, $6::jsonb, 'panel', $7, NOW(), NOW())
+       RETURNING id, wa_message_id, direction, message_type, text_body, status, from_phone, to_phone, source, created_at, updated_at`,
       [
         conversationId,
         sendResult.wa_message_id,
@@ -1351,7 +1482,8 @@ router.post('/api/whatsapp/inbox/conversations/:id/messages', authenticateToken,
         JSON.stringify({
           request: outboundPayloadData.payload,
           response: sendResult.raw_response || {}
-        })
+        }),
+        Number(req.user.id)
       ]
     );
     await client.query(

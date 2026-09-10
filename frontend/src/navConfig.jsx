@@ -27,6 +27,7 @@ const PromosPanel = lazy(() => import('./PromosPanel'));
 const ForjaPanel = lazy(() => import('./ForjaPanel'));
 const CrmPanel = lazy(() => import('./CrmPanel'));
 const EnvioLocalPage = lazy(() => import('./EnvioLocalSettings'));
+const WhatsAppInbox = lazy(() => import('./admin/SalesAssistant'));
 
 /**
  * Single source of truth for every internal destination.
@@ -71,6 +72,19 @@ export const NAV_ITEMS = [
     // Aparece en el menú solo cuando el admin activa el Panel de Ventas.
     feature: 'panel_ventas',
     render: (ctx) => <CrmPanel token={ctx.token} user={ctx.user} />
+  },
+  {
+    path: '/whatsapp',
+    label: 'WhatsApp',
+    // Bandeja de WhatsApp por fases (Admin → Paneles): el líder entra con
+    // whatsapp_inbox_lider, los vendedores con whatsapp_inbox_ventas. Admin
+    // la tiene siempre en Admin → Ventas IA; aquí aparece solo para el equipo.
+    routeAccess: ['cotizar', 'historial_global', 'admin'],
+    visibleWhen: (access, features) => (
+      (Boolean(features?.whatsapp_inbox_ventas) && canAccessPanel(access, 'cotizar'))
+      || (Boolean(features?.whatsapp_inbox_lider) && canAccessPanel(access, 'historial_global') && !canAccessPanel(access, 'admin'))
+    ),
+    render: (ctx) => <WhatsAppInbox token={ctx.token} user={ctx.user} />
   },
   {
     path: '/pedidos',
@@ -210,7 +224,7 @@ export const NAV_ITEMS = [
 // can see at least one of its items, so most roles get a short sidebar.
 const SIDEBAR_SECTIONS = [
   { key: 'principal', label: 'Principal', paths: ['/', '/calendario'] },
-  { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/crm', '/history'] },
+  { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/whatsapp', '/crm', '/history'] },
   { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion', '/envio-local'] },
   { key: 'produccion', label: 'Producción', paths: ['/produccion-planificacion', '/produccion-kanban'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras'] },
@@ -232,6 +246,7 @@ export function getSidebarSections(access, features = {}) {
         .map((path) => byPath.get(path))
         .filter((item) => item && !item.hidden && allowsAny(access, item.navAccess || item.routeAccess))
         .filter((item) => !item.feature || features[item.feature])
+        .filter((item) => typeof item.visibleWhen !== 'function' || item.visibleWhen(access, features))
         .map(({ path, label }) => ({ to: path, label }))
     }))
     .filter((section) => section.items.length > 0);
