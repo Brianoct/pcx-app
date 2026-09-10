@@ -146,12 +146,28 @@ function MediaAttachment({ message, token }) {
   if (messageType === 'image') {
     return <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={filename || 'imagen'} className="sales-ia-media-img" /></a>;
   }
+  // Notas de voz: reproductor en línea (antes solo decía «[Audio]»).
+  if (messageType === 'audio') {
+    return <audio controls preload="metadata" src={url} className="sales-ia-audio" />;
+  }
   return (
     <a href={url} target="_blank" rel="noreferrer" download={filename || undefined} className="sales-ia-media-link">
       {messageType === 'document' ? `Abrir ${filename || 'documento'}` : 'Abrir archivo'}
     </a>
   );
 }
+
+// Quién escribió cada burbuja. En coexistencia el equipo también responde
+// desde la app del teléfono: eso llega como eco (source 'phone') y se
+// distingue de lo enviado desde el panel (con nombre del vendedor).
+const actorLabelFor = (message = {}) => {
+  if (message.direction === 'inbound') return 'Cliente';
+  const source = String(message.source || '').trim();
+  if (source === 'phone') return 'Ventas · teléfono';
+  if (source === 'history') return 'Ventas · historial';
+  if (message.sent_by_name) return `${message.sent_by_name} · panel`;
+  return 'Ventas';
+};
 
 const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
 const VENTA_TYPE_OPTIONS = [
@@ -164,6 +180,11 @@ const money = (n) => `Bs ${Number(n || 0).toFixed(2)}`;
 function SalesAssistant({ token, user }) {
   const [conversations, setConversations] = useState([]);
   const [salesUsers, setSalesUsers] = useState([]);
+  // Alcance de quien mira: 'all' (Admin/líder) o 'assigned' (vendedor). El
+  // servidor manda; esto solo decide qué controles se muestran.
+  const [inboxAccess, setInboxAccess] = useState({ scope: 'all', can_assign: false });
+  const [callbackBusy, setCallbackBusy] = useState(false);
+  const [assigning, setAssigning] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [conversation, setConversation] = useState(null);
@@ -225,6 +246,7 @@ function SalesAssistant({ token, user }) {
       const res = await apiRequest(`/api/whatsapp/inbox/conversations?limit=80&search=${encodeURIComponent(search)}`, { token });
       setConversations(Array.isArray(res?.conversations) ? res.conversations : []);
       setSalesUsers(Array.isArray(res?.sales_users) ? res.sales_users : []);
+      if (res?.access) setInboxAccess({ scope: res.access.scope || 'all', can_assign: Boolean(res.access.can_assign) });
     } catch (err) {
       setError(err?.message || 'No se pudieron cargar las conversaciones.');
     } finally {
@@ -265,6 +287,58 @@ function SalesAssistant({ token, user }) {
     });
   };
   const clearMsgSelection = () => setSelectedMsgIds(new Set());
+
+  // «¿Prefieres que te llamemos?»: el cliente toca «Sí, llámenme» y aparece
+  // la tarea de devolver llamada en este encabezado.
+  const requestCallback = async () => {
+    if (!selectedId || callbackBusy) return;
+    if (!window.confirm('¿Enviar al cliente la pregunta «¿Prefieres que te llamemos?» con botones de respuesta?')) return;
+    setCallbackBusy(true);
+    setError('');
+    try {
+      await apiRequest(`/api/whatsapp/inbox/conversations/${selectedId}/callback-request`, { method: 'POST', token, retries: 0 });
+      await reloadMessages(selectedId);
+    } catch (err) {
+      setError(err?.message || 'No se pudo enviar la solicitud de llamada.');
+    } finally {
+      setCallbackBusy(false);
+    }
+  };
+
+  const completeCallback = async () => {
+    const task = conversation?.pending_callback;
+    if (!task || callbackBusy) return;
+    setCallbackBusy(true);
+    setError('');
+    try {
+      await apiRequest(`/api/whatsapp/inbox/followups/${task.id}`, { method: 'PATCH', token, body: { status: 'done' } });
+      await reloadMessages(selectedId);
+      loadConversations();
+    } catch (err) {
+      setError(err?.message || 'No se pudo cerrar la llamada pendiente.');
+    } finally {
+      setCallbackBusy(false);
+    }
+  };
+
+  const assignConversation = async (userId) => {
+    if (!selectedId || assigning) return;
+    setAssigning(true);
+    setError('');
+    try {
+      await apiRequest(`/api/whatsapp/inbox/conversations/${selectedId}/assign`, {
+        method: 'PATCH',
+        token,
+        body: userId === 'auto' ? { mode: 'auto' } : { assigned_user_id: Number(userId) }
+      });
+      await reloadMessages(selectedId);
+      loadConversations();
+    } catch (err) {
+      setError(err?.message || 'No se pudo asignar la conversación.');
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   const openConversation = async (id) => {
     activeConvRef.current = id;
@@ -589,6 +663,50 @@ function SalesAssistant({ token, user }) {
                     Cliente: {cartera.name}{cartera.owner_name ? ` · Atiende: ${cartera.owner_name}` : ''}
                   </button>
                 )}
+                <div className="sia-thread-tools">
+                  {conversation?.contact_phone && (
+                    <a
+                      className="admin-ai-pill"
+                      href={`https://wa.me/${String(conversation.contact_phone).replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Abre el chat en el WhatsApp de PCX de tu teléfono; desde ahí tocas el ícono de llamar"
+                    >
+                      📞 Llamar por WhatsApp
+                    </a>
+                  )}
+                  {conversation?.pending_callback ? (
+                    <span className="sia-callback-badge">
+                      Llamada pendiente: el cliente pidió que lo llamen
+                      <button type="button" className="admin-ai-pill" onClick={completeCallback} disabled={callbackBusy}>
+                        {callbackBusy ? '…' : '✓ Llamada hecha'}
+                      </button>
+                    </span>
+                  ) : (
+                    <button type="button" className="admin-ai-pill" onClick={requestCallback} disabled={callbackBusy}>
+                      {callbackBusy ? 'Enviando…' : '¿Prefiere que lo llamemos?'}
+                    </button>
+                  )}
+                  {inboxAccess.can_assign && (
+                    <label className="sia-assign">
+                      Atiende:
+                      <select
+                        value={conversation?.assigned_user_id ? String(conversation.assigned_user_id) : ''}
+                        onChange={(e) => { if (e.target.value) assignConversation(e.target.value); }}
+                        disabled={assigning}
+                      >
+                        <option value="" disabled>Sin asignar — elegir…</option>
+                        <option value="auto">Automático (por turno)</option>
+                        {salesUsers.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {!inboxAccess.can_assign && conversation?.assigned_user_name && (
+                    <small className="sales-ia-muted">Atiende: {conversation.assigned_user_name}</small>
+                  )}
+                </div>
                 <small className="sales-ia-muted">Marca mensajes para enfocar la IA (opcional)</small>
               </div>
               <div className="sales-ia-messages">
@@ -607,7 +725,7 @@ function SalesAssistant({ token, user }) {
                       />
                     </label>
                     <span className={`sia-actor ${m.direction === 'inbound' ? 'sia-actor-cliente' : 'sia-actor-ventas'}`}>
-                      {m.direction === 'inbound' ? 'Cliente' : 'Ventas'}
+                      {actorLabelFor(m)}
                     </span>
                     <div>{m.text_body || `[${m.message_type || 'mensaje'}]`}</div>
                     <MediaAttachment message={m} token={token} />

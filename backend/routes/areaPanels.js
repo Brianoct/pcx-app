@@ -10,7 +10,9 @@ const { loadUserContext } = require('../lib/users');
 
 const router = express.Router();
 
-const FLAG_KEYS = ['panel_ventas', 'panel_marketing', 'panel_produccion', 'panel_almacen'];
+// whatsapp_inbox_*: fases de despliegue de la bandeja de WhatsApp (ver
+// lib/whatsapp.js): líder ve todo / vendedores ven lo suyo.
+const FLAG_KEYS = ['panel_ventas', 'panel_marketing', 'panel_produccion', 'panel_almacen', 'whatsapp_inbox_lider', 'whatsapp_inbox_ventas'];
 const SOLD = "('Pagado', 'Embalado', 'Enviado')";
 const BO_TODAY = "(NOW() AT TIME ZONE 'America/La_Paz')::date";
 const BO_DATE = (col) => `(${col} AT TIME ZONE 'UTC' AT TIME ZONE 'America/La_Paz')::date`;

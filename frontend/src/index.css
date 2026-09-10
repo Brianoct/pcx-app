@@ -2599,6 +2599,54 @@ button, .btn {
 }
 .sales-ia-thread-head strong { color: #292524; }
 
+/* Herramientas del hilo (coexistencia): llamar, pedir llamada, asignar. */
+.sia-thread-tools {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sia-thread-tools a.admin-ai-pill { text-decoration: none; }
+
+.sia-callback-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 999px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.sia-assign {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: #78716c;
+  font-weight: 600;
+}
+
+.sia-assign select {
+  padding: 4px 8px;
+  border: 1px solid #e7e0d8;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.8rem;
+}
+
+.sales-ia-audio {
+  display: block;
+  width: min(100%, 320px);
+  height: 36px;
+  margin-top: 4px;
+}
+
 .sales-ia-messages {
   display: grid;
   gap: 6px;

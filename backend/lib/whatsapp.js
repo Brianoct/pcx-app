@@ -36,6 +36,17 @@ const WHATSAPP_FOLLOWUP_STATUSES = ['pending', 'done', 'cancelled'];
 
 const WHATSAPP_MEDIA_UPLOAD_MAX_BYTES = 16 * 1024 * 1024;
 
+// Despliegue por fases de la bandeja (Admin -> Paneles). Admin siempre entra.
+//  - whatsapp_inbox_lider: el líder de ventas ve y asigna TODAS las conversaciones.
+//  - whatsapp_inbox_ventas: cada vendedor ve y responde SOLO las suyas (el
+//    líder también queda habilitado con esta).
+const WHATSAPP_INBOX_FLAG_LIDER = 'whatsapp_inbox_lider';
+const WHATSAPP_INBOX_FLAG_VENTAS = 'whatsapp_inbox_ventas';
+
+// Ids de los botones del mensaje «¿Prefieres que te llamemos?».
+const WHATSAPP_CALLBACK_YES_ID = 'pcx_callback_yes';
+const WHATSAPP_CALLBACK_NO_ID = 'pcx_callback_no';
+
 const whatsappMediaUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -665,6 +676,264 @@ const assignConversationToCustomerOwner = async (client, conversationId, waPhone
   }
 };
 
+// ─── Acceso a la bandeja por rol y fase ─────────────────────────────────────
+const loadInboxFlags = async () => {
+  const res = await pool.query(
+    'SELECT key, enabled FROM feature_flags WHERE key = ANY($1::text[])',
+    [[WHATSAPP_INBOX_FLAG_LIDER, WHATSAPP_INBOX_FLAG_VENTAS]]
+  );
+  const flags = { [WHATSAPP_INBOX_FLAG_LIDER]: false, [WHATSAPP_INBOX_FLAG_VENTAS]: false };
+  for (const row of res.rows) flags[row.key] = Boolean(row.enabled);
+  return flags;
+};
+
+// Devuelve { scope: 'all' | 'assigned', can_assign } o null si el rol no
+// tiene acceso en la fase actual.
+const resolveWhatsAppInboxAccess = async (user) => {
+  const role = normalizeRole(user?.role || '');
+  if (role === ROLE_KEYS.admin) return { scope: 'all', can_assign: true, role };
+  const flags = await loadInboxFlags();
+  if (role === ROLE_KEYS.ventasLider) {
+    if (flags[WHATSAPP_INBOX_FLAG_LIDER] || flags[WHATSAPP_INBOX_FLAG_VENTAS]) {
+      return { scope: 'all', can_assign: true, role };
+    }
+    return null;
+  }
+  if (role === ROLE_KEYS.ventas && flags[WHATSAPP_INBOX_FLAG_VENTAS]) {
+    return { scope: 'assigned', can_assign: false, role };
+  }
+  return null;
+};
+
+// Middleware de las rutas de la bandeja. Reemplaza al requireRole(['admin'])
+// original: Admin siempre; líder y vendedores según los flags de fase. Para
+// las rutas con :id de conversación (o de seguimiento), un vendedor solo
+// alcanza lo que tiene asignado.
+const requireWhatsAppInboxAccess = async (req, res, next) => {
+  try {
+    const access = await resolveWhatsAppInboxAccess(req.user);
+    if (!access) {
+      return res.status(403).json({ error: 'La bandeja de WhatsApp no está habilitada para tu rol todavía.' });
+    }
+    req.inboxAccess = access;
+    if (access.scope === 'assigned' && req.params?.id) {
+      const id = Number.parseInt(req.params.id, 10);
+      const path = String(req.route?.path || req.path || '');
+      if (Number.isInteger(id) && id > 0) {
+        let owned = true;
+        if (path.includes('/conversations/')) {
+          const r = await pool.query('SELECT assigned_user_id FROM whatsapp_conversations WHERE id = $1', [id]);
+          owned = r.rowCount > 0 && Number(r.rows[0].assigned_user_id) === Number(req.user.id);
+        } else if (path.includes('/followups/')) {
+          const r = await pool.query(
+            `SELECT c.assigned_user_id FROM whatsapp_followup_tasks t
+             JOIN whatsapp_conversations c ON c.id = t.conversation_id WHERE t.id = $1`,
+            [id]
+          );
+          owned = r.rowCount > 0 && Number(r.rows[0].assigned_user_id) === Number(req.user.id);
+        }
+        if (!owned) return res.status(403).json({ error: 'Esta conversación no está asignada a ti.' });
+      }
+    }
+    return next();
+  } catch (err) {
+    console.error('WhatsApp inbox access error:', err);
+    return res.status(500).json({ error: 'No se pudo validar el acceso a la bandeja' });
+  }
+};
+
+// ─── Coexistencia: contacto + conversación sin tocar asignación ni no-leídos ─
+// Los ecos del teléfono y el historial no son "mensajes nuevos del cliente":
+// no asignan por round-robin ni suman no-leídos; solo aseguran que la
+// conversación exista y refrescan la vista previa si el mensaje es más nuevo.
+const ensureConversationForPhone = async (client, phone, profileName = null) => {
+  const contactRes = await client.query(
+    `INSERT INTO whatsapp_contacts (wa_phone, profile_name, created_at, updated_at)
+     VALUES ($1, $2, NOW(), NOW())
+     ON CONFLICT (wa_phone) DO UPDATE
+     SET profile_name = COALESCE(EXCLUDED.profile_name, whatsapp_contacts.profile_name),
+         updated_at = NOW()
+     RETURNING id`,
+    [phone, profileName]
+  );
+  const contactId = Number(contactRes.rows[0].id);
+  await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [contactId]);
+  const convRes = await client.query(
+    `INSERT INTO whatsapp_conversations (contact_id, status, unread_count, created_at, updated_at)
+     VALUES ($1, 'open', 0, NOW(), NOW())
+     ON CONFLICT (contact_id) DO UPDATE SET updated_at = NOW()
+     RETURNING id, assigned_user_id`,
+    [contactId]
+  );
+  return {
+    conversationId: Number(convRes.rows[0].id),
+    assignedUserId: convRes.rows[0].assigned_user_id ? Number(convRes.rows[0].assigned_user_id) : null
+  };
+};
+
+// Inserta un mensaje si su wa_message_id no existe. Devuelve true si se insertó.
+const insertMessageIfNew = async (client, {
+  conversationId, waMessageId, direction, messageType, textBody, status, fromPhone, toPhone,
+  rawPayload, createdAt, source, sentByUserId = null
+}) => {
+  if (waMessageId) {
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1)::bigint)', [waMessageId]);
+    const dup = await client.query('SELECT id FROM whatsapp_messages WHERE wa_message_id = $1 LIMIT 1', [waMessageId]);
+    if (dup.rowCount > 0) return false;
+  }
+  await client.query(
+    `INSERT INTO whatsapp_messages (
+       conversation_id, wa_message_id, direction, message_type, text_body, status,
+       from_phone, to_phone, raw_payload, source, sent_by_user_id, created_at, updated_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, NOW())`,
+    [conversationId, waMessageId || null, direction, messageType, textBody || null, status,
+     fromPhone || null, toPhone || null, JSON.stringify(rawPayload || {}), source, sentByUserId, createdAt]
+  );
+  return true;
+};
+
+const touchConversationPreview = async (client, conversationId, textBody, createdAt) => {
+  await client.query(
+    `UPDATE whatsapp_conversations
+     SET last_message_preview = CASE WHEN last_message_at IS NULL OR last_message_at <= $3 THEN $2 ELSE last_message_preview END,
+         last_message_at = GREATEST(COALESCE(last_message_at, $3), $3),
+         updated_at = NOW()
+     WHERE id = $1`,
+    [conversationId, textBody || null, createdAt]
+  );
+};
+
+// Eco de lo que el equipo escribe desde la app del teléfono (campo
+// smb_message_echoes). Se guarda como saliente con source = 'phone'.
+const processWhatsAppMessageEchoes = async (echoes = []) => {
+  if (!Array.isArray(echoes) || echoes.length === 0) return;
+  for (const echo of echoes) {
+    const toPhone = normalizeWhatsAppPhone(echo?.to || '');
+    const waMessageId = String(echo?.id || '').trim();
+    if (!toPhone) continue;
+    const textBody = extractWhatsAppTextBody(echo);
+    const messageType = String(echo?.type || 'text').trim() || 'text';
+    const createdAt = Number.isFinite(Number(echo?.timestamp)) ? new Date(Number(echo.timestamp) * 1000) : new Date();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { conversationId } = await ensureConversationForPhone(client, toPhone, null);
+      const inserted = await insertMessageIfNew(client, {
+        conversationId, waMessageId, direction: 'outbound', messageType, textBody, status: 'sent',
+        fromPhone: null, toPhone, rawPayload: echo, createdAt, source: 'phone'
+      });
+      if (inserted) await touchConversationPreview(client, conversationId, textBody, createdAt);
+      await client.query('COMMIT');
+      if (inserted) {
+        notifyWhatsAppInboxRealtime('message_created', {
+          conversation_id: conversationId, wa_message_id: waMessageId || null, direction: 'outbound', message_type: messageType
+        });
+        notifyWhatsAppInboxRealtime('conversation_updated', { conversation_id: conversationId, reason: 'phone_echo' });
+      }
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      console.error('WhatsApp echo error:', err);
+    } finally {
+      client.release();
+    }
+  }
+};
+
+// Sincronización inicial del historial (campo history) al conectar el número
+// en coexistencia: hilos por cliente con sus mensajes. La dirección la marca
+// history_context.from_me (o el remitente, si no viene). Nada de esto suma
+// no-leídos ni dispara asignación: es pasado.
+const processWhatsAppHistorySync = async (historyEntries = [], businessPhone = '') => {
+  if (!Array.isArray(historyEntries) || historyEntries.length === 0) return;
+  const ownPhone = normalizeWhatsAppPhone(businessPhone);
+  let imported = 0;
+  for (const entry of historyEntries) {
+    const threads = Array.isArray(entry?.threads) ? entry.threads : [];
+    for (const thread of threads) {
+      const customerPhone = normalizeWhatsAppPhone(thread?.id || '');
+      const messages = Array.isArray(thread?.messages) ? thread.messages : [];
+      if (!customerPhone || messages.length === 0) continue;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { conversationId } = await ensureConversationForPhone(client, customerPhone, null);
+        for (const message of messages) {
+          const fromPhone = normalizeWhatsAppPhone(message?.from || '');
+          const fromMe = typeof message?.history_context?.from_me === 'boolean'
+            ? message.history_context.from_me
+            : (ownPhone ? fromPhone === ownPhone : fromPhone !== customerPhone);
+          const createdAt = Number.isFinite(Number(message?.timestamp)) ? new Date(Number(message.timestamp) * 1000) : new Date();
+          const inserted = await insertMessageIfNew(client, {
+            conversationId,
+            waMessageId: String(message?.id || '').trim(),
+            direction: fromMe ? 'outbound' : 'inbound',
+            messageType: String(message?.type || 'text').trim() || 'text',
+            textBody: extractWhatsAppTextBody(message),
+            status: fromMe ? (String(message?.history_context?.status || '').trim() || 'sent') : 'received',
+            fromPhone: fromMe ? null : customerPhone,
+            toPhone: fromMe ? customerPhone : null,
+            rawPayload: message,
+            createdAt,
+            source: 'history'
+          });
+          if (inserted) {
+            imported += 1;
+            await touchConversationPreview(client, conversationId, extractWhatsAppTextBody(message), createdAt);
+          }
+        }
+        await client.query('COMMIT');
+        notifyWhatsAppInboxRealtime('conversation_updated', { conversation_id: conversationId, reason: 'history_sync' });
+      } catch (err) {
+        try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+        console.error('WhatsApp history sync error:', err);
+      } finally {
+        client.release();
+      }
+    }
+  }
+  if (imported > 0) console.log(`WhatsApp history sync: ${imported} mensajes importados`);
+};
+
+// Contactos guardados en la app del teléfono (campo smb_app_state_sync): el
+// nombre que el equipo le puso al cliente vale más que el nombre de perfil.
+const processWhatsAppAppStateSync = async (stateSync = []) => {
+  if (!Array.isArray(stateSync) || stateSync.length === 0) return;
+  for (const item of stateSync) {
+    if (String(item?.type || '').trim() !== 'contact') continue;
+    if (String(item?.action || 'add').trim() === 'remove') continue;
+    const phone = normalizeWhatsAppPhone(item?.contact?.phone_number || '');
+    const fullName = String(item?.contact?.full_name || item?.contact?.first_name || '').trim();
+    if (!phone || !fullName) continue;
+    try {
+      await pool.query(
+        `INSERT INTO whatsapp_contacts (wa_phone, profile_name, created_at, updated_at)
+         VALUES ($1, $2, NOW(), NOW())
+         ON CONFLICT (wa_phone) DO UPDATE SET profile_name = EXCLUDED.profile_name, updated_at = NOW()`,
+        [phone, fullName]
+      );
+    } catch (err) {
+      console.error('WhatsApp contact sync error:', err);
+    }
+  }
+};
+
+// Cuando el cliente toca «Sí, llámenme»: una tarea de devolver llamada para
+// el vendedor asignado (una sola pendiente por conversación).
+const createCallbackTaskIfMissing = async (client, conversationId, assignedUserId) => {
+  const pending = await client.query(
+    `SELECT id FROM whatsapp_followup_tasks
+     WHERE conversation_id = $1 AND kind = 'callback' AND status = 'pending' LIMIT 1`,
+    [conversationId]
+  );
+  if (pending.rowCount > 0) return false;
+  await client.query(
+    `INSERT INTO whatsapp_followup_tasks (conversation_id, assigned_user_id, note, due_at, status, kind, created_at, updated_at)
+     VALUES ($1, $2, 'El cliente pidió que lo llamen: devolver llamada desde el WhatsApp de PCX', NOW() + INTERVAL '1 hour', 'pending', 'callback', NOW(), NOW())`,
+    [conversationId, assignedUserId]
+  );
+  return true;
+};
+
 const processInboundWhatsAppMessage = async (message = {}, contactsByWaId = new Map()) => {
   const fromPhone = normalizeWhatsAppPhone(message.from || '');
   const waMessageId = String(message.id || '').trim();
@@ -675,7 +944,10 @@ const processInboundWhatsAppMessage = async (message = {}, contactsByWaId = new 
   const createdAt = Number.isFinite(Number(message.timestamp))
     ? new Date(Number(message.timestamp) * 1000)
     : new Date();
+  const isCallbackYes = messageType === 'interactive'
+    && String(message?.interactive?.button_reply?.id || '').trim() === WHATSAPP_CALLBACK_YES_ID;
   let broadcastPayload = null;
+  let callbackCreated = false;
 
   const client = await pool.connect();
   try {
@@ -806,6 +1078,11 @@ const processInboundWhatsAppMessage = async (message = {}, contactsByWaId = new 
           await assignConversationRoundRobin(client, conversationId, { reason: 'auto_round_robin_inbound', changedBy: null });
         }
       }
+      if (isCallbackYes) {
+        const assignedRes = await client.query('SELECT assigned_user_id FROM whatsapp_conversations WHERE id = $1', [conversationId]);
+        const assignedNow = assignedRes.rows[0]?.assigned_user_id ? Number(assignedRes.rows[0].assigned_user_id) : null;
+        callbackCreated = await createCallbackTaskIfMissing(client, conversationId, assignedNow);
+      }
       broadcastPayload = {
         conversation_id: conversationId,
         wa_message_id: waMessageId || null,
@@ -819,7 +1096,7 @@ const processInboundWhatsAppMessage = async (message = {}, contactsByWaId = new 
       notifyWhatsAppInboxRealtime('message_created', broadcastPayload);
       notifyWhatsAppInboxRealtime('conversation_updated', {
         conversation_id: conversationId,
-        reason: 'inbound_message'
+        reason: callbackCreated ? 'callback_requested' : 'inbound_message'
       });
       notifyWhatsAppInboxRealtime('kpi_updated', {
         reason: 'inbound_message'
@@ -873,6 +1150,15 @@ module.exports = {
   WHATSAPP_ACCESS_TOKEN,
   WHATSAPP_API_BASE,
   WHATSAPP_APP_SECRET,
+  WHATSAPP_CALLBACK_NO_ID,
+  WHATSAPP_CALLBACK_YES_ID,
+  WHATSAPP_INBOX_FLAG_LIDER,
+  WHATSAPP_INBOX_FLAG_VENTAS,
+  processWhatsAppAppStateSync,
+  processWhatsAppHistorySync,
+  processWhatsAppMessageEchoes,
+  requireWhatsAppInboxAccess,
+  resolveWhatsAppInboxAccess,
   WHATSAPP_FOLLOWUP_STATUSES,
   WHATSAPP_GRAPH_VERSION,
   WHATSAPP_MEDIA_UPLOAD_MAX_BYTES,

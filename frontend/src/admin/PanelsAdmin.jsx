@@ -20,7 +20,21 @@ const PANELS = [
     available: true
   },
   { key: 'panel_produccion', label: 'Panel de Producción', icon: '🏭', detail: 'Próximamente.', available: false },
-  { key: 'panel_almacen', label: 'Panel de Almacén', icon: '📦', detail: 'Próximamente.', available: false }
+  { key: 'panel_almacen', label: 'Panel de Almacén', icon: '📦', detail: 'Próximamente.', available: false },
+  {
+    key: 'whatsapp_inbox_lider',
+    label: 'WhatsApp: líder de ventas',
+    icon: '💬',
+    detail: 'Fase 2 de la bandeja de WhatsApp: el líder de ventas ve TODAS las conversaciones y asigna clientes desde Ventas → WhatsApp. Admin siempre la tiene en Admin → Ventas IA.',
+    available: true
+  },
+  {
+    key: 'whatsapp_inbox_ventas',
+    label: 'WhatsApp: vendedores',
+    icon: '📱',
+    detail: 'Fase 3: cada vendedor ve y responde solo sus conversaciones asignadas desde Ventas → WhatsApp (habilita también al líder).',
+    available: true
+  }
 ];
 
 const GOAL_FIELDS = [
