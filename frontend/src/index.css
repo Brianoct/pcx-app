@@ -9105,6 +9105,8 @@ img, video, canvas { max-width: 100%; }
 }
 
 .public-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 28px; }
+.public-card-lines { display: flex; flex-direction: column; gap: 4px; }
+.public-card-link { display: inline-block; margin-top: 6px; color: #b91c1c; font-weight: 700; }
 .public-card {
   display: flex;
   flex-direction: column;
