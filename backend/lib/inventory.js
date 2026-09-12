@@ -15,14 +15,21 @@ const INVENTORY_CITY_SCOPE = {
     maxField: 'max_stock_santacruz',
     aliases: ['santa cruz', 'santacruz', 'scz']
   },
+  // Lima queda solo para resolver datos históricos (usuarios o tarjetas con esa
+  // ciudad). No se vende ahí todavía: ningún tablero, sugerencia ni selector
+  // debe generar filas para Lima (ver ACTIVE_INVENTORY_SCOPES).
   lima: {
     canonical: 'Lima',
     stockField: 'stock_lima',
     minField: 'min_stock_lima',
     maxField: 'max_stock_lima',
-    aliases: ['lima']
+    aliases: ['lima'],
+    active: false
   }
 };
+
+// Almacenes que realmente operan hoy (Cochabamba y Santa Cruz).
+const ACTIVE_INVENTORY_SCOPES = Object.values(INVENTORY_CITY_SCOPE).filter((scope) => scope.active !== false);
 
 const resolveInventoryScopeByCity = (cityValue = '') => {
   const normalized = normalizeText(cityValue);
@@ -75,6 +82,7 @@ const getPedidosAccessScope = (userContext, access) => {
 };
 
 module.exports = {
+  ACTIVE_INVENTORY_SCOPES,
   INVENTORY_CITY_SCOPE,
   getInventoryAccessScope,
   getPedidosAccessScope,

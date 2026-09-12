@@ -2,7 +2,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { isPgUndefinedTableError } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
-const { INVENTORY_CITY_SCOPE } = require('../lib/inventory');
+const { ACTIVE_INVENTORY_SCOPES } = require('../lib/inventory');
 const { replaceProductProcessSteps } = require('../lib/kanban');
 const { ROLE_KEYS, canAccessPanel, normalizeRole } = require('../lib/rbac');
 const { validateProductSku } = require('../lib/products');
@@ -328,7 +328,7 @@ router.get('/api/procurement/product-suggestions', authenticateToken, async (req
     const suggestions = [];
     for (const row of rowsRes.rows || []) {
       resaleProducts.push({ sku: String(row.sku || '').toUpperCase(), name: row.name });
-      for (const scope of Object.values(INVENTORY_CITY_SCOPE)) {
+      for (const scope of ACTIVE_INVENTORY_SCOPES) {
         const stock = Math.max(0, Number.parseInt(row[scope.stockField], 10) || 0);
         const minStock = Math.max(0, Number.parseInt(row[scope.minField], 10) || 0);
         const maxStock = Math.max(0, Number.parseInt(row[scope.maxField], 10) || 0);

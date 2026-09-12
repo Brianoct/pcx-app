@@ -7,7 +7,7 @@ import { useToast } from '../ui/toastContext';
 
 const EMPLOYMENT_TYPES = ['Tiempo completo', 'Medio tiempo', 'Por proyecto', 'Prácticas'];
 const AREAS = ['Producción', 'Ventas', 'Almacén', 'Marketing', 'Administración'];
-const LOCATIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
+const LOCATIONS = ['Cochabamba', 'Santa Cruz'];
 
 const emptyForm = () => ({
   id: null, title: '', area: '', location: '', employment_type: 'Tiempo completo', description: '', requirements: ''

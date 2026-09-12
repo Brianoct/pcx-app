@@ -19,7 +19,7 @@ const clampNumber = (value, min, max) => {
 };
 
 
-const ALMACEN_OPTIONS = ['Cochabamba', 'Lima', 'Santa Cruz'];
+const ALMACEN_OPTIONS = ['Cochabamba', 'Santa Cruz'];
 
 export default function QuoteTool({ token, user }) {
   const toast = useToast();

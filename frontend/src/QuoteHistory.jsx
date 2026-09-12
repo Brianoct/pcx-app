@@ -6,7 +6,7 @@ import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
 const QUOTE_STATUS_OPTIONS = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
-const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
+const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz'];
 const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'];
 const PAYMENT_METHOD_OPTIONS = [
   { value: '', label: 'Sin definir' },

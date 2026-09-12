@@ -52,10 +52,11 @@ function InventoryPanel({ token, role, access }) {
   const [suggestions, setSuggestions] = useState(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  // Lima queda fuera del inventario (sin venta prevista ahí); las columnas
+  // stock_lima siguen en la base por historial pero no se muestran ni alertan.
   const globalStores = [
     { key: 'cochabamba', field: 'stock_cochabamba', location: 'Cochabamba', minField: 'min_stock_cochabamba', maxField: 'max_stock_cochabamba', minLabel: 'Min/Max Cbba' },
-    { key: 'santacruz', field: 'stock_santacruz', location: 'Santa Cruz', minField: 'min_stock_santacruz', maxField: 'max_stock_santacruz', minLabel: 'Min/Max Scz' },
-    { key: 'lima', field: 'stock_lima', location: 'Lima', minField: 'min_stock_lima', maxField: 'max_stock_lima', minLabel: 'Min/Max Lima' }
+    { key: 'santacruz', field: 'stock_santacruz', location: 'Santa Cruz', minField: 'min_stock_santacruz', maxField: 'max_stock_santacruz', minLabel: 'Min/Max Scz' }
   ];
   const cityToKey = {
     cochabamba: {
@@ -81,14 +82,6 @@ function InventoryPanel({ token, role, access }) {
       minField: 'min_stock_santacruz',
       maxField: 'max_stock_santacruz',
       minLabel: 'Min/Max Scz'
-    },
-    lima: {
-      key: 'lima',
-      location: 'Lima',
-      stockField: 'stock_lima',
-      minField: 'min_stock_lima',
-      maxField: 'max_stock_lima',
-      minLabel: 'Min/Max Lima'
     }
   };
 
@@ -256,6 +249,15 @@ function InventoryPanel({ token, role, access }) {
 
     if (changedMinProducts.length === 0) return;
 
+    // El mínimo ya no puede ser 0: sin mínimo no hay alerta ni producción.
+    const withoutMin = changedMinProducts.filter((product) =>
+      editableStores.some((store) => Number(product[store.minField] ?? 0) < 1)
+    );
+    if (withoutMin.length > 0) {
+      setSaveMessage(`El mínimo de cada almacén debe ser al menos 1. Revisa: ${withoutMin.slice(0, 5).map((p) => p.sku).join(', ')}${withoutMin.length > 5 ? '…' : ''}`);
+      return;
+    }
+
     setSavingMins(true);
     setSaveMessage('');
     try {
@@ -377,15 +379,24 @@ function InventoryPanel({ token, role, access }) {
   }, []);
   const changedMinSkuSet = new Set(changedMinSkus);
 
+  // Regla: todo producto debe tener un mínimo (>= 1) en cada almacén. Un
+  // mínimo en 0 no es "sin alerta": es un producto sin configurar, y se marca
+  // para que Almacén lo corrija.
   const getStockLevel = (product, stockField, minField, maxField) => {
     const stock = Number(product[stockField] ?? 0);
     const min = Number(product[minField] ?? 0);
     const max = Number(product[maxField] ?? 0);
     if (stock <= 0) return 'critical';
+    if (min <= 0) return 'nomin';
     if (stock <= min) return 'low';
     if (max > 0 && stock > max) return 'over';
     return 'ok';
   };
+
+  const noMinCount = products.reduce((sum, product) => {
+    const missing = visibleStores.some((store) => Number(product[store.minField] ?? 0) <= 0);
+    return sum + (missing ? 1 : 0);
+  }, 0);
 
   const lowOrCriticalCount = products.reduce((sum, product) => {
     const hasAlert = visibleStores
@@ -425,6 +436,7 @@ function InventoryPanel({ token, role, access }) {
   const levelChip = (level) => {
     if (level === 'critical') return <span className="inv-chip is-critical">Sin stock</span>;
     if (level === 'low') return <span className="inv-chip is-low">Bajo mín</span>;
+    if (level === 'nomin') return <span className="inv-chip is-nomin" title="Este producto no tiene mínimo configurado en este almacén: ponle uno (mínimo 1)">Sin mínimo</span>;
     if (level === 'over') return <span className="inv-chip is-over">Sobre máx</span>;
     return <span className="inv-chip is-ok">OK</span>;
   };
@@ -432,8 +444,9 @@ function InventoryPanel({ token, role, access }) {
   const worstLevel = (levels) => (
     levels.includes('critical') ? 'critical'
       : levels.includes('low') ? 'low'
-        : levels.includes('over') ? 'over'
-          : 'ok'
+        : levels.includes('nomin') ? 'nomin'
+          : levels.includes('over') ? 'over'
+            : 'ok'
   );
 
   const renderTriplet = (product, store, level) => (
@@ -448,12 +461,12 @@ function InventoryPanel({ token, role, access }) {
       />
       <input
         type="number"
-        min="0"
-        className="inv-input inv-input-min"
+        min="1"
+        className={`inv-input inv-input-min${Number(product[store.minField] ?? 0) <= 0 ? ' is-invalid' : ''}`}
         value={product[store.minField] ?? 0}
         onChange={(e) => handleMinChange(product.sku, store.minField, e.target.value)}
         aria-label={`Mínimo ${store.location}`}
-        title="Mínimo: dispara producción"
+        title="Mínimo: dispara producción (al menos 1)"
       />
       <input
         type="number"
@@ -518,6 +531,11 @@ function InventoryPanel({ token, role, access }) {
             </strong>
           </span>
           <span style={{ color: '#dc2626' }}>Bajo mínimo: <strong>{lowOrCriticalCount}</strong></span>
+          {noMinCount > 0 && (
+            <span style={{ color: '#b45309' }} title="Productos sin mínimo definido (mínimo 0). Cada almacén debe tener un mínimo de al menos 1.">
+              Sin mínimo: <strong>{noMinCount}</strong>
+            </span>
+          )}
           {overstockCount > 0 && (
             <span style={{ color: '#2563eb' }}>Sobre máximo: <strong>{overstockCount}</strong></span>
           )}
@@ -598,8 +616,8 @@ function InventoryPanel({ token, role, access }) {
                         Mín
                         <input
                           type="number"
-                          min="0"
-                          className="inv-input inv-input-min"
+                          min="1"
+                          className={`inv-input inv-input-min${Number(product[store.minField] ?? 0) <= 0 ? ' is-invalid' : ''}`}
                           value={product[store.minField] ?? 0}
                           onChange={(e) => handleMinChange(product.sku, store.minField, e.target.value)}
                         />
