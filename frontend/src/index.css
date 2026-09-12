@@ -6722,6 +6722,7 @@ img, video, canvas { max-width: 100%; }
 .inv-chip.is-low, .inv-chip.is-critical { background: rgba(220, 38, 38, 0.1); color: var(--danger); }
 .inv-chip.is-over { background: rgba(37, 99, 235, 0.1); color: var(--accent-secondary); }
 .inv-chip.is-pending { background: rgba(245, 158, 11, 0.14); color: #b45309; }
+.inv-chip.is-nomin { background: rgba(245, 158, 11, 0.14); color: #b45309; }
 
 /* Inputs: stock (green, level-aware) · mín (amber) · máx (blue) */
 .inv-input {
@@ -6740,6 +6741,7 @@ img, video, canvas { max-width: 100%; }
 .inv-input-stock.is-low, .inv-input-stock.is-critical { color: #b91c1c; border-color: #ef4444; }
 .inv-input-stock.is-over { color: #2563eb; }
 .inv-input-min { color: #b45309; }
+.inv-input-min.is-invalid { border-color: var(--danger); background: rgba(220, 38, 38, 0.06); color: var(--danger); }
 .inv-input-max { color: #2563eb; }
 
 /* Desktop table: sin scroll interno — la página es el único scroll y la

@@ -643,7 +643,6 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
             <option value="">Todos los almacenes</option>
             <option value="Santa Cruz">Santa Cruz</option>
             <option value="Cochabamba">Cochabamba</option>
-            <option value="Lima">Lima</option>
           </select>
         )}
 

@@ -122,6 +122,9 @@ router.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Al
         if (!isValidLevel(req.body[field])) {
           return res.status(400).json({ error: 'Los niveles deben ser números >= 0' });
         }
+        if (field === allowedMinField && Number(req.body[field]) < 1) {
+          return res.status(400).json({ error: 'El mínimo de tu almacén debe ser al menos 1 (ya no se acepta 0).' });
+        }
         values.push(Number(req.body[field]));
         sets.push(`${field} = $${values.length}`);
       }
@@ -148,13 +151,24 @@ router.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Al
 
     const {
       min_stock_cochabamba,
-      min_stock_santacruz,
-      min_stock_lima
+      min_stock_santacruz
     } = req.body;
+    // Lima ya no se administra (sin venta prevista): se acepta si viene, y si
+    // no, se conserva lo que haya.
+    const min_stock_lima = Object.prototype.hasOwnProperty.call(req.body, 'min_stock_lima')
+      ? req.body.min_stock_lima
+      : null;
 
-    const values = [min_stock_cochabamba, min_stock_santacruz, min_stock_lima];
+    const values = [min_stock_cochabamba, min_stock_santacruz];
     if (values.some((v) => !isValidLevel(v))) {
-      return res.status(400).json({ error: 'Los mínimos por almacén son requeridos y deben ser números >= 0' });
+      return res.status(400).json({ error: 'Los mínimos de Cochabamba y Santa Cruz son requeridos y deben ser números >= 0' });
+    }
+    // Regla de negocio: todo producto tiene un mínimo real en cada almacén.
+    if (values.some((v) => Number(v) < 1)) {
+      return res.status(400).json({ error: 'El mínimo de cada almacén debe ser al menos 1 (ya no se acepta 0).' });
+    }
+    if (min_stock_lima !== null && !isValidLevel(min_stock_lima)) {
+      return res.status(400).json({ error: 'Los niveles deben ser números >= 0' });
     }
 
     // Max levels are optional; only provided ones are updated.
@@ -173,12 +187,12 @@ router.patch('/api/products/:sku/min-stock', authenticateToken, requireRole(['Al
       `UPDATE products
        SET min_stock_cochabamba = $1,
            min_stock_santacruz = $2,
-           min_stock_lima = $3${maxSets.length ? `, ${maxSets.join(', ')}` : ''},
+           min_stock_lima = COALESCE($3, min_stock_lima)${maxSets.length ? `, ${maxSets.join(', ')}` : ''},
            last_updated = NOW()
        WHERE sku = $${4 + maxValues.length}
        RETURNING sku, min_stock_cochabamba, min_stock_santacruz, min_stock_lima,
                  max_stock_cochabamba, max_stock_santacruz, max_stock_lima`,
-      [min_stock_cochabamba, min_stock_santacruz, min_stock_lima, ...maxValues, sku.toUpperCase()]
+      [Number(min_stock_cochabamba), Number(min_stock_santacruz), min_stock_lima === null ? null : Number(min_stock_lima), ...maxValues, sku.toUpperCase()]
     );
 
     if (result.rowCount === 0) {
@@ -367,7 +381,7 @@ router.get('/api/inventory/minmax-suggestions', authenticateToken, async (req, r
     const rows = productsRes.rows.map((product) => {
       const sold = unitsBySkuCity.get(String(product.sku).toUpperCase()) || { cochabamba: 0, santacruz: 0, lima: 0 };
       const cities = {};
-      for (const [cityKey, suffix] of [['cochabamba', 'cochabamba'], ['santacruz', 'santacruz'], ['lima', 'lima']]) {
+      for (const [cityKey, suffix] of [['cochabamba', 'cochabamba'], ['santacruz', 'santacruz']]) {
         const units = sold[cityKey] || 0;
         const monthly = Math.round((units * 30 / windowDays) * 10) / 10;
         cities[cityKey] = {

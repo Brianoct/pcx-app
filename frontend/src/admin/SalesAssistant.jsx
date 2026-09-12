@@ -169,7 +169,7 @@ const actorLabelFor = (message = {}) => {
   return 'Ventas';
 };
 
-const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz', 'Lima'];
+const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz'];
 const VENTA_TYPE_OPTIONS = [
   { value: 'SF', label: 'SF (sin factura)' },
   { value: 'CF', label: 'CF (con factura)' }

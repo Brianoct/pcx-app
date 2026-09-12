@@ -67,14 +67,12 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
         `SELECT COUNT(*)::int AS alerts,
                 COUNT(*) FILTER (WHERE
                   (min_stock_cochabamba > 0 AND stock_cochabamba <= 0) OR
-                  (min_stock_santacruz > 0 AND stock_santacruz <= 0) OR
-                  (min_stock_lima > 0 AND stock_lima <= 0)
+                  (min_stock_santacruz > 0 AND stock_santacruz <= 0)
                 )::int AS sin_stock
          FROM products
          WHERE is_active = TRUE AND (
            (min_stock_cochabamba > 0 AND stock_cochabamba < min_stock_cochabamba) OR
-           (min_stock_santacruz > 0 AND stock_santacruz < min_stock_santacruz) OR
-           (min_stock_lima > 0 AND stock_lima < min_stock_lima)
+           (min_stock_santacruz > 0 AND stock_santacruz < min_stock_santacruz)
          )`
       );
     }

@@ -1,5 +1,5 @@
 const { pool } = require('../db');
-const { INVENTORY_CITY_SCOPE } = require('./inventory');
+const { ACTIVE_INVENTORY_SCOPES } = require('./inventory');
 const { ensureProductCatalogReady } = require('./products');
 const { normalizeText } = require('./rbac');
 
@@ -50,7 +50,7 @@ const WELDED_SKUS = new Set(['C15N']);
 // board; purchasing will be handled by a dedicated board in a later step.
 const RESALE_START_PROCESS = 'comprar';
 
-const PRODUCTION_KANBAN_LOCATION_FIELDS = Object.values(INVENTORY_CITY_SCOPE).map((scope) => ({
+const PRODUCTION_KANBAN_LOCATION_FIELDS = ACTIVE_INVENTORY_SCOPES.map((scope) => ({
   label: scope.canonical,
   stockField: scope.stockField,
   minField: scope.minField,
