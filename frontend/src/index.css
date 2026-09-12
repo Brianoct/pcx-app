@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* La fuente Inter se carga desde index.html (preconnect + link), no aquí. */
 
 :root {
   /* Warm light theme (PCX brand: crimson/orange accents on warm neutrals) */
@@ -8990,7 +8990,94 @@ img, video, canvas { max-width: 100%; }
 }
 
 /* ============ Páginas públicas: Contacto y Trabaja con nosotros ============ */
-.landing-nav { display: flex; gap: 8px; align-items: center; }
+.landing-nav { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+.landing-login.is-current { color: #292524; background: rgba(41, 37, 36, 0.08); }
+
+.public-nav-wa { color: #15803d; }
+.public-nav-wa:hover { color: #166534; background: rgba(22, 163, 74, 0.1); }
+
+/* En las páginas públicas con scroll, el encabezado se queda pegado arriba:
+   Catálogos, Contacto y WhatsApp siempre a un toque (también en celular). */
+.public-page .landing-top.public-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  background: rgba(250, 248, 245, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(41, 37, 36, 0.06);
+}
+
+/* Inicio: segundo botón hacia los catálogos + fila de portadas. */
+.landing-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+.landing-cta-secondary {
+  background: #ffffff;
+  color: #1c1917;
+  border: 1.5px solid rgba(28, 25, 23, 0.18);
+  box-shadow: 0 6px 18px rgba(28, 25, 23, 0.1);
+}
+
+.landing-cta-secondary::before { content: '📘'; }
+
+.landing-cta-secondary:hover {
+  background: #faf8f5;
+  color: #1c1917;
+  box-shadow: 0 10px 24px rgba(28, 25, 23, 0.16);
+}
+
+/* Celular: el encabezado cabe en una sola línea y el inicio (una sola vista,
+   sin scroll) cede la fila de portadas — el botón «Ver catálogos» ya lleva ahí. */
+@media (max-width: 480px) {
+  .landing-top { padding: 14px 16px; }
+  .landing-logo { height: 32px; }
+  .landing-nav { gap: 2px; flex-wrap: nowrap; }
+  .landing-login { font-size: 0.76rem; padding: 6px 8px; }
+}
+
+.landing-catalog-row {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 30px;
+}
+
+.landing-catalog-mini {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px 8px 8px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #e7e2da;
+  box-shadow: 0 2px 10px rgba(28, 25, 23, 0.07);
+  text-decoration: none;
+  color: #292524;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.landing-catalog-mini:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(28, 25, 23, 0.12); }
+
+.landing-catalog-mini img {
+  width: 54px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 9px;
+}
+
+.landing-catalog-mini span { display: flex; flex-direction: column; text-align: left; line-height: 1.2; }
+.landing-catalog-mini strong { font-size: 0.9rem; font-weight: 800; }
+.landing-catalog-mini small { font-size: 0.72rem; color: #78716c; font-weight: 600; }
+
+/* Pantallas bajas o angostas: el inicio es de una sola vista (sin scroll), las
+   portadas ceden — el botón «Ver catálogos» ya lleva ahí. */
+@media (max-height: 640px), (max-width: 480px) {
+  .landing-catalog-row { display: none; }
+}
 
 .public-page {
   min-height: 100vh;
@@ -11463,6 +11550,9 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   .catalog-grid { grid-template-columns: 1fr; }
   .catalog-help { flex-direction: column; align-items: stretch; text-align: center; }
   .catalog-help-text { text-align: center; }
+  /* En celular el botón flotante tapaba «Ver catálogo» de la primera
+     tarjeta; el WhatsApp queda en el encabezado pegado y en el bloque final. */
+  .catalog-wa-float { display: none; }
   .catalog-wa-btn { justify-content: center; }
 }
 

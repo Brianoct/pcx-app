@@ -1,8 +1,7 @@
 // Página pública de catálogos: el link que Ventas comparte por WhatsApp.
 // El cliente abre, hojea el catálogo de cada línea (PDF) y tiene el botón de
 // WhatsApp siempre a mano para pedir el suyo. Sin login, sin datos privados.
-import { Link } from 'react-router-dom';
-import logo from './assets/logo.png';
+import PublicNav from './PublicNav';
 
 const WHATSAPP_NUMBER = '59169618264';
 const WHATSAPP_MESSAGE = 'Hola PCX, vi su catálogo y quiero más información.';
@@ -38,10 +37,7 @@ const CATALOGS = [
 export default function CatalogosPage() {
   return (
     <div className="public-page catalogs-page">
-      <header className="landing-top">
-        <Link to="/"><img src={logo} alt="PCX" className="landing-logo" /></Link>
-        <Link to="/contacto" className="landing-login">Contacto</Link>
-      </header>
+      <PublicNav whatsappUrl={WHATSAPP_URL} />
 
       <main className="public-main catalogs-main">
         <p className="landing-eyebrow">Catálogos 2026</p>

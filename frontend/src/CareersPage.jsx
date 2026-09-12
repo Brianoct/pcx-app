@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { apiRequest } from './apiClient';
-import logo from './assets/logo.png';
+import PublicNav from './PublicNav';
 
 // Las postulaciones van directo al WhatsApp de Brian (no al de ventas).
 const WHATSAPP_NUMBER = '59167405778';
@@ -27,10 +27,7 @@ export default function CareersPage() {
 
   return (
     <div className="public-page">
-      <header className="landing-top">
-        <Link to="/"><img src={logo} alt="PCX" className="landing-logo" /></Link>
-        <Link to="/login" className="landing-login">Ingresar</Link>
-      </header>
+      <PublicNav />
 
       <main className="public-main">
         <p className="landing-eyebrow">Trabaja con nosotros</p>

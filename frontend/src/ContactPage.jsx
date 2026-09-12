@@ -1,18 +1,16 @@
 // Página pública de contacto del sitio principal. Desde aquí se llega a la
 // página de convocatorias ("Trabaja con nosotros").
 import { Link } from 'react-router-dom';
-import logo from './assets/logo.png';
+import PublicNav from './PublicNav';
 
 const WHATSAPP_NUMBER = '59169618264';
 const WHATSAPP_MESSAGE = 'Hola PCX, quiero conocer sus productos de organización.';
+const PHONE_DISPLAY = '+591 696 18264';
 
 export default function ContactPage() {
   return (
     <div className="public-page">
-      <header className="landing-top">
-        <Link to="/"><img src={logo} alt="PCX" className="landing-logo" /></Link>
-        <Link to="/login" className="landing-login">Ingresar</Link>
-      </header>
+      <PublicNav />
 
       <main className="public-main">
         <p className="landing-eyebrow">Contacto</p>
@@ -31,7 +29,14 @@ export default function ContactPage() {
           >
             <span className="public-card-icon">💬</span>
             <span className="public-card-title">WhatsApp</span>
-            <span className="public-card-text">+591 696 18264 — ventas y consultas</span>
+            <span className="public-card-text">{PHONE_DISPLAY} — ventas y consultas</span>
+          </a>
+
+          {/* Llamada directa: funciona sin WhatsApp Web (en el celular abre el marcador). */}
+          <a className="public-card" href={`tel:+${WHATSAPP_NUMBER}`}>
+            <span className="public-card-icon">📞</span>
+            <span className="public-card-title">Llamar</span>
+            <span className="public-card-text">{PHONE_DISPLAY} — toca para llamar</span>
           </a>
 
           <div className="public-card">
