@@ -71,8 +71,7 @@ function UsersRolesAdmin({ token, initialView }) {
           <p className="admin-subtab-hint">
             Todos los porcentajes se aplican sobre ventas del mes. Cada persona ve su
             acumulado en la cajita del nav. Al cierre de mes, paga usando los datos
-            de {link('pagos', 'Pagos')}. Los registros de control de calidad ahora viven
-            en la sección <strong>Mejoras</strong>.
+            de {link('pagos', 'Pagos')}.
           </p>
           <CommissionConfig token={token} />
         </>
