@@ -416,7 +416,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         role="button"
         tabIndex={0}
         aria-expanded={isExpanded}
-        className={`prod-card is-due-${status.key} ${isExpanded ? 'is-expanded' : ''} ${busyKey === lot.key ? 'is-busy' : ''}`}
+        className={`prod-card is-due-${status.key} ${['soon', 'urgent', 'late'].includes(status.key) ? 'is-due-tinted' : ''} ${isExpanded ? 'is-expanded' : ''} ${busyKey === lot.key ? 'is-busy' : ''}`}
         onClick={toggle}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
         title={lot.due_date ? `Entrega ${dueText} · ${DUE_STATUS_META[status.key].label}` : 'Sin fecha de entrega (abre la ficha para ponerla)'}
