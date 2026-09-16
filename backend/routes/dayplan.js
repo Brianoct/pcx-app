@@ -15,9 +15,12 @@ const TASK_TYPE_ALIASES = { kaizen: 'mejora' };
 const userDisplayName = (row) =>
   String(row.display_name || '').trim() || String(row.email || '').split('@')[0] || 'Usuario';
 
-const buildTaskRow = (row, subtasks = []) => ({
+const buildTaskRow = (row, subtasks = [], participants = []) => ({
   id: Number(row.id),
   user_id: Number(row.user_id),
+  // Mejora en grupo: personas etiquetadas además de la dueña. El bloque se
+  // dibuja en la columna de cada una y todas reciben su registro al hacerse.
+  participants,
   task_date: row.task_date instanceof Date ? row.task_date.toISOString().slice(0, 10) : String(row.task_date).slice(0, 10),
   start_minute: Number(row.start_minute),
   end_minute: Number(row.end_minute),
@@ -51,6 +54,48 @@ const loadSubtasksByTask = async (taskIds) => {
     map.get(sub.task_id).push(sub);
   }
   return map;
+};
+
+const loadParticipantsByTask = async (taskIds) => {
+  if (taskIds.length === 0) return new Map();
+  const result = await pool.query(
+    `SELECT p.task_id, u.id, u.display_name, u.email
+     FROM day_plan_task_participants p JOIN users u ON u.id = p.user_id
+     WHERE p.task_id = ANY($1)
+     ORDER BY COALESCE(NULLIF(TRIM(u.display_name), ''), u.email)`,
+    [taskIds]
+  );
+  const map = new Map();
+  for (const row of result.rows) {
+    const taskId = Number(row.task_id);
+    if (!map.has(taskId)) map.set(taskId, []);
+    map.get(taskId).push({ id: Number(row.id), name: userDisplayName(row) });
+  }
+  return map;
+};
+
+// Reemplaza el grupo del bloque. Solo bloques "mejora" llevan participantes;
+// ids inválidos, inactivos o la propia dueña se descartan en silencio.
+const saveParticipants = async (taskRow, participantIds) => {
+  await pool.query('DELETE FROM day_plan_task_participants WHERE task_id = $1', [taskRow.id]);
+  if (String(taskRow.task_type) !== 'mejora' || !Array.isArray(participantIds) || participantIds.length === 0) return;
+  const wanted = Array.from(new Set(participantIds.filter((id) => Number.isInteger(id) && id > 0 && id !== Number(taskRow.user_id))));
+  if (wanted.length === 0) return;
+  const valid = await pool.query('SELECT id FROM users WHERE is_active = TRUE AND id = ANY($1)', [wanted]);
+  for (const row of valid.rows) {
+    await pool.query(
+      'INSERT INTO day_plan_task_participants (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [taskRow.id, Number(row.id)]
+    );
+  }
+};
+
+const isParticipant = async (req, taskRow) => {
+  const res = await pool.query(
+    'SELECT 1 FROM day_plan_task_participants WHERE task_id = $1 AND user_id = $2',
+    [taskRow.id, req.user.id]
+  );
+  return res.rowCount > 0;
 };
 
 // Sincroniza el check con la tarea de Planificación vinculada (si la hay).
@@ -114,6 +159,13 @@ const parseTaskFields = (body, { partial = false } = {}) => {
   return { fields: out };
 };
 
+// participant_ids viaja aparte de los campos SQL: es una tabla propia.
+const parseParticipantIds = (body) => {
+  if (!Object.prototype.hasOwnProperty.call(body || {}, 'participant_ids')) return undefined;
+  const raw = Array.isArray(body.participant_ids) ? body.participant_ids : [];
+  return raw.map((value) => Number.parseInt(value, 10)).filter((id) => Number.isInteger(id) && id > 0).slice(0, 30);
+};
+
 // The whole team's plan for one day, plus the roster of active users so
 // people who haven't planned yet still appear as empty columns.
 router.get('/api/day-plan', authenticateToken, async (req, res) => {
@@ -135,7 +187,8 @@ router.get('/api/day-plan', authenticateToken, async (req, res) => {
         [date]
       )
     ]);
-    const subtasksByTask = await loadSubtasksByTask(tasksRes.rows.map((row) => Number(row.id)));
+    const taskIds = tasksRes.rows.map((row) => Number(row.id));
+    const [subtasksByTask, participantsByTask] = await Promise.all([loadSubtasksByTask(taskIds), loadParticipantsByTask(taskIds)]);
     res.json({
       date,
       team: teamRes.rows.map((row) => ({
@@ -143,7 +196,7 @@ router.get('/api/day-plan', authenticateToken, async (req, res) => {
         name: userDisplayName(row),
         role: row.role
       })),
-      tasks: tasksRes.rows.map((row) => buildTaskRow(row, subtasksByTask.get(Number(row.id)) || []))
+      tasks: tasksRes.rows.map((row) => buildTaskRow(row, subtasksByTask.get(Number(row.id)) || [], participantsByTask.get(Number(row.id)) || []))
     });
   } catch (err) {
     console.error('Error loading day plan:', err);
@@ -164,7 +217,11 @@ router.post('/api/day-plan', authenticateToken, async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [req.user.id, date, start_minute, end_minute, title, parsed.fields.task_type || 'tarea']
     );
-    res.status(201).json({ task: buildTaskRow(result.rows[0]) });
+    const created = result.rows[0];
+    const participantIds = parseParticipantIds(req.body);
+    if (participantIds && participantIds.length > 0) await saveParticipants(created, participantIds);
+    const participantsByTask = await loadParticipantsByTask([Number(created.id)]);
+    res.status(201).json({ task: buildTaskRow(created, [], participantsByTask.get(Number(created.id)) || []) });
   } catch (err) {
     console.error('Error creating day plan task:', err);
     res.status(500).json({ error: 'No se pudo agregar la tarea' });
@@ -181,24 +238,38 @@ router.patch('/api/day-plan/:id', authenticateToken, async (req, res) => {
   const parsed = parseTaskFields(req.body, { partial: true });
   if (parsed.error) return res.status(400).json({ error: parsed.error });
   const fields = parsed.fields;
-  if (Object.keys(fields).length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
+  const participantIds = parseParticipantIds(req.body);
+  if (Object.keys(fields).length === 0 && participantIds === undefined) return res.status(400).json({ error: 'Nada que actualizar' });
   try {
     const currentRes = await pool.query('SELECT * FROM day_plan_tasks WHERE id = $1', [taskId]);
     if (currentRes.rowCount === 0) return res.status(404).json({ error: 'Tarea no encontrada' });
     if (!canManageTask(req, currentRes.rows[0])) {
-      return res.status(403).json({ error: 'Solo puedes editar tus propias tareas' });
+      // Quien participa en una mejora en grupo puede marcarla hecha/pendiente,
+      // pero no cambiarle título, horario, tipo ni grupo.
+      const onlyDone = Object.keys(fields).every((key) => key === 'is_done') && participantIds === undefined;
+      if (!onlyDone || !(await isParticipant(req, currentRes.rows[0]))) {
+        return res.status(403).json({ error: 'Solo puedes editar tus propias tareas' });
+      }
     }
-    const sets = [];
-    const values = [taskId];
-    for (const [key, value] of Object.entries(fields)) {
-      values.push(value);
-      sets.push(`${key} = $${values.length}`);
+    let updated = currentRes.rows[0];
+    if (Object.keys(fields).length > 0) {
+      const sets = [];
+      const values = [taskId];
+      for (const [key, value] of Object.entries(fields)) {
+        values.push(value);
+        sets.push(`${key} = $${values.length}`);
+      }
+      const result = await pool.query(
+        `UPDATE day_plan_tasks SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`,
+        values
+      );
+      updated = result.rows[0];
     }
-    const result = await pool.query(
-      `UPDATE day_plan_tasks SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`,
-      values
-    );
-    const updated = result.rows[0];
+    if (participantIds !== undefined) {
+      await saveParticipants(updated, participantIds);
+    } else if (Object.prototype.hasOwnProperty.call(fields, 'task_type') && fields.task_type !== 'mejora') {
+      await pool.query('DELETE FROM day_plan_task_participants WHERE task_id = $1', [taskId]);
+    }
     // Check sincronizado: si la tarea vino de Planificación, marcarla hecha
     // aquí también la marca allá (y viceversa, ver routes/planning.js).
     if (Object.prototype.hasOwnProperty.call(fields, 'is_done') && updated.planning_task_id) {
@@ -207,12 +278,12 @@ router.patch('/api/day-plan/:id', authenticateToken, async (req, res) => {
     // Registro de mejoras: marcar hecha una "Mejora" la registra; reabrirla
     // o cambiarle el tipo la retira. Cambiar el título lo refleja allá.
     let mejoraSync = null;
-    if (['is_done', 'task_type', 'title', 'task_date'].some((key) => Object.prototype.hasOwnProperty.call(fields, key))) {
+    if (participantIds !== undefined || ['is_done', 'task_type', 'title', 'task_date'].some((key) => Object.prototype.hasOwnProperty.call(fields, key))) {
       mejoraSync = await syncMejoraForTask(updated);
     }
-    const subtasksByTask = await loadSubtasksByTask([taskId]);
+    const [subtasksByTask, participantsByTask] = await Promise.all([loadSubtasksByTask([taskId]), loadParticipantsByTask([taskId])]);
     res.json({
-      task: buildTaskRow(updated, subtasksByTask.get(taskId) || []),
+      task: buildTaskRow(updated, subtasksByTask.get(taskId) || [], participantsByTask.get(taskId) || []),
       mejora_registered: mejoraSync ? Boolean(mejoraSync.registered && Object.prototype.hasOwnProperty.call(fields, 'is_done') && fields.is_done) : false
     });
   } catch (err) {

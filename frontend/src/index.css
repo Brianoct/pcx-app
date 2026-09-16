@@ -8640,6 +8640,14 @@ img, video, canvas { max-width: 100%; }
 .mejoras-item-user { border: 0; background: transparent; padding: 0; font: inherit; font-weight: 700; color: var(--text-secondary); cursor: pointer; }
 .mejoras-item-user:hover { color: var(--mejora); text-decoration: underline; }
 .mejoras-item-area { font-weight: 600; }
+.mejoras-item-group {
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--mejora-soft);
+  color: var(--mejora-deep);
+}
 .mejoras-item-area-select { font-size: 0.72rem; padding: 1px 4px; border-radius: 6px; border: 1px solid #e7e5e4; background: #fafaf9; }
 .mejoras-item-detail { margin: 2px 0 0; font-size: 0.84rem; color: var(--text-secondary); white-space: pre-wrap; }
 .mejoras-item-detail.is-missing { font-style: italic; color: var(--text-muted); }
@@ -11092,6 +11100,40 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 .dpe-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dpe-row select { min-height: 38px; }
 .dpe-save { margin-left: auto; min-height: 38px; padding: 8px 16px; }
+
+/* Mejora en grupo: chips de compañeros (barra de agregar y editor). */
+.dayplan-add-people { flex-basis: 100%; }
+.dpe-people { border-top: 1px solid #f0efed; padding-top: 10px; margin-bottom: 10px; }
+.dpe-people-hint { margin: 6px 0 0; font-size: 0.74rem; color: var(--text-muted); }
+.dayplan-people { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dayplan-people-label { font-size: 0.78rem; font-weight: 800; color: var(--text-secondary); }
+.dayplan-people-chip {
+  appearance: none;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid #d6d3d1;
+  background: #fff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.dayplan-people-chip:hover { border-color: #a8a29e; }
+.dayplan-people-chip.is-on { color: #fff; }
+.dayplan-people-note { font-size: 0.72rem; color: #5b21b6; font-weight: 700; }
+
+/* Bloque en grupo: insignia 👥 y avatares de quienes participan. */
+.dayplan-task-badge.is-group { color: #4c1d95; }
+.dayplan-task.is-shared { outline: 2px dashed rgba(255, 255, 255, 0.55); outline-offset: -4px; }
+.dayplan-task-people { display: inline-flex; gap: 2px; margin-top: 2px; }
+.dayplan-task-person {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.58rem; font-weight: 900; color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+}
 
 .dpe-checklist { border-top: 1px solid #f0efed; padding-top: 10px; }
 .dpe-checklist h4 { margin: 0 0 8px; font-size: 0.9rem; display: flex; align-items: center; gap: 8px; }
