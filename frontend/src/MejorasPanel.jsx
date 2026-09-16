@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from './apiClient';
 import { useToast } from './ui/toastContext';
-import QualityControlRecordsAdmin from './admin/QualityControlRecordsAdmin';
 
 // Mejoras: el registro de todo lo que el equipo mejoró. La filosofía PCX:
 // lo rutinario se estandariza y se automata; el día a día es mejorar.
@@ -43,7 +42,6 @@ export default function MejorasPanel({ token, user }) {
   const [editingId, setEditingId] = useState(null);
   const [draftDetail, setDraftDetail] = useState('');
   const [savingId, setSavingId] = useState(null);
-  const [qcRecords, setQcRecords] = useState(null); // null = sin acceso
 
   const myId = Number(user?.id);
   const isAdmin = String(user?.role || '').trim().toLowerCase() === 'admin';
@@ -63,17 +61,6 @@ export default function MejorasPanel({ token, user }) {
   }, [token, month, year]);
 
   useEffect(() => { load(); }, [load]);
-
-  // Los registros de control de calidad siguen viviendo aquí (colapsados)
-  // para quien tenga ese permiso.
-  useEffect(() => {
-    let active = true;
-    apiRequest(`/api/qc/checks?month=${now.getMonth() + 1}&year=${now.getFullYear()}`, { token })
-      .then((rows) => { if (active) setQcRecords(Array.isArray(rows) ? rows : []); })
-      .catch(() => { if (active) setQcRecords(null); });
-    return () => { active = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
 
   const shiftMonth = (delta) => {
     const next = new Date(year, month - 1 + delta, 1);
@@ -364,14 +351,6 @@ export default function MejorasPanel({ token, user }) {
             </aside>
           </div>
 
-          {Array.isArray(qcRecords) && (
-            <details className="mejoras-qc">
-              <summary>Registros de control de calidad</summary>
-              <div className="mejoras-qc-body">
-                <QualityControlRecordsAdmin token={token} />
-              </div>
-            </details>
-          )}
         </>
       )}
     </div>
