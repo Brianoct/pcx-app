@@ -2,11 +2,15 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
 const { ROLE_KEYS, normalizeRole } = require('../lib/rbac');
+const { syncMejoraForTask } = require('../lib/mejoras');
 
 const router = express.Router();
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const TASK_TYPES = ['tarea', '3s', 'kaizen'];
+// "kaizen" fue el nombre anterior de "mejora": se acepta como alias para
+// clientes viejos, pero se guarda siempre como 'mejora'.
+const TASK_TYPES = ['tarea', '3s', 'mejora'];
+const TASK_TYPE_ALIASES = { kaizen: 'mejora' };
 
 const userDisplayName = (row) =>
   String(row.display_name || '').trim() || String(row.email || '').split('@')[0] || 'Usuario';
@@ -71,6 +75,8 @@ const recomputeTaskDone = async (taskRow) => {
   if (Boolean(taskRow.is_done) !== allDone) {
     await pool.query('UPDATE day_plan_tasks SET is_done = $2, updated_at = NOW() WHERE id = $1', [taskRow.id, allDone]);
     await syncPlanningDone(taskRow, allDone);
+    // Un bloque "Mejora" completado por checklist también entra al registro.
+    await syncMejoraForTask({ ...taskRow, is_done: allDone });
   }
   return allDone;
 };
@@ -93,7 +99,8 @@ const parseTaskFields = (body, { partial = false } = {}) => {
     out.end_minute = end;
   }
   if (has('task_type')) {
-    const type = String(body.task_type || '').trim().toLowerCase();
+    const raw = String(body.task_type || '').trim().toLowerCase();
+    const type = TASK_TYPE_ALIASES[raw] || raw;
     if (!TASK_TYPES.includes(type)) return { error: 'Tipo de tarea inválido' };
     out.task_type = type;
   }
@@ -197,8 +204,17 @@ router.patch('/api/day-plan/:id', authenticateToken, async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(fields, 'is_done') && updated.planning_task_id) {
       await syncPlanningDone(updated, fields.is_done);
     }
+    // Registro de mejoras: marcar hecha una "Mejora" la registra; reabrirla
+    // o cambiarle el tipo la retira. Cambiar el título lo refleja allá.
+    let mejoraSync = null;
+    if (['is_done', 'task_type', 'title', 'task_date'].some((key) => Object.prototype.hasOwnProperty.call(fields, key))) {
+      mejoraSync = await syncMejoraForTask(updated);
+    }
     const subtasksByTask = await loadSubtasksByTask([taskId]);
-    res.json({ task: buildTaskRow(updated, subtasksByTask.get(taskId) || []) });
+    res.json({
+      task: buildTaskRow(updated, subtasksByTask.get(taskId) || []),
+      mejora_registered: mejoraSync ? Boolean(mejoraSync.registered && Object.prototype.hasOwnProperty.call(fields, 'is_done') && fields.is_done) : false
+    });
   } catch (err) {
     console.error('Error updating day plan task:', err);
     res.status(500).json({ error: 'No se pudo actualizar la tarea' });

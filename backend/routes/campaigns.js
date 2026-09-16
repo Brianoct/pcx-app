@@ -2,23 +2,13 @@ const express = require('express');
 const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { ROLE_KEYS, normalizeRole } = require('../lib/rbac');
+// Which campaign area a user's role belongs to (which checkboxes they may tick).
+// Admin can tick any area — they're the fallback for everything.
+const { AREA_KEYS: CAMPAIGN_AREAS, areaForRole } = require('../lib/areas');
 
 const router = express.Router();
 
-const CAMPAIGN_AREAS = ['ventas', 'almacen', 'produccion', 'marketing', 'admin'];
 const EDIT_ROLES = ['Marketing', 'Marketing Lider', 'Admin'];
-
-// Which campaign area a user's role belongs to (which checkboxes they may tick).
-// Admin can tick any area — they're the fallback for everything.
-const areaForRole = (roleValue = '') => {
-  const role = normalizeRole(roleValue);
-  if (role === ROLE_KEYS.admin) return 'admin';
-  if (role === ROLE_KEYS.ventas || role === ROLE_KEYS.ventasLider || role === 'sales' || role === 'vendedor') return 'ventas';
-  if (role === ROLE_KEYS.almacen || role === ROLE_KEYS.almacenLider) return 'almacen';
-  if (role === ROLE_KEYS.produccion) return 'produccion';
-  if (role === ROLE_KEYS.marketing || role === ROLE_KEYS.marketingLider) return 'marketing';
-  return null;
-};
 
 const isValidDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
 

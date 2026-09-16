@@ -3,6 +3,7 @@ const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
 const { ROLE_KEYS, canAccessPanel, normalizeRole } = require('../lib/rbac');
 const { loadUserContext } = require('../lib/users');
+const { areaForRole } = require('../lib/areas');
 
 const router = express.Router();
 
@@ -123,6 +124,22 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
        GROUP BY u.id, u.display_name, u.email
        ORDER BY name`
     );
+    // Mejoras por persona: registradas este mes y en total, más el estado de
+    // la mejora de HOY (hecha / planificada / sin planificar). Todo el equipo
+    // activo aparece, tenga o no mejoras: la meta es una por persona por día.
+    jobs.teamMejoras = pool.query(
+      `SELECT u.id, COALESCE(NULLIF(TRIM(u.display_name), ''), split_part(u.email, '@', 1)) AS name, u.role,
+              COUNT(m.id) FILTER (WHERE date_trunc('month', m.task_date) = date_trunc('month', ${BO_TODAY}))::int AS month_count,
+              COUNT(m.id)::int AS total_count,
+              COUNT(m.id) FILTER (WHERE m.task_date = ${BO_TODAY})::int AS today_done,
+              (SELECT COUNT(*)::int FROM day_plan_tasks t
+                WHERE t.user_id = u.id AND t.task_type = 'mejora' AND t.task_date = ${BO_TODAY}) AS today_planned
+       FROM users u
+       LEFT JOIN mejoras m ON m.user_id = u.id
+       WHERE u.is_active = TRUE
+       GROUP BY u.id, u.display_name, u.email, u.role
+       ORDER BY month_count DESC, total_count DESC, name`
+    );
 
     const keys = Object.keys(jobs);
     const results = await Promise.all(keys.map((key) => jobs[key]));
@@ -178,6 +195,14 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
         name: row.name,
         tasks: Number(row.tasks),
         done: Number(row.done)
+      })),
+      team_mejoras: data.teamMejoras.rows.map((row) => ({
+        user_id: Number(row.id),
+        name: row.name,
+        area: areaForRole(row.role) || 'general',
+        month_count: Number(row.month_count),
+        total_count: Number(row.total_count),
+        today: Number(row.today_done) > 0 ? 'done' : (Number(row.today_planned) > 0 ? 'planned' : 'none')
       }))
     });
   } catch (err) {
