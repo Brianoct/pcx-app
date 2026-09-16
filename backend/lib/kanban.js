@@ -198,6 +198,10 @@ const mapProductionKanbanCardRow = (row = {}, routeStagesBySku = null) => {
     planned_date: row.planned_date
       ? (row.planned_date instanceof Date ? row.planned_date.toISOString().slice(0, 10) : String(row.planned_date).slice(0, 10))
       : null,
+    // Fecha de entrega comprometida: define el color de la tarjeta en el tablero.
+    due_date: row.due_date
+      ? (row.due_date instanceof Date ? row.due_date.toISOString().slice(0, 10) : String(row.due_date).slice(0, 10))
+      : null,
     last_moved_at: row.last_moved_at || null,
     created_at: row.created_at || null,
     updated_at: row.updated_at || null
@@ -295,6 +299,10 @@ const syncProductionKanbanFromInventory = async () => {
                WHEN NOT production_kanban_cards.is_active THEN NULL
                ELSE production_kanban_cards.planned_date
              END,
+             due_date = CASE
+               WHEN NOT production_kanban_cards.is_active THEN NULL
+               ELSE production_kanban_cards.due_date
+             END,
              is_active = TRUE,
              updated_at = NOW()`,
         [sku, productName, locationLabel, stock, minStock, requiredQty, startProcess]
@@ -329,7 +337,7 @@ const syncProductionKanbanFromInventory = async () => {
 
   const cardsRes = await pool.query(
     `SELECT id, sku, product_name, store_location, current_stock, min_stock, required_qty,
-            processed_count, qty_frozen, start_process, stage, source, planned_date, last_moved_at, created_at, updated_at
+            processed_count, qty_frozen, start_process, stage, source, planned_date, due_date, last_moved_at, created_at, updated_at
      FROM production_kanban_cards
      WHERE is_active = TRUE
        AND source = 'min_stock'

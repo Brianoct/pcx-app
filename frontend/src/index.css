@@ -5576,7 +5576,6 @@ img, video, canvas { max-width: 100%; }
   padding: 8px 9px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-soft);
-  border-left: 3px solid var(--accent-warm);
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(28, 25, 23, 0.06);
   cursor: pointer;
@@ -5584,6 +5583,82 @@ img, video, canvas { max-width: 100%; }
 .prod-card:active { transform: translateY(1px); }
 .prod-card.is-busy { opacity: 0.6; pointer-events: none; }
 .prod-card.is-expanded { border-color: var(--accent-warm); }
+
+/* Color por fecha de entrega (mismo look glossy que el Plan del día):
+   blanco = a tiempo · amarillo = faltan 2 días · naranja = 1 día / hoy ·
+   rojo = atrasado. */
+.prod-card.is-due-soon,
+.prod-card.is-due-urgent,
+.prod-card.is-due-late {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.prod-card.is-due-soon { background: linear-gradient(165deg, #eab308 0%, #a16207 130%); box-shadow: 0 3px 10px rgba(234, 179, 8, 0.4); }
+.prod-card.is-due-urgent { background: linear-gradient(165deg, #ea580c 0%, #9a3412 130%); box-shadow: 0 3px 10px rgba(234, 88, 12, 0.4); }
+.prod-card.is-due-late { background: linear-gradient(165deg, #dc2626 0%, #991b1b 130%); box-shadow: 0 3px 10px rgba(220, 38, 38, 0.4); }
+.prod-card.is-due-soon.is-expanded, .prod-card.is-due-urgent.is-expanded, .prod-card.is-due-late.is-expanded { border-color: rgba(255, 255, 255, 0.7); }
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-card-name,
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-card-sede,
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-card-deadline,
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-card-nexthint,
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-card-chevron,
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-lot-color,
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-lot-sedes,
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-lot-done { color: #ffffff; }
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-card-sede,
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-card-nexthint { opacity: 0.9; }
+/* La ficha expandida vuelve a fondo claro para que contadores y botones se lean. */
+.prod-card[class*="is-due-"]:not(.is-due-ok) .prod-card-extra {
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--text-primary);
+  border-top: 0;
+  border-radius: 10px;
+  padding: 8px;
+}
+.prod-card-due {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 5px;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+.prod-card-due-pill { white-space: nowrap; }
+.prod-card-due-pill {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #78350f;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+.prod-card.is-due-late .prod-card-due-pill { color: #991b1b; }
+.prod-card.is-due-urgent .prod-card-due-pill { color: #9a3412; }
+.prod-card-dates { font-size: 0.68rem; color: var(--text-muted); }
+
+/* Leyenda de colores sobre el tablero. */
+.prod-due-legend { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; font-size: 0.72rem; color: var(--text-muted); }
+.prod-due-legend-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px; border-radius: 999px; font-weight: 800; color: #fff; font-size: 0.68rem;
+  box-shadow: 0 1px 4px rgba(28, 25, 23, 0.18);
+}
+.prod-due-legend-chip.is-ok { background: #fff; color: var(--text-secondary); border: 1px solid var(--border); box-shadow: none; }
+.prod-due-legend-chip.is-soon { background: linear-gradient(150deg, #facc15, #ca8a04); }
+.prod-due-legend-chip.is-urgent { background: linear-gradient(150deg, #f97316, #c2410c); }
+.prod-due-legend-chip.is-late { background: linear-gradient(150deg, #ef4444, #b91c1c); }
+
+/* Entrega + ticket dentro de la ficha expandida. */
+.prod-lot-due-row { display: flex; flex-direction: column; align-items: stretch; gap: 4px; font-size: 0.74rem; font-weight: 700; color: var(--text-secondary); }
+.prod-lot-due-row input[type="date"] { width: 100%; min-width: 0; font: inherit; font-size: 0.78rem; padding: 3px 6px; border: 1px solid var(--border); border-radius: 8px; min-height: 30px; }
+.prod-lot-due-row .prod-task-skip { align-self: flex-end; }
+.prod-ticket-btn { width: 100%; font-size: 0.8rem; }
+
+/* Planificación: fecha de entrega en la mini tarjeta. */
+.plan-chip-due { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 0.68rem; font-weight: 700; color: var(--text-muted); }
+.plan-chip-due input[type="date"] { font: inherit; font-size: 0.7rem; padding: 1px 4px; border: 1px solid var(--border); border-radius: 6px; max-width: 128px; }
+.plan-chip-due.is-set { color: #b45309; }
 /* Columnas angostas (8 a lo ancho): nombre y deadline apilados para que el
    nombre use todo el ancho y no se parta letra por letra. */
 .prod-card-top { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
-import { STAGE_LABEL, groupIntoBatches, sedeTotals } from './productionShared';
+import { STAGE_LABEL, formatShortDate, groupIntoBatches, sedeTotals } from './productionShared';
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -74,6 +74,25 @@ export default function ProductionPlanning({ token }) {
       await load();
     } catch (err) {
       setError(err.message || 'No se pudo asignar la fecha');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  // Fecha de ENTREGA del lote: con inicio + entrega el tablero colorea la
+  // tarjeta según lo que falta (amarillo 2 días, naranja 1, rojo atrasado).
+  const setDueDate = async (batch, dueDate) => {
+    setBusyKey(batch.key);
+    setError('');
+    try {
+      await apiRequest('/api/production/kanban/batch-due-date', {
+        method: 'PATCH',
+        token,
+        body: { card_ids: batch.members.map((m) => m.id), due_date: dueDate || null }
+      });
+      await load();
+    } catch (err) {
+      setError(err.message || 'No se pudo asignar la entrega');
     } finally {
       setBusyKey('');
     }
@@ -174,6 +193,22 @@ export default function ProductionPlanning({ token }) {
       {!onCalendar && (
         <span className="plan-chip-colors">{sedeTotals(batch).map((s) => `${s.sede} ${s.qty}`).join(' · ')}</span>
       )}
+      <label
+        className={`plan-chip-due ${batch.due_date ? 'is-set' : ''}`}
+        title={batch.due_date ? `Entrega ${formatShortDate(batch.due_date)}` : 'Fecha de entrega del lote'}
+        onClick={(e) => e.stopPropagation()}
+        draggable={false}
+      >
+        Entrega
+        <input
+          type="date"
+          value={batch.due_date || ''}
+          min={batch.planned_date || todayStr}
+          disabled={busyKey === batch.key}
+          onChange={(e) => setDueDate(batch, e.target.value)}
+          onMouseDown={(e) => e.stopPropagation()}
+        />
+      </label>
       <button
         type="button"
         className="plan-chip-start"
