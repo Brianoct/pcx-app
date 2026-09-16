@@ -216,6 +216,14 @@ function GeneralDashboard({ token, user, role, access }) {
   const teamTasks = teamDay.reduce((sum, m) => sum + Number(m.tasks || 0), 0);
   const teamDone = teamDay.reduce((sum, m) => sum + Number(m.done || 0), 0);
 
+  // Mejoras por persona: cuántas registró cada uno este mes y cómo va la de
+  // hoy. Sale del registro que alimenta el Plan del día (bloques 💡 Mejora).
+  const teamMejoras = Array.isArray(overview?.team_mejoras) ? overview.team_mejoras : [];
+  const myMejoras = teamMejoras.find((m) => m.user_id === Number(user?.id)) || null;
+  const mejorasMonthTotal = teamMejoras.reduce((sum, m) => sum + Number(m.month_count || 0), 0);
+  const mejorasTodayDone = teamMejoras.filter((m) => m.today === 'done').length;
+  const canOpenMejoras = allowsAny(access, ['proyectos_panel', 'admin']);
+
   return (
     <div className="container dashboard-page home-page">
       <header className="home-hero">
@@ -322,6 +330,54 @@ function GeneralDashboard({ token, user, role, access }) {
                     ))}
                   </ul>
                 )}
+              </section>
+            )}
+
+            {teamMejoras.length > 0 && (
+              <section className="home-card home-mejoras">
+                <div className="home-card-head">
+                  <div>
+                    <h3>💡 Mejoras</h3>
+                    <p className="home-card-sub">Una por persona, cada día · {mejorasTodayDone}/{teamMejoras.length} hechas hoy</p>
+                  </div>
+                  <button type="button" className="dashboard-link" onClick={() => navigate(canOpenMejoras ? '/mejoras' : '/calendario')}>
+                    {canOpenMejoras ? 'Ver registro →' : 'Planificar la mía →'}
+                  </button>
+                </div>
+                {myMejoras && (
+                  <div className={`home-mejoras-me is-${myMejoras.today}`}>
+                    <span className="home-mejoras-me-count">{myMejoras.month_count}</span>
+                    <span className="home-mejoras-me-text">
+                      <strong>{myMejoras.month_count === 1 ? 'mejora tuya' : 'mejoras tuyas'} este mes</strong>
+                      <span>
+                        {myMejoras.today === 'done'
+                          ? 'La de hoy ya está registrada ✓'
+                          : myMejoras.today === 'planned'
+                            ? 'La de hoy está en tu plan: márcala hecha al terminar'
+                            : 'Todavía no planificaste tu mejora de hoy'}
+                      </span>
+                    </span>
+                  </div>
+                )}
+                <ul className="home-mejoras-list">
+                  {teamMejoras.map((member) => (
+                    <li key={member.user_id} className={member.user_id === Number(user?.id) ? 'is-me' : ''}>
+                      <span
+                        className={`home-mejoras-dot is-${member.today}`}
+                        title={member.today === 'done' ? 'Mejora de hoy hecha' : member.today === 'planned' ? 'Mejora de hoy planificada' : 'Sin mejora planificada hoy'}
+                        aria-hidden="true"
+                      >
+                        {member.today === 'done' ? '✓' : member.today === 'planned' ? '…' : '·'}
+                      </span>
+                      <span className="home-mejoras-name">{member.name}</span>
+                      <span className="home-mejoras-track">
+                        <span style={{ width: `${Math.round((Number(member.month_count) / Math.max(1, ...teamMejoras.map((m) => Number(m.month_count)))) * 100)}%` }} />
+                      </span>
+                      <span className="home-mejoras-count">{member.month_count}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="home-mejoras-foot">{mejorasMonthTotal} {mejorasMonthTotal === 1 ? 'mejora' : 'mejoras'} del equipo este mes</p>
               </section>
             )}
 

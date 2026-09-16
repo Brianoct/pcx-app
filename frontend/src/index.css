@@ -8488,55 +8488,244 @@ img, video, canvas { max-width: 100%; }
 .payroll-zoom-amount { font-size: 0.95rem; color: var(--text-secondary); margin-bottom: 8px; }
 .payroll-zoom-amount strong { color: #15803d; }
 
-/* ── Mejoras: bono mensual por estándares ─────────────────────────────────── */
-.mejoras-quality {
+/* ── Mejoras: registro de mejoras del equipo ─────────────────────────────── */
+/* Filosofía: lo rutinario se automatiza, el día a día es mejorar. La pestaña
+   lee el registro que alimentan los bloques "💡 Mejora" del Plan del día. */
+.mejoras-page { --mejora: #6d28d9; --mejora-soft: #ede9fe; --mejora-deep: #4c1d95; }
+.mejoras-head {
   display: flex;
-  align-items: center;
-  gap: 18px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   flex-wrap: wrap;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  padding: 14px 18px;
-  margin-bottom: 14px;
-}
-.mejoras-quality-stat { display: flex; flex-direction: column; }
-.mejoras-quality-value { font-size: 2rem; font-weight: 900; color: #b45309; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.mejoras-quality-label { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
-.mejoras-quality-detail { font-size: 0.84rem; color: var(--text-secondary); }
-
-.mejoras-areas {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
   margin-bottom: 16px;
 }
-.mejoras-area {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-left: 3px solid #16a34a;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+.mejoras-tagline { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--text-primary); }
+.mejoras-tagline strong { color: var(--mejora); }
+.mejoras-how { margin: 4px 0 0; font-size: 0.82rem; color: var(--text-secondary); max-width: 62ch; }
+.mejoras-chip-mini {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: linear-gradient(150deg, #8b5cf6, #6d28d9);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  vertical-align: 1px;
+}
+.mejoras-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mejoras-month { font-weight: 800; text-transform: capitalize; min-width: 150px; text-align: center; }
+
+.mejoras-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.mejoras-tile {
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 16px;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
 }
-.mejoras-area.is-pending { border-left-color: #d6d3d1; opacity: 0.85; }
-.mejoras-area-name { font-size: 1rem; font-weight: 800; }
-.mejoras-area-criterio { font-size: 0.8rem; font-weight: 700; color: #15803d; }
-.mejoras-area-criterio.is-pending { color: var(--text-muted); }
-.mejoras-area-detalle { font-size: 0.78rem; color: var(--text-secondary); }
-.mejoras-area-status {
-  margin-top: 6px;
-  font-size: 0.68rem;
+.mejoras-tile.is-live { border-color: #c4b5fd; background: linear-gradient(180deg, #f5f3ff, #fff); }
+.mejoras-tile-value { font-size: 2rem; font-weight: 900; line-height: 1.05; color: var(--mejora-deep); font-variant-numeric: tabular-nums; }
+.mejoras-tile-label { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.mejoras-tile-trend { font-size: 0.76rem; color: var(--text-secondary); }
+.mejoras-tile-trend.is-up { color: #15803d; font-weight: 700; }
+.mejoras-tile-trend.is-down { color: #b91c1c; font-weight: 700; }
+
+.mejoras-section-title { margin: 0 0 8px; font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.mejoras-areas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.mejoras-area {
+  appearance: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+}
+.mejoras-area:hover { border-color: #c4b5fd; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(109, 40, 217, 0.12); }
+.mejoras-area.is-active { border-color: var(--mejora); box-shadow: 0 0 0 2px rgba(109, 40, 217, 0.18); }
+.mejoras-area.is-empty { opacity: 0.7; }
+.mejoras-area-top { display: flex; align-items: center; gap: 6px; }
+.mejoras-area-icon { font-size: 1rem; }
+.mejoras-area-name { font-weight: 800; flex: 1; }
+.mejoras-area-count { font-weight: 900; font-size: 1.15rem; color: var(--mejora-deep); font-variant-numeric: tabular-nums; }
+.mejoras-area-track { display: block; height: 6px; border-radius: 999px; background: #f1efee; overflow: hidden; }
+.mejoras-area-bar { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #8b5cf6, #6d28d9); min-width: 0; transition: width 0.3s ease; }
+.mejoras-area-sub { font-size: 0.7rem; color: var(--text-muted); }
+
+.mejoras-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 860px) { .mejoras-grid { grid-template-columns: 1fr; } }
+.mejoras-log-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.mejoras-log-head h3 { margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mejoras-log-count { font-size: 0.74rem; font-weight: 700; color: var(--text-muted); text-transform: capitalize; }
+.mejoras-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
   font-weight: 700;
+  background: var(--mejora-soft);
+  color: var(--mejora-deep);
+  padding: 2px 6px 2px 9px;
+  border-radius: 999px;
+}
+.mejoras-filter-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 0.7rem; padding: 0 2px; }
+
+.mejoras-progress {
+  border: 1px dashed #c4b5fd;
+  background: #faf8ff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.mejoras-progress-title { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--mejora); margin-bottom: 4px; }
+.mejoras-progress ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.mejoras-progress li { display: flex; gap: 8px; align-items: baseline; font-size: 0.82rem; }
+.mejoras-progress-time { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: 0.74rem; }
+.mejoras-empty { padding: 10px 0; }
+
+.mejoras-day { margin-bottom: 12px; }
+.mejoras-day-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--text-muted);
+  padding: 4px 0;
+  border-bottom: 1px solid #f1efee;
+  margin-bottom: 6px;
 }
-.mejoras-records { margin-top: 4px; }
+.mejoras-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mejoras-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid #ece9e7;
+  border-left: 4px solid var(--mejora);
+  border-radius: 10px;
+  padding: 9px 10px 9px 12px;
+}
+.mejoras-item.is-ventas { border-left-color: #2563eb; }
+.mejoras-item.is-almacen { border-left-color: #d97706; }
+.mejoras-item.is-produccion { border-left-color: #0d9488; }
+.mejoras-item.is-marketing { border-left-color: #ea580c; }
+.mejoras-item.is-admin { border-left-color: #475569; }
+.mejoras-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.mejoras-item-title { font-weight: 700; line-height: 1.3; }
+.mejoras-item-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.74rem; color: var(--text-muted); }
+.mejoras-item-user { border: 0; background: transparent; padding: 0; font: inherit; font-weight: 700; color: var(--text-secondary); cursor: pointer; }
+.mejoras-item-user:hover { color: var(--mejora); text-decoration: underline; }
+.mejoras-item-area { font-weight: 600; }
+.mejoras-item-area-select { font-size: 0.72rem; padding: 1px 4px; border-radius: 6px; border: 1px solid #e7e5e4; background: #fafaf9; }
+.mejoras-item-detail { margin: 2px 0 0; font-size: 0.84rem; color: var(--text-secondary); white-space: pre-wrap; }
+.mejoras-item-detail.is-missing { font-style: italic; color: var(--text-muted); }
+.mejoras-item-doc {
+  align-self: flex-start;
+  border: 1px dashed #c4b5fd;
+  background: transparent;
+  color: var(--mejora);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  margin-top: 2px;
+}
+.mejoras-item-doc:hover { background: var(--mejora-soft); }
+.mejoras-detail-edit { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.mejoras-detail-edit textarea { width: 100%; font: inherit; font-size: 0.86rem; padding: 8px; border-radius: 8px; border: 1px solid #d6d3d1; resize: vertical; }
+.mejoras-detail-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.mejoras-item-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.mejoras-item-actions button { border: 0; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.85rem; padding: 2px 5px; border-radius: 6px; }
+.mejoras-item-actions button:hover { background: #f5f5f4; color: var(--text-primary); }
+
+.mejoras-people-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mejoras-people-list li button {
+  width: 100%;
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+.mejoras-people-list li button:hover { background: #faf8ff; }
+.mejoras-people-list li.is-active button { background: var(--mejora-soft); border-color: #c4b5fd; }
+.mejoras-people-list li.is-zero .mejoras-person-name { color: var(--text-muted); }
+.mejoras-person-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mejoras-person-name { font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.mejoras-person-name em { font-style: normal; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: var(--mejora); color: #fff; padding: 1px 6px; border-radius: 999px; }
+.mejoras-person-count { font-weight: 900; color: var(--mejora-deep); font-variant-numeric: tabular-nums; }
+.mejoras-person-track { display: block; height: 5px; border-radius: 999px; background: #f1efee; overflow: hidden; }
+.mejoras-person-bar { display: block; height: 100%; background: linear-gradient(90deg, #8b5cf6, #6d28d9); border-radius: 999px; transition: width 0.3s ease; }
+.mejoras-person-sub { font-size: 0.7rem; color: var(--text-muted); }
+
+.mejoras-qc { margin-top: 20px; border: 1px solid #e7e5e4; border-radius: 12px; background: #fff; }
+.mejoras-qc summary { cursor: pointer; padding: 10px 14px; font-weight: 700; font-size: 0.86rem; color: var(--text-secondary); }
+.mejoras-qc-body { padding: 0 14px 14px; }
+
+/* Inicio: mejoras por persona */
+.home-mejoras-me {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+  border: 1px solid #ddd6fe;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+.home-mejoras-me.is-done { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-color: #a7f3d0; }
+.home-mejoras-me-count { font-size: 1.7rem; font-weight: 900; color: #4c1d95; font-variant-numeric: tabular-nums; line-height: 1; }
+.home-mejoras-me.is-done .home-mejoras-me-count { color: #065f46; }
+.home-mejoras-me-text { display: flex; flex-direction: column; gap: 1px; font-size: 0.8rem; color: var(--text-secondary); }
+.home-mejoras-me-text strong { color: var(--text-primary); font-size: 0.86rem; }
+.home-mejoras-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.home-mejoras-list li { display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(50px, 90px) 24px; align-items: center; gap: 8px; font-size: 0.84rem; }
+.home-mejoras-list li.is-me .home-mejoras-name { font-weight: 800; }
+.home-mejoras-dot {
+  width: 18px; height: 18px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.66rem; font-weight: 900; background: #f1efee; color: #a8a29e;
+}
+.home-mejoras-dot.is-planned { background: #fef3c7; color: #b45309; }
+.home-mejoras-dot.is-done { background: #6d28d9; color: #fff; }
+.home-mejoras-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-mejoras-track { display: block; height: 5px; border-radius: 999px; background: #f1efee; overflow: hidden; }
+.home-mejoras-track span { display: block; height: 100%; background: linear-gradient(90deg, #8b5cf6, #6d28d9); border-radius: 999px; }
+.home-mejoras-count { text-align: right; font-weight: 800; color: #4c1d95; font-variant-numeric: tabular-nums; }
+.home-mejoras-foot { margin: 10px 0 0; font-size: 0.74rem; color: var(--text-muted); }
 
 /* ── Estadísticas: sistema de tiles uniforme con acentos por área ─────────── */
 /* Overrides late in the file so they win over the legacy dashboard styles. */
@@ -8813,7 +9002,7 @@ img, video, canvas { max-width: 100%; }
   .campaign-banner-cta { margin-left: auto; }
 }
 
-/* ============ Plan del día: tipos de tarea (3S / Kaizen) + hover ============ */
+/* ============ Plan del día: tipos de tarea (3S / Mejora) + hover ============ */
 
 /* ✓/✕ solo al pasar el mouse — en pantallas táctiles quedan siempre visibles
    porque ahí no existe hover. */
@@ -8843,8 +9032,9 @@ img, video, canvas { max-width: 100%; }
   border-left: 4px solid #78350f;
 }
 
-/* Kaizen: mismo look violeta rayado para TODO el equipo. */
-.dayplan-task.type-kaizen {
+/* Mejora: mismo look violeta rayado para TODO el equipo. Al marcarse hecha
+   queda registrada en la pestaña Mejoras. */
+.dayplan-task.type-mejora {
   background: repeating-linear-gradient(135deg, #7c3aed 0 12px, #6d28d9 12px 24px);
   border-left: 4px solid #4c1d95;
 }
@@ -8860,11 +9050,11 @@ img, video, canvas { max-width: 100%; }
   white-space: nowrap;
 }
 .dayplan-task-badge.is-3s { color: #92400e; }
-.dayplan-task-badge.is-kaizen { color: #5b21b6; }
+.dayplan-task-badge.is-mejora { color: #5b21b6; }
 
 /* Selector de tipo en la barra de agregar: se tiñe según lo elegido. */
 .dayplan-type-select.is-3s { background: #fef3c7; border-color: #d97706; color: #92400e; font-weight: 700; }
-.dayplan-type-select.is-kaizen { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; font-weight: 700; }
+.dayplan-type-select.is-mejora { background: #ede9fe; border-color: #7c3aed; color: #5b21b6; font-weight: 700; }
 
 /* Leyenda en la barra de resumen. */
 .dayplan-legend { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
@@ -8879,7 +9069,7 @@ img, video, canvas { max-width: 100%; }
   box-shadow: 0 2px 5px rgba(28, 25, 23, 0.22);
 }
 .dayplan-legend-chip.is-3s { background: linear-gradient(150deg, #f59e0b, #b45309); }
-.dayplan-legend-chip.is-kaizen { background: linear-gradient(150deg, #8b5cf6, #6d28d9); }
+.dayplan-legend-chip.is-mejora { background: linear-gradient(150deg, #8b5cf6, #6d28d9); }
 .dayplan-legend-note { font-size: 0.72rem; color: var(--text-muted); }
 
 /* Indicadores por persona en el encabezado de su columna: gris = le falta,
@@ -8895,6 +9085,8 @@ img, video, canvas { max-width: 100%; }
   opacity: 0.35;
 }
 .dayplan-lean-dot.ok { filter: none; opacity: 1; background: rgba(16, 185, 129, 0.16); }
+/* Mejora hecha y registrada: el foco se enciende del todo. */
+.dayplan-lean-dot.is-done { background: #6d28d9; box-shadow: 0 0 0 2px rgba(109, 40, 217, 0.25); }
 
 @media (max-width: 640px) {
   .dayplan-legend-note { display: none; }

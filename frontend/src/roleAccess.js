@@ -330,7 +330,7 @@ export const ACCESS_GROUPS = [
   {
     label: 'Mejoras',
     keys: [
-      { key: 'proyectos_panel', label: 'Mejoras (bono por estándares)' }
+      { key: 'proyectos_panel', label: 'Mejoras (registro de mejoras del equipo)' }
     ]
   },
   {

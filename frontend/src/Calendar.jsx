@@ -28,16 +28,17 @@ const USER_COLORS = [
 ];
 
 // Meeting categories: regular work keeps the person's color; Lean 3S and
-// Kaizen use ONE fixed look for the whole team so they jump out on the board.
+// Mejora use ONE fixed look for the whole team so they jump out on the board.
+// Una "Mejora" hecha queda registrada automáticamente en la pestaña Mejoras.
 const TASK_TYPE_META = {
   tarea: { label: 'Tarea normal' },
   '3s': { label: 'Lean 3S', icon: '🧹', badge: '3S' },
-  kaizen: { label: 'Kaizen (mejora)', icon: '💡', badge: 'KAIZEN' }
+  mejora: { label: 'Mejora', icon: '💡', badge: 'MEJORA' }
 };
 
 // Icono del bloque, deducido del título: hace el tablero legible de un
 // vistazo en la reunión de la mañana sin pedirle nada extra al equipo.
-// 3S/Kaizen/Plan no pasan por aquí (llevan su insignia fija).
+// 3S/Mejora/Plan no pasan por aquí (llevan su insignia fija).
 const TASK_ICON_RULES = [
   [/reuni/i, '👥'],
   [/llama|atenci|cliente|whatsapp|telef/i, '📞'],
@@ -164,6 +165,7 @@ export default function Calendar({ token, user }) {
         method: 'PATCH', token, body: { is_done: !task.is_done }
       });
       setTasks((prev) => prev.map((t) => (t.id === task.id ? data.task : t)));
+      if (data.mejora_registered) toast.success('💡 Mejora registrada: ya aparece en Mejoras y en Inicio');
     } catch (err) {
       toast.error(err.message || 'No se pudo actualizar');
     }
@@ -346,6 +348,9 @@ export default function Calendar({ token, user }) {
         method: 'PATCH', token, body: { is_done: !subtask.is_done }
       });
       applySubtaskResult(task.id, (subs) => subs.map((s) => (s.id === subtask.id ? data.subtask : s)), data.task_done);
+      if (data.task_done === true && !task.is_done && task.task_type === 'mejora') {
+        toast.success('💡 Mejora registrada: ya aparece en Mejoras y en Inicio');
+      }
     } catch (err) {
       toast.error(err.message || 'No se pudo actualizar');
     }
@@ -468,7 +473,7 @@ export default function Calendar({ token, user }) {
         <span><strong>{doneCount}</strong> hechas</span>
         <span className="dayplan-legend">
           <span className="dayplan-legend-chip is-3s">🧹 3S</span>
-          <span className="dayplan-legend-chip is-kaizen">💡 Kaizen</span>
+          <span className="dayplan-legend-chip is-mejora" title="Al marcarla hecha queda registrada en la pestaña Mejoras">💡 Mejora</span>
           <span className="dayplan-legend-chip is-plan">📋 Plan</span>
           <span className="dayplan-legend-note">1 de cada una por persona, cada día</span>
         </span>
@@ -490,7 +495,9 @@ export default function Calendar({ token, user }) {
             const isMine = member.id === myId;
             const memberDone = memberTasks.filter((t) => t.is_done).length;
             const has3s = memberTasks.some((t) => t.task_type === '3s');
-            const hasKaizen = memberTasks.some((t) => t.task_type === 'kaizen');
+            const mejoraTasks = memberTasks.filter((t) => t.task_type === 'mejora');
+            const hasMejora = mejoraTasks.length > 0;
+            const mejoraDone = mejoraTasks.some((t) => t.is_done);
             return (
               <div key={member.id} className={`dayplan-col ${isMine ? 'is-mine' : ''}`}>
                 <div
@@ -518,7 +525,10 @@ export default function Calendar({ token, user }) {
                     </span>
                     <span className="dayplan-col-lean">
                       <span className={`dayplan-lean-dot ${has3s ? 'ok' : ''}`} title={has3s ? '3S planificada' : 'Falta su 3S de hoy'}>🧹</span>
-                      <span className={`dayplan-lean-dot ${hasKaizen ? 'ok' : ''}`} title={hasKaizen ? 'Kaizen planificado' : 'Falta su Kaizen de hoy'}>💡</span>
+                      <span
+                        className={`dayplan-lean-dot ${hasMejora ? 'ok' : ''} ${mejoraDone ? 'is-done' : ''}`}
+                        title={mejoraDone ? 'Mejora hecha y registrada' : hasMejora ? 'Mejora planificada' : 'Falta su Mejora de hoy'}
+                      >💡</span>
                     </span>
                   </span>
                 </div>
@@ -557,7 +567,7 @@ export default function Calendar({ token, user }) {
                           height,
                           left: `${task.lane * width}%`,
                           width: `calc(${width}% - 4px)`,
-                          // Regular tasks wear the person's gradient; 3S/Kaizen
+                          // Regular tasks wear the person's gradient; 3S/Mejora
                           // and planning tasks use the fixed team-wide look
                           // from CSS.
                           background: type === 'tarea' && !isPlan

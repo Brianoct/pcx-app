@@ -147,7 +147,7 @@ export const NAV_ITEMS = [
     label: 'Mejoras',
     routeAccess: ['proyectos_panel', 'admin'],
     navAccess: ['proyectos_panel'],
-    render: (ctx) => <MejorasPanel token={ctx.token} />
+    render: (ctx) => <MejorasPanel token={ctx.token} user={ctx.user} />
   },
   {
     path: '/combos',
