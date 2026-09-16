@@ -186,7 +186,7 @@ const moveCardsToStage = async ({ cards, nextStage, userId }) => {
              updated_at = NOW()
          WHERE id = $1
          RETURNING id, sku, product_name, store_location, current_stock, min_stock, required_qty,
-                   processed_count, qty_frozen, start_process, stage, source, last_moved_at, created_at, updated_at`,
+                   processed_count, qty_frozen, start_process, stage, source, planned_date, due_date, last_moved_at, created_at, updated_at`,
         [card.id, nextStage, leavingPlanning]
       );
       movedCards.push(updatedRes.rows[0]);
@@ -307,6 +307,48 @@ router.patch('/api/production/kanban/batch-planned-date', authenticateToken, req
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'No se pudo asignar la fecha de producción' });
+  }
+});
+
+// Fecha de entrega del lote (due_date). Se fija en Planificación junto con la
+// fecha de inicio, pero también se puede poner o corregir con el lote ya en
+// producción. Vive en cada tarjeta miembro: si el lote se reparte entre
+// estaciones, cada parte conserva la misma entrega.
+router.patch('/api/production/kanban/batch-due-date', authenticateToken, requireRole(['Produccion', 'Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
+  try {
+    if (!(await ensureKanbanAccess(req, res))) return;
+    const raw = req.body?.due_date;
+    let dueDate = null;
+    if (raw !== null && raw !== undefined && raw !== '') {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(raw))) {
+        return res.status(400).json({ error: 'Fecha inválida. Usa formato AAAA-MM-DD' });
+      }
+      dueDate = String(raw);
+    }
+    const cards = await loadActiveCards(req.body?.card_ids);
+    if (cards.length === 0) return res.status(404).json({ error: 'Tarjetas no encontradas o inactivas' });
+    if (!cardsShareVariantGroup(cards)) return res.status(400).json({ error: 'La entrega se asigna por lote de un solo producto o sus variantes de color' });
+    if (dueDate) {
+      const startRes = await pool.query(
+        'SELECT MIN(planned_date) AS start FROM production_kanban_cards WHERE id = ANY($1::bigint[])',
+        [cards.map((card) => card.id)]
+      );
+      const start = startRes.rows[0]?.start;
+      const startText = start ? (start instanceof Date ? start.toISOString().slice(0, 10) : String(start).slice(0, 10)) : null;
+      if (startText && dueDate < startText) {
+        return res.status(400).json({ error: 'La entrega no puede ser antes de la fecha de inicio' });
+      }
+    }
+    await pool.query(
+      `UPDATE production_kanban_cards
+       SET due_date = $2, updated_at = NOW()
+       WHERE id = ANY($1::bigint[])`,
+      [cards.map((card) => card.id), dueDate]
+    );
+    res.json({ message: dueDate ? 'Fecha de entrega asignada' : 'Fecha de entrega quitada', due_date: dueDate });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo asignar la fecha de entrega' });
   }
 });
 

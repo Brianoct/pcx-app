@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
-import { BOARD_STAGES, COLOR_SWATCH, STAGE_LABEL, parseVariantSku, stripColorFromName } from './productionShared';
+import { BOARD_STAGES, COLOR_SWATCH, DUE_STATUS_META, STAGE_LABEL, dueStatus, earliestDate, formatShortDate, parseVariantSku, printLotTicket, stripColorFromName } from './productionShared';
 import { boliviaToday } from './campaignShared';
 
 // El tablero de producción, por LOTES completos:
@@ -17,13 +17,23 @@ import { boliviaToday } from './campaignShared';
 //    (alimenta comisiones de QC, de ahí `onCommissionChanged`) — sin paso
 //    visible de calidad.
 // Planificación vive en /produccion-planificacion y Recepción en /recepcion.
+//
+// Color de la tarjeta = cuánto falta para la ENTREGA (due_date, fijada en
+// Planificación o desde la ficha): blanco a tiempo, amarillo 2 días, naranja
+// 1 día / hoy, rojo atrasado. Cada parte de un lote repartido lleva la misma
+// entrega, así que el color no depende de que el lote esté junto.
 
-// "2026-06-04" → "4 jun" sin pasar por Date (evita corrimientos de zona horaria).
-const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-const formatDeadline = (isoDate) => {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(isoDate || ''));
-  if (!match) return null;
-  return `${Number(match[3])} ${MONTH_SHORT[Number(match[2]) - 1] || ''}`;
+// Texto según el estado de entrega: corto para la píldora de la tarjeta
+// (columnas angostas), largo para el ticket.
+const duePillText = (status, { long = false } = {}) => {
+  if (status.key === 'late') {
+    const days = Math.abs(status.daysLeft);
+    return long ? (days === 1 ? '1 DÍA DE ATRASO' : `${days} DÍAS DE ATRASO`) : `ATRASADO ${days}d`;
+  }
+  if (status.key === 'urgent') return status.daysLeft === 0 ? 'VENCE HOY' : (long ? 'FALTA 1 DÍA' : '1 DÍA');
+  if (status.key === 'soon') return long ? 'FALTAN 2 DÍAS' : '2 DÍAS';
+  if (status.key === 'ok') return `${status.daysLeft} días`;
+  return '';
 };
 
 // Sedes abreviadas para la cara de la tarjeta en Embalado.
@@ -128,6 +138,8 @@ const buildLots = (groups) => {
         members,
         qty: members.reduce((sum, m) => sum + Number(m.required_qty || 0), 0),
         processed: members.reduce((sum, m) => sum + Number(m.processed_count || 0), 0),
+        start_date: earliestDate(group.members, 'planned_date'),
+        due_date: earliestDate(members, 'due_date') || earliestDate(group.members, 'due_date'),
         pendingTasks: members.reduce((sum, m) => sum + Number(m.pending_tasks || 0), 0),
         // Colores: referencia visible recién desde Pintado.
         colors: group.is_variant_group && paintIdx >= 0 && idx >= paintIdx ? colorMixOf(members) : null,
@@ -332,10 +344,62 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     moveLot(lot, lot.nextStage);
   };
 
+  // Fecha de entrega del lote entero (todas sus partes, estén donde estén).
+  const setLotDue = async (lot, value) => {
+    if (busyKey) return;
+    const dueDate = value || null;
+    setBusyKey(`${lot.key}::due`);
+    setError('');
+    try {
+      await apiRequest('/api/production/kanban/batch-due-date', {
+        method: 'PATCH',
+        token,
+        body: { card_ids: lot.group.members.map((m) => m.id), due_date: dueDate }
+      });
+      const ids = new Set(lot.group.members.map((m) => Number(m.id)));
+      setCards((prev) => prev.map((card) => (ids.has(Number(card.id)) ? { ...card, due_date: dueDate } : card)));
+      setNotice(dueDate ? `${lot.group.display_name}: entrega ${formatShortDate(dueDate)}` : `${lot.group.display_name}: sin fecha de entrega`);
+    } catch (err) {
+      setError(err.message || 'No se pudo asignar la entrega');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  // Ticket térmico (80 mm) para pegar al lote físico.
+  const printTicket = (lot) => {
+    const { group } = lot;
+    const status = dueStatus(lot.due_date, boliviaToday());
+    const routeIdx = group.route.indexOf(lot.stage);
+    const nextStages = routeIdx >= 0 ? group.route.slice(routeIdx + 1).filter((s) => s !== 'recepcion').map((s) => STAGE_LABEL[s] || s) : [];
+    const sedes = [...lot.members.reduce((acc, member) => {
+      const sede = String(member.store_location || '—');
+      acc.set(sede, (acc.get(sede) || 0) + Number(member.required_qty || 0));
+      return acc;
+    }, new Map()).entries()].map(([sede, qty]) => ({ sede, qty }));
+    const colors = group.is_variant_group ? colorMixOf(lot.members).map((c) => ({ label: c.label, qty: c.qty })) : [];
+    const lotId = `L-${Math.min(...group.members.map((m) => Number(m.id)))}`;
+    const opened = printLotTicket({
+      title: group.display_name,
+      sku: group.key,
+      qty: lot.qty,
+      stageLabel: STAGE_LABEL[lot.stage] || lot.stage,
+      startDate: formatShortDate(lot.start_date),
+      dueDate: formatShortDate(lot.due_date),
+      dueLabel: status.key === 'none' ? '' : duePillText(status, { long: true }),
+      colors,
+      sedes,
+      nextStages,
+      lotId
+    });
+    if (!opened) setError('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para pcxind.com.');
+  };
+
   const renderLotCard = (lot) => {
     const { group } = lot;
-    const deadline = formatDeadline(group.planned_date);
-    const overdue = Boolean(group.planned_date) && String(group.planned_date).slice(0, 10) < boliviaToday();
+    const status = dueStatus(lot.due_date, boliviaToday());
+    const dueText = formatShortDate(lot.due_date);
+    const startText = formatShortDate(lot.start_date);
     const isExpanded = expandedKey === lot.key;
     const toggle = () => setExpandedKey(isExpanded ? null : lot.key);
     const splitLot = lot.qty !== group.total_qty;
@@ -352,17 +416,22 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         role="button"
         tabIndex={0}
         aria-expanded={isExpanded}
-        className={`prod-card ${isExpanded ? 'is-expanded' : ''} ${busyKey === lot.key ? 'is-busy' : ''}`}
+        className={`prod-card is-due-${status.key} ${isExpanded ? 'is-expanded' : ''} ${busyKey === lot.key ? 'is-busy' : ''}`}
         onClick={toggle}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+        title={lot.due_date ? `Entrega ${dueText} · ${DUE_STATUS_META[status.key].label}` : 'Sin fecha de entrega (abre la ficha para ponerla)'}
       >
         <div className="prod-card-top">
           <span className="prod-card-name">{group.display_name}</span>
-          {deadline && (
-            <span className={`prod-card-deadline ${overdue ? 'is-overdue' : ''}`} title="Fecha planificada">
-              📅 {deadline}
+          {dueText ? (
+            <span className="prod-card-due">
+              ⏳ {dueText}
+              {status.key !== 'ok' && <span className="prod-card-due-pill">{duePillText(status)}</span>}
+              {status.key === 'ok' && <span className="prod-card-dates">· {duePillText(status)}</span>}
             </span>
-          )}
+          ) : startText ? (
+            <span className="prod-card-dates" title="Fecha de inicio">📅 inicio {startText}</span>
+          ) : null}
         </div>
 
         <span className="prod-card-sede">
@@ -408,6 +477,23 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
 
         {isExpanded && (
           <div className="prod-card-extra" onClick={(e) => e.stopPropagation()}>
+            <div className="prod-lot-due-row">
+              <span>{startText ? `Inicio ${startText} · ` : ''}Entrega</span>
+              <input
+                type="date"
+                value={lot.due_date || ''}
+                min={lot.start_date || undefined}
+                disabled={Boolean(busyKey)}
+                onChange={(e) => setLotDue(lot, e.target.value)}
+                aria-label="Fecha de entrega del lote"
+              />
+              {lot.due_date && (
+                <button type="button" className="prod-task-skip" disabled={Boolean(busyKey)} onClick={() => setLotDue(lot, '')}>Quitar</button>
+              )}
+            </div>
+            <button type="button" className="btn btn-secondary prod-ticket-btn" onClick={() => printTicket(lot)} title="Imprime el resumen del lote en la impresora térmica (80 mm)">
+              🖨 Ticket del lote
+            </button>
             <div className="prod-lot-tick">
               <span className="prod-lot-tick-label">Hechas en esta estación</span>
               {lot.colors && lot.colors.length > 1 ? (
@@ -537,6 +623,14 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
 
       {error && <div className="card prod-error">{error}</div>}
       {notice && <div className="prod-notice">{notice}</div>}
+
+      <div className="prod-due-legend" aria-label="Colores según la entrega">
+        <span className="prod-due-legend-chip is-ok">A tiempo</span>
+        <span className="prod-due-legend-chip is-soon">Faltan 2 días</span>
+        <span className="prod-due-legend-chip is-urgent">1 día · vence hoy</span>
+        <span className="prod-due-legend-chip is-late">Atrasado</span>
+        <span>La entrega se fija en Planificación o en la ficha del lote.</span>
+      </div>
 
       {loading ? (
         <div className="card" style={{ color: '#78716c' }}>Cargando producción…</div>

@@ -96,6 +96,7 @@ export const groupIntoBatches = (cards, { stages = null } = {}) => {
         pending_tasks: 0,
         qty_frozen: false,
         planned_date: null,
+        due_date: null,
         oldest_move: null
       });
     }
@@ -107,6 +108,9 @@ export const groupIntoBatches = (cards, { stages = null } = {}) => {
     batch.qty_frozen = batch.qty_frozen || Boolean(card.qty_frozen);
     if (card.planned_date && (!batch.planned_date || card.planned_date < batch.planned_date)) {
       batch.planned_date = card.planned_date;
+    }
+    if (card.due_date && (!batch.due_date || card.due_date < batch.due_date)) {
+      batch.due_date = card.due_date;
     }
     const colorKey = String(card.sku || '').toUpperCase();
     if (!batch.colors.has(colorKey)) {
@@ -142,6 +146,104 @@ export const groupIntoBatches = (cards, { stages = null } = {}) => {
     }
   }
   return batches;
+};
+
+// ── Fecha de entrega → color de la tarjeta ──────────────────────────────────
+// Blanco = a tiempo (3+ días), amarillo = faltan 2 días, naranja = falta 1
+// día o vence hoy, rojo = atrasado. Sin entrega = blanco. Mismo look glossy
+// que los bloques del Plan del día.
+const MS_PER_DAY = 86400000;
+const dateToUtcMs = (isoDate) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(isoDate || ''));
+  if (!match) return null;
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+};
+export const DUE_STATUS_META = {
+  none: { label: 'Sin entrega', short: '' },
+  ok: { label: 'A tiempo', short: 'a tiempo' },
+  soon: { label: 'Faltan 2 días', short: '2 días' },
+  urgent: { label: 'Falta 1 día', short: '1 día' },
+  late: { label: 'Atrasado', short: 'atrasado' }
+};
+export const dueStatus = (dueDate, todayIso) => {
+  const due = dateToUtcMs(dueDate);
+  const today = dateToUtcMs(todayIso);
+  if (due === null || today === null) return { key: 'none', daysLeft: null };
+  const daysLeft = Math.round((due - today) / MS_PER_DAY);
+  if (daysLeft < 0) return { key: 'late', daysLeft };
+  if (daysLeft <= 1) return { key: 'urgent', daysLeft };
+  if (daysLeft === 2) return { key: 'soon', daysLeft };
+  return { key: 'ok', daysLeft };
+};
+
+// "2026-06-04" → "4 jun" sin pasar por Date (evita corrimientos de zona horaria).
+const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+export const formatShortDate = (isoDate) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(isoDate || ''));
+  if (!match) return null;
+  return `${Number(match[3])} ${MONTH_SHORT[Number(match[2]) - 1] || ''}`;
+};
+
+// Fecha más temprana entre las tarjetas de un lote (inicio o entrega).
+export const earliestDate = (cards, field) => cards.reduce((best, card) => {
+  const value = card?.[field] ? String(card[field]).slice(0, 10) : null;
+  return value && (!best || value < best) ? value : best;
+}, null);
+
+// ── Ticket térmico del lote ─────────────────────────────────────────────────
+// Abre una ventana de impresión con el resumen del lote en 80 mm de ancho
+// para pegarlo al lote físico. Va por el diálogo de impresión del navegador:
+// ahí se elige la impresora térmica.
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+export const printLotTicket = ({ title, sku, qty, stageLabel, startDate, dueDate, colors = [], sedes = [], nextStages = [], lotId, dueLabel }) => {
+  const win = window.open('', '_blank', 'width=420,height=640');
+  if (!win) return false;
+  const now = new Date();
+  const printed = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const rows = [];
+  if (colors.length > 0) rows.push(`<div class="sec"><div class="lbl">Colores</div>${colors.map((c) => `<div class="row"><span>${escapeHtml(c.label)}</span><b>${escapeHtml(c.qty)}</b></div>`).join('')}</div>`);
+  if (sedes.length > 0) rows.push(`<div class="sec"><div class="lbl">Destino</div>${sedes.map((s) => `<div class="row"><span>${escapeHtml(s.sede)}</span><b>${escapeHtml(s.qty)}</b></div>`).join('')}</div>`);
+  win.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Lote ${escapeHtml(lotId)}</title>
+<style>
+  @page { size: 80mm auto; margin: 4mm; }
+  * { box-sizing: border-box; }
+  body { width: 72mm; margin: 0; font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 11pt; line-height: 1.25; }
+  .brand { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #000; padding-bottom: 3px; margin-bottom: 6px; }
+  .brand b { font-size: 15pt; letter-spacing: 1px; }
+  .brand span { font-size: 9pt; }
+  .title { font-size: 16pt; font-weight: 900; line-height: 1.15; margin: 2px 0 4px; }
+  .sku { font-size: 10pt; margin-bottom: 6px; }
+  .qty { font-size: 26pt; font-weight: 900; margin: 2px 0 6px; }
+  .qty small { font-size: 10pt; font-weight: 700; }
+  .sec { border-top: 1px dashed #000; padding-top: 4px; margin-top: 4px; }
+  .lbl { font-size: 8pt; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
+  .row { display: flex; justify-content: space-between; gap: 6px; font-size: 11pt; }
+  .dates .row b { font-size: 12pt; }
+  .stage { font-size: 12pt; font-weight: 800; }
+  .route { font-size: 9pt; margin-top: 2px; }
+  .foot { border-top: 2px solid #000; margin-top: 8px; padding-top: 4px; font-size: 8pt; display: flex; justify-content: space-between; }
+  .box { border: 2px solid #000; padding: 4px 6px; margin-top: 6px; font-size: 12pt; font-weight: 900; text-align: center; }
+</style></head><body>
+  <div class="brand"><b>PCX</b><span>LOTE ${escapeHtml(lotId)}</span></div>
+  <div class="title">${escapeHtml(title)}</div>
+  <div class="sku">SKU ${escapeHtml(sku)}</div>
+  <div class="qty">${escapeHtml(qty)} <small>pzas</small></div>
+  ${rows.join('')}
+  <div class="sec dates">
+    <div class="row"><span>Inicio</span><b>${escapeHtml(startDate || '—')}</b></div>
+    <div class="row"><span>Entrega</span><b>${escapeHtml(dueDate || '—')}</b></div>
+  </div>
+  ${dueLabel ? `<div class="box">${escapeHtml(dueLabel)}</div>` : ''}
+  <div class="sec">
+    <div class="lbl">Etapa actual</div>
+    <div class="stage">${escapeHtml(stageLabel)}</div>
+    ${nextStages.length > 0 ? `<div class="route">Sigue: ${escapeHtml(nextStages.join(' → '))}</div>` : ''}
+  </div>
+  <div class="foot"><span>Impreso ${escapeHtml(printed)}</span><span>pcxind.com</span></div>
+  <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 150); });</script>
+</body></html>`);
+  win.document.close();
+  return true;
 };
 
 // Per-sede totals of a batch (colors merged), for the sheet's secondary line.
