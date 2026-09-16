@@ -85,6 +85,8 @@ export default function Calendar({ token, user }) {
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [taskType, setTaskType] = useState('tarea');
+  // Mejora en grupo: compañeros etiquetados en el bloque nuevo.
+  const [participantIds, setParticipantIds] = useState([]);
   const [startMinute, setStartMinute] = useState(8 * 60);
   const [endMinute, setEndMinute] = useState(9 * 60);
   const [saving, setSaving] = useState(false);
@@ -142,11 +144,19 @@ export default function Calendar({ token, user }) {
       const data = await apiRequest('/api/day-plan', {
         method: 'POST',
         token,
-        body: { date, title: title.trim(), start_minute: startMinute, end_minute: endMinute, task_type: taskType }
+        body: {
+          date,
+          title: title.trim(),
+          start_minute: startMinute,
+          end_minute: endMinute,
+          task_type: taskType,
+          participant_ids: taskType === 'mejora' ? participantIds : []
+        }
       });
       setTasks((prev) => [...prev, data.task]);
       setTitle('');
       setTaskType('tarea');
+      setParticipantIds([]);
       // Chain the next entry right after this one — fast logging in the meeting.
       const duration = endMinute - startMinute;
       const nextStart = Math.min(endMinute, DAY_END - 30);
@@ -188,7 +198,8 @@ export default function Calendar({ token, user }) {
       title: task.title,
       task_type: task.task_type,
       start_minute: task.start_minute,
-      end_minute: task.end_minute
+      end_minute: task.end_minute,
+      participant_ids: (task.participants || []).map((p) => p.id)
     });
     setNewSubtask('');
     // Fecha sugerida para «pasar a otro día»: el día siguiente del tablero.
@@ -308,7 +319,8 @@ export default function Calendar({ token, user }) {
           title: editDraft.title.trim(),
           task_type: editDraft.task_type,
           start_minute: editDraft.start_minute,
-          end_minute: editDraft.end_minute
+          end_minute: editDraft.end_minute,
+          participant_ids: editDraft.task_type === 'mejora' ? (editDraft.participant_ids || []) : []
         }
       });
       setTasks((prev) => prev.map((t) => (t.id === editorTask.id ? data.task : t)));
@@ -365,14 +377,50 @@ export default function Calendar({ token, user }) {
     }
   };
 
+  // Una mejora en grupo se dibuja en la columna de la dueña Y en la de cada
+  // participante (mismo bloque, mismo id; `shared` marca las copias).
   const tasksByUser = useMemo(() => {
     const map = new Map();
+    const push = (userId, task) => {
+      if (!map.has(userId)) map.set(userId, []);
+      map.get(userId).push(task);
+    };
     for (const task of tasks) {
-      if (!map.has(task.user_id)) map.set(task.user_id, []);
-      map.get(task.user_id).push(task);
+      push(task.user_id, task);
+      for (const participant of task.participants || []) {
+        if (participant.id !== task.user_id) push(participant.id, { ...task, shared: true });
+      }
     }
     return map;
   }, [tasks]);
+
+  const teammates = useMemo(() => team.filter((member) => member.id !== myId), [team, myId]);
+
+  const toggleId = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+
+  // Chips de compañeros para etiquetar en una Mejora en grupo.
+  const renderParticipantPicker = (selected, onChange) => (
+    <div className="dayplan-people">
+      <span className="dayplan-people-label">👥 Con:</span>
+      {teammates.map((member) => {
+        const [color] = colorByUserId.get(member.id) || USER_COLORS[0];
+        const active = selected.includes(member.id);
+        return (
+          <button
+            type="button"
+            key={member.id}
+            className={`dayplan-people-chip ${active ? 'is-on' : ''}`}
+            style={active ? { background: color, borderColor: color } : undefined}
+            onClick={() => onChange(toggleId(selected, member.id))}
+            title={active ? `Quitar a ${member.name} del grupo` : `Etiquetar a ${member.name}`}
+          >
+            {member.name}
+          </button>
+        );
+      })}
+      {selected.length > 0 && <span className="dayplan-people-note">mejora en grupo · {selected.length + 1} personas</span>}
+    </div>
+  );
 
   // My column first, then people WITH a plan, then the rest — the meeting
   // reads left to right.
@@ -465,6 +513,11 @@ export default function Calendar({ token, user }) {
         <button type="button" className="btn btn-primary" disabled={saving || !title.trim()} onClick={addTask}>
           {saving ? '…' : '+ Agregar'}
         </button>
+        {taskType === 'mejora' && teammates.length > 0 && (
+          <div className="dayplan-add-people">
+            {renderParticipantPicker(participantIds, setParticipantIds)}
+          </div>
+        )}
       </div>
 
       <div className="dayplan-meta">
@@ -557,11 +610,19 @@ export default function Calendar({ token, user }) {
                     const subtasks = task.subtasks || [];
                     const subDone = subtasks.filter((s) => s.is_done).length;
                     const progressPct = subtasks.length > 0 ? Math.round((subDone / subtasks.length) * 100) : null;
-                    const canEdit = isMine || isAdmin;
+                    // En una mejora en grupo el bloque aparece en varias
+                    // columnas: solo la dueña (o admin) lo edita/mueve/borra;
+                    // cada participante puede marcarlo hecho.
+                    const participants = task.participants || [];
+                    const isOwner = task.user_id === myId;
+                    const amParticipant = participants.some((p) => p.id === myId);
+                    const canEdit = isOwner || isAdmin;
+                    const canToggle = isOwner || amParticipant;
+                    const isGroup = participants.length > 0;
                     return (
                       <div
                         key={task.id}
-                        className={`dayplan-task ${task.is_done ? 'is-done' : ''} ${type !== 'tarea' ? `type-${type}` : ''} ${isPlan ? 'type-plan' : ''} ${canEdit ? 'is-editable' : ''} ${isDragging ? 'is-dragging' : ''}`}
+                        className={`dayplan-task ${task.is_done ? 'is-done' : ''} ${type !== 'tarea' ? `type-${type}` : ''} ${isPlan ? 'type-plan' : ''} ${isGroup ? 'is-group' : ''} ${task.shared ? 'is-shared' : ''} ${canEdit ? 'is-editable' : ''} ${isDragging ? 'is-dragging' : ''}`}
                         style={{
                           top,
                           height,
@@ -579,7 +640,7 @@ export default function Calendar({ token, user }) {
                             ? `0 3px 10px ${color}55`
                             : undefined
                         }}
-                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${isPlan ? 'Planificación · ' : typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}${canEdit ? ' · clic para editar · arrastra para mover' : ''}`}
+                        title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${isPlan ? 'Planificación · ' : typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}${isGroup ? ` · en grupo con ${[team.find((m) => m.id === task.user_id)?.name, ...participants.map((p) => p.name)].filter(Boolean).join(', ')}` : ''}${canEdit ? ' · clic para editar · arrastra para mover' : ''}`}
                         onClick={canEdit ? () => { if (!suppressClickRef.current) openEditor(task); } : undefined}
                         onPointerDown={canEdit ? (e) => beginDrag(e, task, 'move') : undefined}
                         role={canEdit ? 'button' : undefined}
@@ -594,13 +655,28 @@ export default function Calendar({ token, user }) {
                           ) : type !== 'tarea' && (
                             <span className={`dayplan-task-badge is-${type}`}>{typeMeta.icon} {typeMeta.badge}</span>
                           )}
+                          {isGroup && (
+                            <span className="dayplan-task-badge is-group" title={`En grupo: ${participants.length + 1} personas`}>👥 {participants.length + 1}</span>
+                          )}
                         </span>
+                        {isGroup && (
+                          <span className="dayplan-task-people" aria-hidden="true">
+                            {[{ id: task.user_id, name: team.find((m) => m.id === task.user_id)?.name || '?' }, ...participants].map((p) => {
+                              const [pc, pcd] = colorByUserId.get(p.id) || USER_COLORS[0];
+                              return (
+                                <span key={p.id} className="dayplan-task-person" style={{ background: `linear-gradient(150deg, ${pc}, ${pcd})` }} title={p.name}>
+                                  {String(p.name || '?').charAt(0).toUpperCase()}
+                                </span>
+                              );
+                            })}
+                          </span>
+                        )}
                         {isPlan ? (
                           <label className="dayplan-task-checkline" onClick={(e) => e.stopPropagation()}>
                             <input
                               type="checkbox"
                               checked={task.is_done}
-                              disabled={!isMine}
+                              disabled={!canToggle}
                               onChange={() => toggleDone(task)}
                             />
                             <span className="dayplan-task-title">{task.title}</span>
@@ -616,14 +692,16 @@ export default function Calendar({ token, user }) {
                             <span className="dayplan-task-progress-text">{subDone}/{subtasks.length} · {progressPct}%</span>
                           </span>
                         )}
-                        {isMine && (
+                        {canToggle && (
                           <span className="dayplan-task-actions" onClick={(e) => e.stopPropagation()}>
                             {subtasks.length === 0 && (
                               <button type="button" title={task.is_done ? 'Marcar pendiente' : 'Marcar hecha'} onClick={() => toggleDone(task)}>
                                 {task.is_done ? '↺' : '✓'}
                               </button>
                             )}
-                            <button type="button" title="Eliminar" onClick={() => removeTask(task)}>✕</button>
+                            {isOwner && (
+                              <button type="button" title="Eliminar" onClick={() => removeTask(task)}>✕</button>
+                            )}
                           </span>
                         )}
                         {canEdit && (
@@ -694,6 +772,12 @@ export default function Calendar({ token, user }) {
                 Guardar
               </button>
             </div>
+            {editDraft.task_type === 'mejora' && teammates.length > 0 && (
+              <div className="dpe-people">
+                {renderParticipantPicker(editDraft.participant_ids || [], (ids) => setEditDraft({ ...editDraft, participant_ids: ids }))}
+                <p className="dpe-people-hint">Cada persona etiquetada ve el bloque en su columna, puede marcarlo hecho y recibe su mejora al completarse.</p>
+              </div>
+            )}
 
             <div className="dpe-checklist">
               <h4>Checklist del bloque {editorTask.subtasks?.length > 0 && (

@@ -3,7 +3,7 @@ const { pool } = require('../db');
 const { authenticateToken } = require('../lib/authMiddleware');
 const { ROLE_KEYS, normalizeRole } = require('../lib/rbac');
 const { AREA_LABELS } = require('../lib/areas');
-const { MEJORA_AREAS, mapMejoraRow, normalizeMejoraArea } = require('../lib/mejoras');
+const { MEJORA_AREAS, groupMejoraRows, normalizeMejoraArea } = require('../lib/mejoras');
 
 const router = express.Router();
 
@@ -11,6 +11,10 @@ const router = express.Router();
 // por área del negocio y por persona. Las mejoras NO se crean aquí: nacen
 // como bloque "Mejora" en el Plan del día y entran al registro al marcarse
 // hechas (ver lib/mejoras.js). Aquí se consultan y se documentan.
+//
+// Una mejora en grupo tiene un registro por participante (mismo group_key):
+// para el equipo cuenta UNA vez (COUNT DISTINCT group_key); para cada
+// persona cuenta la suya.
 
 const BO_TODAY = "(NOW() AT TIME ZONE 'America/La_Paz')::date";
 const AREA_ORDER = ['ventas', 'almacen', 'produccion', 'marketing', 'admin', 'general'];
@@ -26,34 +30,32 @@ const parseMonth = (query) => {
   return { month: safeMonth, year: safeYear };
 };
 
+const loadGroup = async (groupKey) => {
+  const res = await pool.query(
+    `SELECT m.*, u.display_name, u.email, u.role
+     FROM mejoras m JOIN users u ON u.id = m.user_id
+     WHERE m.group_key = $1
+     ORDER BY m.id`,
+    [groupKey]
+  );
+  return groupMejoraRows(res.rows)[0] || null;
+};
+
 router.get('/api/mejoras', authenticateToken, async (req, res) => {
   const { month, year } = parseMonth(req.query || {});
-  const areaFilter = normalizeMejoraArea(req.query?.area || '');
-  const userFilter = Number.parseInt(req.query?.user_id, 10);
   try {
     const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
-    const itemParams = [monthStart];
-    const itemClauses = [];
-    if (areaFilter) {
-      itemParams.push(areaFilter);
-      itemClauses.push(`AND m.area = $${itemParams.length}`);
-    }
-    if (Number.isInteger(userFilter) && userFilter > 0) {
-      itemParams.push(userFilter);
-      itemClauses.push(`AND m.user_id = $${itemParams.length}`);
-    }
     const [itemsRes, byAreaRes, byUserRes, totalsRes, plannedRes] = await Promise.all([
       pool.query(
         `SELECT m.*, u.display_name, u.email, u.role
          FROM mejoras m
          JOIN users u ON u.id = m.user_id
          WHERE m.task_date >= $1::date AND m.task_date < ($1::date + INTERVAL '1 month')
-           ${itemClauses.join(' ')}
-         ORDER BY m.task_date DESC, m.completed_at DESC, m.id DESC`,
-        itemParams
+         ORDER BY m.task_date DESC, m.completed_at DESC, m.group_key DESC, m.id`,
+        [monthStart]
       ),
       pool.query(
-        `SELECT area, COUNT(*)::int AS count
+        `SELECT area, COUNT(DISTINCT group_key)::int AS count
          FROM mejoras
          WHERE task_date >= $1::date AND task_date < ($1::date + INTERVAL '1 month')
          GROUP BY area`,
@@ -72,18 +74,23 @@ router.get('/api/mejoras', authenticateToken, async (req, res) => {
         [monthStart]
       ),
       pool.query(
-        `SELECT COUNT(*) FILTER (WHERE task_date >= $1::date AND task_date < ($1::date + INTERVAL '1 month'))::int AS month_count,
-                COUNT(*) FILTER (WHERE task_date >= ($1::date - INTERVAL '1 month') AND task_date < $1::date)::int AS previous_month_count,
-                COUNT(*)::int AS all_time,
+        `SELECT COUNT(DISTINCT group_key) FILTER (WHERE task_date >= $1::date AND task_date < ($1::date + INTERVAL '1 month'))::int AS month_count,
+                COUNT(DISTINCT group_key) FILTER (WHERE task_date >= ($1::date - INTERVAL '1 month') AND task_date < $1::date)::int AS previous_month_count,
+                COUNT(DISTINCT group_key)::int AS all_time,
                 COUNT(DISTINCT user_id) FILTER (WHERE task_date >= $1::date AND task_date < ($1::date + INTERVAL '1 month'))::int AS people,
-                COUNT(*) FILTER (WHERE task_date = ${BO_TODAY})::int AS today_count
+                COUNT(DISTINCT group_key) FILTER (WHERE task_date = ${BO_TODAY})::int AS today_count
          FROM mejoras`,
         [monthStart]
       ),
       // Mejoras planificadas hoy y aún no hechas: lo que está "en camino".
       pool.query(
         `SELECT t.id, t.title, t.user_id, t.start_minute,
-                COALESCE(NULLIF(TRIM(u.display_name), ''), split_part(u.email, '@', 1)) AS name
+                COALESCE(NULLIF(TRIM(u.display_name), ''), split_part(u.email, '@', 1)) AS name,
+                COALESCE((
+                  SELECT string_agg(COALESCE(NULLIF(TRIM(pu.display_name), ''), split_part(pu.email, '@', 1)), ', ' ORDER BY pu.display_name)
+                  FROM day_plan_task_participants p JOIN users pu ON pu.id = p.user_id
+                  WHERE p.task_id = t.id
+                ), '') AS participants
          FROM day_plan_tasks t JOIN users u ON u.id = t.user_id
          WHERE t.task_type = 'mejora' AND t.is_done = FALSE AND t.task_date = ${BO_TODAY}
          ORDER BY t.start_minute, t.id`
@@ -112,10 +119,11 @@ router.get('/api/mejoras', authenticateToken, async (req, res) => {
         id: Number(row.id),
         title: row.title,
         user_id: Number(row.user_id),
-        user_name: row.name,
+        user_name: row.participants ? `${row.name}, ${row.participants}` : row.name,
+        is_group: Boolean(row.participants),
         start_minute: Number(row.start_minute)
       })),
-      items: itemsRes.rows.map(mapMejoraRow),
+      items: groupMejoraRows(itemsRes.rows),
       areas: MEJORA_AREAS.map((area) => ({ area, label: AREA_LABELS[area] }))
     });
   } catch (err) {
@@ -124,8 +132,9 @@ router.get('/api/mejoras', authenticateToken, async (req, res) => {
   }
 });
 
-// Documentar una mejora: qué cambió y qué se ganó. La persona dueña o admin.
-// Admin además puede corregir el área.
+// Documentar una mejora: qué cambió y qué se ganó. Cualquiera de sus
+// participantes o admin; el texto es compartido por todo el grupo.
+// Admin además puede corregir el área (de todo el grupo).
 router.patch('/api/mejoras/:id', authenticateToken, async (req, res) => {
   const id = Number.parseInt(req.params.id, 10);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Mejora inválida' });
@@ -133,12 +142,12 @@ router.patch('/api/mejoras/:id', authenticateToken, async (req, res) => {
   try {
     const current = await pool.query('SELECT * FROM mejoras WHERE id = $1', [id]);
     if (current.rowCount === 0) return res.status(404).json({ error: 'Mejora no encontrada' });
-    const row = current.rows[0];
-    const owner = Number(row.user_id) === Number(req.user.id);
-    if (!owner && !isAdmin(req)) return res.status(403).json({ error: 'Solo puedes documentar tus propias mejoras' });
+    const groupKey = Number(current.rows[0].group_key);
+    const member = await pool.query('SELECT 1 FROM mejoras WHERE group_key = $1 AND user_id = $2', [groupKey, req.user.id]);
+    if (member.rowCount === 0 && !isAdmin(req)) return res.status(403).json({ error: 'Solo puedes documentar tus propias mejoras' });
 
     const sets = [];
-    const values = [id];
+    const values = [groupKey];
     if (has('detail')) {
       const detail = String(req.body.detail || '').trim().slice(0, 1500);
       values.push(detail || null);
@@ -152,29 +161,24 @@ router.patch('/api/mejoras/:id', authenticateToken, async (req, res) => {
       sets.push(`area = $${values.length}`);
     }
     if (sets.length === 0) return res.status(400).json({ error: 'Nada que actualizar' });
-    const updated = await pool.query(
-      `UPDATE mejoras SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING *`,
-      values
-    );
-    const withUser = await pool.query(
-      `SELECT m.*, u.display_name, u.email, u.role FROM mejoras m JOIN users u ON u.id = m.user_id WHERE m.id = $1`,
-      [updated.rows[0].id]
-    );
-    res.json({ mejora: mapMejoraRow(withUser.rows[0]) });
+    await pool.query(`UPDATE mejoras SET ${sets.join(', ')}, updated_at = NOW() WHERE group_key = $1`, values);
+    res.json({ mejora: await loadGroup(groupKey) });
   } catch (err) {
     console.error('Error updating mejora:', err);
     res.status(500).json({ error: 'No se pudo actualizar la mejora' });
   }
 });
 
-// Quitar un registro (solo Admin): para entradas que no fueron una mejora real.
+// Quitar un registro (solo Admin): para entradas que no fueron una mejora
+// real. Se quita el grupo completo.
 router.delete('/api/mejoras/:id', authenticateToken, async (req, res) => {
   const id = Number.parseInt(req.params.id, 10);
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Mejora inválida' });
   if (!isAdmin(req)) return res.status(403).json({ error: 'Solo Admin puede eliminar registros' });
   try {
-    const del = await pool.query('DELETE FROM mejoras WHERE id = $1', [id]);
-    if (del.rowCount === 0) return res.status(404).json({ error: 'Mejora no encontrada' });
+    const current = await pool.query('SELECT group_key FROM mejoras WHERE id = $1', [id]);
+    if (current.rowCount === 0) return res.status(404).json({ error: 'Mejora no encontrada' });
+    await pool.query('DELETE FROM mejoras WHERE group_key = $1', [Number(current.rows[0].group_key)]);
     res.json({ message: 'Registro eliminado' });
   } catch (err) {
     console.error('Error deleting mejora:', err);

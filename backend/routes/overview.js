@@ -105,14 +105,16 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
          ORDER BY follow_up_at ASC LIMIT 4`
       );
     }
+    // Mi día incluye las mejoras en grupo donde me etiquetaron.
+    const MINE_OR_TAGGED = `(user_id = $1 OR id IN (SELECT task_id FROM day_plan_task_participants WHERE user_id = $1))`;
     jobs.myDay = pool.query(
       `SELECT COUNT(*)::int AS tasks, COUNT(*) FILTER (WHERE is_done)::int AS done
-       FROM day_plan_tasks WHERE user_id = $1 AND task_date = ${BO_TODAY}`,
+       FROM day_plan_tasks WHERE ${MINE_OR_TAGGED} AND task_date = ${BO_TODAY}`,
       [req.user.id]
     );
     jobs.myDayItems = pool.query(
       `SELECT id, title, is_done, start_minute FROM day_plan_tasks
-       WHERE user_id = $1 AND task_date = ${BO_TODAY}
+       WHERE ${MINE_OR_TAGGED} AND task_date = ${BO_TODAY}
        ORDER BY start_minute ASC LIMIT 6`,
       [req.user.id]
     );
@@ -133,7 +135,8 @@ router.get('/api/dashboard/overview', authenticateToken, async (req, res) => {
               COUNT(m.id)::int AS total_count,
               COUNT(m.id) FILTER (WHERE m.task_date = ${BO_TODAY})::int AS today_done,
               (SELECT COUNT(*)::int FROM day_plan_tasks t
-                WHERE t.user_id = u.id AND t.task_type = 'mejora' AND t.task_date = ${BO_TODAY}) AS today_planned
+                WHERE t.task_type = 'mejora' AND t.task_date = ${BO_TODAY}
+                  AND (t.user_id = u.id OR t.id IN (SELECT task_id FROM day_plan_task_participants WHERE user_id = u.id))) AS today_planned
        FROM users u
        LEFT JOIN mejoras m ON m.user_id = u.id
        WHERE u.is_active = TRUE

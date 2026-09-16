@@ -72,7 +72,10 @@ export default function MejorasPanel({ token, user }) {
 
   const items = useMemo(() => {
     const all = Array.isArray(data?.items) ? data.items : [];
-    return all.filter((item) => (!areaFilter || item.area === areaFilter) && (!userFilter || item.user_id === userFilter));
+    // Una mejora en grupo aparece bajo cada uno de sus participantes.
+    return all.filter((item) =>
+      (!areaFilter || item.area === areaFilter)
+      && (!userFilter || (item.participant_ids || [item.user_id]).includes(userFilter)));
   }, [data, areaFilter, userFilter]);
 
   // Agrupadas por día para leer el registro como una bitácora.
@@ -253,16 +256,28 @@ export default function MejorasPanel({ token, user }) {
                     <div className="mejoras-day-label">{dateLabel(date)}</div>
                     <ul className="mejoras-list">
                       {dayItems.map((item) => {
-                        const canEdit = isAdmin || item.user_id === myId;
+                        const canEdit = isAdmin || (item.participant_ids || [item.user_id]).includes(myId);
                         const isEditing = editingId === item.id;
                         return (
                           <li key={item.id} className={`mejoras-item is-${item.area}`}>
                             <div className="mejoras-item-main">
                               <div className="mejoras-item-title">{item.title}</div>
                               <div className="mejoras-item-meta">
-                                <button type="button" className="mejoras-item-user" onClick={() => { setUserFilter(item.user_id); setAreaFilter(null); }}>
-                                  {item.user_name}
-                                </button>
+                                {item.is_group && (
+                                  <span className="mejoras-item-group" title="Mejora hecha en grupo: cuenta para cada participante">
+                                    👥 En grupo
+                                  </span>
+                                )}
+                                {(item.participants || [{ user_id: item.user_id, name: item.user_name }]).map((p, index) => (
+                                  <button
+                                    type="button"
+                                    key={p.user_id}
+                                    className="mejoras-item-user"
+                                    onClick={() => { setUserFilter(p.user_id); setAreaFilter(null); }}
+                                  >
+                                    {p.name}{index < (item.participants?.length || 1) - 1 ? ',' : ''}
+                                  </button>
+                                ))}
                                 {isAdmin ? (
                                   <select
                                     className="mejoras-item-area-select"
