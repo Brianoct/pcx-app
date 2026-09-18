@@ -398,256 +398,231 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
     if (!opened) setError('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para pcxind.com.');
   };
 
+  // Cara de la tarjeta: solo producto y cantidad. El color ya dice cómo va
+  // la entrega; todo el detalle vive en la ficha (popup) al tocarla.
   const renderLotCard = (lot) => {
     const { group } = lot;
     const status = dueStatus(lot.due_date, boliviaToday());
     const dueText = formatShortDate(lot.due_date);
-    const startText = formatShortDate(lot.start_date);
-    const isExpanded = expandedKey === lot.key;
-    const toggle = () => setExpandedKey(isExpanded ? null : lot.key);
-    const splitLot = lot.qty !== group.total_qty;
-    const sedeRows = lot.showSede
-      ? [...lot.members.reduce((acc, member) => {
-          const sede = shortSede(member.store_location);
-          acc.set(sede, (acc.get(sede) || 0) + Number(member.required_qty || 0));
-          return acc;
-        }, new Map()).entries()].filter(([, qty]) => qty > 0)
-      : [];
+    const isOpen = expandedKey === lot.key;
+    const open = () => setExpandedKey(lot.key);
     return (
       <div
         key={lot.key}
         role="button"
         tabIndex={0}
-        aria-expanded={isExpanded}
-        className={`prod-card is-due-${status.key} ${['soon', 'urgent', 'late'].includes(status.key) ? 'is-due-tinted' : ''} ${isExpanded ? 'is-expanded' : ''} ${busyKey === lot.key ? 'is-busy' : ''}`}
-        onClick={toggle}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
-        title={lot.due_date ? `Entrega ${dueText} · ${DUE_STATUS_META[status.key].label}` : 'Sin fecha de entrega (abre la ficha para ponerla)'}
+        className={`prod-card is-due-${status.key} ${['soon', 'urgent', 'late'].includes(status.key) ? 'is-due-tinted' : ''} ${isOpen ? 'is-expanded' : ''} ${busyKey === lot.key ? 'is-busy' : ''}`}
+        onClick={open}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+        title={lot.due_date ? `Entrega ${dueText} · ${DUE_STATUS_META[status.key].label} · toca para ver la ficha` : 'Toca para ver la ficha del lote'}
       >
-        <div className="prod-card-top">
-          <span className="prod-card-name">{group.display_name}</span>
-          {dueText ? (
-            <span className="prod-card-due">
-              ⏳ {dueText}
-              {status.key !== 'ok' && <span className="prod-card-due-pill">{duePillText(status)}</span>}
-              {status.key === 'ok' && <span className="prod-card-dates">· {duePillText(status)}</span>}
-            </span>
-          ) : startText ? (
-            <span className="prod-card-dates" title="Fecha de inicio">📅 inicio {startText}</span>
-          ) : null}
-        </div>
+        <span className="prod-card-name">{group.display_name}</span>
+        <span className="prod-card-qty">{lot.qty} pza{lot.qty === 1 ? '' : 's'}</span>
+      </div>
+    );
+  };
 
-        <span className="prod-card-sede">
-          {lot.qty} pza{lot.qty === 1 ? '' : 's'}
-          {splitLot ? ` · lote de ${group.total_qty}` : ''}
-          {lot.processed > 0 && (
-            <span className={`prod-lot-done ${lot.processed >= lot.qty ? 'is-complete' : ''}`} title="Hechas en esta estación">
-              {' '}· ✓ {lot.processed}/{lot.qty}
-            </span>
+  // Ficha del lote (popup): fechas y estado, estimación, colores, sedes,
+  // avance en la estación, tareas de medición, ticket y mover el lote.
+  const renderLotSheet = (lot) => {
+    const { group } = lot;
+    const status = dueStatus(lot.due_date, boliviaToday());
+    const dueText = formatShortDate(lot.due_date);
+    const startText = formatShortDate(lot.start_date);
+    const splitLot = lot.qty !== group.total_qty;
+    const sedeRows = [...lot.members.reduce((acc, member) => {
+      const sede = shortSede(member.store_location);
+      acc.set(sede, (acc.get(sede) || 0) + Number(member.required_qty || 0));
+      return acc;
+    }, new Map()).entries()].filter(([, qty]) => qty > 0);
+    const first = lot.members[0];
+    const std = first?.std_minutes?.[lot.stage];
+    const measured = first?.measured_minutes?.[lot.stage];
+    const close = () => setExpandedKey(null);
+    return (
+      <div className="dpe-overlay" onClick={close}>
+        <div className={`dpe-panel prod-sheet is-due-${status.key}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-label={`Lote ${group.display_name}`}>
+          <div className="dpe-head">
+            <div className="prod-sheet-title">
+              <h3>{group.display_name}</h3>
+              <span className="prod-sheet-sub">
+                {STAGE_LABEL[lot.stage] || lot.stage} · {lot.qty} pza{lot.qty === 1 ? '' : 's'}{splitLot ? ` · lote de ${group.total_qty}` : ''}
+                {lot.processed > 0 ? ` · ✓ ${lot.processed}/${lot.qty} hechas` : ''}
+              </span>
+            </div>
+            <button type="button" className="dpe-close" onClick={close} aria-label="Cerrar">✕</button>
+          </div>
+
+          <div className={`prod-sheet-status is-${status.key}`}>
+            {lot.due_date
+              ? <><strong>{DUE_STATUS_META[status.key].label}</strong> · entrega {dueText}{status.key !== 'none' && status.key !== 'ok' ? ` · ${duePillText(status, { long: true })}` : ''}</>
+              : <>Sin fecha de entrega{startText ? ` · inicio ${startText}` : ''}</>}
+          </div>
+
+          <div className="prod-lot-due-row">
+            <span>{startText ? `Inicio ${startText} · ` : ''}Entrega</span>
+            <input
+              type="date"
+              value={lot.due_date || ''}
+              min={lot.start_date || undefined}
+              disabled={Boolean(busyKey)}
+              onChange={(e) => setLotDue(lot, e.target.value)}
+              aria-label="Fecha de entrega del lote"
+            />
+            {lot.due_date && (
+              <button type="button" className="prod-task-skip" disabled={Boolean(busyKey)} onClick={() => setLotDue(lot, '')}>Quitar</button>
+            )}
+          </div>
+
+          {lot.estimate && lot.estimate.stages.length > 0 && (
+            <div className="prod-lot-est" title="Piezas × minutos estándar por pieza de cada proceso">
+              <span className="prod-lot-tick-label">Trabajo estimado</span>
+              {lot.estimate.stages.map((row) => (
+                <div key={row.process} className={`prod-lot-est-row ${row.process === lot.stage ? 'is-current' : ''}`}>
+                  <span>{STAGE_LABEL[row.process] || row.process}</span>
+                  <span>{formatMinutes(row.minutes)}</span>
+                </div>
+              ))}
+              <div className="prod-lot-est-row prod-lot-est-total">
+                <span>Restante</span>
+                <span>{formatMinutes(lot.estimate.total)}</span>
+              </div>
+            </div>
           )}
-        </span>
+          {(std !== undefined || measured) && (
+            <div className="prod-lot-est-note">
+              {std !== undefined ? `Estándar ${std} min/pza en ${STAGE_LABEL[lot.stage] || lot.stage}` : 'Sin estándar para esta etapa'}
+              {measured ? ` · medido en tablero ${measured.minutes_per_piece} min/pza (${measured.lots} lote${measured.lots === 1 ? '' : 's'}, 90 días, reloj de pared)` : ''}
+              {lot.estimate?.unknown > 0 ? ` · ${lot.estimate.unknown} etapa${lot.estimate.unknown === 1 ? '' : 's'} sin tiempo` : ''}
+            </div>
+          )}
 
-        {lot.estimate?.current && (
-          <span
-            className={`prod-card-est ${lot.estimate.current.measured ? 'is-measured' : ''}`}
-            title={lot.estimate.current.measured ? 'Estimado con el tiempo medido en el tablero (sin estándar definido)' : 'Estimado con los minutos estándar por pieza'}
-          >
-            ⏱ ≈ {formatMinutes(lot.estimate.current.minutes)} aquí
-            {lot.estimate.total > lot.estimate.current.minutes ? ` · ${formatMinutes(lot.estimate.total)} en total` : ''}
-          </span>
-        )}
+          {lot.colors && (
+            <div className="prod-lot-colors" title="Colores del lote (hechas/total)">
+              {lot.colors.map((color) => (
+                <span key={color.sku} className="prod-lot-color">
+                  <ColorSwatch code={color.code} label={color.label} />
+                  {color.label}: {(color.done || 0) > 0 ? `${color.done}/${color.qty}` : color.qty}
+                </span>
+              ))}
+            </div>
+          )}
+          {sedeRows.length > 0 && (
+            <div className="prod-lot-sedes" title="Destino por sede">
+              Destino: {sedeRows.map(([sede, qty]) => `${sede} ${qty}`).join(' · ')}
+            </div>
+          )}
 
-        {lot.colors && (
-          <div className="prod-lot-colors" title="Colores del lote (hechas/total)">
-            {lot.colors.map((color) => (
-              <span key={color.sku} className="prod-lot-color">
-                <ColorSwatch code={color.code} label={color.label} />
-                {(color.done || 0) > 0 ? `${color.done}/${color.qty}` : color.qty}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {lot.showSede && sedeRows.length > 0 && (
-          <div className="prod-lot-sedes" title="Destino por sede">
-            {sedeRows.map(([sede, qty]) => `${sede} ${qty}`).join(' · ')}
-          </div>
-        )}
-
-        <div className="prod-card-foot">
-          <span className="prod-card-meta">
-            {lot.nextStage && (
-              <span className="prod-card-nexthint">→ {STAGE_LABEL[lot.nextStage]}</span>
-            )}
-            {lot.pendingTasks > 0 && (
-              <span className="prod-card-task-badge" title="Tareas de medición pendientes">
-                {lot.pendingTasks} tarea{lot.pendingTasks > 1 ? 's' : ''}
-              </span>
-            )}
-            <span className="prod-card-chevron" aria-hidden="true">{isExpanded ? '▴' : '▾'}</span>
-          </span>
-        </div>
-
-        {isExpanded && (
-          <div className="prod-card-extra" onClick={(e) => e.stopPropagation()}>
-            {lot.estimate && lot.estimate.stages.length > 0 && (
-              <div className="prod-lot-est" title="Piezas × minutos por pieza de cada proceso">
-                {lot.estimate.stages.map((row) => (
-                  <div key={row.process} className={`prod-lot-est-row ${row.process === lot.stage ? 'is-current' : ''}`}>
-                    <span>{STAGE_LABEL[row.process] || row.process}{row.measured ? ' *' : ''}</span>
-                    <span>{formatMinutes(row.minutes)}</span>
+          <div className="prod-lot-tick">
+            <span className="prod-lot-tick-label">Hechas en esta estación</span>
+            {lot.colors && lot.colors.length > 1 ? (
+              // Lote multicolor (desde Pintado): un contador por color.
+              lot.colors.map((color) => (
+                <div key={color.sku} className="prod-lot-tick-row">
+                  <span className="prod-lot-tick-color">
+                    <ColorSwatch code={color.code} label={color.label} />
+                    {color.label || color.sku}
+                  </span>
+                  <div className="prod-card-counter prod-lot-tick-counter">
+                    <button
+                      type="button"
+                      aria-label={`Restar una pieza hecha de ${color.label || color.sku}`}
+                      disabled={Boolean(busyKey) || (color.done || 0) <= 0}
+                      onClick={() => tickProgress(lot, color.members, -1)}
+                    >
+                      −
+                    </button>
+                    <span className="prod-chunk-qty">{color.done || 0}/{color.qty}</span>
+                    <button
+                      type="button"
+                      className="is-plus"
+                      aria-label={`Marcar una pieza hecha de ${color.label || color.sku}`}
+                      disabled={Boolean(busyKey) || (color.done || 0) >= color.qty}
+                      onClick={() => tickProgress(lot, color.members, 1)}
+                    >
+                      +
+                    </button>
                   </div>
-                ))}
-                <div className="prod-lot-est-row prod-lot-est-total">
-                  <span>Trabajo restante</span>
-                  <span>{formatMinutes(lot.estimate.total)}</span>
                 </div>
-                {(() => {
-                  const first = lot.members[0];
-                  const std = first?.std_minutes?.[lot.stage];
-                  const measured = first?.measured_minutes?.[lot.stage];
-                  if (std === undefined && !measured) return null;
-                  return (
-                    <div className="prod-lot-est-note">
-                      {std !== undefined ? `Estándar ${std} min/pza` : 'Sin estándar'}
-                      {measured ? ` · medido ${measured.minutes_per_piece} min/pza (${measured.lots} lote${measured.lots === 1 ? '' : 's'}, 90 días)` : ''}
-                      {lot.estimate.unknown > 0 ? ` · ${lot.estimate.unknown} etapa${lot.estimate.unknown === 1 ? '' : 's'} sin tiempo` : ''}
-                    </div>
-                  );
-                })()}
+              ))
+            ) : (
+              <div className="prod-card-counter">
+                <button
+                  type="button"
+                  aria-label="Restar una pieza hecha"
+                  disabled={Boolean(busyKey) || lot.processed <= 0}
+                  onClick={() => tickProgress(lot, lot.members, -1)}
+                >
+                  −
+                </button>
+                <span className="prod-chunk-qty">{lot.processed}/{lot.qty}</span>
+                <button
+                  type="button"
+                  className="is-plus"
+                  aria-label="Marcar una pieza hecha"
+                  disabled={Boolean(busyKey) || lot.processed >= lot.qty}
+                  onClick={() => tickProgress(lot, lot.members, 1)}
+                >
+                  +
+                </button>
               </div>
             )}
-            <div className="prod-lot-due-row">
-              <span>{startText ? `Inicio ${startText} · ` : ''}Entrega</span>
-              <input
-                type="date"
-                value={lot.due_date || ''}
-                min={lot.start_date || undefined}
-                disabled={Boolean(busyKey)}
-                onChange={(e) => setLotDue(lot, e.target.value)}
-                aria-label="Fecha de entrega del lote"
-              />
-              {lot.due_date && (
-                <button type="button" className="prod-task-skip" disabled={Boolean(busyKey)} onClick={() => setLotDue(lot, '')}>Quitar</button>
-              )}
-            </div>
-            <button type="button" className="btn btn-secondary prod-ticket-btn" onClick={() => printTicket(lot)} title="Imprime el resumen del lote en la impresora térmica (80 mm)">
-              🖨 Ticket del lote
-            </button>
-            <div className="prod-lot-tick">
-              <span className="prod-lot-tick-label">Hechas en esta estación</span>
-              {lot.colors && lot.colors.length > 1 ? (
-                // Lote multicolor (desde Pintado): un contador por color.
-                lot.colors.map((color) => (
-                  <div key={color.sku} className="prod-lot-tick-row">
-                    <span className="prod-lot-tick-color">
-                      <ColorSwatch code={color.code} label={color.label} />
-                      {color.label || color.sku}
-                    </span>
-                    <div className="prod-card-counter prod-lot-tick-counter">
-                      <button
-                        type="button"
-                        aria-label={`Restar una pieza hecha de ${color.label || color.sku}`}
-                        disabled={Boolean(busyKey) || (color.done || 0) <= 0}
-                        onClick={() => tickProgress(lot, color.members, -1)}
-                      >
-                        −
-                      </button>
-                      <span className="prod-chunk-qty">{color.done || 0}/{color.qty}</span>
-                      <button
-                        type="button"
-                        className="is-plus"
-                        aria-label={`Marcar una pieza hecha de ${color.label || color.sku}`}
-                        disabled={Boolean(busyKey) || (color.done || 0) >= color.qty}
-                        onClick={() => tickProgress(lot, color.members, 1)}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="prod-card-counter">
-                  <button
-                    type="button"
-                    aria-label="Restar una pieza hecha"
-                    disabled={Boolean(busyKey) || lot.processed <= 0}
-                    onClick={() => tickProgress(lot, lot.members, -1)}
-                  >
-                    −
-                  </button>
-                  <span className="prod-chunk-qty">{lot.processed}/{lot.qty}</span>
-                  <button
-                    type="button"
-                    className="is-plus"
-                    aria-label="Marcar una pieza hecha"
-                    disabled={Boolean(busyKey) || lot.processed >= lot.qty}
-                    onClick={() => tickProgress(lot, lot.members, 1)}
-                  >
-                    +
-                  </button>
-                </div>
-              )}
-            </div>
-            {chunkTasks.map((task) => (
-              <div key={task.id} className="prod-task">
-                <div className="prod-task-question">
-                  ¿Cuánto <strong>{task.material_name}</strong> usaste en {STAGE_LABEL[task.process] || task.process} para este lote
-                  {task.batch_qty > 0 ? ` (${task.batch_qty} pzas)` : ''}?
-                </div>
-                <div className="prod-task-controls">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    className="prod-task-input"
-                    placeholder="0"
-                    value={taskInputs[task.id] ?? ''}
-                    onChange={(e) => setTaskInputs((prev) => ({ ...prev, [task.id]: e.target.value }))}
-                  />
-                  <span className="prod-task-unit">{task.unit_measure}</span>
-                  <button
-                    type="button"
-                    className="btn btn-primary prod-task-save"
-                    disabled={taskBusyId === task.id || taskInputs[task.id] === undefined || taskInputs[task.id] === ''}
-                    onClick={() => resolveTask(task, false)}
-                  >
-                    {taskBusyId === task.id ? '…' : 'Registrar'}
-                  </button>
-                  <button
-                    type="button"
-                    className="prod-task-skip"
-                    disabled={taskBusyId === task.id}
-                    onClick={() => resolveTask(task, true)}
-                  >
-                    Omitir
-                  </button>
-                </div>
+          </div>
+
+          {chunkTasks.map((task) => (
+            <div key={task.id} className="prod-task">
+              <div className="prod-task-question">
+                ¿Cuánto <strong>{task.material_name}</strong> usaste en {STAGE_LABEL[task.process] || task.process} para este lote
+                {task.batch_qty > 0 ? ` (${task.batch_qty} pzas)` : ''}?
               </div>
-            ))}
+              <div className="prod-task-controls">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  className="prod-task-input"
+                  placeholder="0"
+                  value={taskInputs[task.id] ?? ''}
+                  onChange={(e) => setTaskInputs((prev) => ({ ...prev, [task.id]: e.target.value }))}
+                />
+                <span className="prod-task-unit">{task.unit_measure}</span>
+                <button
+                  type="button"
+                  className="btn btn-primary prod-task-save"
+                  disabled={taskBusyId === task.id || taskInputs[task.id] === undefined || taskInputs[task.id] === ''}
+                  onClick={() => resolveTask(task, false)}
+                >
+                  {taskBusyId === task.id ? '…' : 'Registrar'}
+                </button>
+                <button
+                  type="button"
+                  className="prod-task-skip"
+                  disabled={taskBusyId === task.id}
+                  onClick={() => resolveTask(task, true)}
+                >
+                  Omitir
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <div className="prod-sheet-actions">
             {lot.nextStage && (
-              <button
-                type="button"
-                className="btn btn-primary prod-advance-btn"
-                disabled={Boolean(busyKey)}
-                onClick={() => advanceLot(lot)}
-              >
+              <button type="button" className="btn btn-primary prod-advance-btn" disabled={Boolean(busyKey)} onClick={() => advanceLot(lot)}>
                 Avanzar lote → {STAGE_LABEL[lot.nextStage]}
               </button>
             )}
+            <button type="button" className="btn btn-secondary prod-ticket-btn" onClick={() => printTicket(lot)} title="Imprime el resumen del lote en la impresora térmica (80 mm)">
+              🖨 Ticket del lote
+            </button>
             {lot.prevStage && (
-              <button
-                type="button"
-                className="btn btn-secondary prod-return-btn"
-                disabled={Boolean(busyKey)}
-                onClick={() => moveLot(lot, lot.prevStage)}
-              >
+              <button type="button" className="btn btn-secondary prod-return-btn" disabled={Boolean(busyKey)} onClick={() => moveLot(lot, lot.prevStage)}>
                 ↩ Devolver lote a {STAGE_LABEL[lot.prevStage]}
               </button>
             )}
           </div>
-        )}
+        </div>
       </div>
     );
   };
@@ -723,6 +698,7 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
         </div>
       )}
 
+      {expandedLot && renderLotSheet(expandedLot)}
     </div>
   );
 }

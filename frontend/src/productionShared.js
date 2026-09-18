@@ -213,22 +213,22 @@ export const minutesPerPiece = (card, process) => {
   return null;
 };
 
-// Estimación del lote (miembros × min/pza) para una etapa y para lo que
-// queda de la ruta desde esa etapa (sin Recepción).
+// Estimación del lote (miembros × minutos ESTÁNDAR por pieza) para una etapa
+// y para lo que queda de la ruta desde esa etapa (sin Recepción). Solo usa el
+// estándar: el tiempo medido en el tablero es reloj de pared (un lote puede
+// dormir días en una estación) y como pronóstico engaña; queda de referencia.
 export const estimateLot = (members, route, stage) => {
   const perStage = (process) => {
     let minutes = 0;
     let known = 0;
-    let measured = false;
     for (const member of members) {
       const qty = Number(member.required_qty || 0);
-      const mpp = minutesPerPiece(member, process);
-      if (!mpp) continue;
+      const std = member?.std_minutes?.[process];
+      if (std === null || std === undefined || !Number.isFinite(Number(std))) continue;
       known += qty;
-      minutes += qty * mpp.minutes;
-      if (mpp.source === 'measured') measured = true;
+      minutes += qty * Number(std);
     }
-    return known > 0 ? { process, minutes, measured } : null;
+    return known > 0 ? { process, minutes } : null;
   };
   const idx = route.indexOf(stage);
   const remaining = idx >= 0 ? route.slice(idx).filter((s) => s !== 'recepcion' && s !== 'planificacion') : [];

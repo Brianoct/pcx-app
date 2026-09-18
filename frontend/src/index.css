@@ -6953,8 +6953,21 @@ img, video, canvas { max-width: 100%; }
 .est-rate-input input { width: 78px; min-height: 36px; padding: 6px 8px; }
 
 /* Kanban: estimación de trabajo del lote */
-.prod-card-est { font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); }
-.prod-card-est.is-measured { font-style: italic; }
+.prod-card-qty { font-size: 0.78rem; font-weight: 700; color: var(--text-muted); }
+.prod-card.is-due-tinted .prod-card-qty { color: #fff; opacity: 0.92; }
+/* Ficha del lote (popup) */
+.prod-sheet { max-width: 480px; gap: 10px; }
+.prod-sheet-title h3 { margin: 0; font-size: 1.05rem; line-height: 1.2; }
+.prod-sheet-sub { display: block; font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+.prod-sheet-status { border-radius: 10px; padding: 8px 12px; font-size: 0.82rem; background: #f5f5f4; color: var(--text-secondary); }
+.prod-sheet-status.is-ok { background: #ecfdf5; color: #065f46; }
+.prod-sheet-status.is-soon { background: #fef9c3; color: #854d0e; }
+.prod-sheet-status.is-urgent { background: #ffedd5; color: #9a3412; }
+.prod-sheet-status.is-late { background: #fee2e2; color: #991b1b; }
+.prod-sheet-actions { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid #f0efed; padding-top: 10px; }
+.prod-sheet .prod-lot-due-row { flex-direction: row; align-items: center; flex-wrap: wrap; }
+.prod-sheet .prod-lot-due-row input[type="date"] { width: auto; }
+.prod-sheet .prod-return-btn { margin-top: 0; }
 .prod-lot-est { display: flex; flex-direction: column; gap: 3px; font-size: 0.74rem; color: var(--text-secondary); }
 .prod-lot-est-row { display: flex; justify-content: space-between; gap: 8px; }
 .prod-lot-est-row.is-current { font-weight: 800; color: var(--text-primary); }
