@@ -190,12 +190,60 @@ export const earliestDate = (cards, field) => cards.reduce((best, card) => {
   return value && (!best || value < best) ? value : best;
 }, null);
 
+// ── Estimación de tiempo por lote ───────────────────────────────────────────
+// minutos → "2 h 30 min" / "45 min" / "3 d 4 h".
+export const formatMinutes = (minutes) => {
+  const total = Math.round(Number(minutes) || 0);
+  if (total <= 0) return '0 min';
+  const days = Math.floor(total / (8 * 60)); // jornada de 8 h
+  const hours = Math.floor((total % (8 * 60)) / 60);
+  const mins = total % 60;
+  if (days > 0) return `${days} d${hours > 0 ? ` ${hours} h` : ''}`;
+  if (hours > 0) return `${hours} h${mins > 0 ? ` ${mins} min` : ''}`;
+  return `${mins} min`;
+};
+
+// Minutos por pieza para un proceso: el estándar de la estructura si existe,
+// si no la mediana medida en el tablero. Devuelve { minutes, source } o null.
+export const minutesPerPiece = (card, process) => {
+  const std = card?.std_minutes?.[process];
+  if (std !== null && std !== undefined && Number.isFinite(Number(std))) return { minutes: Number(std), source: 'std' };
+  const measured = card?.measured_minutes?.[process];
+  if (measured && Number.isFinite(Number(measured.minutes_per_piece))) return { minutes: Number(measured.minutes_per_piece), source: 'measured' };
+  return null;
+};
+
+// Estimación del lote (miembros × min/pza) para una etapa y para lo que
+// queda de la ruta desde esa etapa (sin Recepción).
+export const estimateLot = (members, route, stage) => {
+  const perStage = (process) => {
+    let minutes = 0;
+    let known = 0;
+    let measured = false;
+    for (const member of members) {
+      const qty = Number(member.required_qty || 0);
+      const mpp = minutesPerPiece(member, process);
+      if (!mpp) continue;
+      known += qty;
+      minutes += qty * mpp.minutes;
+      if (mpp.source === 'measured') measured = true;
+    }
+    return known > 0 ? { process, minutes, measured } : null;
+  };
+  const idx = route.indexOf(stage);
+  const remaining = idx >= 0 ? route.slice(idx).filter((s) => s !== 'recepcion' && s !== 'planificacion') : [];
+  const stages = remaining.map(perStage).filter(Boolean);
+  const current = stages.find((s) => s.process === stage) || null;
+  const total = stages.reduce((sum, s) => sum + s.minutes, 0);
+  return { current, stages, total, unknown: remaining.length - stages.length };
+};
+
 // ── Ticket térmico del lote ─────────────────────────────────────────────────
 // Abre una ventana de impresión con el resumen del lote en 80 mm de ancho
 // para pegarlo al lote físico. Va por el diálogo de impresión del navegador:
 // ahí se elige la impresora térmica.
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-export const printLotTicket = ({ title, sku, qty, stageLabel, startDate, dueDate, colors = [], sedes = [], nextStages = [], lotId, dueLabel }) => {
+export const printLotTicket = ({ title, sku, qty, stageLabel, startDate, dueDate, colors = [], sedes = [], nextStages = [], lotId, dueLabel, stageEstimate = null, totalEstimate = null }) => {
   const win = window.open('', '_blank', 'width=420,height=640');
   if (!win) return false;
   const now = new Date();
@@ -236,8 +284,9 @@ export const printLotTicket = ({ title, sku, qty, stageLabel, startDate, dueDate
   ${dueLabel ? `<div class="box">${escapeHtml(dueLabel)}</div>` : ''}
   <div class="sec">
     <div class="lbl">Etapa actual</div>
-    <div class="stage">${escapeHtml(stageLabel)}</div>
+    <div class="stage">${escapeHtml(stageLabel)}${stageEstimate ? ` <span style="font-weight:400;font-size:10pt">≈ ${escapeHtml(stageEstimate)}</span>` : ''}</div>
     ${nextStages.length > 0 ? `<div class="route">Sigue: ${escapeHtml(nextStages.join(' → '))}</div>` : ''}
+    ${totalEstimate ? `<div class="route">Trabajo restante ≈ ${escapeHtml(totalEstimate)}</div>` : ''}
   </div>
   <div class="foot"><span>Impreso ${escapeHtml(printed)}</span><span>pcxind.com</span></div>
   <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 150); });</script>

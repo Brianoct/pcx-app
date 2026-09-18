@@ -4,7 +4,8 @@ const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { getProductionKanbanAccessScope, resolveInventoryScopeByCity } = require('../lib/inventory');
 const { PRODUCTION_KANBAN_STAGES, cardsShareVariantGroup, getRouteStagesForSku, mapProductionKanbanCardRow, normalizeProductionKanbanStage, normalizeProductionStartProcess, replaceProductProcessSteps, syncProductionKanbanFromInventory } = require('../lib/kanban');
 const { validateProductSku } = require('../lib/products');
-const { getProductStructure, loadProductionSettings, saveProductStructure, saveProductionSettings } = require('../lib/productStructure');
+const { getProductStructure, loadProcessRates, loadProductionSettings, saveProcessRates, saveProductStructure, saveProductionSettings } = require('../lib/productStructure');
+const { loadMeasuredMinutesBySku, loadStandardMinutesBySku } = require('../lib/productionTimes');
 const { countPendingTasksByCard, getVarianceReport, listCardTasks, maybeCreateSamplingTasks, resolveTask } = require('../lib/productionSampling');
 const { ensureQcProductSettingsSeeded } = require('../lib/qc');
 const { sanitizePanelAccess } = require('../lib/rbac');
@@ -54,8 +55,14 @@ router.get('/api/production/kanban', authenticateToken, requireRole(['Produccion
       cards = await syncProductionKanbanFromInventory();
     }
     const pendingTasks = await countPendingTasksByCard(cards.map((card) => card.id));
+    // Tiempos por proceso (min/pza): estándar de la estructura y mediana
+    // medida en el tablero. Con ellos la tarjeta estima cuánto trabajo queda.
+    const skus = cards.map((card) => card.sku);
+    const [stdBySku, measuredBySku] = await Promise.all([loadStandardMinutesBySku(skus), loadMeasuredMinutesBySku(skus)]);
     for (const card of cards) {
       card.pending_tasks = pendingTasks.get(card.id) || 0;
+      card.std_minutes = stdBySku[card.sku] || {};
+      card.measured_minutes = measuredBySku[card.sku] || {};
     }
     await attachStageDistributions(cards);
     const totalRequired = cards.reduce((sum, card) => sum + Number(card.required_qty || 0), 0);
@@ -628,6 +635,42 @@ router.put('/api/products/:sku/structure', authenticateToken, requireRole(['admi
     if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
     console.error(err);
     res.status(500).json({ error: 'No se pudo guardar la estructura del producto' });
+  }
+});
+
+// Encargado y tarifa (Bs/hora) por proceso. Solo Admin; devuelve también la
+// lista de usuarios activos para el selector de encargado.
+router.get('/api/production/process-rates', authenticateToken, requireRole(['admin']), async (_req, res) => {
+  try {
+    const [rates, usersRes] = await Promise.all([
+      loadProcessRates(),
+      pool.query(
+        `SELECT id, email, display_name, role FROM users WHERE is_active = TRUE
+         ORDER BY LOWER(COALESCE(NULLIF(TRIM(display_name), ''), email))`
+      )
+    ]);
+    res.json({
+      rates,
+      users: usersRes.rows.map((row) => ({
+        id: Number(row.id),
+        name: String(row.display_name || '').trim() || String(row.email || '').split('@')[0],
+        role: row.role || null
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron cargar las tarifas por proceso' });
+  }
+});
+
+router.put('/api/production/process-rates', authenticateToken, requireRole(['admin']), async (req, res) => {
+  try {
+    const rates = await saveProcessRates(req.body?.rates, req.user.id);
+    res.json({ message: 'Tarifas por proceso guardadas', rates });
+  } catch (err) {
+    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron guardar las tarifas por proceso' });
   }
 });
 

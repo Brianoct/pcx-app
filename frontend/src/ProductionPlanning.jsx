@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
-import { STAGE_LABEL, formatShortDate, groupIntoBatches, sedeTotals } from './productionShared';
+import { STAGE_LABEL, estimateLot, formatMinutes, formatShortDate, groupIntoBatches, sedeTotals } from './productionShared';
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -187,6 +187,17 @@ export default function ProductionPlanning({ token }) {
     >
       <span className="plan-chip-name">{batch.display_name}</span>
       <span className="plan-chip-qty">{batch.total_qty} pzas</span>
+      {(() => {
+        const route = batch.route || [];
+        const first = route[route.indexOf('planificacion') + 1] || route[0];
+        const est = estimateLot(batch.members, route, first);
+        if (!est || est.total <= 0) return null;
+        return (
+          <span className="plan-chip-est" title="Trabajo estimado: piezas × minutos por pieza de cada proceso (jornada de 8 h)">
+            ⏱ ≈ {formatMinutes(est.total)} de trabajo{est.unknown > 0 ? ` (+${est.unknown} sin tiempo)` : ''}
+          </span>
+        );
+      })()}
       {!onCalendar && batch.is_variant_group && (
         <span className="plan-chip-colors">{batch.color_list.map((c) => `${c.label} ${c.qty}`).join(' · ')}</span>
       )}
