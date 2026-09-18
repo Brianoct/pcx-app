@@ -85,7 +85,7 @@ export default function Calendar({ token, user }) {
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
   const [taskType, setTaskType] = useState('tarea');
-  // Mejora en grupo: compañeros etiquetados en el bloque nuevo.
+  // Co-work: compañeros etiquetados en el bloque nuevo (cualquier tipo).
   const [participantIds, setParticipantIds] = useState([]);
   const [startMinute, setStartMinute] = useState(8 * 60);
   const [endMinute, setEndMinute] = useState(9 * 60);
@@ -150,7 +150,7 @@ export default function Calendar({ token, user }) {
           start_minute: startMinute,
           end_minute: endMinute,
           task_type: taskType,
-          participant_ids: taskType === 'mejora' ? participantIds : []
+          participant_ids: participantIds
         }
       });
       setTasks((prev) => [...prev, data.task]);
@@ -320,7 +320,7 @@ export default function Calendar({ token, user }) {
           task_type: editDraft.task_type,
           start_minute: editDraft.start_minute,
           end_minute: editDraft.end_minute,
-          participant_ids: editDraft.task_type === 'mejora' ? (editDraft.participant_ids || []) : []
+          participant_ids: editDraft.participant_ids || []
         }
       });
       setTasks((prev) => prev.map((t) => (t.id === editorTask.id ? data.task : t)));
@@ -377,8 +377,9 @@ export default function Calendar({ token, user }) {
     }
   };
 
-  // Una mejora en grupo se dibuja en la columna de la dueña Y en la de cada
-  // participante (mismo bloque, mismo id; `shared` marca las copias).
+  // Un bloque en grupo (co-work: tarea, 3S o mejora) se dibuja en la columna
+  // de la dueña Y en la de cada participante (mismo id; `shared` marca las
+  // copias).
   const tasksByUser = useMemo(() => {
     const map = new Map();
     const push = (userId, task) => {
@@ -398,7 +399,7 @@ export default function Calendar({ token, user }) {
 
   const toggleId = (list, id) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
-  // Chips de compañeros para etiquetar en una Mejora en grupo.
+  // Chips de compañeros para etiquetar en un bloque en grupo.
   const renderParticipantPicker = (selected, onChange) => (
     <div className="dayplan-people">
       <span className="dayplan-people-label">👥 Con:</span>
@@ -418,7 +419,7 @@ export default function Calendar({ token, user }) {
           </button>
         );
       })}
-      {selected.length > 0 && <span className="dayplan-people-note">mejora en grupo · {selected.length + 1} personas</span>}
+      {selected.length > 0 && <span className="dayplan-people-note">en grupo · {selected.length + 1} personas</span>}
     </div>
   );
 
@@ -513,7 +514,7 @@ export default function Calendar({ token, user }) {
         <button type="button" className="btn btn-primary" disabled={saving || !title.trim()} onClick={addTask}>
           {saving ? '…' : '+ Agregar'}
         </button>
-        {taskType === 'mejora' && teammates.length > 0 && (
+        {teammates.length > 0 && (
           <div className="dayplan-add-people">
             {renderParticipantPicker(participantIds, setParticipantIds)}
           </div>
@@ -772,10 +773,10 @@ export default function Calendar({ token, user }) {
                 Guardar
               </button>
             </div>
-            {editDraft.task_type === 'mejora' && teammates.length > 0 && (
+            {teammates.length > 0 && (
               <div className="dpe-people">
                 {renderParticipantPicker(editDraft.participant_ids || [], (ids) => setEditDraft({ ...editDraft, participant_ids: ids }))}
-                <p className="dpe-people-hint">Cada persona etiquetada ve el bloque en su columna, puede marcarlo hecho y recibe su mejora al completarse.</p>
+                <p className="dpe-people-hint">Cada persona etiquetada ve el bloque en su columna y puede marcarlo hecho. Si es una Mejora, todas la reciben en su registro al completarse.</p>
               </div>
             )}
 

@@ -74,11 +74,12 @@ const loadParticipantsByTask = async (taskIds) => {
   return map;
 };
 
-// Reemplaza el grupo del bloque. Solo bloques "mejora" llevan participantes;
-// ids inválidos, inactivos o la propia dueña se descartan en silencio.
+// Reemplaza el grupo del bloque (co-work): cualquier tipo de bloque —tarea,
+// 3S o mejora— puede llevar compañeros etiquetados. Ids inválidos,
+// inactivos o la propia dueña se descartan en silencio.
 const saveParticipants = async (taskRow, participantIds) => {
   await pool.query('DELETE FROM day_plan_task_participants WHERE task_id = $1', [taskRow.id]);
-  if (String(taskRow.task_type) !== 'mejora' || !Array.isArray(participantIds) || participantIds.length === 0) return;
+  if (!Array.isArray(participantIds) || participantIds.length === 0) return;
   const wanted = Array.from(new Set(participantIds.filter((id) => Number.isInteger(id) && id > 0 && id !== Number(taskRow.user_id))));
   if (wanted.length === 0) return;
   const valid = await pool.query('SELECT id FROM users WHERE is_active = TRUE AND id = ANY($1)', [wanted]);
@@ -244,7 +245,7 @@ router.patch('/api/day-plan/:id', authenticateToken, async (req, res) => {
     const currentRes = await pool.query('SELECT * FROM day_plan_tasks WHERE id = $1', [taskId]);
     if (currentRes.rowCount === 0) return res.status(404).json({ error: 'Tarea no encontrada' });
     if (!canManageTask(req, currentRes.rows[0])) {
-      // Quien participa en una mejora en grupo puede marcarla hecha/pendiente,
+      // Quien participa en un bloque en grupo puede marcarlo hecho/pendiente,
       // pero no cambiarle título, horario, tipo ni grupo.
       const onlyDone = Object.keys(fields).every((key) => key === 'is_done') && participantIds === undefined;
       if (!onlyDone || !(await isParticipant(req, currentRes.rows[0]))) {
@@ -267,8 +268,6 @@ router.patch('/api/day-plan/:id', authenticateToken, async (req, res) => {
     }
     if (participantIds !== undefined) {
       await saveParticipants(updated, participantIds);
-    } else if (Object.prototype.hasOwnProperty.call(fields, 'task_type') && fields.task_type !== 'mejora') {
-      await pool.query('DELETE FROM day_plan_task_participants WHERE task_id = $1', [taskId]);
     }
     // Check sincronizado: si la tarea vino de Planificación, marcarla hecha
     // aquí también la marca allá (y viceversa, ver routes/planning.js).
