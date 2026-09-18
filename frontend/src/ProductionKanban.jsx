@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
-import { BOARD_STAGES, COLOR_SWATCH, DUE_STATUS_META, STAGE_LABEL, dueStatus, earliestDate, formatShortDate, parseVariantSku, printLotTicket, stripColorFromName } from './productionShared';
+import { BOARD_STAGES, COLOR_SWATCH, DUE_STATUS_META, STAGE_LABEL, dueStatus, earliestDate, estimateLot, formatMinutes, formatShortDate, parseVariantSku, printLotTicket, stripColorFromName } from './productionShared';
 import { boliviaToday } from './campaignShared';
 
 // El tablero de producción, por LOTES completos:
@@ -138,6 +138,7 @@ const buildLots = (groups) => {
         members,
         qty: members.reduce((sum, m) => sum + Number(m.required_qty || 0), 0),
         processed: members.reduce((sum, m) => sum + Number(m.processed_count || 0), 0),
+        estimate: estimateLot(members, route, stage),
         start_date: earliestDate(group.members, 'planned_date'),
         due_date: earliestDate(members, 'due_date') || earliestDate(group.members, 'due_date'),
         pendingTasks: members.reduce((sum, m) => sum + Number(m.pending_tasks || 0), 0),
@@ -390,7 +391,9 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
       colors,
       sedes,
       nextStages,
-      lotId
+      lotId,
+      stageEstimate: lot.estimate?.current ? formatMinutes(lot.estimate.current.minutes) : null,
+      totalEstimate: lot.estimate?.total > 0 ? formatMinutes(lot.estimate.total) : null
     });
     if (!opened) setError('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para pcxind.com.');
   };
@@ -444,6 +447,16 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
           )}
         </span>
 
+        {lot.estimate?.current && (
+          <span
+            className={`prod-card-est ${lot.estimate.current.measured ? 'is-measured' : ''}`}
+            title={lot.estimate.current.measured ? 'Estimado con el tiempo medido en el tablero (sin estándar definido)' : 'Estimado con los minutos estándar por pieza'}
+          >
+            ⏱ ≈ {formatMinutes(lot.estimate.current.minutes)} aquí
+            {lot.estimate.total > lot.estimate.current.minutes ? ` · ${formatMinutes(lot.estimate.total)} en total` : ''}
+          </span>
+        )}
+
         {lot.colors && (
           <div className="prod-lot-colors" title="Colores del lote (hechas/total)">
             {lot.colors.map((color) => (
@@ -477,6 +490,33 @@ export default function ProductionKanban({ token, onCommissionChanged }) {
 
         {isExpanded && (
           <div className="prod-card-extra" onClick={(e) => e.stopPropagation()}>
+            {lot.estimate && lot.estimate.stages.length > 0 && (
+              <div className="prod-lot-est" title="Piezas × minutos por pieza de cada proceso">
+                {lot.estimate.stages.map((row) => (
+                  <div key={row.process} className={`prod-lot-est-row ${row.process === lot.stage ? 'is-current' : ''}`}>
+                    <span>{STAGE_LABEL[row.process] || row.process}{row.measured ? ' *' : ''}</span>
+                    <span>{formatMinutes(row.minutes)}</span>
+                  </div>
+                ))}
+                <div className="prod-lot-est-row prod-lot-est-total">
+                  <span>Trabajo restante</span>
+                  <span>{formatMinutes(lot.estimate.total)}</span>
+                </div>
+                {(() => {
+                  const first = lot.members[0];
+                  const std = first?.std_minutes?.[lot.stage];
+                  const measured = first?.measured_minutes?.[lot.stage];
+                  if (std === undefined && !measured) return null;
+                  return (
+                    <div className="prod-lot-est-note">
+                      {std !== undefined ? `Estándar ${std} min/pza` : 'Sin estándar'}
+                      {measured ? ` · medido ${measured.minutes_per_piece} min/pza (${measured.lots} lote${measured.lots === 1 ? '' : 's'}, 90 días)` : ''}
+                      {lot.estimate.unknown > 0 ? ` · ${lot.estimate.unknown} etapa${lot.estimate.unknown === 1 ? '' : 's'} sin tiempo` : ''}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
             <div className="prod-lot-due-row">
               <span>{startText ? `Inicio ${startText} · ` : ''}Entrega</span>
               <input

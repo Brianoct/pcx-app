@@ -6942,6 +6942,25 @@ img, video, canvas { max-width: 100%; }
   margin-bottom: 0;
 }
 .est-rate-controls { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+/* Encargado + Bs/hora por proceso */
+.est-rates-card { margin-bottom: 14px; }
+.est-rates-hint { margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary); max-width: 78ch; }
+.est-rates-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 16px; margin-top: 10px; }
+.est-rate-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) 118px; align-items: center; gap: 8px; }
+.est-rate-process { font-size: 0.8rem; font-weight: 800; }
+.est-rate-row select { min-height: 36px; font-size: 0.82rem; }
+.est-rate-input { display: flex; align-items: center; gap: 4px; font-size: 0.74rem; color: var(--text-muted); }
+.est-rate-input input { width: 78px; min-height: 36px; padding: 6px 8px; }
+
+/* Kanban: estimación de trabajo del lote */
+.prod-card-est { font-size: 0.7rem; font-weight: 700; color: var(--text-secondary); }
+.prod-card-est.is-measured { font-style: italic; }
+.prod-lot-est { display: flex; flex-direction: column; gap: 3px; font-size: 0.74rem; color: var(--text-secondary); }
+.prod-lot-est-row { display: flex; justify-content: space-between; gap: 8px; }
+.prod-lot-est-row.is-current { font-weight: 800; color: var(--text-primary); }
+.prod-lot-est-total { border-top: 1px dashed var(--border); padding-top: 3px; font-weight: 800; color: var(--text-primary); }
+.prod-lot-est-note { font-size: 0.68rem; color: var(--text-muted); }
+.plan-chip-est { font-size: 0.68rem; font-weight: 700; color: #4338ca; }
 .est-rate-label {
   display: grid;
   gap: 4px;

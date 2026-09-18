@@ -36,6 +36,10 @@ function ProductStructureAdmin({ token }) {
   const [leaderPct, setLeaderPct] = useState('15');
   const [sellerPct, setSellerPct] = useState('10');
   const [savingRate, setSavingRate] = useState(false);
+  // Encargado y Bs/hora por proceso (sin tarifa propia → usa la general).
+  const [processRates, setProcessRates] = useState([]);
+  const [rateUsers, setRateUsers] = useState([]);
+  const [savingProcessRates, setSavingProcessRates] = useState(false);
   const [variance, setVariance] = useState(null);
   const [search, setSearch] = useState('');
   const [selectedSku, setSelectedSku] = useState('');
@@ -49,14 +53,21 @@ function ProductStructureAdmin({ token }) {
     let active = true;
     (async () => {
       try {
-        const [costingRows, equipos, materiales, settings, varianceData] = await Promise.all([
+        const [costingRows, equipos, materiales, settings, varianceData, ratesData] = await Promise.all([
           apiRequest('/api/product-costing', { token }),
           apiRequest('/api/admin/equipos', { token }),
           apiRequest('/api/admin/materiales', { token }),
           apiRequest('/api/production/settings', { token }),
-          apiRequest('/api/production/variance', { token }).catch(() => null)
+          apiRequest('/api/production/variance', { token }).catch(() => null),
+          apiRequest('/api/production/process-rates', { token }).catch(() => null)
         ]);
         if (!active) return;
+        setProcessRates(Array.isArray(ratesData?.rates) ? ratesData.rates.map((r) => ({
+          process: r.process,
+          owner_user_id: r.owner_user_id ?? '',
+          rate_bs_hour: r.rate_bs_hour ?? ''
+        })) : []);
+        setRateUsers(Array.isArray(ratesData?.users) ? ratesData.users : []);
         setProducts((Array.isArray(costingRows) ? costingRows : []).map((r) => ({ sku: r.sku, name: r.name })));
         setEquipment(Array.isArray(equipos) ? equipos : []);
         setMaterialsCatalog(Array.isArray(materiales) ? materiales : []);
@@ -137,6 +148,43 @@ function ProductStructureAdmin({ token }) {
     }
   };
 
+  const updateProcessRate = (process, patch) => {
+    setProcessRates((prev) => prev.map((r) => (r.process === process ? { ...r, ...patch } : r)));
+  };
+
+  const saveProcessRatesNow = async () => {
+    setSavingProcessRates(true);
+    try {
+      const data = await apiRequest('/api/production/process-rates', {
+        method: 'PUT',
+        token,
+        body: {
+          rates: processRates.map((r) => ({
+            process: r.process,
+            owner_user_id: r.owner_user_id === '' ? null : Number(r.owner_user_id),
+            rate_bs_hour: r.rate_bs_hour === '' ? null : Number(r.rate_bs_hour)
+          }))
+        }
+      });
+      setProcessRates((Array.isArray(data?.rates) ? data.rates : []).map((r) => ({
+        process: r.process,
+        owner_user_id: r.owner_user_id ?? '',
+        rate_bs_hour: r.rate_bs_hour ?? ''
+      })));
+      toast.success('Tarifas por proceso guardadas');
+    } catch (err) {
+      toast.error('Error: ' + (err.message || 'No se pudieron guardar las tarifas'));
+    } finally {
+      setSavingProcessRates(false);
+    }
+  };
+
+  // Tarifa efectiva de un proceso: la propia o la general.
+  const rateFor = (process) => {
+    const own = processRates.find((r) => r.process === process)?.rate_bs_hour;
+    return own !== '' && own !== null && own !== undefined ? Number(own) : (Number(laborRate) || 0);
+  };
+
   const updateStep = (index, patch) => {
     setStructure((prev) => prev && ({
       ...prev,
@@ -198,17 +246,27 @@ function ProductStructureAdmin({ token }) {
       sum + equipmentCostPerUnit(equipmentById.get(Number(s.equipment_id)))
     ), 0);
     const totalMinutes = structure.steps.reduce((sum, s) => sum + (Number(s.std_minutes) || 0), 0);
-    const laborCost = (totalMinutes / 60) * rate;
+    // Mano de obra = Σ minutos del paso × tarifa de su proceso (o la general).
+    const laborByStep = structure.steps.map((s) => ({
+      process: s.process,
+      minutes: Number(s.std_minutes) || 0,
+      rate: rateFor(s.process),
+      cost: ((Number(s.std_minutes) || 0) / 60) * rateFor(s.process)
+    }));
+    const laborCost = laborByStep.reduce((sum, s) => sum + s.cost, 0);
     const computedCost = materialsCost + equipmentCost + laborCost;
     return {
       materialsCost,
       equipmentCost,
       laborCost,
+      laborByStep,
+      usesGlobalRate: laborByStep.some((s) => s.minutes > 0 && s.rate === rate && !processRates.find((r) => r.process === s.process && r.rate_bs_hour !== '')),
       totalMinutes,
       computedCost,
       computedPrice: computedCost + structure.utility
     };
-  }, [structure, materialById, equipmentById, laborRate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [structure, materialById, equipmentById, laborRate, processRates]);
 
   const saveStructure = async () => {
     if (!structure || !selectedSku) return;
@@ -313,6 +371,52 @@ function ProductStructureAdmin({ token }) {
           </button>
         </div>
       </div>
+
+      {/* Tiempos y tarifas por proceso */}
+      {processRates.length > 0 && (
+        <div className="card est-rates-card">
+          <div className="est-section-head">
+            <div>
+              <h4 className="est-section-title">Encargado y tarifa por proceso</h4>
+              <p className="est-rates-hint">
+                Cada estación tiene una persona a cargo y su costo por hora. El costeo suma los minutos por pieza de cada
+                paso × la tarifa de su proceso; si un proceso no tiene tarifa usa la general ({money(Number(laborRate) || 0)}/h).
+                Los minutos por pieza se definen en la ruta de cada producto; el tablero los usa para estimar el trabajo de cada lote.
+              </p>
+            </div>
+            <button type="button" className="btn btn-secondary" onClick={saveProcessRatesNow} disabled={savingProcessRates}>
+              {savingProcessRates ? 'Guardando…' : 'Guardar tarifas'}
+            </button>
+          </div>
+          <div className="est-rates-grid">
+            {processRates.map((row) => (
+              <div key={row.process} className="est-rate-row">
+                <span className="est-rate-process">{PROCESS_LABEL[row.process] || row.process}</span>
+                <select
+                  value={row.owner_user_id}
+                  onChange={(e) => updateProcessRate(row.process, { owner_user_id: e.target.value })}
+                  aria-label={`Encargado de ${PROCESS_LABEL[row.process] || row.process}`}
+                >
+                  <option value="">— Sin encargado —</option>
+                  {rateUsers.map((u) => <option key={u.id} value={u.id}>{u.name}{u.role ? ` (${u.role})` : ''}</option>)}
+                </select>
+                <label className="est-rate-input">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    placeholder={String(Number(laborRate) || 0)}
+                    value={row.rate_bs_hour}
+                    onChange={(e) => updateProcessRate(row.process, { rate_bs_hour: e.target.value })}
+                    aria-label={`Bs por hora de ${PROCESS_LABEL[row.process] || row.process}`}
+                  />
+                  <span>Bs/h</span>
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="est-grid">
         {/* Product picker */}
@@ -467,8 +571,8 @@ function ProductStructureAdmin({ token }) {
                   <div className="est-cost-grid">
                     <div><span>Materiales</span><strong>{money(preview.materialsCost)}</strong></div>
                     <div><span>Equipos</span><strong>{money(preview.equipmentCost)}</strong></div>
-                    <div>
-                      <span>Mano de obra ({preview.totalMinutes.toFixed(0)} min)</span>
+                    <div title={preview.laborByStep.filter((s) => s.minutes > 0).map((s) => `${PROCESS_LABEL[s.process] || s.process}: ${s.minutes} min × ${s.rate} Bs/h = ${money(s.cost)}`).join('\n')}>
+                      <span>Mano de obra ({preview.totalMinutes.toFixed(0)} min · por proceso)</span>
                       <strong>{money(preview.laborCost)}</strong>
                     </div>
                     <div className="est-cost-total"><span>Costo total</span><strong>{money(preview.computedCost)}</strong></div>

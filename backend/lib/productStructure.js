@@ -63,6 +63,75 @@ const saveProductionSettings = async (payload = {}, userId) => {
   return loadProductionSettings();
 };
 
+// ─── Tarifas por proceso (encargado + Bs/hora) ──────────────────────────────
+// Cada estación tiene una persona a cargo y su costo por hora. Sin tarifa
+// propia, el proceso usa la tarifa general (labor_rate_bs_hour).
+
+const loadProcessRates = async () => {
+  const res = await pool.query(
+    `SELECT r.process, r.owner_user_id, r.rate_bs_hour, r.updated_at,
+            u.display_name AS owner_display_name, u.email AS owner_email
+     FROM production_process_rates r
+     LEFT JOIN users u ON u.id = r.owner_user_id`
+  );
+  const byProcess = {};
+  for (const row of res.rows) {
+    byProcess[row.process] = {
+      process: row.process,
+      owner_user_id: row.owner_user_id !== null ? Number(row.owner_user_id) : null,
+      owner_name: row.owner_user_id
+        ? (String(row.owner_display_name || '').trim() || String(row.owner_email || '').split('@')[0])
+        : null,
+      rate_bs_hour: row.rate_bs_hour !== null ? Number(row.rate_bs_hour) : null,
+      updated_at: row.updated_at || null
+    };
+  }
+  return PRODUCTION_KANBAN_STAGES
+    .filter((process) => process !== 'planificacion' && process !== 'recepcion')
+    .map((process) => byProcess[process] || { process, owner_user_id: null, owner_name: null, rate_bs_hour: null, updated_at: null });
+};
+
+const saveProcessRates = async (rows, userId) => {
+  if (!Array.isArray(rows)) throw createHttpError(400, 'rates debe ser un arreglo');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const item of rows) {
+      const process = normalizeProductionKanbanStage(item?.process || '');
+      if (!process || process === 'planificacion' || process === 'recepcion') {
+        throw createHttpError(400, `Proceso inválido: ${item?.process}`);
+      }
+      let ownerId = null;
+      if (item?.owner_user_id !== undefined && item?.owner_user_id !== null && item?.owner_user_id !== '') {
+        ownerId = Number.parseInt(item.owner_user_id, 10);
+        if (!Number.isInteger(ownerId) || ownerId <= 0) throw createHttpError(400, `${process}: encargado inválido`);
+      }
+      let rate = null;
+      if (item?.rate_bs_hour !== undefined && item?.rate_bs_hour !== null && item?.rate_bs_hour !== '') {
+        rate = Number(item.rate_bs_hour);
+        if (!Number.isFinite(rate) || rate < 0) throw createHttpError(400, `${process}: la tarifa debe ser un número >= 0`);
+      }
+      await client.query(
+        `INSERT INTO production_process_rates (process, owner_user_id, rate_bs_hour, updated_by, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (process) DO UPDATE
+         SET owner_user_id = EXCLUDED.owner_user_id,
+             rate_bs_hour = EXCLUDED.rate_bs_hour,
+             updated_by = EXCLUDED.updated_by,
+             updated_at = NOW()`,
+        [process, ownerId, rate, userId || null]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+  return loadProcessRates();
+};
+
 // ─── Structure payload validation ────────────────────────────────────────────
 
 const parseStructureSteps = (value) => {
@@ -223,7 +292,7 @@ const equipmentCostPerUnit = (equipment) => {
 const getProductStructure = async (sku) => {
   const normalizedSku = validateProductSku(sku);
 
-  const [stepsRes, materialsRes, settings, manualRes, productRes] = await Promise.all([
+  const [stepsRes, materialsRes, settings, manualRes, productRes, processRates] = await Promise.all([
     pool.query(
       `SELECT s.step_order, s.process, s.std_minutes, s.equipment_id,
               e.code AS equipment_code, e.name AS equipment_name,
@@ -256,20 +325,35 @@ const getProductStructure = async (sku) => {
     pool.query(
       'SELECT sku, name, sf_price FROM products WHERE UPPER(sku) = $1',
       [normalizedSku]
-    )
+    ),
+    loadProcessRates()
   ]);
 
   if (productRes.rowCount === 0) throw createHttpError(404, 'Producto no encontrado');
 
-  const steps = stepsRes.rows.map((row) => ({
-    step_order: Number(row.step_order),
-    process: row.process,
-    std_minutes: row.std_minutes !== null ? Number(row.std_minutes) : null,
-    equipment_id: row.equipment_id !== null ? Number(row.equipment_id) : null,
-    equipment_code: row.equipment_code || null,
-    equipment_name: row.equipment_name || null,
-    equipment_cost_per_unit: Number(equipmentCostPerUnit(row.equipment_id !== null ? row : null).toFixed(4))
-  }));
+  // Tarifa efectiva por proceso: la del proceso o, si no tiene, la general.
+  const rateByProcess = Object.fromEntries(processRates.map((r) => [r.process, r]));
+  const effectiveRate = (process) => {
+    const own = rateByProcess[process]?.rate_bs_hour;
+    return own !== null && own !== undefined ? own : settings.labor_rate_bs_hour;
+  };
+
+  const steps = stepsRes.rows.map((row) => {
+    const minutes = row.std_minutes !== null ? Number(row.std_minutes) : null;
+    const rate = effectiveRate(row.process);
+    return {
+      step_order: Number(row.step_order),
+      process: row.process,
+      std_minutes: minutes,
+      rate_bs_hour: rate,
+      owner_name: rateByProcess[row.process]?.owner_name || null,
+      labor_cost_per_unit: Number((((minutes || 0) / 60) * rate).toFixed(4)),
+      equipment_id: row.equipment_id !== null ? Number(row.equipment_id) : null,
+      equipment_code: row.equipment_code || null,
+      equipment_name: row.equipment_name || null,
+      equipment_cost_per_unit: Number(equipmentCostPerUnit(row.equipment_id !== null ? row : null).toFixed(4))
+    };
+  });
 
   const materials = materialsRes.rows.map((row) => {
     const qty = Number(row.qty_per_unit || 0);
@@ -291,7 +375,8 @@ const getProductStructure = async (sku) => {
   const materialsCost = materials.reduce((sum, m) => sum + m.cost_per_unit, 0);
   const equipmentCost = steps.reduce((sum, s) => sum + s.equipment_cost_per_unit, 0);
   const totalMinutes = steps.reduce((sum, s) => sum + Number(s.std_minutes || 0), 0);
-  const laborCost = (totalMinutes / 60) * settings.labor_rate_bs_hour;
+  // Mano de obra = Σ minutos del paso × tarifa de SU proceso.
+  const laborCost = steps.reduce((sum, s) => sum + s.labor_cost_per_unit, 0);
 
   const manual = manualRes.rows[0] || null;
   const manualUtility = Number(manual?.utilidad || 0);
@@ -323,7 +408,9 @@ const getProductStructure = async (sku) => {
 
 module.exports = {
   getProductStructure,
+  loadProcessRates,
   loadProductionSettings,
+  saveProcessRates,
   saveProductStructure,
   saveProductionSettings
 };
