@@ -12318,3 +12318,79 @@ button.vc-kpi {
   min-width: 0;
 }
 .prod-lot-tick-counter { width: 100%; }
+
+/* ── Bono por desempeño ───────────────────────────────────────────────────── */
+.bono-page { --bono: #0f766e; --bono-soft: #ccfbf1; --bono-deep: #134e4a; }
+.bono-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.bono-tagline { margin: 0; font-size: 1.05rem; font-weight: 700; }
+.bono-tagline strong { color: var(--bono); }
+.bono-how { margin: 4px 0 0; font-size: 0.82rem; color: var(--text-secondary); max-width: 70ch; }
+.bono-nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bono-month { font-weight: 800; text-transform: capitalize; min-width: 150px; text-align: center; }
+.bono-preview-note { background: #fffbeb; border: 1px dashed #f59e0b; color: #92400e; border-radius: 10px; padding: 8px 12px; font-size: 0.78rem; margin-bottom: 14px; }
+.bono-section-title { margin: 0 0 8px; font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.bono-muted { font-size: 0.78rem; color: var(--text-muted); }
+
+.bono-me { border-radius: 16px; padding: 14px 16px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 8px; border: 1px solid; }
+.bono-me.is-ok { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-color: #a7f3d0; }
+.bono-me.is-no { background: linear-gradient(135deg, #fff7ed, #ffedd5); border-color: #fed7aa; }
+.bono-me-title { font-size: 1.05rem; font-weight: 900; }
+.bono-me-sub { display: block; font-size: 0.82rem; color: var(--text-secondary); }
+.bono-me-goals { display: flex; flex-wrap: wrap; gap: 6px; }
+.bono-me-actions { display: flex; gap: 14px; }
+
+.bono-goal { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; background: #f5f5f4; color: var(--text-secondary); border: 1px solid #e7e5e4; }
+.bono-goal.is-green { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
+.bono-goal.is-red { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.bono-goal.is-nodata { background: #f5f5f4; color: #78716c; }
+.bono-goal-icon { font-weight: 900; }
+.bono-goal-value { font-weight: 900; }
+
+.bono-gates { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.bono-gate { background: #fff; border: 1px solid #e7e5e4; border-radius: 14px; padding: 12px 14px; }
+.bono-gate.is-green { border-color: #a7f3d0; }
+.bono-gate.is-red { border-color: #fecaca; background: #fff7f7; }
+.bono-gate-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.bono-gate-area { font-weight: 800; }
+.bono-gate-status { font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; background: #f5f5f4; color: #78716c; }
+.bono-gate-status.is-green { background: #d1fae5; color: #065f46; }
+.bono-gate-status.is-red { background: #fee2e2; color: #991b1b; }
+.bono-gate-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bono-gate-list li { display: flex; gap: 8px; align-items: flex-start; font-size: 0.8rem; }
+.bono-gate-list li.is-green .bono-goal-icon { color: #047857; }
+.bono-gate-list li.is-red .bono-goal-icon { color: #b91c1c; }
+.bono-gate-goal { display: flex; flex-direction: column; }
+.bono-gate-goal span { font-size: 0.74rem; color: var(--text-muted); }
+
+.bono-people-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.bono-areas { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.bono-area h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 8px; font-size: 0.95rem; }
+.bono-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bono-person { border: 1px solid #ece9e7; border-left: 4px solid #d6d3d1; border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.bono-person.is-ok { border-left-color: #10b981; }
+.bono-person.is-no { border-left-color: #f97316; }
+.bono-person.is-me { background: #fafaf9; }
+.bono-person-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bono-person-name { font-weight: 800; display: flex; align-items: center; gap: 6px; }
+.bono-person-name em { font-style: normal; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; background: var(--bono); color: #fff; padding: 1px 6px; border-radius: 999px; }
+.bono-person-result { font-size: 0.74rem; font-weight: 900; }
+.bono-person-result.is-ok { color: #047857; }
+.bono-person-result.is-no { color: #c2410c; }
+.bono-person-goals { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.bono-config { margin-bottom: 18px; }
+.bono-config-tick { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; font-weight: 700; margin: 6px 0 10px; }
+.bono-config-tick input { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+.bono-config-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bono-config-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-top: 1px solid #f1efee; padding-top: 8px; }
+.bono-config-enabled { display: flex; gap: 8px; align-items: flex-start; flex: 1 1 320px; font-size: 0.82rem; }
+.bono-config-enabled span { display: flex; flex-direction: column; }
+.bono-config-enabled em { font-style: normal; font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.bono-config-enabled small { color: var(--text-secondary); font-size: 0.74rem; }
+.bono-config-threshold { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 700; }
+.bono-config-threshold input { width: 74px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font: inherit; }
+.bono-log { margin-top: 12px; font-size: 0.76rem; }
+.bono-log summary { cursor: pointer; font-weight: 700; }
+.bono-log ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.bono-log li { display: flex; gap: 8px; align-items: baseline; color: var(--text-secondary); }
+.bono-log li span { color: var(--text-muted); font-variant-numeric: tabular-nums; }

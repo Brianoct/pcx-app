@@ -16,6 +16,7 @@ const ProductionKanban = lazy(() => import('./ProductionKanban'));
 const ProductionPlanning = lazy(() => import('./ProductionPlanning'));
 const ProductionReception = lazy(() => import('./ProductionReception'));
 const MejorasPanel = lazy(() => import('./MejorasPanel'));
+const BonoPanel = lazy(() => import('./BonoPanel'));
 const ExpensesPanel = lazy(() => import('./ExpensesPanel'));
 const ProfilePanel = lazy(() => import('./ProfilePanel'));
 const ComprasBoard = lazy(() => import('./ComprasBoard'));
@@ -150,6 +151,13 @@ export const NAV_ITEMS = [
     render: (ctx) => <MejorasPanel token={ctx.token} user={ctx.user} />
   },
   {
+    path: '/bono',
+    label: 'Bono',
+    routeAccess: ['proyectos_panel', 'admin'],
+    navAccess: ['proyectos_panel'],
+    render: (ctx) => <BonoPanel token={ctx.token} user={ctx.user} />
+  },
+  {
     path: '/combos',
     label: 'Combos',
     routeAccess: ['marketing_combos'],
@@ -227,7 +235,7 @@ const SIDEBAR_SECTIONS = [
   { key: 'ventas', label: 'Ventas', paths: ['/cotizar', '/whatsapp', '/crm', '/history'] },
   { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion', '/envio-local'] },
   { key: 'produccion', label: 'Producción', paths: ['/produccion-planificacion', '/produccion-kanban'] },
-  { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras'] },
+  { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras', '/bono'] },
   { key: 'marketing', label: 'Marketing', paths: ['/marketing-calendario', '/campanas', '/live', '/promos', '/marketing-inversion', '/combos'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
   { key: 'administracion', label: 'Administración', paths: ['/comprar', '/admin', '/dashboard'] }
