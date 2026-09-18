@@ -11261,7 +11261,19 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
   background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.8rem;
 }
 .dpe-sub-delete:hover { background: #fee2e2; color: #b91c1c; }
-.dpe-subtask-add { display: flex; gap: 8px; }
+/* Co-work: quién hace cada ítem del checklist. */
+.dpe-sub-assignee {
+  flex-shrink: 0; max-width: 128px; min-height: 30px; padding: 3px 6px;
+  border: 1px solid var(--border); border-radius: 8px; background: #fff;
+  font: inherit; font-size: 0.74rem; font-weight: 700; color: var(--text-secondary);
+}
+.dpe-sub-assignee.is-new { max-width: 140px; min-height: 38px; }
+.dpe-sub-who {
+  flex-shrink: 0; padding: 2px 9px; border-radius: 999px; color: #fff;
+  font-size: 0.68rem; font-weight: 800; white-space: nowrap;
+}
+.dpe-subtasks li.is-mine { background: #f0fdf4; }
+.dpe-subtask-add { display: flex; gap: 8px; flex-wrap: wrap; }
 .dpe-subtask-add input {
   flex: 1; min-height: 38px; padding: 8px 11px;
   border: 1px solid var(--border); border-radius: 10px; font: inherit;
