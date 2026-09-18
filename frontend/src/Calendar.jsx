@@ -95,6 +95,7 @@ export default function Calendar({ token, user }) {
   const [editorId, setEditorId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
   const [newSubtask, setNewSubtask] = useState('');
+  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState('');
   const [moveDate, setMoveDate] = useState('');
   // Arrastre: mover el bloque (misma duración) o estirar el borde inferior.
   const dragRef = useRef(null);
@@ -202,6 +203,7 @@ export default function Calendar({ token, user }) {
       participant_ids: (task.participants || []).map((p) => p.id)
     });
     setNewSubtask('');
+    setNewSubtaskAssignee('');
     // Fecha sugerida para «pasar a otro día»: el día siguiente del tablero.
     const [y, m, d] = date.split('-').map(Number);
     setMoveDate(toDateText(new Date(y, m - 1, d + 1)));
@@ -345,7 +347,7 @@ export default function Calendar({ token, user }) {
     if (!editorTask || !newSubtask.trim()) return;
     try {
       const data = await apiRequest(`/api/day-plan/${editorTask.id}/subtasks`, {
-        method: 'POST', token, body: { title: newSubtask.trim() }
+        method: 'POST', token, body: { title: newSubtask.trim(), assignee_user_id: newSubtaskAssignee ? Number(newSubtaskAssignee) : null }
       });
       applySubtaskResult(editorTask.id, (subs) => [...subs, data.subtask], data.task_done);
       setNewSubtask('');
@@ -365,6 +367,18 @@ export default function Calendar({ token, user }) {
       }
     } catch (err) {
       toast.error(err.message || 'No se pudo actualizar');
+    }
+  };
+
+  // Co-work: asignar un ítem del checklist a alguien del grupo del bloque.
+  const assignSubtask = async (task, subtask, userId) => {
+    try {
+      const data = await apiRequest(`/api/day-plan/subtasks/${subtask.id}`, {
+        method: 'PATCH', token, body: { assignee_user_id: userId ? Number(userId) : null }
+      });
+      applySubtaskResult(task.id, (subs) => subs.map((s) => (s.id === subtask.id ? data.subtask : s)), data.task_done);
+    } catch (err) {
+      toast.error(err.message || 'No se pudo asignar');
     }
   };
 
@@ -642,9 +656,9 @@ export default function Calendar({ token, user }) {
                             : undefined
                         }}
                         title={`${minuteLabel(task.start_minute)}–${minuteLabel(task.end_minute)} · ${isPlan ? 'Planificación · ' : typeMeta.icon ? `${typeMeta.label} · ` : ''}${task.title}${isGroup ? ` · en grupo con ${[team.find((m) => m.id === task.user_id)?.name, ...participants.map((p) => p.name)].filter(Boolean).join(', ')}` : ''}${canEdit ? ' · clic para editar · arrastra para mover' : ''}`}
-                        onClick={canEdit ? () => { if (!suppressClickRef.current) openEditor(task); } : undefined}
+                        onClick={canToggle ? () => { if (!suppressClickRef.current) openEditor(task); } : undefined}
                         onPointerDown={canEdit ? (e) => beginDrag(e, task, 'move') : undefined}
-                        role={canEdit ? 'button' : undefined}
+                        role={canToggle ? 'button' : undefined}
                       >
                         <span className="dayplan-task-toprow">
                           {type === 'tarea' && !isPlan && (
@@ -685,14 +699,21 @@ export default function Calendar({ token, user }) {
                         ) : (
                           <span className="dayplan-task-title">{task.title}</span>
                         )}
-                        {progressPct !== null && (
-                          <span className="dayplan-task-progress">
-                            <span className="dayplan-task-progress-bar">
-                              <span style={{ width: `${progressPct}%` }} />
+                        {progressPct !== null && (() => {
+                          const mine = subtasks.filter((s) => s.assignee_user_id === member.id);
+                          const mineDone = mine.filter((s) => s.is_done).length;
+                          return (
+                            <span className="dayplan-task-progress">
+                              <span className="dayplan-task-progress-bar">
+                                <span style={{ width: `${progressPct}%` }} />
+                              </span>
+                              <span className="dayplan-task-progress-text">
+                                {subDone}/{subtasks.length} · {progressPct}%
+                                {mine.length > 0 ? ` · 👤 ${mineDone}/${mine.length}` : ''}
+                              </span>
                             </span>
-                            <span className="dayplan-task-progress-text">{subDone}/{subtasks.length} · {progressPct}%</span>
-                          </span>
-                        )}
+                          );
+                        })()}
                         {canToggle && (
                           <span className="dayplan-task-actions" onClick={(e) => e.stopPropagation()}>
                             {subtasks.length === 0 && (
@@ -723,11 +744,18 @@ export default function Calendar({ token, user }) {
         </div>
       )}
 
-      {editorTask && editDraft && (
+      {editorTask && editDraft && (() => {
+        const editorCanEdit = editorTask.user_id === myId || isAdmin;
+        // Personas del bloque: dueña + etiquetados (para asignar ítems).
+        const groupPeople = [
+          { id: editorTask.user_id, name: team.find((m) => m.id === editorTask.user_id)?.name || 'Dueña' },
+          ...(editorTask.participants || [])
+        ];
+        return (
         <div className="dpe-overlay" onClick={() => setEditorId(null)}>
           <div className="dpe-panel" onClick={(e) => e.stopPropagation()}>
             <div className="dpe-head">
-              <h3>Editar bloque</h3>
+              <h3>{editorCanEdit ? 'Editar bloque' : 'Bloque en grupo'}</h3>
               <button type="button" className="dpe-close" onClick={() => setEditorId(null)} aria-label="Cerrar">✕</button>
             </div>
 
@@ -736,6 +764,7 @@ export default function Calendar({ token, user }) {
               className="dpe-title"
               maxLength={120}
               value={editDraft.title}
+              disabled={!editorCanEdit}
               onChange={(e) => setEditDraft({ ...editDraft, title: e.target.value })}
             />
 
@@ -743,6 +772,7 @@ export default function Calendar({ token, user }) {
               <select
                 className="dayplan-type-select"
                 value={editDraft.task_type}
+                disabled={!editorCanEdit}
                 onChange={(e) => setEditDraft({ ...editDraft, task_type: e.target.value })}
               >
                 {Object.entries(TASK_TYPE_META).map(([value, meta]) => (
@@ -751,6 +781,7 @@ export default function Calendar({ token, user }) {
               </select>
               <select
                 value={editDraft.start_minute}
+                disabled={!editorCanEdit}
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   setEditDraft({
@@ -765,19 +796,27 @@ export default function Calendar({ token, user }) {
               <span className="dayplan-add-sep">→</span>
               <select
                 value={editDraft.end_minute}
+                disabled={!editorCanEdit}
                 onChange={(e) => setEditDraft({ ...editDraft, end_minute: Number(e.target.value) })}
               >
                 {TIME_OPTIONS.filter((m) => m > editDraft.start_minute).map((m) => <option key={m} value={m}>{minuteLabel(m)}</option>)}
               </select>
-              <button type="button" className="btn btn-primary dpe-save" disabled={!editDraft.title.trim()} onClick={saveEditor}>
-                Guardar
-              </button>
+              {editorCanEdit && (
+                <button type="button" className="btn btn-primary dpe-save" disabled={!editDraft.title.trim()} onClick={saveEditor}>
+                  Guardar
+                </button>
+              )}
             </div>
-            {teammates.length > 0 && (
+            {editorCanEdit && teammates.length > 0 && (
               <div className="dpe-people">
                 {renderParticipantPicker(editDraft.participant_ids || [], (ids) => setEditDraft({ ...editDraft, participant_ids: ids }))}
                 <p className="dpe-people-hint">Cada persona etiquetada ve el bloque en su columna y puede marcarlo hecho. Si es una Mejora, todas la reciben en su registro al completarse.</p>
               </div>
+            )}
+            {!editorCanEdit && (
+              <p className="dpe-people-hint">
+                En grupo con {groupPeople.map((p) => p.name).join(', ')}. Marca lo que te toca en el checklist; solo la dueña del bloque edita el resto.
+              </p>
             )}
 
             <div className="dpe-checklist">
@@ -790,29 +829,64 @@ export default function Calendar({ token, user }) {
                 <p className="dpe-empty">Agrega varias tareas dentro de este horario: el bloque mostrará el % de avance y se marcará hecho al completarlas todas.</p>
               )}
               <ul className="dpe-subtasks">
-                {(editorTask.subtasks || []).map((subtask) => (
-                  <li key={subtask.id} className={subtask.is_done ? 'is-done' : ''}>
-                    <label>
-                      <input type="checkbox" checked={subtask.is_done} onChange={() => toggleSubtask(editorTask, subtask)} />
-                      <span>{subtask.title}</span>
-                    </label>
-                    <button type="button" className="dpe-sub-delete" title="Quitar" onClick={() => removeSubtask(editorTask, subtask)}>✕</button>
-                  </li>
-                ))}
+                {(editorTask.subtasks || []).map((subtask) => {
+                  const [ac, acd] = subtask.assignee_user_id ? (colorByUserId.get(subtask.assignee_user_id) || USER_COLORS[0]) : [null, null];
+                  return (
+                    <li key={subtask.id} className={`${subtask.is_done ? 'is-done' : ''} ${subtask.assignee_user_id === myId ? 'is-mine' : ''}`}>
+                      <label>
+                        <input type="checkbox" checked={subtask.is_done} onChange={() => toggleSubtask(editorTask, subtask)} />
+                        <span>{subtask.title}</span>
+                      </label>
+                      {editorCanEdit && groupPeople.length > 1 ? (
+                        <select
+                          className="dpe-sub-assignee"
+                          style={ac ? { borderColor: ac, color: acd } : undefined}
+                          value={subtask.assignee_user_id || ''}
+                          onChange={(e) => assignSubtask(editorTask, subtask, e.target.value)}
+                          title="Quién lo hace"
+                          aria-label={`Asignar "${subtask.title}"`}
+                        >
+                          <option value="">— nadie —</option>
+                          {groupPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      ) : subtask.assignee_name ? (
+                        <span className="dpe-sub-who" style={{ background: `linear-gradient(150deg, ${ac}, ${acd})` }} title="Quién lo hace">{subtask.assignee_name}</span>
+                      ) : null}
+                      {editorCanEdit && (
+                        <button type="button" className="dpe-sub-delete" title="Quitar" onClick={() => removeSubtask(editorTask, subtask)}>✕</button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
-              <div className="dpe-subtask-add">
-                <input
-                  type="text"
-                  maxLength={120}
-                  placeholder="Nueva tarea de la lista…"
-                  value={newSubtask}
-                  onChange={(e) => setNewSubtask(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') addSubtask(); }}
-                />
-                <button type="button" className="btn btn-secondary" disabled={!newSubtask.trim()} onClick={addSubtask}>+ Agregar</button>
-              </div>
+              {editorCanEdit && (
+                <div className="dpe-subtask-add">
+                  <input
+                    type="text"
+                    maxLength={120}
+                    placeholder="Nueva tarea de la lista…"
+                    value={newSubtask}
+                    onChange={(e) => setNewSubtask(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') addSubtask(); }}
+                  />
+                  {groupPeople.length > 1 && (
+                    <select
+                      className="dpe-sub-assignee is-new"
+                      value={newSubtaskAssignee}
+                      onChange={(e) => setNewSubtaskAssignee(e.target.value)}
+                      title="Quién lo hace"
+                      aria-label="Asignar la nueva tarea"
+                    >
+                      <option value="">— nadie —</option>
+                      {groupPeople.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  )}
+                  <button type="button" className="btn btn-secondary" disabled={!newSubtask.trim()} onClick={addSubtask}>+ Agregar</button>
+                </div>
+              )}
             </div>
 
+            {editorCanEdit && (
             <div className="dpe-move">
               <span className="dpe-move-label">Pasar a:</span>
               <button
@@ -840,13 +914,17 @@ export default function Calendar({ token, user }) {
                 Mover
               </button>
             </div>
+            )}
 
-            <div className="dpe-foot">
-              <button type="button" className="dpe-delete" onClick={() => removeTask(editorTask)}>Eliminar bloque</button>
-            </div>
+            {editorCanEdit && (
+              <div className="dpe-foot">
+                <button type="button" className="dpe-delete" onClick={() => removeTask(editorTask)}>Eliminar bloque</button>
+              </div>
+            )}
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
