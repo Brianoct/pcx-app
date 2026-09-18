@@ -15,6 +15,7 @@ const NAV_ICONS = {
   '/produccion-planificacion': '◫',
   '/produccion-kanban': '⚙',
   '/mejoras': '✦',
+  '/bono': '★',
   '/marketing-calendario': '▦',
   '/campanas': '◈',
   '/live': '●',
