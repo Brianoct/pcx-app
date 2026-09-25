@@ -29,6 +29,7 @@ const ACCESS_TEMPLATE = {
   marketing_calendario: false,
   marketing_inversion: false,
   marketing_promos: false,
+  clientes_lectura: false,
   admin: false
 };
 
@@ -85,14 +86,16 @@ const ROLE_DEFAULTS = {
     marketing_combos: true,
     marketing_calendario: true,
     marketing_inversion: true,
-    marketing_promos: true
+    marketing_promos: true,
+    clientes_lectura: true
   },
   'marketing lider': {
     calendario: true,
     marketing_combos: true,
     marketing_calendario: true,
     marketing_inversion: true,
-    marketing_promos: true
+    marketing_promos: true,
+    clientes_lectura: true
   },
   produccion: {
     calendario: true,
@@ -229,6 +232,9 @@ const PANEL_KEY_ALIASES = {
   live: 'campanas_live',
   marketing_calendario: 'marketing_calendario',
   marketingcalendario: 'marketing_calendario',
+  clientes_lectura: 'clientes_lectura',
+  clienteslectura: 'clientes_lectura',
+  crm_lectura: 'clientes_lectura',
   marketing_inversion: 'marketing_inversion',
   marketinginversion: 'marketing_inversion',
   inversion: 'marketing_inversion',
@@ -340,7 +346,8 @@ export const ACCESS_GROUPS = [
       { key: 'marketing_calendario', label: 'Calendario de Marketing' },
       { key: 'marketing_inversion', label: 'Inversión (costos y retorno)' },
       { key: 'marketing_promos', label: 'Promos (envío gratis, sorteo, cupones)' },
-      { key: 'marketing_combos', label: 'Combos' }
+      { key: 'marketing_combos', label: 'Combos' },
+      { key: 'clientes_lectura', label: 'Clientes (solo lectura: filtrar y exportar)' }
     ]
   },
   {

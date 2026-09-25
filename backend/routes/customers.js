@@ -8,20 +8,32 @@ const { createHttpError } = require('../lib/util');
 
 const router = express.Router();
 
-// Sales-facing CRM: anyone who can quote (or manage quotes) can use it.
-const ensureCrmAccess = async (req, res) => {
+// CRM: quien cotiza (o maneja cotizaciones) lo usa completo. Marketing entra
+// en modo LECTURA (clientes_lectura): filtra y exporta, no edita nada.
+const resolveCrmScope = (userContext) => {
+  if (normalizeRole(userContext.role || '') === ROLE_KEYS.admin) return 'full';
+  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
+  if (access.cotizar || access.historial_global || access.historial_individual || access.pedidos_global) return 'full';
+  if (access.clientes_lectura) return 'read';
+  return null;
+};
+
+const ensureCrmAccess = async (req, res, { write = false } = {}) => {
   const userContext = await loadUserContext(req.user.id);
   if (!userContext) {
     res.status(401).json({ error: 'Usuario no encontrado' });
     return null;
   }
-  if (normalizeRole(userContext.role || '') === ROLE_KEYS.admin) return userContext;
-  const access = sanitizePanelAccess(userContext.panel_access, userContext.role);
-  if (access.cotizar || access.historial_global || access.historial_individual || access.pedidos_global) {
-    return userContext;
+  const scope = resolveCrmScope(userContext);
+  if (!scope) {
+    res.status(403).json({ error: 'No tienes acceso a clientes' });
+    return null;
   }
-  res.status(403).json({ error: 'No tienes acceso a clientes' });
-  return null;
+  if (write && scope !== 'full') {
+    res.status(403).json({ error: 'Tu acceso a clientes es solo de lectura' });
+    return null;
+  }
+  return { ...userContext, crm_scope: scope };
 };
 
 const QUOTES_BY_PHONE_JOIN = `regexp_replace(COALESCE(q.customer_phone, ''), '\\D', '', 'g') = c.phone_normalized
@@ -29,6 +41,7 @@ const QUOTES_BY_PHONE_JOIN = `regexp_replace(COALESCE(q.customer_phone, ''), '\\
 
 const CUSTOMER_LIST_SELECT = `
   SELECT c.*, s.quotes_count, s.total_spent, s.last_quote_at, s.last_store_location,
+         s.paid_count, s.last_paid_at, l.acero_total, l.armonia_total, l.acero_items, l.armonia_items,
          COALESCE(NULLIF(TRIM(owner.display_name), ''), split_part(owner.email, '@', 1)) AS owner_name
   FROM customers c
   LEFT JOIN users owner ON owner.id = c.assigned_user_id
@@ -36,10 +49,40 @@ const CUSTOMER_LIST_SELECT = `
     SELECT COUNT(*)::int AS quotes_count,
            COALESCE(SUM(CASE WHEN q.status IN ('Pagado', 'Embalado', 'Enviado') THEN q.total ELSE 0 END), 0) AS total_spent,
            MAX(q.created_at) AS last_quote_at,
-           (array_agg(q.store_location ORDER BY q.created_at DESC))[1] AS last_store_location
+           (array_agg(q.store_location ORDER BY q.created_at DESC))[1] AS last_store_location,
+           COUNT(*) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado'))::int AS paid_count,
+           MAX(q.created_at) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')) AS last_paid_at
     FROM quotes q
     WHERE ${QUOTES_BY_PHONE_JOIN}
-  ) s ON TRUE`;
+  ) s ON TRUE
+  -- Líneas compradas: se derivan de las cotizaciones pagadas (SKU → línea del
+  -- producto). Nadie las escribe a mano; así Marketing filtra sin etiquetar.
+  LEFT JOIN LATERAL (
+    SELECT COALESCE(SUM(COALESCE((li->>'lineTotal')::numeric, 0)) FILTER (WHERE LOWER(p.product_line) = 'acero'), 0) AS acero_total,
+           COALESCE(SUM(COALESCE((li->>'lineTotal')::numeric, 0)) FILTER (WHERE LOWER(p.product_line) LIKE 'armon%'), 0) AS armonia_total,
+           COUNT(*) FILTER (WHERE LOWER(p.product_line) = 'acero')::int AS acero_items,
+           COUNT(*) FILTER (WHERE LOWER(p.product_line) LIKE 'armon%')::int AS armonia_items
+    FROM quotes q
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(q.line_items) = 'array' THEN q.line_items ELSE '[]'::jsonb END) li
+    LEFT JOIN products p ON UPPER(p.sku) = UPPER(TRIM(li->>'sku'))
+    WHERE ${QUOTES_BY_PHONE_JOIN}
+      AND q.status IN ('Pagado', 'Embalado', 'Enviado')
+  ) l ON TRUE`;
+
+// Filtros de Marketing sobre la lista: línea comprada, última compra y ciudad.
+// (Columnas sin alias: valen tanto en la consulta principal como sobre la
+// subconsulta del resumen.)
+const LINE_FILTERS = {
+  acero: 'acero_items > 0',
+  armonia: 'armonia_items > 0',
+  both: 'acero_items > 0 AND armonia_items > 0',
+  none: 'COALESCE(paid_count, 0) = 0'
+};
+const RECENCY_FILTERS = {
+  '30': "last_paid_at >= NOW() - INTERVAL '30 days'",
+  '90': "last_paid_at >= NOW() - INTERVAL '90 days'",
+  '60plus': "last_paid_at IS NOT NULL AND last_paid_at < NOW() - INTERVAL '60 days'"
+};
 
 router.get('/api/customers', authenticateToken, async (req, res) => {
   const userContext = await ensureCrmAccess(req, res);
@@ -67,7 +110,16 @@ router.get('/api/customers', authenticateToken, async (req, res) => {
     if (String(req.query.due || '') === '1') {
       where.push("c.follow_up_at IS NOT NULL AND c.follow_up_at <= (NOW() AT TIME ZONE 'America/La_Paz')::date");
     }
-    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 300);
+    const line = String(req.query.line || '').trim().toLowerCase();
+    if (LINE_FILTERS[line]) where.push(`(${LINE_FILTERS[line]})`);
+    const recency = String(req.query.recency || '').trim().toLowerCase();
+    if (RECENCY_FILTERS[recency]) where.push(`(${RECENCY_FILTERS[recency]})`);
+    const city = String(req.query.city || '').trim();
+    if (city) {
+      params.push(`%${city.toLowerCase()}%`);
+      where.push(`(LOWER(COALESCE(c.ciudad, '')) LIKE $${params.length} OR LOWER(COALESCE(c.department, '')) LIKE $${params.length} OR LOWER(COALESCE(c.provincia, '')) LIKE $${params.length})`);
+    }
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 1000);
     const result = await pool.query(
       `${CUSTOMER_LIST_SELECT}
        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
@@ -77,12 +129,31 @@ router.get('/api/customers', authenticateToken, async (req, res) => {
        LIMIT ${limit}`,
       params
     );
-    const dueRes = await pool.query(
-      "SELECT COUNT(*)::int AS due FROM customers WHERE follow_up_at IS NOT NULL AND follow_up_at <= (NOW() AT TIME ZONE 'America/La_Paz')::date"
-    );
+    const [dueRes, summaryRes] = await Promise.all([
+      pool.query(
+        "SELECT COUNT(*)::int AS due FROM customers WHERE follow_up_at IS NOT NULL AND follow_up_at <= (NOW() AT TIME ZONE 'America/La_Paz')::date"
+      ),
+      // Resumen de toda la cartera (sin filtros) para las fichas de arriba.
+      pool.query(
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE ${LINE_FILTERS.acero})::int AS acero,
+                COUNT(*) FILTER (WHERE ${LINE_FILTERS.armonia})::int AS armonia,
+                COUNT(*) FILTER (WHERE ${LINE_FILTERS.both})::int AS both,
+                COUNT(*) FILTER (WHERE ${RECENCY_FILTERS['60plus']})::int AS reactivar
+         FROM (${CUSTOMER_LIST_SELECT}) x`
+      )
+    ]);
     res.json({
       customers: result.rows.map(buildCustomerRow),
-      follow_ups_due: Number(dueRes.rows[0]?.due || 0)
+      follow_ups_due: Number(dueRes.rows[0]?.due || 0),
+      scope: userContext.crm_scope,
+      summary: {
+        total: Number(summaryRes.rows[0]?.total || 0),
+        acero: Number(summaryRes.rows[0]?.acero || 0),
+        armonia: Number(summaryRes.rows[0]?.armonia || 0),
+        both: Number(summaryRes.rows[0]?.both || 0),
+        reactivar: Number(summaryRes.rows[0]?.reactivar || 0)
+      }
     });
   } catch (err) {
     console.error(err);
@@ -213,7 +284,10 @@ router.get('/api/customers/:id', authenticateToken, async (req, res) => {
       ),
       customer.phone_normalized
         ? pool.query(
-          `SELECT q.id, q.status, q.total, q.store_location, q.vendor, q.created_at
+          `SELECT q.id, q.status, q.total, q.store_location, q.vendor, q.created_at,
+                  (SELECT COALESCE(array_agg(DISTINCT LOWER(p.product_line)) FILTER (WHERE p.product_line IS NOT NULL), '{}')
+                   FROM jsonb_array_elements(CASE WHEN jsonb_typeof(q.line_items) = 'array' THEN q.line_items ELSE '[]'::jsonb END) li
+                   LEFT JOIN products p ON UPPER(p.sku) = UPPER(TRIM(li->>'sku'))) AS lines
            FROM quotes q
            JOIN customers c ON c.id = $1
            WHERE ${QUOTES_BY_PHONE_JOIN}
@@ -238,8 +312,10 @@ router.get('/api/customers/:id', authenticateToken, async (req, res) => {
         total: Number(row.total || 0),
         store_location: row.store_location,
         vendor: row.vendor || null,
-        created_at: row.created_at
-      }))
+        created_at: row.created_at,
+        lines: Array.isArray(row.lines) ? row.lines.map((l) => (String(l).startsWith('armon') ? 'armonia' : String(l))) : []
+      })),
+      scope: userContext.crm_scope
     });
   } catch (err) {
     console.error(err);
@@ -293,7 +369,7 @@ const parseCustomerPayload = (body = {}, { partial = false } = {}) => {
 };
 
 router.post('/api/customers', authenticateToken, async (req, res) => {
-  const userContext = await ensureCrmAccess(req, res);
+  const userContext = await ensureCrmAccess(req, res, { write: true });
   if (!userContext) return;
   try {
     const data = parseCustomerPayload(req.body || {});
@@ -326,7 +402,7 @@ router.post('/api/customers', authenticateToken, async (req, res) => {
 });
 
 router.patch('/api/customers/:id', authenticateToken, async (req, res) => {
-  const userContext = await ensureCrmAccess(req, res);
+  const userContext = await ensureCrmAccess(req, res, { write: true });
   if (!userContext) return;
   try {
     const customerId = Number.parseInt(req.params.id, 10);
@@ -368,7 +444,7 @@ router.patch('/api/customers/:id', authenticateToken, async (req, res) => {
 });
 
 router.post('/api/customers/:id/notes', authenticateToken, async (req, res) => {
-  const userContext = await ensureCrmAccess(req, res);
+  const userContext = await ensureCrmAccess(req, res, { write: true });
   if (!userContext) return;
   try {
     const customerId = Number.parseInt(req.params.id, 10);

@@ -39,6 +39,8 @@ const PANEL_KEYS = [
   'marketing_calendario',
   'marketing_inversion',
   'marketing_promos',
+  // Clientes (CRM) en modo lectura: Marketing filtra y exporta, no edita.
+  'clientes_lectura',
   'admin'
 ];
 
@@ -70,6 +72,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     marketing_calendario: false,
     marketing_inversion: false,
     marketing_promos: false,
+    clientes_lectura: false,
     admin: false
   };
 
@@ -130,7 +133,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       marketing_combos: true,
       marketing_calendario: true,
       marketing_inversion: true,
-      marketing_promos: true
+      marketing_promos: true,
+      clientes_lectura: true
     };
   }
 
@@ -141,7 +145,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       marketing_combos: true,
       marketing_calendario: true,
       marketing_inversion: true,
-      marketing_promos: true
+      marketing_promos: true,
+      clientes_lectura: true
     };
   }
 

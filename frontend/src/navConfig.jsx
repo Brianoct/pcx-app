@@ -68,10 +68,11 @@ export const NAV_ITEMS = [
   {
     path: '/crm',
     label: 'Clientes',
-    // Marketing entra por sus propias llaves: mismo CRM que Ventas.
-    routeAccess: ['cotizar', 'historial_global', 'marketing_calendario'],
-    // Aparece en el menú solo cuando el admin activa el Panel de Ventas.
-    feature: 'panel_ventas',
+    // Marketing entra en modo lectura (clientes_lectura): mismo CRM que Ventas.
+    routeAccess: ['cotizar', 'historial_global', 'clientes_lectura'],
+    // Para Ventas aparece cuando el admin activa el Panel de Ventas; para
+    // quien solo lee (Marketing) aparece siempre.
+    visibleWhen: (access, features) => Boolean(features?.panel_ventas) || canAccessPanel(access, 'clientes_lectura'),
     render: (ctx) => <CrmPanel token={ctx.token} user={ctx.user} />
   },
   {
