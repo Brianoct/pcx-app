@@ -54,7 +54,15 @@ const buildCustomerRow = (row = {}) => ({
   quotes_count: row.quotes_count !== undefined ? Number(row.quotes_count || 0) : undefined,
   total_spent: row.total_spent !== undefined ? Number(row.total_spent || 0) : undefined,
   last_quote_at: row.last_quote_at !== undefined ? (row.last_quote_at || null) : undefined,
-  last_store_location: row.last_store_location !== undefined ? (row.last_store_location || null) : undefined
+  last_store_location: row.last_store_location !== undefined ? (row.last_store_location || null) : undefined,
+  // Compras pagadas y líneas compradas (derivadas de las cotizaciones pagadas).
+  paid_count: row.paid_count !== undefined ? Number(row.paid_count || 0) : undefined,
+  last_paid_at: row.last_paid_at !== undefined ? (row.last_paid_at || null) : undefined,
+  acero_total: row.acero_total !== undefined ? Number(row.acero_total || 0) : undefined,
+  armonia_total: row.armonia_total !== undefined ? Number(row.armonia_total || 0) : undefined,
+  lines_bought: row.acero_items !== undefined
+    ? [...(Number(row.acero_items) > 0 ? ['acero'] : []), ...(Number(row.armonia_items) > 0 ? ['armonia'] : [])]
+    : undefined
 });
 
 // Called whenever a quote is created/edited: keeps the customer book current
