@@ -291,8 +291,8 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
         user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes,
         alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
         coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items, line_items, subtotal, total, status,
-        delivery_fee_bs, delivery_label, delivery_gps, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, NOW())
+        delivery_fee_bs, delivery_label, delivery_gps, created_by_user_id, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, NOW())
       RETURNING id`,
       [
         quoteOwnerId,
@@ -321,7 +321,9 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
         normalizedStatus,
         deliveryFields.fee,
         deliveryFields.label,
-        deliveryFields.gps
+        deliveryFields.gps,
+        // Auditoría: quién estaba logueado (aunque la venta se asigne a otro).
+        req.user.id
       ]
     );
 
@@ -427,6 +429,19 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
     let query = '';
     let params = [];
 
+    // Auditoría (solo Admin): quién creó la cotización estando logueado y
+    // quién la editó por última vez. Los demás roles no reciben estas columnas.
+    const isAdmin = normalizeRole(userContext.role || '') === ROLE_KEYS.admin;
+    const auditSelect = isAdmin
+      ? `, q.created_by_user_id, q.updated_by_user_id, q.updated_by_at,
+         COALESCE(NULLIF(TRIM(cb.display_name), ''), split_part(cb.email, '@', 1)) AS created_by_name,
+         COALESCE(NULLIF(TRIM(ub.display_name), ''), split_part(ub.email, '@', 1)) AS updated_by_name`
+      : '';
+    const auditJoin = isAdmin
+      ? ` LEFT JOIN users cb ON cb.id = q.created_by_user_id
+          LEFT JOIN users ub ON ub.id = q.updated_by_user_id`
+      : '';
+
     if (isTeamView) {
       query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
                       q.alternative_name, q.alternative_phone,
@@ -434,9 +449,9 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
                       q.gift_name, q.gift_sku, q.gift_qty, q.gift_items, q.promos, q.ciudad, q.dest_geo_id,
                       q.delivery_fee_bs, q.delivery_label, q.delivery_gps,
-                      q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone
+                      q.created_at, u.phone AS vendor_phone, u.phone AS seller_phone${auditSelect}
                FROM quotes q
-               LEFT JOIN users u ON u.id = q.user_id
+               LEFT JOIN users u ON u.id = q.user_id${auditJoin}
                ORDER BY q.created_at DESC`;
       params = [];
     } else if (access.pedidos_individual && !access.historial_individual && !pedidosScope.isGlobal) {
@@ -826,8 +841,8 @@ router.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
     }
 
     const updateRes = await client.query(
-      'UPDATE quotes SET status = $1 WHERE id = $2 RETURNING status',
-      [status, req.params.id]
+      'UPDATE quotes SET status = $1, updated_by_user_id = $3, updated_by_at = NOW() WHERE id = $2 RETURNING status',
+      [status, req.params.id, req.user.id]
     );
 
     await client.query('COMMIT');
@@ -907,8 +922,8 @@ router.patch('/api/quotes/:id/payment-method', authenticateToken, async (req, re
     }
 
     const updateRes = await client.query(
-      'UPDATE quotes SET payment_method = $1, payment_cash_bs = $2 WHERE id = $3 RETURNING payment_method, payment_cash_bs',
-      [nextPaymentMethod, nextCashBs, quoteId]
+      'UPDATE quotes SET payment_method = $1, payment_cash_bs = $2, updated_by_user_id = $4, updated_by_at = NOW() WHERE id = $3 RETURNING payment_method, payment_cash_bs',
+      [nextPaymentMethod, nextCashBs, quoteId, req.user.id]
     );
 
     await client.query('COMMIT');
@@ -1189,7 +1204,9 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
            dest_geo_id = $24,
            delivery_fee_bs = $26,
            delivery_label = $27,
-           delivery_gps = $28
+           delivery_gps = $28,
+           updated_by_user_id = $29,
+           updated_by_at = NOW()
       WHERE id = $22`,
       [
         customer_name,
@@ -1219,7 +1236,8 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         resolvedGift.gift_items ? JSON.stringify(resolvedGift.gift_items) : null,
         deliveryFieldsUpdate ? deliveryFieldsUpdate.fee : (currentQuote.delivery_fee_bs ?? null),
         deliveryFieldsUpdate ? deliveryFieldsUpdate.label : (currentQuote.delivery_label || null),
-        deliveryFieldsUpdate ? deliveryFieldsUpdate.gps : (currentQuote.delivery_gps || null)
+        deliveryFieldsUpdate ? deliveryFieldsUpdate.gps : (currentQuote.delivery_gps || null),
+        req.user.id
       ]
     );
 
