@@ -778,6 +778,9 @@ button, .btn {
   white-space: nowrap;
 }
 
+/* Auditoría (solo Admin): quién creó / editó la cotización. */
+.history-audit { display: block; font-size: 0.66rem; color: var(--text-muted); white-space: normal; line-height: 1.3; margin-top: 2px; }
+.history-audit.is-different { color: #b45309; font-weight: 700; }
 .history-cell-truncate {
   display: block;
   width: 100%;

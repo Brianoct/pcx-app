@@ -16,7 +16,7 @@ const PAYMENT_METHOD_OPTIONS = [
 ];
 const PAYMENT_ALLOWED_STATUSES = ['Pagado', 'Embalado', 'Enviado'];
 
-function QuoteHistory({ token, access, onStatusUpdated }) {
+function QuoteHistory({ token, role, access, onStatusUpdated }) {
   const toast = useToast();
   const { enqueueWrite, isWriteIntentError } = useOutbox();
   const [quotes, setQuotes] = useState([]);
@@ -1229,6 +1229,16 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
   };
 
   const isLeader = canViewGlobalHistory;
+  // Auditoría solo para Admin: quién creó la cotización estando logueado
+  // (aunque la venta esté asignada a otro) y quién la editó por última vez.
+  const isAdmin = String(role || '').trim().toLowerCase() === 'admin';
+  const auditText = (quote) => {
+    if (!isAdmin || quote.created_by_name === undefined) return null;
+    const parts = [];
+    parts.push(`Creó: ${quote.created_by_name || 'sin registro'}`);
+    if (quote.updated_by_name) parts.push(`Editó: ${quote.updated_by_name}${quote.updated_by_at ? ` · ${formatHistoryDate(quote.updated_by_at)}` : ''}`);
+    return parts.join(' · ');
+  };
 
   if (!canViewHistory && !canViewGlobalHistory) {
     return (
@@ -1347,6 +1357,12 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                       <div className="mobile-card-row">
                         <span className="mobile-card-label">Vendedor</span>
                         <span>{quote.vendor || '—'}</span>
+                      </div>
+                    )}
+                    {auditText(quote) && (
+                      <div className="mobile-card-row">
+                        <span className="mobile-card-label">Registro</span>
+                        <span className="history-audit">{auditText(quote)}</span>
                       </div>
                     )}
                     <div className="mobile-card-row">
@@ -1478,8 +1494,13 @@ function QuoteHistory({ token, access, onStatusUpdated }) {
                         )}
                       </td>
                       {isLeader && (
-                        <td className="history-td center" title={quote.vendor || '—'}>
+                        <td className="history-td center" title={auditText(quote) ? `${quote.vendor || '—'} · ${auditText(quote)}` : (quote.vendor || '—')}>
                           <span className="history-cell-truncate">{quote.vendor || '—'}</span>
+                          {auditText(quote) && (
+                            <small className={`history-audit ${quote.created_by_name && quote.created_by_name !== quote.vendor ? 'is-different' : ''}`}>
+                              {auditText(quote)}
+                            </small>
+                          )}
                         </td>
                       )}
                       <td className="history-td center" style={{ fontWeight: '600' }}>
