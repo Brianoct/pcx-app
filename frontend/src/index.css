@@ -12523,8 +12523,8 @@ button.vc-kpi {
 .lp-btn-wa { background: var(--lp-red); color: #fff; box-shadow: 0 10px 26px rgba(225, 29, 46, 0.32); }
 .lp-btn-wa::before { content: ''; width: 20px; height: 20px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M17.5 14.4c-.3-.1-1.8-.9-2-1s-.5-.1-.7.1-.8 1-.9 1.2-.3.2-.6.1c-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1s0-.5.1-.6l.5-.5.3-.5c.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4s-1 1-1 2.5 1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2z'/%3E%3C/svg%3E") center/contain no-repeat; }
 .lp-btn-wa:hover { background: var(--lp-red-dark); color: #fff; }
-.lp-btn-outline { border: 2px solid #fff; color: #fff; }
-.lp-btn-outline:hover { background: #fff; color: var(--lp-ink); }
+.lp-btn-outline { background: #fff; color: var(--lp-ink); border: 0; font: inherit; font-weight: 700; cursor: pointer; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35); }
+.lp-btn-outline:hover { background: var(--lp-red); color: #fff; }
 
 .lp-eyebrow { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--lp-red); margin-bottom: 14px; }
 .lp-accent { color: var(--lp-red); }
@@ -12686,6 +12686,8 @@ button.vc-kpi {
 .lp-footer-links a { color: rgba(255, 255, 255, 0.6); text-decoration: none; }
 .lp-footer-links a:hover { color: #fff; }
 .lp-footer-login { opacity: 0.55; }
+.landing-footer-login { color: inherit; text-decoration: none; opacity: 0.7; }
+.landing-footer-login:hover { opacity: 1; }
 
 /* Responsivo por contenedor (no por ventana): así la vista previa «Celular»
    del editor se ve igual que un celular de verdad. En el sitio real el

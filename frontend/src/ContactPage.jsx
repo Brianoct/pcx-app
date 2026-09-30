@@ -34,7 +34,7 @@ const HORARIO = [
 export default function ContactPage() {
   return (
     <div className="public-page">
-      <PublicNav />
+      <PublicNav showLogin={false} />
 
       <main className="public-main">
         <p className="landing-eyebrow">Contacto</p>
@@ -101,6 +101,8 @@ export default function ContactPage() {
         <span>PCX · Hecho en Bolivia</span>
         <span className="landing-footer-dot">·</span>
         <span>Cochabamba · Santa Cruz</span>
+        <span className="landing-footer-dot">·</span>
+        <Link to="/login" className="landing-footer-login">Ingresar</Link>
       </footer>
     </div>
   );

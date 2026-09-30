@@ -37,6 +37,10 @@ export default function QuoteTool({ token, user }) {
   const [ventaType, setVentaType] = useState('sf');
   const [discountMode, setDiscountMode] = useState('percent');
   const [discountInput, setDiscountInput] = useState(0);
+  // Mientras se escribe en un campo de descuento se muestra tal cual el
+  // texto tecleado; recién al salir del campo se formatea a 2 decimales.
+  // (Antes cada tecla reformateaba el valor y no se podía borrar ni escribir.)
+  const [discountDraft, setDiscountDraft] = useState({ field: null, text: '' });
   const [customerCoupon, setCustomerCoupon] = useState(null);
   const [selectedCouponCode, setSelectedCouponCode] = useState('');
   const [useAlternativeName, setUseAlternativeName] = useState(false);
@@ -1013,23 +1017,45 @@ export default function QuoteTool({ token, user }) {
   const discountAmountFieldValue = discountAmountApplied.toFixed(2);
   const targetTotalFieldValue = total.toFixed(2);
 
+  const parseDiscountText = (text) => {
+    const cleaned = String(text || '').replace(',', '.').replace(/[^0-9.]/g, '');
+    const parsed = Number.parseFloat(cleaned);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
   const handleDiscountPercentChange = (rawValue) => {
-    const nextValue = clampNumber(Number.parseFloat(rawValue), 0, 100);
+    const nextValue = clampNumber(parseDiscountText(rawValue), 0, 100);
     setDiscountMode('percent');
     setDiscountInput(nextValue);
   };
 
   const handleDiscountAmountChange = (rawValue) => {
-    const nextValue = clampNumber(Number.parseFloat(rawValue), 0, Math.max(0, subtotal));
+    const nextValue = clampNumber(parseDiscountText(rawValue), 0, Math.max(0, subtotal));
     setDiscountMode('amount');
     setDiscountInput(nextValue);
   };
 
   const handleTargetTotalChange = (rawValue) => {
-    const nextValue = clampNumber(Number.parseFloat(rawValue), 0, Math.max(0, subtotal));
+    const nextValue = clampNumber(parseDiscountText(rawValue), 0, Math.max(0, subtotal));
     setDiscountMode('target');
     setDiscountInput(nextValue);
   };
+
+  const DISCOUNT_HANDLERS = { percent: handleDiscountPercentChange, amount: handleDiscountAmountChange, target: handleTargetTotalChange };
+  const DISCOUNT_FIELD_VALUES = { percent: discountPercentFieldValue, amount: discountAmountFieldValue, target: targetTotalFieldValue };
+  const discountFieldProps = (field) => ({
+    type: 'text',
+    inputMode: 'decimal',
+    value: discountDraft.field === field ? discountDraft.text : DISCOUNT_FIELD_VALUES[field],
+    onFocus: (e) => { setDiscountDraft({ field, text: DISCOUNT_FIELD_VALUES[field] }); e.target.select(); },
+    onChange: (e) => {
+      const text = e.target.value;
+      if (!/^[0-9]*[.,]?[0-9]*$/.test(text)) return;
+      setDiscountDraft({ field, text });
+      DISCOUNT_HANDLERS[field](text);
+    },
+    onBlur: () => setDiscountDraft({ field: null, text: '' })
+  });
   const clearDiscounts = () => {
     setDiscountMode('percent');
     setDiscountInput(0);
@@ -1762,12 +1788,7 @@ export default function QuoteTool({ token, user }) {
                   <label style={{ display: 'grid', gap: '4px' }}>
                     <span style={{ color: '#78716c', fontSize: '0.78rem' }}>Descuento %</span>
                     <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      value={discountPercentFieldValue}
-                      onChange={(e) => handleDiscountPercentChange(e.target.value)}
+                      {...discountFieldProps('percent')}
                       style={{
                         width: '100%',
                         padding: '8px',
@@ -1781,12 +1802,7 @@ export default function QuoteTool({ token, user }) {
                   <label style={{ display: 'grid', gap: '4px' }}>
                     <span style={{ color: '#78716c', fontSize: '0.78rem' }}>Descuento Bs</span>
                     <input
-                      type="number"
-                      min="0"
-                      max={Math.max(0, subtotal)}
-                      step="0.01"
-                      value={discountAmountFieldValue}
-                      onChange={(e) => handleDiscountAmountChange(e.target.value)}
+                      {...discountFieldProps('amount')}
                       style={{
                         width: '100%',
                         padding: '8px',
@@ -1800,12 +1816,7 @@ export default function QuoteTool({ token, user }) {
                   <label style={{ display: 'grid', gap: '4px' }}>
                     <span style={{ color: '#78716c', fontSize: '0.78rem' }}>Total objetivo Bs</span>
                     <input
-                      type="number"
-                      min="0"
-                      max={Math.max(0, subtotal)}
-                      step="0.01"
-                      value={targetTotalFieldValue}
-                      onChange={(e) => handleTargetTotalChange(e.target.value)}
+                      {...discountFieldProps('target')}
                       style={{
                         width: '100%',
                         padding: '8px',
