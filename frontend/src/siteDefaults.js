@@ -114,12 +114,14 @@ export const DEFAULT_HOME = {
             "city": "Cochabamba",
             "kind": "Fábrica + Showroom",
             "address": "Av. Elías Meneses y Llaunquenquiri, Zona El Paso",
+            "maps": "https://www.google.com/maps/search/?api=1&query=-17.362016%2C-66.256613",
             "image": ""
           },
           {
             "city": "Santa Cruz",
             "kind": "Tienda",
             "address": "Av. Prefecto Rivas y Lagunillas, Zona Alto San Pedro",
+            "maps": "https://www.google.com/maps/search/?api=1&query=-17.808547%2C-63.189812",
             "image": ""
           }
         ],

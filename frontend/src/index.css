@@ -12591,6 +12591,8 @@ button.vc-kpi {
 .lp-store-list div { display: flex; flex-direction: column; gap: 2px; }
 .lp-store-list em { font-style: normal; font-size: 0.82rem; color: var(--lp-red); font-weight: 600; }
 .lp-store-list span { font-size: 0.88rem; color: var(--lp-muted); line-height: 1.4; }
+.lp-store-map { font-size: 0.84rem; font-weight: 700; color: var(--lp-red); text-decoration: none; margin-top: 2px; }
+.lp-store-map:hover { text-decoration: underline; }
 
 /* Combos */
 .lp-combos { background: var(--lp-charcoal); color: #fff; }

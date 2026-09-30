@@ -97,6 +97,7 @@ function Facts({ section }) {
                   <strong>{store.city}</strong>
                   {store.kind && <em>{store.kind}</em>}
                   {store.address && <span>{store.address}</span>}
+                  {store.maps && <a className="lp-store-map" href={store.maps} target="_blank" rel="noopener noreferrer">Cómo llegar en Google Maps →</a>}
                 </div>
               </li>
             ))}
