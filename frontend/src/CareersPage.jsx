@@ -27,7 +27,7 @@ export default function CareersPage() {
 
   return (
     <div className="public-page">
-      <PublicNav />
+      <PublicNav showLogin={false} />
 
       <main className="public-main">
         <p className="landing-eyebrow">Trabaja con nosotros</p>
@@ -88,6 +88,8 @@ export default function CareersPage() {
         <span>PCX · Hecho en Bolivia</span>
         <span className="landing-footer-dot">·</span>
         <span>Cochabamba · Santa Cruz</span>
+        <span className="landing-footer-dot">·</span>
+        <Link to="/login" className="landing-footer-login">Ingresar</Link>
       </footer>
     </div>
   );

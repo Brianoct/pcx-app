@@ -32,6 +32,8 @@ if (typeof window !== 'undefined') {
 }
 
 const toMoney = (value) => Number(value || 0).toFixed(2);
+// Porcentajes con hasta 2 decimales (3.0303030303% → 3.03%).
+const formatPercent = (value) => Number(Number(value || 0).toFixed(2)).toString();
 
 const truncate = (value = '', max = 56) => {
   const text = String(value || '');
@@ -283,11 +285,11 @@ export function generateModernQuotePdf({
   const summaryLines = [
     { label: 'Subtotal', value: `${toMoney(subtotal)} Bs` },
     ...(Number(discountPercent || 0) > 0
-      ? [{ label: `Descuento (${Number(discountPercent)}%)`, value: `${toMoney(discountValue)} Bs` }]
+      ? [{ label: `Descuento (${formatPercent(discountPercent)}%)`, value: `${toMoney(discountValue)} Bs` }]
       : []),
     // Promo de accesorios: % aplicado solo a las líneas de accesorios.
     ...(accessoryDiscount && Number(accessoryDiscount.amount || 0) > 0
-      ? [{ label: `Dcto accesorios (${Number(accessoryDiscount.percent || 0)}%)`, value: `-${toMoney(accessoryDiscount.amount)} Bs` }]
+      ? [{ label: `Dcto accesorios (${formatPercent(accessoryDiscount.percent)}%)`, value: `-${toMoney(accessoryDiscount.amount)} Bs` }]
       : []),
     // Envío local cotizado desde el GPS del cliente: línea propia, después
     // del descuento (el descuento aplica solo a productos).
