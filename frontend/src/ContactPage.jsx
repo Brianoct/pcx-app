@@ -7,23 +7,26 @@ const WHATSAPP_NUMBER = '59169618264';
 const WHATSAPP_MESSAGE = 'Hola PCX, quiero conocer sus productos de organización.';
 const PHONE_DISPLAY = '+591 696 18264';
 
-// Sedes (direcciones confirmadas por Brian, 2026-09-12). El enlace abre el
-// punto en Google Maps con la dirección tal cual, para navegar hasta ahí.
+// Sedes (direcciones confirmadas por Brian, 2026-09-12; coordenadas exactas
+// 2026-09-30). El enlace abre el punto exacto en Google Maps: buscar por la
+// dirección escrita caía en el lugar equivocado.
 const SEDES = [
   {
     key: 'cbba',
     title: 'Fábrica PCX · Cochabamba',
     address: 'Av. Elías Meneses y Llaunquenquiri, Zona El Paso',
-    city: 'Cochabamba, Bolivia'
+    city: 'Cochabamba, Bolivia',
+    coords: '-17.362016,-66.256613'
   },
   {
     key: 'scz',
     title: 'Sucursal · Santa Cruz',
     address: 'Av. Prefecto Rivas y Lagunillas, Zona Alto San Pedro',
-    city: 'Santa Cruz de la Sierra, Bolivia'
+    city: 'Santa Cruz de la Sierra, Bolivia',
+    coords: '-17.808547,-63.189812'
   }
 ];
-const mapsUrl = (sede) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${sede.address}, ${sede.city}`)}`;
+const mapsUrl = (sede) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(sede.coords)}`;
 
 // Horario de atención (confirmado por Brian, 2026-09-12).
 const HORARIO = [

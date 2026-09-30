@@ -228,8 +228,8 @@ function FactsEditor({ section, set, token }) {
       <TextField label="Título" value={stores.title} onChange={(v) => set(['stores', 'title'], v)} />
       <TextField label="Subtítulo" value={stores.subtitle} onChange={(v) => set(['stores', 'subtitle'], v)} />
       <ListEditor label="Tiendas" items={stores.items} onChange={(v) => set(['stores', 'items'], v)} token={token} max={5} addLabel="Tienda"
-        fields={[{ key: 'city', label: 'Ciudad' }, { key: 'kind', label: 'Tipo (fábrica, tienda…)' }, { key: 'address', label: 'Dirección' }, { key: 'image', label: 'Foto', type: 'image' }]}
-        newItem={{ city: '', kind: '', address: '', image: '' }} />
+        fields={[{ key: 'city', label: 'Ciudad' }, { key: 'kind', label: 'Tipo (fábrica, tienda…)' }, { key: 'address', label: 'Dirección' }, { key: 'maps', label: 'Enlace de Google Maps', hint: 'compartir → copiar enlace', placeholder: 'https://maps.app.goo.gl/…' }, { key: 'image', label: 'Foto', type: 'image' }]}
+        newItem={{ city: '', kind: '', address: '', maps: '', image: '' }} />
       <TextField label="Título de la nota" value={stores.note_title} onChange={(v) => set(['stores', 'note_title'], v)} />
       <TextField label="Nota" value={stores.note} onChange={(v) => set(['stores', 'note'], v)} />
     </>
