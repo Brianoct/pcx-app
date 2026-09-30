@@ -40,6 +40,7 @@ const SECTION_LABELS = {
   hero: 'Portada',
   facts: 'Precios · Materiales · Tiendas',
   combos: 'Combos y compra personalizable',
+  quote: 'Arma tu pedido (cotizador)',
   video: 'Video educativo',
   gallery: 'Talleres reales (antes / después)',
   testimonials: 'Testimonios',
@@ -48,7 +49,8 @@ const SECTION_LABELS = {
 
 const NAV_TARGETS = [
   { value: 'top', label: 'Arriba de todo' },
-  { value: 'combos', label: 'Combos / productos' },
+  { value: 'cotizar', label: 'Arma tu pedido (cotizador)' },
+  { value: 'combos', label: 'Combos' },
   { value: 'tiendas', label: 'Tiendas físicas' },
   { value: 'video', label: 'Video' },
   { value: 'galeria', label: 'Talleres reales' },
@@ -247,9 +249,26 @@ function CombosEditor({ section, set, token }) {
       <TextField label="Título" value={custom.title} onChange={(v) => set(['custom', 'title'], v)} />
       <TextField label="Texto" value={custom.body} onChange={(v) => set(['custom', 'body'], v)} multiline />
       <TextField label="Botón" value={custom.cta_label} onChange={(v) => set(['custom', 'cta_label'], v)} />
-      <SelectField label="El botón lleva a" value={custom.cta_to || '/catalogos'} onChange={(v) => set(['custom', 'cta_to'], v)}
-        options={NAV_TARGETS.filter((t) => t.value.startsWith('/'))} />
+      <SelectField label="El botón lleva a" value={custom.cta_to || 'cotizar'} onChange={(v) => set(['custom', 'cta_to'], v)}
+        options={NAV_TARGETS.filter((t) => t.value !== 'top')} />
       <ImageField label="Foto de fondo" value={section.image} onChange={(v) => set(['image'], v)} token={token} />
+    </>
+  );
+}
+
+function QuoteEditor({ section, set }) {
+  return (
+    <>
+      <TextField label="Título" value={section.title} onChange={(v) => set(['title'], v)} />
+      <TextField label="Subtítulo" value={section.subtitle} onChange={(v) => set(['subtitle'], v)} multiline />
+      <label className="se-check">
+        <input type="checkbox" checked={section.show_combos !== false} onChange={(e) => set(['show_combos'], e.target.checked)} />
+        <span>Mostrar también los combos</span>
+      </label>
+      <TextField label="Botón de envío" value={section.cta_label} onChange={(v) => set(['cta_label'], v)} />
+      <TextField label="Primera línea del mensaje de WhatsApp" value={section.message_intro} onChange={(v) => set(['message_intro'], v)} hint="después va la lista de productos y el total" />
+      <TextField label="Nota bajo los productos" value={section.note} onChange={(v) => set(['note'], v)} />
+      <p className="se-empty">Los productos, fotos y precios son los mismos de Cotizar (Admin › Productos). Aquí solo se edita el texto.</p>
     </>
   );
 }
@@ -309,6 +328,7 @@ const SECTION_EDITORS = {
   hero: HeroEditor,
   facts: FactsEditor,
   combos: CombosEditor,
+  quote: QuoteEditor,
   video: VideoEditor,
   gallery: GalleryEditor,
   testimonials: TestimonialsEditor,
@@ -531,7 +551,7 @@ export default function SiteEditor({ token }) {
         <div className="se-preview" ref={previewRef}>
           <div className="se-preview-stage" style={{ width: previewWidth, zoom: previewScale }}>
             <div className="se-preview-page" onClickCapture={(e) => { const a = e.target.closest('a'); if (a) e.preventDefault(); }}>
-              <LandingContent content={draft} />
+              <LandingContent content={draft} preview />
             </div>
           </div>
         </div>
