@@ -41,6 +41,8 @@ const PANEL_KEYS = [
   'marketing_promos',
   // Clientes (CRM) en modo lectura: Marketing filtra y exporta, no edita.
   'clientes_lectura',
+  // Sitio web público: editar y publicar el contenido del inicio.
+  'sitio_web',
   'admin'
 ];
 
@@ -73,6 +75,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     marketing_inversion: false,
     marketing_promos: false,
     clientes_lectura: false,
+    sitio_web: false,
     admin: false
   };
 
@@ -134,7 +137,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       marketing_calendario: true,
       marketing_inversion: true,
       marketing_promos: true,
-      clientes_lectura: true
+      clientes_lectura: true,
+      sitio_web: true
     };
   }
 
@@ -146,7 +150,8 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
       marketing_calendario: true,
       marketing_inversion: true,
       marketing_promos: true,
-      clientes_lectura: true
+      clientes_lectura: true,
+      sitio_web: true
     };
   }
 

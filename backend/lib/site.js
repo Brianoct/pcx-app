@@ -39,7 +39,6 @@ const DEFAULT_HOME = {
     {
       type: 'facts',
       enabled: true,
-      image: '/menu-images/T9495N.jpg',
       prices: {
         title: 'Precios',
         subtitle: 'Desde Bs 400 hasta Bs 2.000',
@@ -130,6 +129,62 @@ const DEFAULT_HOME = {
   footer: { text: 'PCX · Hecho en Bolivia · Cochabamba · Santa Cruz' }
 };
 
+// Limpieza del contenido que manda el editor: solo texto, números, booleanos,
+// listas y objetos; textos acotados; sin claves raras. El diseño no confía
+// en nada más que eso (React escapa el texto al renderizar).
+const MAX_CONTENT_BYTES = 400 * 1024;
+const MAX_TEXT = 4000;
+const MAX_DEPTH = 8;
+
+const cleanValue = (value, depth = 0) => {
+  if (depth > MAX_DEPTH) return null;
+  if (typeof value === 'string') return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').slice(0, MAX_TEXT);
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'boolean' || value === null) return value;
+  if (Array.isArray(value)) return value.slice(0, 200).map((item) => cleanValue(item, depth + 1));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (!/^[a-z0-9_]{1,40}$/i.test(key)) continue;
+      const cleaned = cleanValue(item, depth + 1);
+      if (cleaned !== undefined) out[key] = cleaned;
+    }
+    return out;
+  }
+  return undefined;
+};
+
+const sanitizeHomeContent = (raw) => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    const err = new Error('Contenido inválido');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (Buffer.byteLength(JSON.stringify(raw)) > MAX_CONTENT_BYTES) {
+    const err = new Error('El contenido es demasiado grande. Las fotos deben subirse como archivo, no pegarse como texto.');
+    err.statusCode = 400;
+    throw err;
+  }
+  const content = cleanValue(raw);
+  if (!Array.isArray(content.sections)) {
+    const err = new Error('El contenido necesita una lista de secciones');
+    err.statusCode = 400;
+    throw err;
+  }
+  content.version = 1;
+  return content;
+};
+
+// Claves de fotos (/api/site-assets/<clave>/<token>) referenciadas en un JSON.
+const collectAssetKeys = (content) => {
+  const keys = new Set();
+  const text = JSON.stringify(content || {});
+  const re = /\/api\/site-assets\/([a-z0-9_-]{1,80})\//g;
+  let match;
+  while ((match = re.exec(text)) !== null) keys.add(match[1]);
+  return keys;
+};
+
 const loadHomeContent = async ({ draft = false } = {}) => {
   const res = await pool.query('SELECT draft, published, published_at, updated_at FROM site_pages WHERE key = $1', ['home']);
   const row = res.rows[0];
@@ -137,4 +192,4 @@ const loadHomeContent = async ({ draft = false } = {}) => {
   return { content, published_at: row?.published_at || null, updated_at: row?.updated_at || null, is_default: !(draft ? (row?.draft || row?.published) : row?.published) };
 };
 
-module.exports = { DEFAULT_HOME, loadHomeContent };
+module.exports = { DEFAULT_HOME, loadHomeContent, sanitizeHomeContent, collectAssetKeys };

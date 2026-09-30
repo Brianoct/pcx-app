@@ -72,7 +72,6 @@ export const DEFAULT_HOME = {
     {
       "type": "facts",
       "enabled": true,
-      "image": "/menu-images/T9495N.jpg",
       "prices": {
         "title": "Precios",
         "subtitle": "Desde Bs 400 hasta Bs 2.000",

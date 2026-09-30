@@ -22,6 +22,7 @@ const NAV_ICONS = {
   '/promos': '%',
   '/marketing-inversion': '↗',
   '/combos': '❖',
+  '/sitio-web': '⌘',
   '/gastos': '$',
   '/comprar': '⊞',
   '/admin': '⛭',

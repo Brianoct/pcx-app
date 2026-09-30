@@ -30,6 +30,7 @@ const ACCESS_TEMPLATE = {
   marketing_inversion: false,
   marketing_promos: false,
   clientes_lectura: false,
+  sitio_web: false,
   admin: false
 };
 
@@ -62,6 +63,7 @@ const ROLE_DEFAULTS = {
     marketing_calendario: true,
     marketing_inversion: true,
     marketing_promos: true,
+    sitio_web: true,
     recepcion_panel: true,
     admin: true
   },
@@ -87,7 +89,8 @@ const ROLE_DEFAULTS = {
     marketing_calendario: true,
     marketing_inversion: true,
     marketing_promos: true,
-    clientes_lectura: true
+    clientes_lectura: true,
+    sitio_web: true
   },
   'marketing lider': {
     calendario: true,
@@ -95,7 +98,8 @@ const ROLE_DEFAULTS = {
     marketing_calendario: true,
     marketing_inversion: true,
     marketing_promos: true,
-    clientes_lectura: true
+    clientes_lectura: true,
+    sitio_web: true
   },
   produccion: {
     calendario: true,
@@ -235,6 +239,10 @@ const PANEL_KEY_ALIASES = {
   clientes_lectura: 'clientes_lectura',
   clienteslectura: 'clientes_lectura',
   crm_lectura: 'clientes_lectura',
+  sitio_web: 'sitio_web',
+  sitioweb: 'sitio_web',
+  sitio: 'sitio_web',
+  website: 'sitio_web',
   marketing_inversion: 'marketing_inversion',
   marketinginversion: 'marketing_inversion',
   inversion: 'marketing_inversion',
@@ -347,7 +355,8 @@ export const ACCESS_GROUPS = [
       { key: 'marketing_inversion', label: 'Inversión (costos y retorno)' },
       { key: 'marketing_promos', label: 'Promos (envío gratis, sorteo, cupones)' },
       { key: 'marketing_combos', label: 'Combos' },
-      { key: 'clientes_lectura', label: 'Clientes (solo lectura: filtrar y exportar)' }
+      { key: 'clientes_lectura', label: 'Clientes (solo lectura: filtrar y exportar)' },
+      { key: 'sitio_web', label: 'Sitio web (editar y publicar el inicio público)' }
     ]
   },
   {

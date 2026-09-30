@@ -25,6 +25,7 @@ const LivePanel = lazy(() => import('./LivePanel'));
 const MarketingCalendar = lazy(() => import('./MarketingCalendar'));
 const InversionPanel = lazy(() => import('./InversionPanel'));
 const PromosPanel = lazy(() => import('./PromosPanel'));
+const SiteEditor = lazy(() => import('./SiteEditor'));
 const ForjaPanel = lazy(() => import('./ForjaPanel'));
 const CrmPanel = lazy(() => import('./CrmPanel'));
 const EnvioLocalPage = lazy(() => import('./EnvioLocalSettings'));
@@ -195,6 +196,12 @@ export const NAV_ITEMS = [
     render: (ctx) => <PromosPanel token={ctx.token} role={ctx.role} />
   },
   {
+    path: '/sitio-web',
+    label: 'Sitio web',
+    routeAccess: ['sitio_web', 'admin'],
+    render: (ctx) => <SiteEditor token={ctx.token} />
+  },
+  {
     path: '/calendario',
     label: 'Plan del día',
     routeAccess: ['calendario', 'admin'],
@@ -237,7 +244,7 @@ const SIDEBAR_SECTIONS = [
   { key: 'almacen', label: 'Almacén', paths: ['/pedidos', '/inventory', '/recepcion', '/envio-local'] },
   { key: 'produccion', label: 'Producción', paths: ['/produccion-planificacion', '/produccion-kanban'] },
   { key: 'mejoras', label: 'Mejoras', paths: ['/mejoras', '/bono'] },
-  { key: 'marketing', label: 'Marketing', paths: ['/marketing-calendario', '/campanas', '/live', '/promos', '/marketing-inversion', '/combos'] },
+  { key: 'marketing', label: 'Marketing', paths: ['/marketing-calendario', '/campanas', '/live', '/promos', '/marketing-inversion', '/combos', '/sitio-web'] },
   { key: 'finanzas', label: 'Finanzas', paths: ['/gastos'] },
   { key: 'administracion', label: 'Administración', paths: ['/comprar', '/admin', '/dashboard'] }
 ];
