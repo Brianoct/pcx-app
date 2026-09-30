@@ -20,5 +20,6 @@ export const videoEmbedUrl = (url) => {
   if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
   const tk = value.match(/tiktok\.com\/.*\/video\/(\d+)/);
   if (tk) return `https://www.tiktok.com/embed/v2/${tk[1]}`;
-  return value;
+  // Solo YouTube o TikTok: cualquier otro enlace no se incrusta.
+  return '';
 };
