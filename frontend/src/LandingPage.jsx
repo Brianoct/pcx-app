@@ -10,6 +10,7 @@ import PublicNav from './PublicNav';
 import { apiRequest } from './apiClient';
 import { DEFAULT_HOME } from './siteDefaults';
 import { imageSrc, videoEmbedUrl } from './siteMedia';
+import PublicQuote from './PublicQuote';
 
 const waUrl = (whatsapp) => {
   const number = String(whatsapp?.number || '').replace(/\D/g, '');
@@ -138,8 +139,9 @@ function Combos({ section }) {
           <div className="lp-custom-text">
             <h3>{custom.title}</h3>
             {custom.body && <p>{custom.body}</p>}
-            {custom.cta_label && (
-              <Link className="lp-btn lp-btn-outline" to={custom.cta_to || '/catalogos'}>{custom.cta_label}</Link>
+            {custom.cta_label && (String(custom.cta_to || '').startsWith('/')
+              ? <Link className="lp-btn lp-btn-outline" to={custom.cta_to}>{custom.cta_label}</Link>
+              : <button type="button" className="lp-btn lp-btn-outline" onClick={() => document.getElementById(custom.cta_to || 'cotizar')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{custom.cta_label}</button>
             )}
           </div>
         </article>
@@ -245,10 +247,13 @@ function Closing({ section, whatsappUrl }) {
   );
 }
 
+const Quote = ({ section, content, preview }) => <PublicQuote section={section} whatsapp={content.whatsapp} preview={preview} />;
+
 const SECTION_COMPONENTS = {
   hero: Hero,
   facts: Facts,
   combos: Combos,
+  quote: Quote,
   video: Video,
   gallery: Gallery,
   testimonials: Testimonials,
@@ -257,7 +262,7 @@ const SECTION_COMPONENTS = {
 
 // Render puro del contenido: lo usa la página pública y también la vista
 // previa del editor de Marketing (con el borrador en vez de lo publicado).
-export function LandingContent({ content }) {
+export function LandingContent({ content, preview = false }) {
   const whatsappUrl = waUrl(content.whatsapp);
   const sections = (content.sections || []).filter((s) => s && s.enabled !== false);
   return (
@@ -266,7 +271,7 @@ export function LandingContent({ content }) {
       <main>
         {sections.map((section, i) => {
           const Component = SECTION_COMPONENTS[section.type];
-          return Component ? <Component key={`${section.type}-${i}`} section={section} whatsappUrl={whatsappUrl} /> : null;
+          return Component ? <Component key={`${section.type}-${i}`} section={section} content={content} whatsappUrl={whatsappUrl} preview={preview} /> : null;
         })}
       </main>
       <footer className="lp-footer">

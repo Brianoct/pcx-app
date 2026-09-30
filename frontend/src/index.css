@@ -12611,6 +12611,36 @@ button.vc-kpi {
 .lp-custom-text h3 { font-size: 1.5rem; font-weight: 800; }
 .lp-custom-text p { color: rgba(255, 255, 255, 0.82); line-height: 1.5; max-width: 40ch; }
 
+/* Arma tu pedido (cotizador público): reutiliza la vitrina de Cotizar */
+.lp-quote { background: var(--lp-paper); }
+.lp-quote-picker { max-width: 1200px; margin: 0 auto; }
+.lp-quote .quote-catalog-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); margin-bottom: 12px; }
+.lp-quote .quote-catalog-search { max-width: 260px; }
+.lp-quote .quote-catalog-add { background: var(--lp-charcoal); color: #fff; border-color: var(--lp-charcoal); }
+.lp-quote .quote-catalog-add:hover { background: #000; }
+.lp-quote .quote-catalog-price { color: var(--lp-red); }
+.lp-quote-loading, .lp-quote-error { text-align: center; color: var(--lp-muted); padding: 30px 0; }
+.lp-quote-error { color: #b91c1c; }
+.lp-quote-note { text-align: center; max-width: 1200px; margin: 0 auto 16px; }
+.lp-quote-bar {
+  position: sticky; bottom: 12px; z-index: 5;
+  max-width: 1200px; margin: 0 auto;
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 20px;
+  padding: 14px 18px; border-radius: 16px;
+  background: #fff; border: 1px solid var(--lp-line); box-shadow: 0 12px 34px rgba(28, 25, 23, 0.14);
+}
+.lp-quote-bar.is-active { background: var(--lp-charcoal); color: #fff; border-color: transparent; }
+.lp-quote-summary { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 320px; }
+.lp-quote-hint { color: var(--lp-muted); }
+.lp-quote-lines { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.86rem; color: rgba(255, 255, 255, 0.78); }
+.lp-quote-lines li { display: inline-flex; align-items: center; gap: 6px; }
+.lp-quote-lines button { width: 18px; height: 18px; border-radius: 50%; border: 0; background: rgba(255, 255, 255, 0.16); color: #fff; font-size: 0.72rem; line-height: 1; cursor: pointer; padding: 0; }
+.lp-quote-lines button:hover { background: var(--lp-red); }
+.lp-btn.is-disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.lp-btn.is-disabled:hover { transform: none; }
+.lp-quote-sent { text-align: center; margin-top: 12px; color: var(--lp-muted); font-size: 0.9rem; }
+.se-check { display: inline-flex; align-items: center; gap: 8px; font-size: 0.86rem; font-weight: 600; color: #57534e; cursor: pointer; }
+
 /* Video */
 .lp-video { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(24px, 5cqw, 60px); align-items: center; background: #fff; }
 .lp-badge { display: inline-block; background: var(--lp-red); color: #fff; font-size: 0.74rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 12px; border-radius: 999px; margin-bottom: 14px; }
@@ -12685,6 +12715,10 @@ button.vc-kpi {
   .lp-combo { grid-template-columns: 92px 1fr; }
   .lp-combo img { width: 92px; height: 78px; }
   .lp-footer { flex-direction: column; align-items: flex-start; }
+  .lp-quote .quote-catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .lp-quote .quote-catalog-image { aspect-ratio: 1; }
+  .lp-quote .quote-catalog-search { max-width: none; }
+  .lp-quote-bar { padding: 10px 14px; bottom: 8px; }
 }
 
 /* ============ Editor del sitio público (Marketing) ============ */

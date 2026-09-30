@@ -12,7 +12,8 @@ const DEFAULT_HOME = {
   },
   nav: [
     { label: 'Inicio', target: 'top' },
-    { label: 'Productos', target: 'combos' },
+    { label: 'Productos', target: 'cotizar' },
+    { label: 'Combos', target: 'combos' },
     { label: 'Talleres reales', target: 'galeria' },
     { label: 'Testimonios', target: 'testimonios' },
     { label: 'Ubicaciones', target: 'tiendas' },
@@ -81,10 +82,20 @@ const DEFAULT_HOME = {
       custom: {
         title: 'Compra personalizable',
         body: 'Elige el tablero, el color y los accesorios que necesitas. Crea tu propio combo.',
-        cta_label: 'Ver catálogo completo',
-        cta_to: '/catalogos'
+        cta_label: 'Armar mi pedido',
+        cta_to: 'cotizar'
       },
       image: '/menu-images/T9495R.jpg'
+    },
+    {
+      type: 'quote',
+      enabled: true,
+      title: 'Arma tu pedido',
+      subtitle: 'Elige tus productos y envíanos el pedido por WhatsApp. Te confirmamos precio final, envío y forma de pago.',
+      show_combos: true,
+      cta_label: 'Enviar pedido',
+      message_intro: 'Hola PCX, quiero hacer este pedido:',
+      note: 'Precios referenciales sin factura. El envío se cotiza según la ciudad.'
     },
     {
       type: 'video',
@@ -185,11 +196,28 @@ const collectAssetKeys = (content) => {
   return keys;
 };
 
+// Cuando el código suma una sección nueva (p. ej. el cotizador), el
+// contenido ya guardado no la tiene: se agrega con su valor inicial, después
+// de la última sección que la precede en el orden de fábrica.
+const ensureSections = (content) => {
+  if (!content || !Array.isArray(content.sections)) return content;
+  const present = new Set(content.sections.map((s) => s?.type));
+  const sections = [...content.sections];
+  DEFAULT_HOME.sections.forEach((def, defIndex) => {
+    if (present.has(def.type)) return;
+    const previousTypes = DEFAULT_HOME.sections.slice(0, defIndex).map((s) => s.type);
+    let insertAt = 0;
+    sections.forEach((s, i) => { if (previousTypes.includes(s?.type)) insertAt = i + 1; });
+    sections.splice(insertAt, 0, JSON.parse(JSON.stringify(def)));
+  });
+  return { ...content, sections };
+};
+
 const loadHomeContent = async ({ draft = false } = {}) => {
   const res = await pool.query('SELECT draft, published, published_at, updated_at FROM site_pages WHERE key = $1', ['home']);
   const row = res.rows[0];
-  const content = (draft ? (row?.draft || row?.published) : row?.published) || DEFAULT_HOME;
+  const content = ensureSections((draft ? (row?.draft || row?.published) : row?.published) || DEFAULT_HOME);
   return { content, published_at: row?.published_at || null, updated_at: row?.updated_at || null, is_default: !(draft ? (row?.draft || row?.published) : row?.published) };
 };
 
-module.exports = { DEFAULT_HOME, loadHomeContent, sanitizeHomeContent, collectAssetKeys };
+module.exports = { DEFAULT_HOME, loadHomeContent, ensureSections, sanitizeHomeContent, collectAssetKeys };

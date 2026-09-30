@@ -5,7 +5,9 @@ const { authenticateToken } = require('../lib/authMiddleware');
 const { decodeImageDataUrl } = require('../lib/imageAssets');
 const { sanitizePanelAccess } = require('../lib/rbac');
 const { loadUserContext } = require('../lib/users');
-const { DEFAULT_HOME, loadHomeContent, sanitizeHomeContent, collectAssetKeys } = require('../lib/site');
+const { DEFAULT_HOME, loadHomeContent, ensureSections, sanitizeHomeContent, collectAssetKeys } = require('../lib/site');
+const { loadProductCatalogRows } = require('../lib/products');
+const { normalizeCatalogImageUrl } = require('../lib/customerMenu');
 
 const router = express.Router();
 
@@ -44,6 +46,58 @@ router.get('/api/site-assets/:key/:token', async (req, res) => {
   }
 });
 
+// Productos para el cotizador público: los mismos productos, fotos y precios
+// (sin factura) que usa Ventas en Cotizar, más los combos. Sin login.
+const normalizeLine = (value) => {
+  const v = String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  return v === 'acero' || v === 'armonia' ? v : null;
+};
+const normalizeType = (value) => {
+  const v = String(value || '').toLowerCase().trim();
+  return v === 'tablero' || v === 'accesorio' || v === 'combo' ? v : null;
+};
+
+router.get('/api/site/products', async (req, res) => {
+  try {
+    const rows = await loadProductCatalogRows({ includeInactive: false });
+    const products = rows
+      .filter((row) => Number(row.sf || 0) > 0)
+      .map((row) => ({
+        sku: row.sku,
+        name: row.name,
+        price: Number(row.sf || 0),
+        image_url: normalizeCatalogImageUrl(req, row.image_url || '', row.sku),
+        product_type: normalizeType(row.product_type) || (row.sku.startsWith('T') ? 'tablero' : 'accesorio'),
+        product_line: normalizeLine(row.product_line)
+      }));
+    const combosRes = await pool.query(
+      `SELECT c.id, c.name, c.sf_price, c.image_url, c.product_line,
+              COALESCE(json_agg(json_build_object('sku', ci.sku, 'quantity', ci.quantity)) FILTER (WHERE ci.sku IS NOT NULL), '[]') AS items
+       FROM combos c
+       LEFT JOIN combo_items ci ON ci.combo_id = c.id
+       GROUP BY c.id
+       ORDER BY c.created_at DESC`
+    );
+    const combos = combosRes.rows
+      .filter((combo) => Number(combo.sf_price || 0) > 0)
+      .map((combo) => ({
+        sku: `COMBO_${combo.id}`,
+        name: `${combo.name} (Combo)`,
+        price: Number(combo.sf_price || 0),
+        image_url: combo.image_url || null,
+        product_type: 'combo',
+        product_line: normalizeLine(combo.product_line),
+        is_combo: true,
+        items: Array.isArray(combo.items) ? combo.items : []
+      }));
+    res.set('Cache-Control', 'public, max-age=120');
+    res.json({ products, combos });
+  } catch (err) {
+    console.error('Error loading site products:', err);
+    res.status(500).json({ error: 'No se pudieron cargar los productos' });
+  }
+});
+
 // ─── Editor (Marketing / Admin) ─────────────────────────────────────────────
 
 const ensureSiteAccess = async (req, res) => {
@@ -68,8 +122,8 @@ const EDITOR_SELECT = `
   WHERE p.key = 'home'`;
 
 const editorPayload = (row) => ({
-  draft: row?.draft || row?.published || DEFAULT_HOME,
-  published: row?.published || null,
+  draft: ensureSections(row?.draft || row?.published || DEFAULT_HOME),
+  published: row?.published ? ensureSections(row.published) : null,
   published_at: row?.published_at || null,
   updated_at: row?.updated_at || null,
   updated_by_name: row?.updated_by_name || null,

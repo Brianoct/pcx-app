@@ -15,6 +15,10 @@ export const DEFAULT_HOME = {
     },
     {
       "label": "Productos",
+      "target": "cotizar"
+    },
+    {
+      "label": "Combos",
       "target": "combos"
     },
     {
@@ -145,10 +149,20 @@ export const DEFAULT_HOME = {
       "custom": {
         "title": "Compra personalizable",
         "body": "Elige el tablero, el color y los accesorios que necesitas. Crea tu propio combo.",
-        "cta_label": "Ver catálogo completo",
-        "cta_to": "/catalogos"
+        "cta_label": "Armar mi pedido",
+        "cta_to": "cotizar"
       },
       "image": "/menu-images/T9495R.jpg"
+    },
+    {
+      "type": "quote",
+      "enabled": true,
+      "title": "Arma tu pedido",
+      "subtitle": "Elige tus productos y envíanos el pedido por WhatsApp. Te confirmamos precio final, envío y forma de pago.",
+      "show_combos": true,
+      "cta_label": "Enviar pedido",
+      "message_intro": "Hola PCX, quiero hacer este pedido:",
+      "note": "Precios referenciales sin factura. El envío se cotiza según la ciudad."
     },
     {
       "type": "video",
