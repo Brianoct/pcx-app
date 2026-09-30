@@ -63,7 +63,7 @@ const DEFAULT_HOME = {
         title: 'Tiendas físicas',
         subtitle: 'Visítanos en nuestras tiendas:',
         items: [
-          { city: 'Cochabamba', kind: 'Fábrica + Showroom', address: 'Av. Elías Meneses y Llaunquenquiri, Zona El Paso', maps: 'https://www.google.com/maps/search/?api=1&query=-17.362016%2C-66.256613', image: '' },
+          { city: 'Cochabamba', kind: 'Fábrica + Showroom', address: 'Av. Elías Meneses y Llaunquenquiri, Zona El Paso', maps: 'https://maps.app.goo.gl/HRVW4sFXYWUmFQea8', image: '' },
           { city: 'Santa Cruz', kind: 'Tienda', address: 'Av. Prefecto Rivas y Lagunillas, Zona Alto San Pedro', maps: 'https://maps.app.goo.gl/xtVC8d6JJ2qLwNPY9', image: '' }
         ],
         note_title: 'Envíos a nivel nacional',

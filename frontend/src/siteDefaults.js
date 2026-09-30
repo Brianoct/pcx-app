@@ -114,7 +114,7 @@ export const DEFAULT_HOME = {
             "city": "Cochabamba",
             "kind": "Fábrica + Showroom",
             "address": "Av. Elías Meneses y Llaunquenquiri, Zona El Paso",
-            "maps": "https://www.google.com/maps/search/?api=1&query=-17.362016%2C-66.256613",
+            "maps": "https://maps.app.goo.gl/HRVW4sFXYWUmFQea8",
             "image": ""
           },
           {

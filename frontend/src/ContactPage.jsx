@@ -16,7 +16,7 @@ const SEDES = [
     title: 'Fábrica PCX · Cochabamba',
     address: 'Av. Elías Meneses y Llaunquenquiri, Zona El Paso',
     city: 'Cochabamba, Bolivia',
-    coords: '-17.362016,-66.256613'
+    maps: 'https://maps.app.goo.gl/HRVW4sFXYWUmFQea8'
   },
   {
     key: 'scz',
