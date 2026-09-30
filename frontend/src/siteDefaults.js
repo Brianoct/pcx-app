@@ -121,7 +121,7 @@ export const DEFAULT_HOME = {
             "city": "Santa Cruz",
             "kind": "Tienda",
             "address": "Av. Prefecto Rivas y Lagunillas, Zona Alto San Pedro",
-            "maps": "https://www.google.com/maps/search/?api=1&query=-17.808547%2C-63.189812",
+            "maps": "https://maps.app.goo.gl/xtVC8d6JJ2qLwNPY9",
             "image": ""
           }
         ],

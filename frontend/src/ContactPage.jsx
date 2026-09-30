@@ -23,10 +23,12 @@ const SEDES = [
     title: 'Sucursal · Santa Cruz',
     address: 'Av. Prefecto Rivas y Lagunillas, Zona Alto San Pedro',
     city: 'Santa Cruz de la Sierra, Bolivia',
-    coords: '-17.808547,-63.189812'
+    // Enlace de Compartir del local «PCX SCZ» en Google Maps: abre la ficha
+    // del negocio, no solo un punto.
+    maps: 'https://maps.app.goo.gl/xtVC8d6JJ2qLwNPY9'
   }
 ];
-const mapsUrl = (sede) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(sede.coords)}`;
+const mapsUrl = (sede) => sede.maps || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(sede.coords)}`;
 
 // Horario de atención (confirmado por Brian, 2026-09-12).
 const HORARIO = [
