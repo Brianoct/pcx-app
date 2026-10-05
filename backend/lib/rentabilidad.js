@@ -34,7 +34,7 @@ const computeRentabilidad = async ({ month, year } = {}) => {
        JOIN production_material_catalog c ON c.id = m.material_id`
     ),
     pool.query(
-      `SELECT UPPER(s.sku) AS sku, s.std_minutes, s.equipment_id,
+      `SELECT UPPER(s.sku) AS sku, s.std_minutes, s.pieces_per_run, s.equipment_id,
               e.replacement_cost_bs, e.useful_life_months,
               e.monthly_extra_cost_bs, e.monthly_capacity_units
        FROM product_process_steps s
@@ -102,7 +102,7 @@ const computeRentabilidad = async ({ month, year } = {}) => {
   }
   const equipCost = new Map();
   for (const row of stepsRes.rows) {
-    equipCost.set(row.sku, (equipCost.get(row.sku) || 0) + equipmentCostForMinutes(row.equipment_id !== null ? row : null, row.std_minutes));
+    equipCost.set(row.sku, (equipCost.get(row.sku) || 0) + equipmentCostForMinutes(row.equipment_id !== null ? row : null, Number(row.std_minutes || 0) / Math.max(1, Number(row.pieces_per_run) || 1)));
   }
   // Costeo manual (fallback): suma de componentes SIN la utilidad.
   const manualCost = new Map();

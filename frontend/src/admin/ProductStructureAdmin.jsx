@@ -30,6 +30,19 @@ const equipmentHourlyCost = (equipment) => {
 const equipmentCostForMinutes = (equipment, minutes) => equipmentHourlyCost(equipment) * ((Number(minutes) || 0) / 60);
 const equipmentHasHours = (equipment) => Boolean(equipment) && Number(equipment.monthly_capacity_units || 0) > 0;
 
+// Tanda: std_minutes son minutos de máquina por corrida; pieces_per_run las
+// piezas que salen de cada corrida; attended_minutes los minutos de operador
+// por corrida (vacío = atiende toda la corrida). Por pieza:
+//   máquina = std / piezas · operador = (attended ?? std) / piezas
+const stepMinutes = (step) => {
+  const std = Number(step.std_minutes) || 0;
+  const pieces = Math.max(1, Number.parseInt(step.pieces_per_run, 10) || 1);
+  const attended = step.attended_minutes === '' || step.attended_minutes === null || step.attended_minutes === undefined
+    ? std
+    : Number(step.attended_minutes) || 0;
+  return { std, pieces, machine: std / pieces, labor: attended / pieces, batched: pieces > 1 || step.attended_minutes !== '' };
+};
+
 function ProductStructureAdmin({ token }) {
   const toast = useToast();
   const [products, setProducts] = useState([]);
@@ -108,7 +121,10 @@ function ProductStructureAdmin({ token }) {
         steps: (data?.steps || []).map((s) => ({
           process: s.process,
           std_minutes: s.std_minutes ?? '',
-          equipment_id: s.equipment_id ?? ''
+          equipment_id: s.equipment_id ?? '',
+          pieces_per_run: s.pieces_per_run ?? 1,
+          attended_minutes: s.attended_minutes ?? '',
+          batch_open: (Number(s.pieces_per_run) || 1) > 1 || (s.attended_minutes !== null && s.attended_minutes !== undefined)
         })),
         materials: (data?.materials || []).map((m) => ({
           material_id: m.material_id,
@@ -214,7 +230,7 @@ function ProductStructureAdmin({ token }) {
       const used = new Set(prev.steps.map((s) => s.process));
       const nextProcess = PROCESS_OPTIONS.find((p) => !used.has(p.value));
       if (!nextProcess) return prev;
-      return { ...prev, steps: [...prev.steps, { process: nextProcess.value, std_minutes: '', equipment_id: '' }] };
+      return { ...prev, steps: [...prev.steps, { process: nextProcess.value, std_minutes: '', equipment_id: '', pieces_per_run: 1, attended_minutes: '', batch_open: false }] };
     });
   };
 
@@ -248,23 +264,24 @@ function ProductStructureAdmin({ token }) {
     }, 0);
     const equipmentByStep = structure.steps.map((s) => {
       const eq = equipmentById.get(Number(s.equipment_id)) || null;
+      const mins = stepMinutes(s);
       return {
         process: s.process,
-        minutes: Number(s.std_minutes) || 0,
+        minutes: Number(mins.machine.toFixed(2)),
         equipment: eq,
         rate: equipmentHourlyCost(eq),
         missingHours: Boolean(eq) && !equipmentHasHours(eq),
-        cost: equipmentCostForMinutes(eq, s.std_minutes)
+        cost: equipmentCostForMinutes(eq, mins.machine)
       };
     });
     const equipmentCost = equipmentByStep.reduce((sum, s) => sum + s.cost, 0);
-    const totalMinutes = structure.steps.reduce((sum, s) => sum + (Number(s.std_minutes) || 0), 0);
-    // Mano de obra = Σ minutos del paso × tarifa de su proceso (o la general).
+    const totalMinutes = structure.steps.reduce((sum, s) => sum + stepMinutes(s).machine, 0);
+    // Mano de obra = Σ minutos de OPERADOR por pieza × tarifa de su proceso (o la general).
     const laborByStep = structure.steps.map((s) => ({
       process: s.process,
-      minutes: Number(s.std_minutes) || 0,
+      minutes: Number(stepMinutes(s).labor.toFixed(2)),
       rate: rateFor(s.process),
-      cost: ((Number(s.std_minutes) || 0) / 60) * rateFor(s.process)
+      cost: (stepMinutes(s).labor / 60) * rateFor(s.process)
     }));
     const laborCost = laborByStep.reduce((sum, s) => sum + s.cost, 0);
     const computedCost = materialsCost + equipmentCost + laborCost;
@@ -295,7 +312,9 @@ function ProductStructureAdmin({ token }) {
         steps: structure.steps.map((s) => ({
           process: s.process,
           std_minutes: s.std_minutes === '' ? null : Number(s.std_minutes),
-          equipment_id: s.equipment_id === '' ? null : Number(s.equipment_id)
+          equipment_id: s.equipment_id === '' ? null : Number(s.equipment_id),
+          pieces_per_run: Math.max(1, Number.parseInt(s.pieces_per_run, 10) || 1),
+          attended_minutes: s.attended_minutes === '' ? null : Number(s.attended_minutes)
         })),
         materials: structure.materials.map((m) => ({
           material_id: Number(m.material_id),
@@ -496,7 +515,9 @@ function ProductStructureAdmin({ token }) {
                           </option>
                         ))}
                       </select>
-                      <label className="est-minutes-wrap" title="Minutos estándar que UNA pieza ocupa en esta estación (no el lote completo ni el reloj de pared). Con ellos se calcula mano de obra y equipo, y el tablero estima el trabajo de cada lote.">
+                      <label className="est-minutes-wrap" title={step.batch_open
+                        ? 'Minutos de máquina por TANDA (una plancha de impresión, una plancha de láser). Se divide entre las piezas por tanda.'
+                        : 'Minutos estándar que UNA pieza ocupa en esta estación (no el lote completo ni el reloj de pared). Con ellos se calcula mano de obra y equipo, y el tablero estima el trabajo de cada lote.'}>
                         <input
                           type="number"
                           min="0"
@@ -506,8 +527,18 @@ function ProductStructureAdmin({ token }) {
                           onChange={(e) => updateStep(index, { std_minutes: e.target.value })}
                           className="est-minutes"
                         />
-                        <span>min/pza</span>
+                        <span>{step.batch_open ? 'min/tanda' : 'min/pza'}</span>
                       </label>
+                      <button
+                        type="button"
+                        className={`est-batch-toggle ${step.batch_open ? 'is-on' : ''}`}
+                        title="Por tanda: la máquina saca varias piezas de una corrida (plancha de impresión 3D, plancha de láser) y el operador no la atiende todo el tiempo"
+                        onClick={() => updateStep(index, step.batch_open
+                          ? { batch_open: false, pieces_per_run: 1, attended_minutes: '' }
+                          : { batch_open: true })}
+                      >
+                        {step.batch_open ? '▾ tanda' : '▸ tanda'}
+                      </button>
                       <select
                         value={step.equipment_id}
                         onChange={(e) => updateStep(index, { equipment_id: e.target.value })}
@@ -524,6 +555,31 @@ function ProductStructureAdmin({ token }) {
                         <button type="button" onClick={() => moveStep(index, 1)} disabled={index === structure.steps.length - 1} aria-label="Bajar">↓</button>
                         <button type="button" className="is-danger" onClick={() => removeStep(index)} aria-label="Quitar">✕</button>
                       </div>
+                      {step.batch_open && (() => {
+                        const mins = stepMinutes(step);
+                        return (
+                          <div className="est-batch-row">
+                            <label title="Piezas que salen de cada tanda (p. ej. 6 bandejas por plancha de impresión, 12 piezas por plancha de láser)">
+                              <input
+                                type="number" min="1" step="1"
+                                value={step.pieces_per_run}
+                                onChange={(e) => updateStep(index, { pieces_per_run: e.target.value })}
+                              />
+                              <span>pzas/tanda</span>
+                            </label>
+                            <label title="Minutos que el operador dedica a cada tanda (cargar, descargar, revisar). Vacío = atiende toda la tanda.">
+                              <input
+                                type="number" min="0" step="0.5"
+                                placeholder={String(mins.std)}
+                                value={step.attended_minutes}
+                                onChange={(e) => updateStep(index, { attended_minutes: e.target.value })}
+                              />
+                              <span>min operador/tanda</span>
+                            </label>
+                            <em>= máquina {mins.machine.toFixed(2)} min/pza · operador {mins.labor.toFixed(2)} min/pza</em>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -603,11 +659,11 @@ function ProductStructureAdmin({ token }) {
                   <div className="est-cost-grid">
                     <div><span>Materiales</span><strong>{money(preview.materialsCost)}</strong></div>
                     <div title={preview.equipmentByStep.filter((s) => s.equipment).map((s) => `${PROCESS_LABEL[s.process] || s.process}: ${s.equipment.name} ${s.missingHours ? 'sin horas/mes → 0' : `${s.rate.toFixed(2)} Bs/h × ${s.minutes} min = ${money(s.cost)}`}`).join('\n') || 'Sin equipos en la ruta'}>
-                      <span>Equipos (Bs/h × min)</span>
+                      <span>Equipos (Bs/h × {preview.totalMinutes.toFixed(1)} min máquina)</span>
                       <strong>{money(preview.equipmentCost)}</strong>
                     </div>
                     <div title={preview.laborByStep.filter((s) => s.minutes > 0).map((s) => `${PROCESS_LABEL[s.process] || s.process}: ${s.minutes} min × ${s.rate} Bs/h = ${money(s.cost)}`).join('\n')}>
-                      <span>Mano de obra ({preview.totalMinutes.toFixed(0)} min · por proceso)</span>
+                      <span>Mano de obra (operador · por proceso)</span>
                       <strong>{money(preview.laborCost)}</strong>
                     </div>
                     <div className="est-cost-total"><span>Costo total</span><strong>{money(preview.computedCost)}</strong></div>
@@ -645,6 +701,7 @@ function ProductStructureAdmin({ token }) {
           <h4 className="est-section-title" style={{ marginBottom: '4px' }}>Mediciones reales vs estándar</h4>
           <p style={{ color: '#78716c', fontSize: '0.82rem', margin: '0 0 12px' }}>
             Consumo registrado por operadores (muestreo aleatorio) y tiempos observados en el tablero, comparados con los valores estándar.
+            Tiempo real = minutos que el lote estuvo en la estación ÷ piezas del lote (mediana de 90 días; estancias de más de 7 días se descartan). Es reloj de pared: incluye esperas, así que suele superar al estándar.
           </p>
 
           {variance.materials?.length > 0 && (
@@ -685,9 +742,9 @@ function ProductStructureAdmin({ token }) {
                   <tr>
                     <th>Producto</th>
                     <th>Proceso</th>
-                    <th style={{ textAlign: 'right' }}>Estándar (min)</th>
-                    <th style={{ textAlign: 'right' }}>Real prom. (min)</th>
-                    <th style={{ textAlign: 'right' }}>Observaciones</th>
+                    <th style={{ textAlign: 'right' }}>Estándar (min/pza)</th>
+                    <th style={{ textAlign: 'right' }}>Real mediana (min/pza)</th>
+                    <th style={{ textAlign: 'right' }}>Lotes</th>
                     <th style={{ textAlign: 'right' }}>Δ%</th>
                   </tr>
                 </thead>

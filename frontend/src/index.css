@@ -7097,6 +7097,12 @@ img, video, canvas { max-width: 100%; }
 .est-minutes-wrap { display: inline-flex; align-items: center; gap: 4px; }
 .est-minutes-wrap > span { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
 .est-minutes { width: 74px; text-align: center; }
+.est-batch-toggle { min-height: 32px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-secondary); font-size: 0.74rem; font-weight: 700; cursor: pointer; }
+.est-batch-toggle.is-on { background: rgba(37, 99, 235, 0.1); color: #1d4ed8; border-color: rgba(37, 99, 235, 0.35); }
+.est-batch-row { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 6px 0 2px 34px; }
+.est-batch-row label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.74rem; color: var(--text-muted); }
+.est-step-row .est-batch-row input { width: 74px; text-align: center; min-height: 34px; }
+.est-batch-row em { font-style: normal; font-size: 0.78rem; font-weight: 700; color: #1d4ed8; }
 .est-warn { margin-bottom: 10px; padding: 8px 12px; border-radius: 8px; background: rgba(217, 119, 6, 0.12); border: 1px solid rgba(217, 119, 6, 0.4); color: #92400e; font-size: 0.84rem; }
 .est-warn.is-danger { background: rgba(220, 38, 38, 0.08); border-color: rgba(220, 38, 38, 0.4); color: #991b1b; }
 .est-equip { flex: 1 1 160px; min-width: 0; }
