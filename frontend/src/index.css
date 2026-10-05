@@ -7094,7 +7094,11 @@ img, video, canvas { max-width: 100%; }
   justify-content: center;
 }
 .est-step-row select:first-of-type { flex: 1 1 150px; min-width: 0; }
-.est-minutes { width: 86px; text-align: center; }
+.est-minutes-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.est-minutes-wrap > span { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+.est-minutes { width: 74px; text-align: center; }
+.est-warn { margin-bottom: 10px; padding: 8px 12px; border-radius: 8px; background: rgba(217, 119, 6, 0.12); border: 1px solid rgba(217, 119, 6, 0.4); color: #92400e; font-size: 0.84rem; }
+.est-warn.is-danger { background: rgba(220, 38, 38, 0.08); border-color: rgba(220, 38, 38, 0.4); color: #991b1b; }
 .est-equip { flex: 1 1 160px; min-width: 0; }
 .est-material-select { flex: 1 1 180px; min-width: 0; }
 .est-qty { width: 96px; text-align: center; }
@@ -10577,6 +10581,9 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 }
 
 /* Aporte del equipo al costo de cada pieza (calculado, no editable). */
+.cat-derived.is-warn { background: rgba(217, 119, 6, 0.14); color: #b45309; }
+.cat-derived.is-muted { background: rgba(120, 113, 108, 0.12); color: #78716c; }
+.cat-field.is-warn .form-input { border-color: #d97706; box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.15); }
 .cat-derived {
   flex: 0 0 auto;
   align-self: flex-end;

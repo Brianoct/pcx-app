@@ -375,14 +375,15 @@ router.put('/api/admin/product-production/:sku', authenticateToken, requireRole(
 router.get('/api/admin/equipos', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {
     const includeInactive = parseOptionalBoolean(req.query.include_inactive, false);
-    const whereSql = includeInactive ? '' : 'WHERE is_active = TRUE';
+    const whereSql = includeInactive ? '' : 'WHERE e.is_active = TRUE';
     const rowsRes = await pool.query(
       `SELECT
-         id, code, name, replacement_cost_bs, useful_life_months, monthly_extra_cost_bs,
-         monthly_capacity_units, usage_unit, notes, is_active, updated_by, created_at, updated_at
-       FROM production_equipment_catalog
+         e.id, e.code, e.name, e.replacement_cost_bs, e.useful_life_months, e.monthly_extra_cost_bs,
+         e.monthly_capacity_units, e.usage_unit, e.notes, e.is_active, e.updated_by, e.created_at, e.updated_at,
+         (SELECT COUNT(*) FROM product_process_steps s WHERE s.equipment_id = e.id) AS routes_using
+       FROM production_equipment_catalog e
        ${whereSql}
-       ORDER BY UPPER(name) ASC, UPPER(code) ASC, id ASC`
+       ORDER BY UPPER(e.name) ASC, UPPER(e.code) ASC, e.id ASC`
     );
     return res.json((rowsRes.rows || []).map(buildEquipmentResponseRow));
   } catch (err) {

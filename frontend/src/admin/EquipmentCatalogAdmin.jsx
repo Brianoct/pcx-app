@@ -1,6 +1,20 @@
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../apiClient';
 import { useOutbox } from '../OutboxProvider';
+
+// Modelo de costo (igual al backend, lib/equipmentCost.js):
+//   Bs/mes = reposición / vida útil + extra mensual · Bs/hora = Bs/mes / horas
+//   y cada paso de ruta carga Bs/hora × sus minutos estándar.
+const HOURS_HINT = 'Horas que la máquina trabaja en un mes normal (p. ej. 160 h si corre una jornada completa de lunes a viernes). Con ellas se calcula el Bs/hora; cada paso de ruta carga Bs/hora × sus minutos por pieza.';
+const equipmentPreview = (row) => {
+  const life = Number(row.useful_life_months || 0);
+  const depreciation = life > 0 ? Number(row.replacement_cost_bs || 0) / life : 0;
+  const monthly = depreciation + Number(row.monthly_extra_cost_bs || 0);
+  const hours = Number(row.monthly_capacity_units || 0);
+  const perHour = hours > 0 ? monthly / hours : null;
+  return { depreciation, monthly, hours, perHour };
+};
+
 function EquipmentCatalogAdmin({ token }) {
   const { enqueueWrite } = useOutbox();
   const [rows, setRows] = useState([]);
@@ -55,7 +69,7 @@ function EquipmentCatalogAdmin({ token }) {
       monthly_capacity_units: input.monthly_capacity_units === '' || input.monthly_capacity_units === null || input.monthly_capacity_units === undefined
         ? null
         : Number(input.monthly_capacity_units),
-      usage_unit: String(input.usage_unit || '').trim() || null,
+      usage_unit: 'horas',
       notes: String(input.notes || '').trim() || null
     };
     if (!payload.code || !payload.name) {
@@ -194,7 +208,11 @@ function EquipmentCatalogAdmin({ token }) {
   return (
     <div style={{ display: 'grid', gap: '16px' }}>
       <div className="card">
-        <h3 style={{ marginBottom: '12px' }}>Equipos</h3>
+        <h3 style={{ marginBottom: '4px' }}>Equipos</h3>
+        <p style={{ color: '#78716c', margin: '0 0 12px', fontSize: '0.86rem' }}>
+          Cada equipo cuesta por hora: (reposición ÷ vida útil + extra mensual) ÷ horas disponibles por mes.
+          En Estructura, cada paso de ruta con equipo carga ese Bs/hora × sus minutos por pieza. Sin horas, el equipo aporta 0.
+        </p>
         <form onSubmit={createRow} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
           <input
             placeholder="Código"
@@ -239,15 +257,10 @@ function EquipmentCatalogAdmin({ token }) {
             type="number"
             min="0.01"
             step="0.01"
-            placeholder="Capacidad mensual"
+            placeholder="Horas disponibles / mes"
+            title={HOURS_HINT}
             value={newRow.monthly_capacity_units}
             onChange={(e) => setNewRow((prev) => ({ ...prev, monthly_capacity_units: e.target.value }))}
-            className="form-input form-input--inline"
-          />
-          <input
-            placeholder="Unidad de uso (horas, ciclos)"
-            value={newRow.usage_unit}
-            onChange={(e) => setNewRow((prev) => ({ ...prev, usage_unit: e.target.value }))}
             className="form-input form-input--inline"
           />
           <input
@@ -287,13 +300,8 @@ function EquipmentCatalogAdmin({ token }) {
         ) : (
           <div className="cat-list">
             {rows.map((row) => {
-              // Lo que este equipo aporta al costo de cada pieza:
-              // (depreciación mensual + extras) / capacidad mensual.
-              const life = Number(row.useful_life_months || 0);
-              const capacity = Number(row.monthly_capacity_units || 0);
-              const monthly = (life > 0 ? Number(row.replacement_cost_bs || 0) / life : 0)
-                + Number(row.monthly_extra_cost_bs || 0);
-              const perUnit = capacity > 0 ? monthly / capacity : null;
+              const preview = equipmentPreview(row);
+              const usedWithoutHours = Number(row.routes_using || 0) > 0 && preview.perHour === null;
               return (
                 <div key={row.id} className={`cat-item ${row.is_active ? '' : 'is-inactive'}`}>
                   <div className="cat-item-fields">
@@ -314,9 +322,13 @@ function EquipmentCatalogAdmin({ token }) {
                           className="form-input"
                         />
                       </label>
-                      {perUnit !== null && (
-                        <span className="cat-derived" title="Costo que este equipo aporta a cada pieza producida: (depreciación mensual + extras) ÷ capacidad mensual">
-                          {perUnit.toFixed(2)} Bs/pieza
+                      {preview.perHour !== null ? (
+                        <span className="cat-derived" title={`Depreciación ${preview.depreciation.toFixed(2)} Bs/mes + extra ${Number(row.monthly_extra_cost_bs || 0).toFixed(2)} Bs/mes = ${preview.monthly.toFixed(2)} Bs/mes ÷ ${preview.hours} h = ${preview.perHour.toFixed(2)} Bs/h · Ejemplo: 1 min = ${(preview.perHour / 60).toFixed(3)} Bs, 10 min = ${(preview.perHour / 6).toFixed(2)} Bs`}>
+                          {preview.perHour.toFixed(2)} Bs/h · {preview.monthly.toFixed(0)} Bs/mes
+                        </span>
+                      ) : (
+                        <span className={`cat-derived ${usedWithoutHours ? 'is-warn' : 'is-muted'}`} title={usedWithoutHours ? `Este equipo está en ${row.routes_using} paso(s) de ruta y sin horas aporta 0 al costo. ${HOURS_HINT}` : HOURS_HINT}>
+                          {usedWithoutHours ? `⚠ En ${row.routes_using} ruta(s) sin horas → 0 Bs` : 'Sin horas: costo 0'}
                         </span>
                       )}
                       <label className="cat-switch" title={row.is_active ? 'Activo' : 'Inactivo'}>
@@ -357,20 +369,13 @@ function EquipmentCatalogAdmin({ token }) {
                           className="form-input"
                         />
                       </label>
-                      <label className="cat-field cat-field--num" title="Piezas que el equipo puede producir por mes (define el costo por pieza)">
-                        <span>Capacidad mensual</span>
+                      <label className={`cat-field cat-field--num ${usedWithoutHours ? 'is-warn' : ''}`} title={HOURS_HINT}>
+                        <span>Horas disponibles / mes ⓘ</span>
                         <input
                           type="number" min="0.01" step="0.01"
+                          placeholder="p. ej. 160"
                           value={row.monthly_capacity_units ?? ''}
                           onChange={(e) => onRowField(row.id, 'monthly_capacity_units', e.target.value)}
-                          className="form-input"
-                        />
-                      </label>
-                      <label className="cat-field cat-field--sm">
-                        <span>Unidad uso</span>
-                        <input
-                          value={row.usage_unit || ''}
-                          onChange={(e) => onRowField(row.id, 'usage_unit', e.target.value)}
                           className="form-input"
                         />
                       </label>

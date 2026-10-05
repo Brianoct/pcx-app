@@ -7,17 +7,9 @@ const { pool } = require('../db');
 const { COMPLETED_STATUSES, buildDateFilter } = require('./reporting');
 const { loadProductionSettings } = require('./productStructure');
 const { PRODUCT_COST_COMPONENT_KEYS } = require('./costing');
+// Mismo criterio que Estructura: equipo = Bs/hora × minutos del paso.
+const { equipmentCostForMinutes } = require('./equipmentCost');
 const { createHttpError } = require('./util');
-
-// Mismo criterio que Estructura: costo de equipo por unidad producida =
-// (depreciación mensual + extras mensuales) / capacidad mensual.
-const equipmentCostPerUnit = (row) => {
-  const capacity = Number(row.monthly_capacity_units || 0);
-  if (capacity <= 0) return 0;
-  const life = Number(row.useful_life_months || 0);
-  const depreciation = life > 0 ? Number(row.replacement_cost_bs || 0) / life : 0;
-  return (depreciation + Number(row.monthly_extra_cost_bs || 0)) / capacity;
-};
 
 const computeRentabilidad = async ({ month, year } = {}) => {
   const monthNum = month !== undefined ? Number.parseInt(month, 10) : null;
@@ -42,7 +34,7 @@ const computeRentabilidad = async ({ month, year } = {}) => {
        JOIN production_material_catalog c ON c.id = m.material_id`
     ),
     pool.query(
-      `SELECT UPPER(s.sku) AS sku, s.std_minutes,
+      `SELECT UPPER(s.sku) AS sku, s.std_minutes, s.equipment_id,
               e.replacement_cost_bs, e.useful_life_months,
               e.monthly_extra_cost_bs, e.monthly_capacity_units
        FROM product_process_steps s
@@ -110,7 +102,7 @@ const computeRentabilidad = async ({ month, year } = {}) => {
   }
   const equipCost = new Map();
   for (const row of stepsRes.rows) {
-    equipCost.set(row.sku, (equipCost.get(row.sku) || 0) + equipmentCostPerUnit(row));
+    equipCost.set(row.sku, (equipCost.get(row.sku) || 0) + equipmentCostForMinutes(row.equipment_id !== null ? row : null, row.std_minutes));
   }
   // Costeo manual (fallback): suma de componentes SIN la utilidad.
   const manualCost = new Map();

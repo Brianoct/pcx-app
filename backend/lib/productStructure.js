@@ -1,6 +1,7 @@
 const { pool } = require('../db');
 const { PRODUCTION_KANBAN_STAGES, PRODUCTION_KANBAN_START_STAGES, normalizeProductionKanbanStage } = require('./kanban');
 const { validateProductSku } = require('./products');
+const { equipmentCostForMinutes, equipmentHourlyCost, equipmentHasRate } = require('./equipmentCost');
 const { createHttpError } = require('./util');
 
 // ─── Production settings (plant-wide costing knobs) ─────────────────────────
@@ -277,18 +278,6 @@ const saveProductStructure = async (sku, payload, userId) => {
 
 // ─── Read + derived costing ──────────────────────────────────────────────────
 
-// Equipment cost attributed to one produced unit: monthly ownership cost
-// (straight-line depreciation + running extras) spread over monthly capacity.
-const equipmentCostPerUnit = (equipment) => {
-  if (!equipment) return 0;
-  const capacity = Number(equipment.monthly_capacity_units || 0);
-  if (capacity <= 0) return 0;
-  const life = Number(equipment.useful_life_months || 0);
-  const depreciation = life > 0 ? Number(equipment.replacement_cost_bs || 0) / life : 0;
-  const monthly = depreciation + Number(equipment.monthly_extra_cost_bs || 0);
-  return monthly / capacity;
-};
-
 const getProductStructure = async (sku) => {
   const normalizedSku = validateProductSku(sku);
 
@@ -351,7 +340,10 @@ const getProductStructure = async (sku) => {
       equipment_id: row.equipment_id !== null ? Number(row.equipment_id) : null,
       equipment_code: row.equipment_code || null,
       equipment_name: row.equipment_name || null,
-      equipment_cost_per_unit: Number(equipmentCostPerUnit(row.equipment_id !== null ? row : null).toFixed(4))
+      // Equipo: Bs/hora × minutos del paso (ver lib/equipmentCost.js).
+      equipment_rate_bs_hour: row.equipment_id !== null ? Number(equipmentHourlyCost(row).toFixed(4)) : null,
+      equipment_missing_hours: row.equipment_id !== null && !equipmentHasRate(row),
+      equipment_cost_per_unit: Number(equipmentCostForMinutes(row.equipment_id !== null ? row : null, minutes).toFixed(4))
     };
   });
 
@@ -385,6 +377,24 @@ const getProductStructure = async (sku) => {
     : 0;
 
   const computedCost = materialsCost + equipmentCost + laborCost;
+  const currentPrice = Number(productRes.rows[0].sf_price || 0);
+
+  // Avisos para el editor: equipos sin horas (aportan 0) y costo por
+  // encima del precio de venta.
+  const warnings = [];
+  const missingHours = steps.filter((s) => s.equipment_missing_hours);
+  if (missingHours.length > 0) {
+    warnings.push({
+      code: 'equipment_without_hours',
+      message: `Equipos sin horas por mes (aportan 0 al costo): ${[...new Set(missingHours.map((s) => s.equipment_name || s.equipment_code))].join(', ')}. Cárgalas en Admin → Equipos.`
+    });
+  }
+  if (currentPrice > 0 && computedCost > currentPrice) {
+    warnings.push({
+      code: 'cost_above_price',
+      message: `El costo derivado (${computedCost.toFixed(2)} Bs) supera el precio sin factura (${currentPrice.toFixed(2)} Bs).`
+    });
+  }
 
   return {
     sku: normalizedSku,
@@ -401,8 +411,9 @@ const getProductStructure = async (sku) => {
       utility: manualUtility,
       computed_price: Number((computedCost + manualUtility).toFixed(2)),
       manual_total: Number(manualTotal.toFixed(2)),
-      current_price: Number(productRes.rows[0].sf_price || 0)
-    }
+      current_price: currentPrice
+    },
+    warnings
   };
 };
 

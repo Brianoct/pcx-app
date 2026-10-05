@@ -2,6 +2,7 @@ const { pool } = require('../db');
 const { parseNonNegativeAmount } = require('./costing');
 const { ensureProductCatalogReady, validateProductSku } = require('./products');
 const { createHttpError } = require('./util');
+const { equipmentMonthlyCost, equipmentHourlyCost } = require('./equipmentCost');
 
 const PRODUCT_PROCESS_KEYS = ['laser', 'punzonado'];
 
@@ -226,7 +227,8 @@ const normalizeEquipmentPayload = (payload = {}, { partial = false } = {}) => {
   if (hasUsefulLifeMonths) normalized.useful_life_months = parseOptionalPositiveInteger(src.useful_life_months, 'useful_life_months');
   if (hasMonthlyExtraCost) normalized.monthly_extra_cost_bs = parseNonNegativeAmount(src.monthly_extra_cost_bs, 'monthly_extra_cost_bs');
   if (hasMonthlyCapacity) normalized.monthly_capacity_units = parseOptionalPositiveAmount(src.monthly_capacity_units, 'monthly_capacity_units');
-  if (hasUsageUnit) normalized.usage_unit = normalizeOptionalShortText(src.usage_unit, 'usage_unit', { maxLength: 80 });
+  // La unidad de uso quedó fija en horas (modelo Bs/hora).
+  if (hasUsageUnit) normalized.usage_unit = 'horas';
   if (hasNotes) normalized.notes = normalizeOptionalShortText(src.notes, 'notes', { maxLength: 1000 });
   if (hasIsActive) normalized.is_active = normalizeOptionalBooleanField(src.is_active, 'is_active');
 
@@ -288,8 +290,13 @@ const buildEquipmentResponseRow = (row = {}) => ({
   replacement_cost_bs: Number(row.replacement_cost_bs || 0),
   useful_life_months: row.useful_life_months !== null ? Number(row.useful_life_months) : null,
   monthly_extra_cost_bs: Number(row.monthly_extra_cost_bs || 0),
+  // Horas disponibles por mes (modelo Bs/hora, ver lib/equipmentCost.js).
   monthly_capacity_units: row.monthly_capacity_units !== null ? Number(row.monthly_capacity_units) : null,
-  usage_unit: String(row.usage_unit || '').trim() || null,
+  usage_unit: 'horas',
+  monthly_cost_bs: Number(equipmentMonthlyCost(row).toFixed(2)),
+  cost_per_hour_bs: Number(equipmentHourlyCost(row).toFixed(4)),
+  // Pasos de ruta que usan este equipo (para avisar si falta la capacidad).
+  routes_using: row.routes_using !== undefined && row.routes_using !== null ? Number(row.routes_using) : 0,
   notes: String(row.notes || '').trim() || null,
   is_active: Boolean(row.is_active),
   updated_by: row.updated_by !== null ? Number(row.updated_by) : null,

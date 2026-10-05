@@ -16,15 +16,19 @@ const PROCESS_LABEL = Object.fromEntries(PROCESS_OPTIONS.map((p) => [p.value, p.
 
 const money = (value) => `${Number(value || 0).toFixed(2)} Bs`;
 
-// Mirrors backend equipmentCostPerUnit (lib/productStructure.js).
-const equipmentCostPerUnit = (equipment) => {
+// Mismo modelo que el backend (lib/equipmentCost.js): el equipo cuesta
+// Bs/hora = (reposición/vida útil + extra mensual) / horas disponibles por
+// mes, y cada paso carga Bs/hora × sus minutos estándar por pieza.
+const equipmentHourlyCost = (equipment) => {
   if (!equipment) return 0;
-  const capacity = Number(equipment.monthly_capacity_units || 0);
-  if (capacity <= 0) return 0;
+  const hours = Number(equipment.monthly_capacity_units || 0);
+  if (hours <= 0) return 0;
   const life = Number(equipment.useful_life_months || 0);
   const depreciation = life > 0 ? Number(equipment.replacement_cost_bs || 0) / life : 0;
-  return (depreciation + Number(equipment.monthly_extra_cost_bs || 0)) / capacity;
+  return (depreciation + Number(equipment.monthly_extra_cost_bs || 0)) / hours;
 };
+const equipmentCostForMinutes = (equipment, minutes) => equipmentHourlyCost(equipment) * ((Number(minutes) || 0) / 60);
+const equipmentHasHours = (equipment) => Boolean(equipment) && Number(equipment.monthly_capacity_units || 0) > 0;
 
 function ProductStructureAdmin({ token }) {
   const toast = useToast();
@@ -242,9 +246,18 @@ function ProductStructureAdmin({ token }) {
       if (!cat) return sum;
       return sum + Number(m.qty_per_unit || 0) * Number(cat.unit_cost_bs || 0) * (1 + Number(cat.waste_pct || 0) / 100);
     }, 0);
-    const equipmentCost = structure.steps.reduce((sum, s) => (
-      sum + equipmentCostPerUnit(equipmentById.get(Number(s.equipment_id)))
-    ), 0);
+    const equipmentByStep = structure.steps.map((s) => {
+      const eq = equipmentById.get(Number(s.equipment_id)) || null;
+      return {
+        process: s.process,
+        minutes: Number(s.std_minutes) || 0,
+        equipment: eq,
+        rate: equipmentHourlyCost(eq),
+        missingHours: Boolean(eq) && !equipmentHasHours(eq),
+        cost: equipmentCostForMinutes(eq, s.std_minutes)
+      };
+    });
+    const equipmentCost = equipmentByStep.reduce((sum, s) => sum + s.cost, 0);
     const totalMinutes = structure.steps.reduce((sum, s) => sum + (Number(s.std_minutes) || 0), 0);
     // Mano de obra = Σ minutos del paso × tarifa de su proceso (o la general).
     const laborByStep = structure.steps.map((s) => ({
@@ -258,6 +271,8 @@ function ProductStructureAdmin({ token }) {
     return {
       materialsCost,
       equipmentCost,
+      equipmentByStep,
+      equipmentMissingHours: [...new Set(equipmentByStep.filter((s) => s.missingHours).map((s) => s.equipment.name))],
       laborCost,
       laborByStep,
       usesGlobalRate: laborByStep.some((s) => s.minutes > 0 && s.rate === rate && !processRates.find((r) => r.process === s.process && r.rate_bs_hour !== '')),
@@ -454,7 +469,12 @@ function ProductStructureAdmin({ token }) {
             <>
               <div className="card">
                 <div className="est-section-head">
-                  <h4 className="est-section-title">Ruta de procesos — {structure.name}</h4>
+                  <div>
+                    <h4 className="est-section-title">Ruta de procesos — {structure.name}</h4>
+                    <p className="est-rates-hint" style={{ margin: '2px 0 0' }}>
+                      Minutos = tiempo estándar por <strong>una pieza</strong> en esa estación. Mano de obra = min × tarifa del proceso; equipo = min × Bs/hora del equipo.
+                    </p>
+                  </div>
                   <button type="button" className="btn btn-secondary est-add-btn" onClick={addStep}>+ Paso</button>
                 </div>
                 <div className="est-steps">
@@ -476,16 +496,18 @@ function ProductStructureAdmin({ token }) {
                           </option>
                         ))}
                       </select>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        placeholder="min"
-                        title="Minutos estándar por pieza"
-                        value={step.std_minutes}
-                        onChange={(e) => updateStep(index, { std_minutes: e.target.value })}
-                        className="est-minutes"
-                      />
+                      <label className="est-minutes-wrap" title="Minutos estándar que UNA pieza ocupa en esta estación (no el lote completo ni el reloj de pared). Con ellos se calcula mano de obra y equipo, y el tablero estima el trabajo de cada lote.">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          placeholder="0"
+                          value={step.std_minutes}
+                          onChange={(e) => updateStep(index, { std_minutes: e.target.value })}
+                          className="est-minutes"
+                        />
+                        <span>min/pza</span>
+                      </label>
                       <select
                         value={step.equipment_id}
                         onChange={(e) => updateStep(index, { equipment_id: e.target.value })}
@@ -494,7 +516,7 @@ function ProductStructureAdmin({ token }) {
                       >
                         <option value="">Sin equipo</option>
                         {equipment.map((eq) => (
-                          <option key={eq.id} value={eq.id}>{eq.name}</option>
+                          <option key={eq.id} value={eq.id}>{eq.name}{equipmentHasHours(eq) ? ` · ${equipmentHourlyCost(eq).toFixed(2)} Bs/h` : ' · ⚠ sin horas'}</option>
                         ))}
                       </select>
                       <div className="est-row-actions">
@@ -568,9 +590,22 @@ function ProductStructureAdmin({ token }) {
               {preview && (
                 <div className="card est-costing">
                   <h4 className="est-section-title" style={{ marginBottom: '10px' }}>Costo derivado</h4>
+                  {preview.equipmentMissingHours.length > 0 && (
+                    <div className="est-warn">
+                      ⚠ Equipos sin horas por mes (aportan 0 al costo): <strong>{preview.equipmentMissingHours.join(', ')}</strong>. Cárgalas en Admin → Equipos.
+                    </div>
+                  )}
+                  {structure.currentPrice > 0 && preview.computedCost > structure.currentPrice && (
+                    <div className="est-warn is-danger">
+                      ⚠ El costo derivado ({money(preview.computedCost)}) supera el precio sin factura ({money(structure.currentPrice)}). Revisa minutos por pieza, cantidades del BOM o el precio.
+                    </div>
+                  )}
                   <div className="est-cost-grid">
                     <div><span>Materiales</span><strong>{money(preview.materialsCost)}</strong></div>
-                    <div><span>Equipos</span><strong>{money(preview.equipmentCost)}</strong></div>
+                    <div title={preview.equipmentByStep.filter((s) => s.equipment).map((s) => `${PROCESS_LABEL[s.process] || s.process}: ${s.equipment.name} ${s.missingHours ? 'sin horas/mes → 0' : `${s.rate.toFixed(2)} Bs/h × ${s.minutes} min = ${money(s.cost)}`}`).join('\n') || 'Sin equipos en la ruta'}>
+                      <span>Equipos (Bs/h × min)</span>
+                      <strong>{money(preview.equipmentCost)}</strong>
+                    </div>
                     <div title={preview.laborByStep.filter((s) => s.minutes > 0).map((s) => `${PROCESS_LABEL[s.process] || s.process}: ${s.minutes} min × ${s.rate} Bs/h = ${money(s.cost)}`).join('\n')}>
                       <span>Mano de obra ({preview.totalMinutes.toFixed(0)} min · por proceso)</span>
                       <strong>{money(preview.laborCost)}</strong>
