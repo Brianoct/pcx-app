@@ -1,152 +1,12 @@
 const { pool } = require('../db');
 const { parseNonNegativeAmount } = require('./costing');
-const { ensureProductCatalogReady, validateProductSku } = require('./products');
 const { createHttpError } = require('./util');
 const { equipmentMonthlyCost, equipmentHourlyCost } = require('./equipmentCost');
 
-const PRODUCT_PROCESS_KEYS = ['laser', 'punzonado'];
-
-const normalizeProductProcessKey = (value = '') => {
-  const processKey = String(value || '').trim().toLowerCase();
-  if (!processKey) return '';
-  if (!PRODUCT_PROCESS_KEYS.includes(processKey)) {
-    throw createHttpError(400, `Proceso inválido. Usa: ${PRODUCT_PROCESS_KEYS.join(', ')}`);
-  }
-  return processKey;
-};
-
-const parseIntegerIdArray = (value, fieldLabel) => {
-  if (value === undefined || value === null || value === '') return [];
-  if (!Array.isArray(value)) throw createHttpError(400, `${fieldLabel} debe ser un arreglo`);
-  const unique = new Set();
-  const parsed = [];
-  for (const item of value) {
-    const id = Number.parseInt(item, 10);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw createHttpError(400, `${fieldLabel} contiene IDs inválidos`);
-    }
-    if (!unique.has(id)) {
-      unique.add(id);
-      parsed.push(id);
-    }
-  }
-  return parsed;
-};
-
-const parseProcessArray = (value, fieldLabel = 'processes') => {
-  if (value === undefined || value === null || value === '') return [];
-  if (!Array.isArray(value)) throw createHttpError(400, `${fieldLabel} debe ser un arreglo`);
-  const unique = new Set();
-  const parsed = [];
-  for (const item of value) {
-    const processKey = normalizeProductProcessKey(item);
-    if (processKey && !unique.has(processKey)) {
-      unique.add(processKey);
-      parsed.push(processKey);
-    }
-  }
-  return parsed;
-};
-
-const normalizeProductProductionConfigPayload = (payload = {}) => {
-  const src = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
-  return {
-    equipment_ids: parseIntegerIdArray(src.equipment_ids, 'equipment_ids'),
-    material_ids: parseIntegerIdArray(src.material_ids, 'material_ids'),
-    processes: parseProcessArray(src.processes, 'processes')
-  };
-};
-
-const assertProductProductionReferencesExist = async (db, { equipment_ids = [], material_ids = [] } = {}) => {
-  if (equipment_ids.length > 0) {
-    const eqRes = await db.query(
-      `SELECT id
-       FROM production_equipment_catalog
-       WHERE id = ANY($1::bigint[])`,
-      [equipment_ids]
-    );
-    if (eqRes.rowCount !== equipment_ids.length) {
-      throw createHttpError(400, 'Uno o más equipment_ids no existen');
-    }
-  }
-  if (material_ids.length > 0) {
-    const mtRes = await db.query(
-      `SELECT id
-       FROM production_material_catalog
-       WHERE id = ANY($1::bigint[])`,
-      [material_ids]
-    );
-    if (mtRes.rowCount !== material_ids.length) {
-      throw createHttpError(400, 'Uno o más material_ids no existen');
-    }
-  }
-};
-
-const saveProductProductionConfig = async (db, sku, config = {}) => {
-  const normalizedSku = validateProductSku(sku);
-  const payload = normalizeProductProductionConfigPayload(config);
-  await assertProductProductionReferencesExist(db, payload);
-
-  await db.query('DELETE FROM product_equipment_map WHERE UPPER(sku) = $1', [normalizedSku]);
-  await db.query('DELETE FROM product_material_map WHERE UPPER(sku) = $1', [normalizedSku]);
-  await db.query('DELETE FROM product_process_map WHERE UPPER(sku) = $1', [normalizedSku]);
-
-  for (const equipmentId of payload.equipment_ids) {
-    await db.query(
-      `INSERT INTO product_equipment_map (sku, equipment_id, created_at)
-       VALUES ($1, $2, NOW())`,
-      [normalizedSku, equipmentId]
-    );
-  }
-  for (const materialId of payload.material_ids) {
-    await db.query(
-      `INSERT INTO product_material_map (sku, material_id, created_at)
-       VALUES ($1, $2, NOW())`,
-      [normalizedSku, materialId]
-    );
-  }
-  for (const processKey of payload.processes) {
-    await db.query(
-      `INSERT INTO product_process_map (sku, process_key, created_at)
-       VALUES ($1, $2, NOW())`,
-      [normalizedSku, processKey]
-    );
-  }
-  return payload;
-};
-
-const getProductProductionConfig = async (db, sku) => {
-  const normalizedSku = validateProductSku(sku);
-  const [equipmentRes, materialRes, processRes] = await Promise.all([
-    db.query(
-      `SELECT equipment_id
-       FROM product_equipment_map
-       WHERE UPPER(sku) = $1
-       ORDER BY equipment_id ASC`,
-      [normalizedSku]
-    ),
-    db.query(
-      `SELECT material_id
-       FROM product_material_map
-       WHERE UPPER(sku) = $1
-       ORDER BY material_id ASC`,
-      [normalizedSku]
-    ),
-    db.query(
-      `SELECT process_key
-       FROM product_process_map
-       WHERE UPPER(sku) = $1
-       ORDER BY process_key ASC`,
-      [normalizedSku]
-    )
-  ]);
-  return {
-    sku: normalizedSku,
-    equipment_ids: (equipmentRes.rows || []).map((row) => Number(row.equipment_id)),
-    material_ids: (materialRes.rows || []).map((row) => Number(row.material_id)),
-    processes: (processRes.rows || []).map((row) => String(row.process_key || '').trim().toLowerCase()).filter(Boolean)
-  };
-};
+// Nota: las funciones de «configuración de producción» por producto
+// (equipos/materiales sin cantidad en product_equipment_map /
+// product_process_map) se retiraron. La única fuente es la Estructura
+// (lib/productStructure.js): ruta con minutos y BOM con cantidades.
 
 const PRODUCTION_RESOURCE_CODE_REGEX = /^[A-Z0-9_-]{2,40}$/;
 
@@ -323,22 +183,14 @@ const buildMaterialResponseRow = (row = {}) => ({
 
 module.exports = {
   PRODUCTION_RESOURCE_CODE_REGEX,
-  PRODUCT_PROCESS_KEYS,
-  assertProductProductionReferencesExist,
   buildEquipmentResponseRow,
   buildMaterialResponseRow,
-  getProductProductionConfig,
   normalizeEquipmentPayload,
   normalizeMaterialPayload,
   normalizeOptionalBooleanField,
   normalizeOptionalShortText,
-  normalizeProductProcessKey,
-  normalizeProductProductionConfigPayload,
   normalizeProductionResourceCode,
   normalizeProductionResourceName,
-  parseIntegerIdArray,
   parseOptionalPositiveAmount,
-  parseOptionalPositiveInteger,
-  parseProcessArray,
-  saveProductProductionConfig
+  parseOptionalPositiveInteger
 };

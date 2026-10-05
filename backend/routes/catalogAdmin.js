@@ -4,7 +4,7 @@ const { pool } = require('../db');
 const { authenticateToken, requireRole } = require('../lib/authMiddleware');
 const { decodeImageDataUrl } = require('../lib/imageAssets');
 const { PRODUCT_COST_COMPONENT_KEYS, buildProductCostingResponseRow, parseProductCostingPayload } = require('../lib/costing');
-const { PRODUCT_PROCESS_KEYS, buildEquipmentResponseRow, buildMaterialResponseRow, getProductProductionConfig, normalizeEquipmentPayload, normalizeMaterialPayload, normalizeProductProductionConfigPayload, saveProductProductionConfig } = require('../lib/productionResources');
+const { buildEquipmentResponseRow, buildMaterialResponseRow, normalizeEquipmentPayload, normalizeMaterialPayload } = require('../lib/productionResources');
 const { ensureProductCatalogReady, loadProductCatalogRows, normalizeProductPayload, validateProductSku } = require('../lib/products');
 const { exportProductsCsv, importProductsCsv } = require('../lib/productEnrichment');
 const { normalizeText, sanitizePanelAccess } = require('../lib/rbac');
@@ -85,7 +85,6 @@ router.post('/api/product-catalog', authenticateToken, requireRole(['admin']), a
   try {
     const sku = validateProductSku(req.body?.sku);
     const normalized = normalizeProductPayload(req.body, { partial: false });
-    const productionConfig = normalizeProductProductionConfigPayload(req.body || {});
 
     client = await pool.connect();
     await client.query('BEGIN');
@@ -112,7 +111,6 @@ router.post('/api/product-catalog', authenticateToken, requireRole(['admin']), a
         normalized.material || 'metal'
       ]
     );
-    await saveProductProductionConfig(client, sku, productionConfig);
     await client.query('COMMIT');
     client.release();
     client = null;
@@ -130,10 +128,7 @@ router.post('/api/product-catalog', authenticateToken, requireRole(['admin']), a
       image_url: String(result.rows[0].image_url || '').trim() || null,
       product_line: String(result.rows[0].product_line || '').trim() || null,
       product_type: String(result.rows[0].product_type || '').trim() || null,
-      material: String(result.rows[0].material || '').trim() || null,
-      equipment_ids: productionConfig.equipment_ids,
-      material_ids: productionConfig.material_ids,
-      processes: productionConfig.processes
+      material: String(result.rows[0].material || '').trim() || null
     });
   } catch (err) {
     if (client) {
@@ -269,108 +264,10 @@ router.delete('/api/product-catalog/:sku', authenticateToken, requireRole(['admi
   }
 });
 
-router.get('/api/admin/product-production/options', authenticateToken, requireRole(['admin']), async (_req, res) => {
-  try {
-    const [equipmentRes, materialRes] = await Promise.all([
-      pool.query(
-        `SELECT id, code, name
-         FROM production_equipment_catalog
-         WHERE is_active = TRUE
-         ORDER BY UPPER(name) ASC, UPPER(code) ASC, id ASC`
-      ),
-      pool.query(
-        `SELECT id, code, name, unit_measure
-         FROM production_material_catalog
-         WHERE is_active = TRUE
-         ORDER BY UPPER(name) ASC, UPPER(code) ASC, id ASC`
-      )
-    ]);
-    return res.json({
-      process_options: PRODUCT_PROCESS_KEYS.map((key) => ({
-        value: key,
-        label: key === 'laser' ? 'Laser' : 'Punzonado'
-      })),
-      equipment_options: (equipmentRes.rows || []).map((row) => ({
-        id: Number(row.id),
-        code: String(row.code || '').trim().toUpperCase(),
-        name: String(row.name || '').trim()
-      })),
-      material_options: (materialRes.rows || []).map((row) => ({
-        id: Number(row.id),
-        code: String(row.code || '').trim().toUpperCase(),
-        name: String(row.name || '').trim(),
-        unit_measure: String(row.unit_measure || '').trim() || null
-      }))
-    });
-  } catch (err) {
-    console.error(err);
-    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
-    return res.status(500).json({ error: 'No se pudieron cargar opciones de producción' });
-  }
-});
-
-router.get('/api/admin/product-production/:sku', authenticateToken, requireRole(['admin']), async (req, res) => {
-  try {
-    const sku = validateProductSku(req.params.sku);
-    const productRes = await pool.query(
-      `SELECT sku
-       FROM products
-       WHERE UPPER(sku) = $1
-       LIMIT 1`,
-      [sku]
-    );
-    if (productRes.rowCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
-    const config = await getProductProductionConfig(pool, sku);
-    return res.json(config);
-  } catch (err) {
-    console.error(err);
-    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
-    return res.status(500).json({ error: 'No se pudo cargar configuración de producción del producto' });
-  }
-});
-
-router.put('/api/admin/product-production/:sku', authenticateToken, requireRole(['admin']), async (req, res) => {
-  let client;
-  try {
-    const sku = validateProductSku(req.params.sku);
-    const payload = normalizeProductProductionConfigPayload(req.body || {});
-
-    client = await pool.connect();
-    await client.query('BEGIN');
-
-    const productRes = await client.query(
-      `SELECT sku
-       FROM products
-       WHERE UPPER(sku) = $1
-       LIMIT 1`,
-      [sku]
-    );
-    if (productRes.rowCount === 0) throw createHttpError(404, 'Producto no encontrado');
-
-    await saveProductProductionConfig(client, sku, payload);
-
-    await client.query('COMMIT');
-    client.release();
-    client = null;
-
-    return res.json({
-      sku,
-      ...payload
-    });
-  } catch (err) {
-    if (client) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackErr) {
-        console.error('Rollback error product-production config:', rollbackErr);
-      }
-      client.release();
-    }
-    console.error(err);
-    if (err?.statusCode) return res.status(err.statusCode).json({ error: err.message });
-    return res.status(500).json({ error: 'No se pudo guardar configuración de producción del producto' });
-  }
-});
+// La configuración de producción de un producto (ruta, equipos, materiales
+// con cantidades) vive solo en Estructura: GET/PUT /api/products/:sku/structure
+// (routes/production.js). Las rutas /api/admin/product-production/* se
+// retiraron: guardaban equipos y materiales sin cantidad y pisaban el BOM.
 
 router.get('/api/admin/equipos', authenticateToken, requireRole(['admin']), async (req, res) => {
   try {

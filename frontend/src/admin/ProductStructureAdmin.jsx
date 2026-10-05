@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { apiRequest } from '../apiClient';
 import { useToast } from '../ui/toastContext';
 
@@ -43,8 +44,19 @@ const stepMinutes = (step) => {
   return { std, pieces, machine: std / pieces, labor: attended / pieces, batched: pieces > 1 || step.attended_minutes !== '' };
 };
 
+// Dónde se consume un material por defecto, según su nombre y la ruta:
+// pintura/polvo → pintado; el resto → primer proceso que arranca la pieza
+// (impresión, láser, punzonado) o el primer paso de la ruta.
+const isPaintMaterial = (cat) => /pintura|polvo|powder|^PP\d/i.test(`${cat?.code || ''} ${cat?.name || ''}`);
+const defaultConsumeProcess = (cat, routeProcesses) => {
+  if (!routeProcesses.length) return '';
+  if (isPaintMaterial(cat) && routeProcesses.includes('pintado')) return 'pintado';
+  return ['impresion_3d', 'corte_laser', 'punzonado'].find((p) => routeProcesses.includes(p)) || routeProcesses[0];
+};
+
 function ProductStructureAdmin({ token }) {
   const toast = useToast();
+  const location = useLocation();
   const [products, setProducts] = useState([]);
   const [equipment, setEquipment] = useState([]);
   const [materialsCatalog, setMaterialsCatalog] = useState([]);
@@ -101,6 +113,14 @@ function ProductStructureAdmin({ token }) {
     })();
     return () => { active = false; };
   }, [token]);
+
+  // Deep link desde Productos: /admin?tab=estructura&sku=XXX abre ese producto.
+  useEffect(() => {
+    if (loading) return;
+    const sku = String(new URLSearchParams(location.search).get('sku') || '').trim().toUpperCase();
+    if (sku && sku !== selectedSku && products.some((p) => p.sku === sku)) loadStructure(sku);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, location.search, products]);
 
   const equipmentById = useMemo(
     () => new Map(equipment.map((e) => [Number(e.id), e])),
@@ -249,7 +269,8 @@ function ProductStructureAdmin({ token }) {
       const used = new Set(prev.materials.map((m) => Number(m.material_id)));
       const nextMaterial = materialsCatalog.find((m) => !used.has(Number(m.id)));
       if (!nextMaterial) return prev;
-      return { ...prev, materials: [...prev.materials, { material_id: Number(nextMaterial.id), qty_per_unit: 0, process: '' }] };
+      const route = prev.steps.map((st) => st.process);
+      return { ...prev, materials: [...prev.materials, { material_id: Number(nextMaterial.id), qty_per_unit: 0, process: defaultConsumeProcess(nextMaterial, route), powder_open: false }] };
     });
   };
 
@@ -596,14 +617,24 @@ function ProductStructureAdmin({ token }) {
                   <div className="est-materials">
                     {structure.materials.map((material, index) => {
                       const cat = materialById.get(Number(material.material_id));
-                      const lineCost = cat
-                        ? Number(material.qty_per_unit || 0) * Number(cat.unit_cost_bs || 0) * (1 + Number(cat.waste_pct || 0) / 100)
-                        : 0;
+                      const rawCost = cat ? Number(material.qty_per_unit || 0) * Number(cat.unit_cost_bs || 0) : 0;
+                      const wasteCost = cat ? rawCost * (Number(cat.waste_pct || 0) / 100) : 0;
+                      const lineCost = rawCost + wasteCost;
+                      const powderable = cat && isPaintMaterial(cat) && /kg/i.test(cat.unit_measure || '');
+                      const applyPowder = () => {
+                        const area = Number(material.powder_area) || 0;
+                        const sides = Number(material.powder_sides) || 1;
+                        const coverage = Number(material.powder_coverage) || 0.24;
+                        updateMaterial(index, { qty_per_unit: Number((area * sides * coverage).toFixed(4)), powder_open: false });
+                      };
                       return (
                         <div key={`${material.material_id}-${index}`} className="est-material-row">
                           <select
                             value={material.material_id}
-                            onChange={(e) => updateMaterial(index, { material_id: Number(e.target.value) })}
+                            onChange={(e) => {
+                              const next = materialById.get(Number(e.target.value));
+                              updateMaterial(index, { material_id: Number(e.target.value), process: material.process || defaultConsumeProcess(next, routeProcesses) });
+                            }}
                             aria-label="Material"
                             className="est-material-select"
                           >
@@ -625,17 +656,33 @@ function ProductStructureAdmin({ token }) {
                             value={material.process}
                             onChange={(e) => updateMaterial(index, { process: e.target.value })}
                             aria-label="Proceso donde se consume"
-                            className="est-material-process"
+                            className={`est-material-process ${material.process ? '' : 'is-missing'}`}
+                            title={material.process ? 'Proceso donde se consume este material' : 'Falta el proceso donde se consume: el muestreo de consumo real no sabrá cuándo pedir la medición'}
                           >
-                            <option value="">Proceso…</option>
+                            <option value="">⚠ Proceso…</option>
                             {routeProcesses.map((p) => (
                               <option key={p} value={p}>{PROCESS_LABEL[p] || p}</option>
                             ))}
                           </select>
-                          <span className="est-line-cost">{money(lineCost)}</span>
+                          <span className="est-line-cost" title={cat ? `${Number(material.qty_per_unit || 0)} ${cat.unit_measure} × ${Number(cat.unit_cost_bs || 0).toFixed(2)} Bs = ${money(rawCost)} + merma ${Number(cat.waste_pct || 0)}% = ${money(wasteCost)}` : ''}>
+                            {money(lineCost)}
+                            {wasteCost > 0 && <small>{money(rawCost)} + {money(wasteCost)} merma</small>}
+                          </span>
                           <div className="est-row-actions">
+                            {powderable && (
+                              <button type="button" title="Calcular kg de pintura en polvo: área × caras × kg/m²" onClick={() => updateMaterial(index, { powder_open: !material.powder_open, powder_area: material.powder_area ?? '', powder_sides: material.powder_sides ?? 1, powder_coverage: material.powder_coverage ?? 0.24 })}>⚖</button>
+                            )}
                             <button type="button" className="is-danger" onClick={() => removeMaterial(index)} aria-label="Quitar">✕</button>
                           </div>
+                          {powderable && material.powder_open && (
+                            <div className="est-batch-row est-powder">
+                              <label title="Área de la pieza por cara, en m² (descontando agujeros si quieres afinar)"><input type="number" min="0" step="0.001" value={material.powder_area} onChange={(e) => updateMaterial(index, { powder_area: e.target.value })} /><span>m² por cara</span></label>
+                              <label title="Caras pintadas (1 o 2)"><input type="number" min="1" max="2" step="1" value={material.powder_sides} onChange={(e) => updateMaterial(index, { powder_sides: e.target.value })} /><span>caras</span></label>
+                              <label title="Consumo de polvo por m² (0.24 kg/m² es la estimación actual; reemplázalo cuando peses una tanda)"><input type="number" min="0" step="0.01" value={material.powder_coverage} onChange={(e) => updateMaterial(index, { powder_coverage: e.target.value })} /><span>kg/m²</span></label>
+                              <em>= {((Number(material.powder_area) || 0) * (Number(material.powder_sides) || 1) * (Number(material.powder_coverage) || 0)).toFixed(4)} kg</em>
+                              <button type="button" className="btn btn-secondary btn-sm" onClick={applyPowder}>Usar</button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}

@@ -7110,7 +7110,11 @@ img, video, canvas { max-width: 100%; }
 .est-qty { width: 96px; text-align: center; }
 .est-unit { font-size: 0.76rem; color: var(--text-muted); min-width: 34px; }
 .est-material-process { flex: 0 1 150px; min-width: 0; }
-.est-line-cost { font-size: 0.82rem; font-weight: 800; color: var(--success); margin-left: auto; white-space: nowrap; }
+.est-line-cost { font-size: 0.82rem; font-weight: 800; color: var(--success); margin-left: auto; white-space: nowrap; display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
+.est-line-cost small { font-size: 0.68rem; font-weight: 600; color: var(--text-muted); }
+.est-material-process.is-missing { border-color: #d97706; color: #b45309; }
+.est-powder { padding-left: 4px; }
+.est-powder .btn-sm { min-height: 32px; }
 
 .est-row-actions { display: flex; gap: 4px; margin-left: auto; }
 .est-material-row .est-row-actions { margin-left: 0; }
