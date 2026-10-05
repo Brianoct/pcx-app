@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
+import { useNavigate } from 'react-router-dom';
 import { apiRequest, API_BASE } from '../apiClient';
 import { useOutbox } from '../OutboxProvider';
 
@@ -125,6 +126,7 @@ const downscaleImage = (file, { maxDim = 800, quality = 0.82 } = {}) => new Prom
 
 function ProductCatalogAdmin({ token }) {
   const { enqueueWrite } = useOutbox();
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -137,19 +139,8 @@ function ProductCatalogAdmin({ token }) {
     cf: '',
     product_line: 'acero',
     product_type: '',
-    material: 'metal',
-    equipment_ids: [],
-    material_ids: [],
-    processes: []
+    material: 'metal'
   });
-  const [productionOptions, setProductionOptions] = useState({
-    equipment_options: [],
-    material_options: [],
-    process_options: []
-  });
-  const [configModal, setConfigModal] = useState(null);
-  const [configLoading, setConfigLoading] = useState(false);
-  const [configSaving, setConfigSaving] = useState(false);
   const [imageBusySku, setImageBusySku] = useState('');
   const [productSearch, setProductSearch] = useState('');
   // Product enrichment CSV round-trip
@@ -183,22 +174,8 @@ function ProductCatalogAdmin({ token }) {
     }
   };
 
-  const loadProductionOptions = async () => {
-    try {
-      const data = await apiRequest('/api/admin/product-production/options', { token });
-      setProductionOptions({
-        equipment_options: Array.isArray(data?.equipment_options) ? data.equipment_options : [],
-        material_options: Array.isArray(data?.material_options) ? data.material_options : [],
-        process_options: Array.isArray(data?.process_options) ? data.process_options : []
-      });
-    } catch (err) {
-      setMessage(`Error: ${err.message}`);
-    }
-  };
-
   useEffect(() => {
     loadProducts();
-    loadProductionOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -207,34 +184,6 @@ function ProductCatalogAdmin({ token }) {
       row.sku === sku ? { ...row, [field]: value } : row
     )));
     setMessage('');
-  };
-
-  const toggleInArray = (items = [], value) => {
-    const set = new Set(Array.isArray(items) ? items : []);
-    if (set.has(value)) set.delete(value);
-    else set.add(value);
-    return [...set];
-  };
-
-  const toggleNewProductEquipment = (equipmentId) => {
-    setNewProduct((prev) => ({
-      ...prev,
-      equipment_ids: toggleInArray(prev.equipment_ids, equipmentId)
-    }));
-  };
-
-  const toggleNewProductMaterial = (materialId) => {
-    setNewProduct((prev) => ({
-      ...prev,
-      material_ids: toggleInArray(prev.material_ids, materialId)
-    }));
-  };
-
-  const toggleNewProductProcess = (processKey) => {
-    setNewProduct((prev) => ({
-      ...prev,
-      processes: toggleInArray(prev.processes, processKey)
-    }));
   };
 
   const createProduct = async (e) => {
@@ -250,10 +199,7 @@ function ProductCatalogAdmin({ token }) {
         cf: Number(newProduct.cf || 0),
         product_line: newProduct.product_line || null,
         product_type: newProduct.product_type || null,
-        material: newProduct.material || null,
-        equipment_ids: Array.isArray(newProduct.equipment_ids) ? newProduct.equipment_ids : [],
-        material_ids: Array.isArray(newProduct.material_ids) ? newProduct.material_ids : [],
-        processes: Array.isArray(newProduct.processes) ? newProduct.processes : []
+        material: newProduct.material || null
       };
       if (!payload.sku || !payload.name) {
         throw new Error('SKU y nombre son requeridos');
@@ -297,10 +243,7 @@ function ProductCatalogAdmin({ token }) {
         cf: '',
         product_line: 'acero',
         product_type: '',
-        material: 'metal',
-        equipment_ids: [],
-        material_ids: [],
-        processes: []
+        material: 'metal'
       });
       if (typeof navigator !== 'undefined' && navigator.onLine !== false) {
         await loadProducts();
@@ -441,78 +384,11 @@ function ProductCatalogAdmin({ token }) {
     }
   };
 
-  const openProductionConfig = async (row) => {
+  // Ruta, equipos y materiales con cantidades viven en Estructura; desde
+  // aquí se abre esa pestaña con el producto ya seleccionado.
+  const openStructure = (row) => {
     if (!row?.sku) return;
-    setConfigLoading(true);
-    setMessage('');
-    setConfigModal({
-      sku: row.sku,
-      equipment_ids: [],
-      material_ids: [],
-      processes: []
-    });
-    try {
-      const payload = await apiRequest(`/api/admin/product-production/${encodeURIComponent(row.sku)}`, { token });
-      setConfigModal({
-        sku: row.sku,
-        equipment_ids: Array.isArray(payload?.equipment_ids) ? payload.equipment_ids : [],
-        material_ids: Array.isArray(payload?.material_ids) ? payload.material_ids : [],
-        processes: Array.isArray(payload?.processes) ? payload.processes : []
-      });
-    } catch (err) {
-      setMessage(`Error: ${err.message}`);
-      setConfigModal(null);
-    } finally {
-      setConfigLoading(false);
-    }
-  };
-
-  const updateConfigSelection = (field, value) => {
-    setConfigModal((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        [field]: toggleInArray(prev[field] || [], value)
-      };
-    });
-  };
-
-  const saveProductionConfig = async () => {
-    if (!configModal?.sku) return;
-    setConfigSaving(true);
-    setMessage('');
-    try {
-      const payload = {
-        equipment_ids: Array.isArray(configModal.equipment_ids) ? configModal.equipment_ids : [],
-        material_ids: Array.isArray(configModal.material_ids) ? configModal.material_ids : [],
-        processes: Array.isArray(configModal.processes) ? configModal.processes : []
-      };
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        enqueueWrite({
-          label: `Configuración producción ${configModal.sku}`,
-          path: `/api/admin/product-production/${encodeURIComponent(configModal.sku)}`,
-          options: {
-            method: 'PUT',
-            body: payload,
-            retries: 0
-          },
-          meta: { sku: configModal.sku }
-        });
-        setMessage(`Sin conexión: configuración de ${configModal.sku} en cola para sincronizar.`);
-      } else {
-        await apiRequest(`/api/admin/product-production/${encodeURIComponent(configModal.sku)}`, {
-          method: 'PUT',
-          token,
-          body: payload
-        });
-        setMessage(`Configuración de producción guardada para ${configModal.sku}.`);
-      }
-      setConfigModal(null);
-    } catch (err) {
-      setMessage(`Error: ${err.message}`);
-    } finally {
-      setConfigSaving(false);
-    }
+    navigate(`/admin?tab=estructura&sku=${encodeURIComponent(row.sku)}`);
   };
 
   const downloadEnrichmentCsv = async () => {
@@ -745,64 +621,9 @@ function ProductCatalogAdmin({ token }) {
             {saving ? 'Guardando...' : 'Agregar'}
           </button>
 
-          <div style={{ gridColumn: '1 / -1', display: 'grid', gap: 10 }}>
-            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
-              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Procesos</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                {productionOptions.process_options.map((option) => (
-                  <label key={`new-process-${option.value}`} className="form-check-inline">
-                    <input
-                      type="checkbox"
-                      checked={Array.isArray(newProduct.processes) && newProduct.processes.includes(option.value)}
-                      onChange={() => toggleNewProductProcess(option.value)}
-                    />
-                    {option.label}
-                  </label>
-                ))}
-                {productionOptions.process_options.length === 0 && (
-                  <span style={{ color: '#78716c', fontSize: '0.82rem' }}>No hay procesos disponibles</span>
-                )}
-              </div>
-            </div>
-
-            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
-              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Equipos utilizados</div>
-              <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-                {productionOptions.equipment_options.map((equipment) => (
-                  <label key={`new-eq-${equipment.id}`} className="form-check-inline">
-                    <input
-                      type="checkbox"
-                      checked={Array.isArray(newProduct.equipment_ids) && newProduct.equipment_ids.includes(equipment.id)}
-                      onChange={() => toggleNewProductEquipment(equipment.id)}
-                    />
-                    {equipment.code} · {equipment.name}
-                  </label>
-                ))}
-                {productionOptions.equipment_options.length === 0 && (
-                  <span style={{ color: '#78716c', fontSize: '0.82rem' }}>No hay equipos activos. Agrégalos en la pestaña Equipos.</span>
-                )}
-              </div>
-            </div>
-
-            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
-              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Materiales utilizados</div>
-              <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-                {productionOptions.material_options.map((material) => (
-                  <label key={`new-mt-${material.id}`} className="form-check-inline">
-                    <input
-                      type="checkbox"
-                      checked={Array.isArray(newProduct.material_ids) && newProduct.material_ids.includes(material.id)}
-                      onChange={() => toggleNewProductMaterial(material.id)}
-                    />
-                    {material.code} · {material.name}{material.unit_measure ? ` (${material.unit_measure})` : ''}
-                  </label>
-                ))}
-                {productionOptions.material_options.length === 0 && (
-                  <span style={{ color: '#78716c', fontSize: '0.82rem' }}>No hay materiales activos. Agrégalos en la pestaña Materiales.</span>
-                )}
-              </div>
-            </div>
-          </div>
+          <p style={{ gridColumn: '1 / -1', margin: 0, color: '#78716c', fontSize: '0.82rem' }}>
+            La ruta de procesos, los equipos y los materiales con cantidades se cargan después en <strong>Estructura</strong> (botón «Estructura» en cada producto).
+          </p>
         </form>
       </div>
 
@@ -978,10 +799,11 @@ function ProductCatalogAdmin({ token }) {
                   <button
                     type="button"
                     className="pcat-action pcat-action--config"
-                    onClick={() => openProductionConfig(row)}
-                    disabled={saving || configLoading}
+                    onClick={() => openStructure(row)}
+                    disabled={saving}
+                    title="Ruta de procesos, minutos, equipos y materiales con cantidades"
                   >
-                    Producción
+                    Estructura
                   </button>
                   <button
                     type="button"
@@ -1047,105 +869,6 @@ function ProductCatalogAdmin({ token }) {
         </div>
       )}
 
-      {configModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(120,100,80,0.72)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 16,
-          zIndex: 1000
-        }}>
-          <div style={{
-            width: 'min(880px, 100%)',
-            maxHeight: '90vh',
-            overflowY: 'auto',
-            background: '#f5f1ec',
-            border: '1px solid #e7e0d8',
-            borderRadius: 12,
-            padding: 16,
-            display: 'grid',
-            gap: 12
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-              <h3 style={{ margin: 0 }}>Configurar producción · {configModal.sku}</h3>
-              {configLoading && <span style={{ color: '#2563eb', fontSize: '0.82rem' }}>Cargando...</span>}
-            </div>
-
-            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
-              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Procesos</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                {productionOptions.process_options.map((option) => (
-                  <label key={`cfg-process-${option.value}`} className="form-check-inline">
-                    <input
-                      type="checkbox"
-                      checked={Array.isArray(configModal.processes) && configModal.processes.includes(option.value)}
-                      onChange={() => updateConfigSelection('processes', option.value)}
-                      disabled={configLoading || configSaving}
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
-              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Equipos</div>
-              <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-                {productionOptions.equipment_options.map((equipment) => (
-                  <label key={`cfg-eq-${equipment.id}`} className="form-check-inline">
-                    <input
-                      type="checkbox"
-                      checked={Array.isArray(configModal.equipment_ids) && configModal.equipment_ids.includes(equipment.id)}
-                      onChange={() => updateConfigSelection('equipment_ids', equipment.id)}
-                      disabled={configLoading || configSaving}
-                    />
-                    {equipment.code} · {equipment.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ border: '1px solid #e7e0d8', borderRadius: 10, padding: 10, background: '#ffffff' }}>
-              <div style={{ color: '#292524', fontWeight: 700, marginBottom: 8, fontSize: '0.9rem' }}>Materiales</div>
-              <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-                {productionOptions.material_options.map((material) => (
-                  <label key={`cfg-mt-${material.id}`} className="form-check-inline">
-                    <input
-                      type="checkbox"
-                      checked={Array.isArray(configModal.material_ids) && configModal.material_ids.includes(material.id)}
-                      onChange={() => updateConfigSelection('material_ids', material.id)}
-                      disabled={configLoading || configSaving}
-                    />
-                    {material.code} · {material.name}{material.unit_measure ? ` (${material.unit_measure})` : ''}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button
-                type="button"
-                onClick={() => setConfigModal(null)}
-                disabled={configSaving}
-                style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e7e0d8', background: '#ffffff', color: '#292524', cursor: 'pointer' }}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={saveProductionConfig}
-                disabled={configSaving || configLoading}
-                style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#2563eb', color: 'white', fontWeight: 700, cursor: 'pointer' }}
-              >
-                {configSaving ? 'Guardando...' : 'Guardar configuración'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

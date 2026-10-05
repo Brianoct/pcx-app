@@ -65,7 +65,6 @@ const battery = [
   ['GET', '/api/products', admin],
   ['GET', '/api/product-catalog', admin],
   ['GET', '/api/product-costing', admin],
-  ['GET', '/api/admin/product-production/options', admin],
   ['GET', '/api/admin/equipos', admin],
   ['GET', '/api/admin/materiales', admin],
   // geo (catálogo de destinos)

@@ -1,4 +1,5 @@
 const { pool } = require('../db');
+const { perPiece, queryMeasuredStays } = require('./productionTimes');
 const { loadProductionSettings } = require('./productStructure');
 const { createHttpError } = require('./util');
 
@@ -116,25 +117,15 @@ const getVarianceReport = async () => {
      ORDER BY s.sku, c.name`
   );
 
-  const timesRes = await pool.query(
-    `WITH durations AS (
-       SELECT e.sku, e.to_stage AS process,
-              EXTRACT(EPOCH FROM (
-                LEAD(e.moved_at) OVER (PARTITION BY e.card_id ORDER BY e.moved_at, e.id) - e.moved_at
-              )) / 60.0 AS minutes
-       FROM production_stage_events e
-     )
-     SELECT d.sku, d.process,
-            COUNT(*)::int AS observed,
-            AVG(d.minutes) AS avg_minutes,
-            MAX(p.std_minutes) AS std_minutes
-     FROM durations d
-     LEFT JOIN product_process_steps p
-       ON UPPER(p.sku) = UPPER(d.sku) AND p.process = d.process
-     WHERE d.minutes IS NOT NULL
-     GROUP BY d.sku, d.process
-     ORDER BY d.sku, d.process`
+  // Tiempos: misma regla que el tablero y el bono (lib/productionTimes.js):
+  // minutos del lote en la estación ÷ piezas, mediana de 90 días, estancias
+  // de más de 7 días descartadas. Antes se promediaba el reloj de pared del
+  // lote entero y salían miles de minutos contra un estándar por pieza.
+  const measured = await queryMeasuredStays({});
+  const stdRes = await pool.query(
+    'SELECT UPPER(sku) AS sku, process, std_minutes, pieces_per_run FROM product_process_steps WHERE std_minutes IS NOT NULL'
   );
+  const stdByKey = new Map(stdRes.rows.map((row) => [`${row.sku}|${row.process}`, perPiece(row.std_minutes, row.pieces_per_run)]));
 
   const pct = (actual, std) => {
     if (!Number.isFinite(actual) || !Number.isFinite(std) || std <= 0) return null;
@@ -157,16 +148,15 @@ const getVarianceReport = async () => {
         delta_pct: avg !== null && std !== null ? pct(avg, std) : null
       };
     }),
-    times: timesRes.rows.map((row) => {
-      const avg = row.avg_minutes !== null ? Number(Number(row.avg_minutes).toFixed(1)) : null;
-      const std = row.std_minutes !== null ? Number(row.std_minutes) : null;
+    times: measured.map((row) => {
+      const std = stdByKey.has(`${row.sku}|${row.process}`) ? Number(stdByKey.get(`${row.sku}|${row.process}`)) : null;
       return {
         sku: row.sku,
         process: row.process,
-        observed: Number(row.observed),
-        std_minutes: std,
-        avg_minutes: avg,
-        delta_pct: avg !== null && std !== null ? pct(avg, std) : null
+        observed: row.lots,
+        std_minutes: std !== null ? Number(std.toFixed(2)) : null,
+        avg_minutes: row.minutes_per_piece,
+        delta_pct: std !== null ? pct(row.minutes_per_piece, std) : null
       };
     })
   };

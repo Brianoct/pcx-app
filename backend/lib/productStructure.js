@@ -1,6 +1,7 @@
 const { pool } = require('../db');
 const { PRODUCTION_KANBAN_STAGES, PRODUCTION_KANBAN_START_STAGES, normalizeProductionKanbanStage } = require('./kanban');
 const { validateProductSku } = require('./products');
+const { equipmentCostForMinutes, equipmentHourlyCost, equipmentHasRate } = require('./equipmentCost');
 const { createHttpError } = require('./util');
 
 // ─── Production settings (plant-wide costing knobs) ─────────────────────────
@@ -161,7 +162,23 @@ const parseStructureSteps = (value) => {
         throw createHttpError(400, `Paso ${index + 1}: equipment_id inválido`);
       }
     }
-    return { process, std_minutes: stdMinutes, equipment_id: equipmentId };
+    // Tanda: piezas que salen de cada corrida y minutos de operador por
+    // corrida (ver migración 20261006_process_step_batches.sql).
+    let piecesPerRun = 1;
+    if (item?.pieces_per_run !== undefined && item?.pieces_per_run !== null && item?.pieces_per_run !== '') {
+      piecesPerRun = Number.parseInt(item.pieces_per_run, 10);
+      if (!Number.isInteger(piecesPerRun) || piecesPerRun <= 0) {
+        throw createHttpError(400, `Paso ${index + 1}: piezas por tanda debe ser un entero mayor a 0`);
+      }
+    }
+    let attendedMinutes = null;
+    if (item?.attended_minutes !== undefined && item?.attended_minutes !== null && item?.attended_minutes !== '') {
+      attendedMinutes = Number(item.attended_minutes);
+      if (!Number.isFinite(attendedMinutes) || attendedMinutes < 0) {
+        throw createHttpError(400, `Paso ${index + 1}: minutos de operador debe ser un número >= 0`);
+      }
+    }
+    return { process, std_minutes: stdMinutes, equipment_id: equipmentId, pieces_per_run: piecesPerRun, attended_minutes: attendedMinutes };
   });
   return steps;
 };
@@ -236,9 +253,9 @@ const saveProductStructure = async (sku, payload, userId) => {
     await client.query('DELETE FROM product_process_steps WHERE UPPER(sku) = $1', [normalizedSku]);
     for (let i = 0; i < steps.length; i++) {
       await client.query(
-        `INSERT INTO product_process_steps (sku, step_order, process, std_minutes, equipment_id)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [normalizedSku, i + 1, steps[i].process, steps[i].std_minutes, steps[i].equipment_id]
+        `INSERT INTO product_process_steps (sku, step_order, process, std_minutes, equipment_id, pieces_per_run, attended_minutes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [normalizedSku, i + 1, steps[i].process, steps[i].std_minutes, steps[i].equipment_id, steps[i].pieces_per_run, steps[i].attended_minutes]
       );
     }
 
@@ -277,24 +294,12 @@ const saveProductStructure = async (sku, payload, userId) => {
 
 // ─── Read + derived costing ──────────────────────────────────────────────────
 
-// Equipment cost attributed to one produced unit: monthly ownership cost
-// (straight-line depreciation + running extras) spread over monthly capacity.
-const equipmentCostPerUnit = (equipment) => {
-  if (!equipment) return 0;
-  const capacity = Number(equipment.monthly_capacity_units || 0);
-  if (capacity <= 0) return 0;
-  const life = Number(equipment.useful_life_months || 0);
-  const depreciation = life > 0 ? Number(equipment.replacement_cost_bs || 0) / life : 0;
-  const monthly = depreciation + Number(equipment.monthly_extra_cost_bs || 0);
-  return monthly / capacity;
-};
-
 const getProductStructure = async (sku) => {
   const normalizedSku = validateProductSku(sku);
 
   const [stepsRes, materialsRes, settings, manualRes, productRes, processRates] = await Promise.all([
     pool.query(
-      `SELECT s.step_order, s.process, s.std_minutes, s.equipment_id,
+      `SELECT s.step_order, s.process, s.std_minutes, s.equipment_id, s.pieces_per_run, s.attended_minutes,
               e.code AS equipment_code, e.name AS equipment_name,
               e.replacement_cost_bs, e.useful_life_months,
               e.monthly_extra_cost_bs, e.monthly_capacity_units
@@ -340,18 +345,30 @@ const getProductStructure = async (sku) => {
 
   const steps = stepsRes.rows.map((row) => {
     const minutes = row.std_minutes !== null ? Number(row.std_minutes) : null;
+    const piecesPerRun = Math.max(1, Number(row.pieces_per_run) || 1);
+    const attended = row.attended_minutes !== null ? Number(row.attended_minutes) : null;
+    // Por pieza: la máquina ocupa std/piezas; el operador (attended ?? std)/piezas.
+    const machineMinutes = minutes !== null ? minutes / piecesPerRun : 0;
+    const laborMinutes = (attended !== null ? attended : (minutes || 0)) / piecesPerRun;
     const rate = effectiveRate(row.process);
     return {
       step_order: Number(row.step_order),
       process: row.process,
       std_minutes: minutes,
+      pieces_per_run: piecesPerRun,
+      attended_minutes: attended,
+      machine_minutes_per_piece: Number(machineMinutes.toFixed(4)),
+      labor_minutes_per_piece: Number(laborMinutes.toFixed(4)),
       rate_bs_hour: rate,
       owner_name: rateByProcess[row.process]?.owner_name || null,
-      labor_cost_per_unit: Number((((minutes || 0) / 60) * rate).toFixed(4)),
+      labor_cost_per_unit: Number(((laborMinutes / 60) * rate).toFixed(4)),
       equipment_id: row.equipment_id !== null ? Number(row.equipment_id) : null,
       equipment_code: row.equipment_code || null,
       equipment_name: row.equipment_name || null,
-      equipment_cost_per_unit: Number(equipmentCostPerUnit(row.equipment_id !== null ? row : null).toFixed(4))
+      // Equipo: Bs/hora × minutos de máquina por pieza (ver lib/equipmentCost.js).
+      equipment_rate_bs_hour: row.equipment_id !== null ? Number(equipmentHourlyCost(row).toFixed(4)) : null,
+      equipment_missing_hours: row.equipment_id !== null && !equipmentHasRate(row),
+      equipment_cost_per_unit: Number(equipmentCostForMinutes(row.equipment_id !== null ? row : null, machineMinutes).toFixed(4))
     };
   });
 
@@ -374,7 +391,7 @@ const getProductStructure = async (sku) => {
 
   const materialsCost = materials.reduce((sum, m) => sum + m.cost_per_unit, 0);
   const equipmentCost = steps.reduce((sum, s) => sum + s.equipment_cost_per_unit, 0);
-  const totalMinutes = steps.reduce((sum, s) => sum + Number(s.std_minutes || 0), 0);
+  const totalMinutes = steps.reduce((sum, s) => sum + s.machine_minutes_per_piece, 0);
   // Mano de obra = Σ minutos del paso × tarifa de SU proceso.
   const laborCost = steps.reduce((sum, s) => sum + s.labor_cost_per_unit, 0);
 
@@ -385,6 +402,24 @@ const getProductStructure = async (sku) => {
     : 0;
 
   const computedCost = materialsCost + equipmentCost + laborCost;
+  const currentPrice = Number(productRes.rows[0].sf_price || 0);
+
+  // Avisos para el editor: equipos sin horas (aportan 0) y costo por
+  // encima del precio de venta.
+  const warnings = [];
+  const missingHours = steps.filter((s) => s.equipment_missing_hours);
+  if (missingHours.length > 0) {
+    warnings.push({
+      code: 'equipment_without_hours',
+      message: `Equipos sin horas por mes (aportan 0 al costo): ${[...new Set(missingHours.map((s) => s.equipment_name || s.equipment_code))].join(', ')}. Cárgalas en Admin → Equipos.`
+    });
+  }
+  if (currentPrice > 0 && computedCost > currentPrice) {
+    warnings.push({
+      code: 'cost_above_price',
+      message: `El costo derivado (${computedCost.toFixed(2)} Bs) supera el precio sin factura (${currentPrice.toFixed(2)} Bs).`
+    });
+  }
 
   return {
     sku: normalizedSku,
@@ -401,8 +436,9 @@ const getProductStructure = async (sku) => {
       utility: manualUtility,
       computed_price: Number((computedCost + manualUtility).toFixed(2)),
       manual_total: Number(manualTotal.toFixed(2)),
-      current_price: Number(productRes.rows[0].sf_price || 0)
-    }
+      current_price: currentPrice
+    },
+    warnings
   };
 };
 

@@ -151,12 +151,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/admin/product-production/options",
-    "status": 200,
-    "shape": "object"
-  },
-  {
-    "method": "GET",
     "path": "/api/admin/equipos",
     "status": 200,
     "shape": "array"

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { apiRequest } from '../apiClient';
 import { useToast } from '../ui/toastContext';
 
@@ -16,18 +17,46 @@ const PROCESS_LABEL = Object.fromEntries(PROCESS_OPTIONS.map((p) => [p.value, p.
 
 const money = (value) => `${Number(value || 0).toFixed(2)} Bs`;
 
-// Mirrors backend equipmentCostPerUnit (lib/productStructure.js).
-const equipmentCostPerUnit = (equipment) => {
+// Mismo modelo que el backend (lib/equipmentCost.js): el equipo cuesta
+// Bs/hora = (reposición/vida útil + extra mensual) / horas disponibles por
+// mes, y cada paso carga Bs/hora × sus minutos estándar por pieza.
+const equipmentHourlyCost = (equipment) => {
   if (!equipment) return 0;
-  const capacity = Number(equipment.monthly_capacity_units || 0);
-  if (capacity <= 0) return 0;
+  const hours = Number(equipment.monthly_capacity_units || 0);
+  if (hours <= 0) return 0;
   const life = Number(equipment.useful_life_months || 0);
   const depreciation = life > 0 ? Number(equipment.replacement_cost_bs || 0) / life : 0;
-  return (depreciation + Number(equipment.monthly_extra_cost_bs || 0)) / capacity;
+  return (depreciation + Number(equipment.monthly_extra_cost_bs || 0)) / hours;
+};
+const equipmentCostForMinutes = (equipment, minutes) => equipmentHourlyCost(equipment) * ((Number(minutes) || 0) / 60);
+const equipmentHasHours = (equipment) => Boolean(equipment) && Number(equipment.monthly_capacity_units || 0) > 0;
+
+// Tanda: std_minutes son minutos de máquina por corrida; pieces_per_run las
+// piezas que salen de cada corrida; attended_minutes los minutos de operador
+// por corrida (vacío = atiende toda la corrida). Por pieza:
+//   máquina = std / piezas · operador = (attended ?? std) / piezas
+const stepMinutes = (step) => {
+  const std = Number(step.std_minutes) || 0;
+  const pieces = Math.max(1, Number.parseInt(step.pieces_per_run, 10) || 1);
+  const attended = step.attended_minutes === '' || step.attended_minutes === null || step.attended_minutes === undefined
+    ? std
+    : Number(step.attended_minutes) || 0;
+  return { std, pieces, machine: std / pieces, labor: attended / pieces, batched: pieces > 1 || step.attended_minutes !== '' };
+};
+
+// Dónde se consume un material por defecto, según su nombre y la ruta:
+// pintura/polvo → pintado; el resto → primer proceso que arranca la pieza
+// (impresión, láser, punzonado) o el primer paso de la ruta.
+const isPaintMaterial = (cat) => /pintura|polvo|powder|^PP\d/i.test(`${cat?.code || ''} ${cat?.name || ''}`);
+const defaultConsumeProcess = (cat, routeProcesses) => {
+  if (!routeProcesses.length) return '';
+  if (isPaintMaterial(cat) && routeProcesses.includes('pintado')) return 'pintado';
+  return ['impresion_3d', 'corte_laser', 'punzonado'].find((p) => routeProcesses.includes(p)) || routeProcesses[0];
 };
 
 function ProductStructureAdmin({ token }) {
   const toast = useToast();
+  const location = useLocation();
   const [products, setProducts] = useState([]);
   const [equipment, setEquipment] = useState([]);
   const [materialsCatalog, setMaterialsCatalog] = useState([]);
@@ -85,6 +114,14 @@ function ProductStructureAdmin({ token }) {
     return () => { active = false; };
   }, [token]);
 
+  // Deep link desde Productos: /admin?tab=estructura&sku=XXX abre ese producto.
+  useEffect(() => {
+    if (loading) return;
+    const sku = String(new URLSearchParams(location.search).get('sku') || '').trim().toUpperCase();
+    if (sku && sku !== selectedSku && products.some((p) => p.sku === sku)) loadStructure(sku);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, location.search, products]);
+
   const equipmentById = useMemo(
     () => new Map(equipment.map((e) => [Number(e.id), e])),
     [equipment]
@@ -104,7 +141,10 @@ function ProductStructureAdmin({ token }) {
         steps: (data?.steps || []).map((s) => ({
           process: s.process,
           std_minutes: s.std_minutes ?? '',
-          equipment_id: s.equipment_id ?? ''
+          equipment_id: s.equipment_id ?? '',
+          pieces_per_run: s.pieces_per_run ?? 1,
+          attended_minutes: s.attended_minutes ?? '',
+          batch_open: (Number(s.pieces_per_run) || 1) > 1 || (s.attended_minutes !== null && s.attended_minutes !== undefined)
         })),
         materials: (data?.materials || []).map((m) => ({
           material_id: m.material_id,
@@ -210,7 +250,7 @@ function ProductStructureAdmin({ token }) {
       const used = new Set(prev.steps.map((s) => s.process));
       const nextProcess = PROCESS_OPTIONS.find((p) => !used.has(p.value));
       if (!nextProcess) return prev;
-      return { ...prev, steps: [...prev.steps, { process: nextProcess.value, std_minutes: '', equipment_id: '' }] };
+      return { ...prev, steps: [...prev.steps, { process: nextProcess.value, std_minutes: '', equipment_id: '', pieces_per_run: 1, attended_minutes: '', batch_open: false }] };
     });
   };
 
@@ -229,7 +269,8 @@ function ProductStructureAdmin({ token }) {
       const used = new Set(prev.materials.map((m) => Number(m.material_id)));
       const nextMaterial = materialsCatalog.find((m) => !used.has(Number(m.id)));
       if (!nextMaterial) return prev;
-      return { ...prev, materials: [...prev.materials, { material_id: Number(nextMaterial.id), qty_per_unit: 0, process: '' }] };
+      const route = prev.steps.map((st) => st.process);
+      return { ...prev, materials: [...prev.materials, { material_id: Number(nextMaterial.id), qty_per_unit: 0, process: defaultConsumeProcess(nextMaterial, route), powder_open: false }] };
     });
   };
 
@@ -242,22 +283,34 @@ function ProductStructureAdmin({ token }) {
       if (!cat) return sum;
       return sum + Number(m.qty_per_unit || 0) * Number(cat.unit_cost_bs || 0) * (1 + Number(cat.waste_pct || 0) / 100);
     }, 0);
-    const equipmentCost = structure.steps.reduce((sum, s) => (
-      sum + equipmentCostPerUnit(equipmentById.get(Number(s.equipment_id)))
-    ), 0);
-    const totalMinutes = structure.steps.reduce((sum, s) => sum + (Number(s.std_minutes) || 0), 0);
-    // Mano de obra = Σ minutos del paso × tarifa de su proceso (o la general).
+    const equipmentByStep = structure.steps.map((s) => {
+      const eq = equipmentById.get(Number(s.equipment_id)) || null;
+      const mins = stepMinutes(s);
+      return {
+        process: s.process,
+        minutes: Number(mins.machine.toFixed(2)),
+        equipment: eq,
+        rate: equipmentHourlyCost(eq),
+        missingHours: Boolean(eq) && !equipmentHasHours(eq),
+        cost: equipmentCostForMinutes(eq, mins.machine)
+      };
+    });
+    const equipmentCost = equipmentByStep.reduce((sum, s) => sum + s.cost, 0);
+    const totalMinutes = structure.steps.reduce((sum, s) => sum + stepMinutes(s).machine, 0);
+    // Mano de obra = Σ minutos de OPERADOR por pieza × tarifa de su proceso (o la general).
     const laborByStep = structure.steps.map((s) => ({
       process: s.process,
-      minutes: Number(s.std_minutes) || 0,
+      minutes: Number(stepMinutes(s).labor.toFixed(2)),
       rate: rateFor(s.process),
-      cost: ((Number(s.std_minutes) || 0) / 60) * rateFor(s.process)
+      cost: (stepMinutes(s).labor / 60) * rateFor(s.process)
     }));
     const laborCost = laborByStep.reduce((sum, s) => sum + s.cost, 0);
     const computedCost = materialsCost + equipmentCost + laborCost;
     return {
       materialsCost,
       equipmentCost,
+      equipmentByStep,
+      equipmentMissingHours: [...new Set(equipmentByStep.filter((s) => s.missingHours).map((s) => s.equipment.name))],
       laborCost,
       laborByStep,
       usesGlobalRate: laborByStep.some((s) => s.minutes > 0 && s.rate === rate && !processRates.find((r) => r.process === s.process && r.rate_bs_hour !== '')),
@@ -280,7 +333,9 @@ function ProductStructureAdmin({ token }) {
         steps: structure.steps.map((s) => ({
           process: s.process,
           std_minutes: s.std_minutes === '' ? null : Number(s.std_minutes),
-          equipment_id: s.equipment_id === '' ? null : Number(s.equipment_id)
+          equipment_id: s.equipment_id === '' ? null : Number(s.equipment_id),
+          pieces_per_run: Math.max(1, Number.parseInt(s.pieces_per_run, 10) || 1),
+          attended_minutes: s.attended_minutes === '' ? null : Number(s.attended_minutes)
         })),
         materials: structure.materials.map((m) => ({
           material_id: Number(m.material_id),
@@ -454,7 +509,12 @@ function ProductStructureAdmin({ token }) {
             <>
               <div className="card">
                 <div className="est-section-head">
-                  <h4 className="est-section-title">Ruta de procesos — {structure.name}</h4>
+                  <div>
+                    <h4 className="est-section-title">Ruta de procesos — {structure.name}</h4>
+                    <p className="est-rates-hint" style={{ margin: '2px 0 0' }}>
+                      Minutos = tiempo estándar por <strong>una pieza</strong> en esa estación. Mano de obra = min × tarifa del proceso; equipo = min × Bs/hora del equipo.
+                    </p>
+                  </div>
                   <button type="button" className="btn btn-secondary est-add-btn" onClick={addStep}>+ Paso</button>
                 </div>
                 <div className="est-steps">
@@ -476,16 +536,30 @@ function ProductStructureAdmin({ token }) {
                           </option>
                         ))}
                       </select>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        placeholder="min"
-                        title="Minutos estándar por pieza"
-                        value={step.std_minutes}
-                        onChange={(e) => updateStep(index, { std_minutes: e.target.value })}
-                        className="est-minutes"
-                      />
+                      <label className="est-minutes-wrap" title={step.batch_open
+                        ? 'Minutos de máquina por TANDA (una plancha de impresión, una plancha de láser). Se divide entre las piezas por tanda.'
+                        : 'Minutos estándar que UNA pieza ocupa en esta estación (no el lote completo ni el reloj de pared). Con ellos se calcula mano de obra y equipo, y el tablero estima el trabajo de cada lote.'}>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          placeholder="0"
+                          value={step.std_minutes}
+                          onChange={(e) => updateStep(index, { std_minutes: e.target.value })}
+                          className="est-minutes"
+                        />
+                        <span>{step.batch_open ? 'min/tanda' : 'min/pza'}</span>
+                      </label>
+                      <button
+                        type="button"
+                        className={`est-batch-toggle ${step.batch_open ? 'is-on' : ''}`}
+                        title="Por tanda: la máquina saca varias piezas de una corrida (plancha de impresión 3D, plancha de láser) y el operador no la atiende todo el tiempo"
+                        onClick={() => updateStep(index, step.batch_open
+                          ? { batch_open: false, pieces_per_run: 1, attended_minutes: '' }
+                          : { batch_open: true })}
+                      >
+                        {step.batch_open ? '▾ tanda' : '▸ tanda'}
+                      </button>
                       <select
                         value={step.equipment_id}
                         onChange={(e) => updateStep(index, { equipment_id: e.target.value })}
@@ -494,7 +568,7 @@ function ProductStructureAdmin({ token }) {
                       >
                         <option value="">Sin equipo</option>
                         {equipment.map((eq) => (
-                          <option key={eq.id} value={eq.id}>{eq.name}</option>
+                          <option key={eq.id} value={eq.id}>{eq.name}{equipmentHasHours(eq) ? ` · ${equipmentHourlyCost(eq).toFixed(2)} Bs/h` : ' · ⚠ sin horas'}</option>
                         ))}
                       </select>
                       <div className="est-row-actions">
@@ -502,6 +576,31 @@ function ProductStructureAdmin({ token }) {
                         <button type="button" onClick={() => moveStep(index, 1)} disabled={index === structure.steps.length - 1} aria-label="Bajar">↓</button>
                         <button type="button" className="is-danger" onClick={() => removeStep(index)} aria-label="Quitar">✕</button>
                       </div>
+                      {step.batch_open && (() => {
+                        const mins = stepMinutes(step);
+                        return (
+                          <div className="est-batch-row">
+                            <label title="Piezas que salen de cada tanda (p. ej. 6 bandejas por plancha de impresión, 12 piezas por plancha de láser)">
+                              <input
+                                type="number" min="1" step="1"
+                                value={step.pieces_per_run}
+                                onChange={(e) => updateStep(index, { pieces_per_run: e.target.value })}
+                              />
+                              <span>pzas/tanda</span>
+                            </label>
+                            <label title="Minutos que el operador dedica a cada tanda (cargar, descargar, revisar). Vacío = atiende toda la tanda.">
+                              <input
+                                type="number" min="0" step="0.5"
+                                placeholder={String(mins.std)}
+                                value={step.attended_minutes}
+                                onChange={(e) => updateStep(index, { attended_minutes: e.target.value })}
+                              />
+                              <span>min operador/tanda</span>
+                            </label>
+                            <em>= máquina {mins.machine.toFixed(2)} min/pza · operador {mins.labor.toFixed(2)} min/pza</em>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -518,14 +617,24 @@ function ProductStructureAdmin({ token }) {
                   <div className="est-materials">
                     {structure.materials.map((material, index) => {
                       const cat = materialById.get(Number(material.material_id));
-                      const lineCost = cat
-                        ? Number(material.qty_per_unit || 0) * Number(cat.unit_cost_bs || 0) * (1 + Number(cat.waste_pct || 0) / 100)
-                        : 0;
+                      const rawCost = cat ? Number(material.qty_per_unit || 0) * Number(cat.unit_cost_bs || 0) : 0;
+                      const wasteCost = cat ? rawCost * (Number(cat.waste_pct || 0) / 100) : 0;
+                      const lineCost = rawCost + wasteCost;
+                      const powderable = cat && isPaintMaterial(cat) && /kg/i.test(cat.unit_measure || '');
+                      const applyPowder = () => {
+                        const area = Number(material.powder_area) || 0;
+                        const sides = Number(material.powder_sides) || 1;
+                        const coverage = Number(material.powder_coverage) || 0.24;
+                        updateMaterial(index, { qty_per_unit: Number((area * sides * coverage).toFixed(4)), powder_open: false });
+                      };
                       return (
                         <div key={`${material.material_id}-${index}`} className="est-material-row">
                           <select
                             value={material.material_id}
-                            onChange={(e) => updateMaterial(index, { material_id: Number(e.target.value) })}
+                            onChange={(e) => {
+                              const next = materialById.get(Number(e.target.value));
+                              updateMaterial(index, { material_id: Number(e.target.value), process: material.process || defaultConsumeProcess(next, routeProcesses) });
+                            }}
                             aria-label="Material"
                             className="est-material-select"
                           >
@@ -547,17 +656,33 @@ function ProductStructureAdmin({ token }) {
                             value={material.process}
                             onChange={(e) => updateMaterial(index, { process: e.target.value })}
                             aria-label="Proceso donde se consume"
-                            className="est-material-process"
+                            className={`est-material-process ${material.process ? '' : 'is-missing'}`}
+                            title={material.process ? 'Proceso donde se consume este material' : 'Falta el proceso donde se consume: el muestreo de consumo real no sabrá cuándo pedir la medición'}
                           >
-                            <option value="">Proceso…</option>
+                            <option value="">⚠ Proceso…</option>
                             {routeProcesses.map((p) => (
                               <option key={p} value={p}>{PROCESS_LABEL[p] || p}</option>
                             ))}
                           </select>
-                          <span className="est-line-cost">{money(lineCost)}</span>
+                          <span className="est-line-cost" title={cat ? `${Number(material.qty_per_unit || 0)} ${cat.unit_measure} × ${Number(cat.unit_cost_bs || 0).toFixed(2)} Bs = ${money(rawCost)} + merma ${Number(cat.waste_pct || 0)}% = ${money(wasteCost)}` : ''}>
+                            {money(lineCost)}
+                            {wasteCost > 0 && <small>{money(rawCost)} + {money(wasteCost)} merma</small>}
+                          </span>
                           <div className="est-row-actions">
+                            {powderable && (
+                              <button type="button" title="Calcular kg de pintura en polvo: área × caras × kg/m²" onClick={() => updateMaterial(index, { powder_open: !material.powder_open, powder_area: material.powder_area ?? '', powder_sides: material.powder_sides ?? 1, powder_coverage: material.powder_coverage ?? 0.24 })}>⚖</button>
+                            )}
                             <button type="button" className="is-danger" onClick={() => removeMaterial(index)} aria-label="Quitar">✕</button>
                           </div>
+                          {powderable && material.powder_open && (
+                            <div className="est-batch-row est-powder">
+                              <label title="Área de la pieza por cara, en m² (descontando agujeros si quieres afinar)"><input type="number" min="0" step="0.001" value={material.powder_area} onChange={(e) => updateMaterial(index, { powder_area: e.target.value })} /><span>m² por cara</span></label>
+                              <label title="Caras pintadas (1 o 2)"><input type="number" min="1" max="2" step="1" value={material.powder_sides} onChange={(e) => updateMaterial(index, { powder_sides: e.target.value })} /><span>caras</span></label>
+                              <label title="Consumo de polvo por m² (0.24 kg/m² es la estimación actual; reemplázalo cuando peses una tanda)"><input type="number" min="0" step="0.01" value={material.powder_coverage} onChange={(e) => updateMaterial(index, { powder_coverage: e.target.value })} /><span>kg/m²</span></label>
+                              <em>= {((Number(material.powder_area) || 0) * (Number(material.powder_sides) || 1) * (Number(material.powder_coverage) || 0)).toFixed(4)} kg</em>
+                              <button type="button" className="btn btn-secondary btn-sm" onClick={applyPowder}>Usar</button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -568,11 +693,24 @@ function ProductStructureAdmin({ token }) {
               {preview && (
                 <div className="card est-costing">
                   <h4 className="est-section-title" style={{ marginBottom: '10px' }}>Costo derivado</h4>
+                  {preview.equipmentMissingHours.length > 0 && (
+                    <div className="est-warn">
+                      ⚠ Equipos sin horas por mes (aportan 0 al costo): <strong>{preview.equipmentMissingHours.join(', ')}</strong>. Cárgalas en Admin → Equipos.
+                    </div>
+                  )}
+                  {structure.currentPrice > 0 && preview.computedCost > structure.currentPrice && (
+                    <div className="est-warn is-danger">
+                      ⚠ El costo derivado ({money(preview.computedCost)}) supera el precio sin factura ({money(structure.currentPrice)}). Revisa minutos por pieza, cantidades del BOM o el precio.
+                    </div>
+                  )}
                   <div className="est-cost-grid">
                     <div><span>Materiales</span><strong>{money(preview.materialsCost)}</strong></div>
-                    <div><span>Equipos</span><strong>{money(preview.equipmentCost)}</strong></div>
+                    <div title={preview.equipmentByStep.filter((s) => s.equipment).map((s) => `${PROCESS_LABEL[s.process] || s.process}: ${s.equipment.name} ${s.missingHours ? 'sin horas/mes → 0' : `${s.rate.toFixed(2)} Bs/h × ${s.minutes} min = ${money(s.cost)}`}`).join('\n') || 'Sin equipos en la ruta'}>
+                      <span>Equipos (Bs/h × {preview.totalMinutes.toFixed(1)} min máquina)</span>
+                      <strong>{money(preview.equipmentCost)}</strong>
+                    </div>
                     <div title={preview.laborByStep.filter((s) => s.minutes > 0).map((s) => `${PROCESS_LABEL[s.process] || s.process}: ${s.minutes} min × ${s.rate} Bs/h = ${money(s.cost)}`).join('\n')}>
-                      <span>Mano de obra ({preview.totalMinutes.toFixed(0)} min · por proceso)</span>
+                      <span>Mano de obra (operador · por proceso)</span>
                       <strong>{money(preview.laborCost)}</strong>
                     </div>
                     <div className="est-cost-total"><span>Costo total</span><strong>{money(preview.computedCost)}</strong></div>
@@ -610,6 +748,7 @@ function ProductStructureAdmin({ token }) {
           <h4 className="est-section-title" style={{ marginBottom: '4px' }}>Mediciones reales vs estándar</h4>
           <p style={{ color: '#78716c', fontSize: '0.82rem', margin: '0 0 12px' }}>
             Consumo registrado por operadores (muestreo aleatorio) y tiempos observados en el tablero, comparados con los valores estándar.
+            Tiempo real = minutos que el lote estuvo en la estación ÷ piezas del lote (mediana de 90 días; estancias de más de 7 días se descartan). Es reloj de pared: incluye esperas, así que suele superar al estándar.
           </p>
 
           {variance.materials?.length > 0 && (
@@ -650,9 +789,9 @@ function ProductStructureAdmin({ token }) {
                   <tr>
                     <th>Producto</th>
                     <th>Proceso</th>
-                    <th style={{ textAlign: 'right' }}>Estándar (min)</th>
-                    <th style={{ textAlign: 'right' }}>Real prom. (min)</th>
-                    <th style={{ textAlign: 'right' }}>Observaciones</th>
+                    <th style={{ textAlign: 'right' }}>Estándar (min/pza)</th>
+                    <th style={{ textAlign: 'right' }}>Real mediana (min/pza)</th>
+                    <th style={{ textAlign: 'right' }}>Lotes</th>
                     <th style={{ textAlign: 'right' }}>Δ%</th>
                   </tr>
                 </thead>
