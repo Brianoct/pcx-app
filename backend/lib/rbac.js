@@ -43,6 +43,9 @@ const PANEL_KEYS = [
   'clientes_lectura',
   // Sitio web público: editar y publicar el contenido del inicio.
   'sitio_web',
+  // Inicio nuevo (mosaicos + cuadro «describe lo que necesitas»), por persona
+  // mientras se prueba. Admin lo tiene por defecto; el resto se activa a mano.
+  'inicio_nuevo',
   'admin'
 ];
 
@@ -76,6 +79,7 @@ const getDefaultPanelAccessForRole = (roleValue = '') => {
     marketing_promos: false,
     clientes_lectura: false,
     sitio_web: false,
+    inicio_nuevo: false,
     admin: false
   };
 

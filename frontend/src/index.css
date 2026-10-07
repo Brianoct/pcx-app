@@ -12805,3 +12805,36 @@ button.vc-kpi {
   .se-form { border-right: 0; border-bottom: 1px solid #e7e0d8; overflow: visible; }
   .se-preview { min-height: 60vh; }
 }
+
+/* ============ Inicio nuevo (mosaicos + cuadro «describe lo que necesitas») ============ */
+.home { max-width: 980px; margin: 0 auto; padding: 8px 16px 48px; }
+.home-hello { text-align: center; padding: 26px 0 6px; }
+.home-hello h1 { margin: 0; font-size: clamp(1.8rem, 4.5vw, 2.7rem); font-weight: 800; letter-spacing: -0.02em; }
+.home-hello p { margin: 6px 0 0; color: var(--text-muted); font-size: 1.02rem; }
+.home-ask { max-width: 640px; margin: 20px auto 0; display: flex; gap: 10px; }
+.home-ask input { flex: 1; min-width: 0; min-height: 50px; padding: 0 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-input); color: var(--text-primary); font: inherit; font-size: 1rem; }
+.home-ask input:focus { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+.home-go { min-height: 50px; padding: 0 22px; border-radius: 12px; border: 0; background: var(--accent-primary); color: #fff; font-weight: 700; }
+.home-go:disabled { opacity: 0.45; cursor: default; }
+.home-suggest { max-width: 640px; margin: 10px auto 0; min-height: 46px; }
+.home-suggest-card { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; font-size: 0.92rem; }
+.home-suggest-card strong { color: var(--accent-primary); }
+.home-suggest-actions { margin-left: auto; display: flex; gap: 6px; }
+.home-suggest-actions button { min-height: 34px; padding: 4px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-primary); font-size: 0.86rem; font-weight: 600; }
+.home-suggest-actions button.is-primary { background: var(--text-primary); color: var(--bg-secondary); border-color: var(--text-primary); }
+.home-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; max-width: 900px; margin: 22px auto 0; }
+.home-tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; aspect-ratio: 1.45; min-height: 0; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 14px; color: var(--text-primary); font-weight: 600; font-size: 1rem; transition: transform 0.12s ease, border-color 0.12s ease; }
+.home-tile:hover { transform: translateY(-2px); border-color: rgba(225, 29, 72, 0.45); }
+.home-tile.is-hot { background: rgba(225, 29, 72, 0.06); }
+.home-tile img { width: 64px; height: 64px; object-fit: contain; }
+.home-more { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 6px; margin: 26px auto 0; color: var(--text-muted); font-size: 0.95rem; }
+.home-more-label { margin-right: 6px; }
+.home-more button { min-height: 32px; padding: 4px 8px; border: 0; background: transparent; color: var(--text-primary); font-weight: 500; font-size: 0.95rem; border-radius: 6px; }
+.home-more button:hover { color: var(--accent-primary); background: var(--bg-secondary); }
+.home-more button + button::before { content: '·'; color: var(--text-muted); margin-right: 10px; }
+@media (max-width: 640px) {
+  .home-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .home-tile { font-size: 0.92rem; }
+  .home-tile img { width: 52px; height: 52px; }
+  .home-ask { flex-direction: row; }
+}
