@@ -8,6 +8,7 @@ import { canAccessPanel } from './roleAccess';
 import { allowsAny } from './navConfig';
 import PerformanceDashboard from './PerformanceDashboard';
 import VentasDashboard from './VentasDashboard';
+import HomeTiles from './HomeTiles';
 import MarketingDashboard from './MarketingDashboard';
 import { useToast } from './ui/toastContext';
 import { areaForRole, AREA_LABELS, boliviaToday, campaignIsActive, formatCampaignDate } from './campaignShared';
@@ -38,6 +39,12 @@ const minuteLabel = (minute) => {
 };
 
 export default function Dashboard({ token, user, role, access, features }) {
+  // Inicio nuevo (en prueba): mosaicos de acceso rápido + cuadro de búsqueda.
+  // Se activa por persona con el permiso inicio_nuevo; el resto sigue viendo
+  // el Inicio de siempre.
+  if (canAccessPanel(access, 'inicio_nuevo')) {
+    return <HomeTiles token={token} user={user} role={role} access={access} features={features} />;
+  }
   // Inicio por área: si el admin activó el Panel de Ventas, el equipo
   // comercial ve su tablero en lugar del Inicio genérico.
   if (features?.panel_ventas && areaForRole(role) === 'ventas') {

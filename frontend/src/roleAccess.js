@@ -31,6 +31,7 @@ const ACCESS_TEMPLATE = {
   marketing_promos: false,
   clientes_lectura: false,
   sitio_web: false,
+  inicio_nuevo: false,
   admin: false
 };
 
@@ -64,6 +65,7 @@ const ROLE_DEFAULTS = {
     marketing_inversion: true,
     marketing_promos: true,
     sitio_web: true,
+    inicio_nuevo: true,
     recepcion_panel: true,
     admin: true
   },
@@ -240,6 +242,8 @@ const PANEL_KEY_ALIASES = {
   clienteslectura: 'clientes_lectura',
   crm_lectura: 'clientes_lectura',
   sitio_web: 'sitio_web',
+  inicio_nuevo: 'inicio_nuevo',
+  inicionuevo: 'inicio_nuevo',
   sitioweb: 'sitio_web',
   sitio: 'sitio_web',
   website: 'sitio_web',
@@ -309,7 +313,8 @@ export const ACCESS_GROUPS = [
   {
     label: 'Principal',
     keys: [
-      { key: 'calendario', label: 'Plan del día' }
+      { key: 'calendario', label: 'Plan del día' },
+      { key: 'inicio_nuevo', label: 'Inicio nuevo (mosaicos y cuadro de búsqueda, en prueba)' }
     ]
   },
   {
