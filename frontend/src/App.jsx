@@ -8,7 +8,7 @@ import { NAV_ITEMS, allowsAny, getDefaultPath } from './navConfig';
 import { useAuth } from './authContext';
 import { useCommission } from './useCommission';
 import './index.css';
-import TikTokPixel from './tiktokPixel';
+import PublicPixels from './publicPixels';
 
 const PublicCustomerMenu = lazy(() => import('./PublicCustomerMenu'));
 const ComprasScan = lazy(() => import('./ComprasScan'));
@@ -62,8 +62,8 @@ function App() {
   if (!token) {
     return (
       <Router>
-        {/* Píxel de TikTok: solo aquí, en las páginas públicas. */}
-        <TikTokPixel />
+        {/* Píxeles de TikTok y Meta: solo aquí, en las páginas públicas. */}
+        <PublicPixels />
         <Suspense fallback={routeFallback}>
           <Routes>
             <Route path="/catalogo/:shareToken" element={<PublicCustomerMenu />} />
