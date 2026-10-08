@@ -95,6 +95,7 @@ export default function PublicQuote({ section, whatsapp, preview = false }) {
         </div>
         <a
           className={`lp-btn lp-btn-wa ${lines.length === 0 ? 'is-disabled' : ''}`}
+          data-tt-event="SubmitForm"
           href={lines.length === 0 || preview ? undefined : waUrl}
           target="_blank"
           rel="noopener noreferrer"
