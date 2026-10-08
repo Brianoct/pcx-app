@@ -125,6 +125,50 @@ function ImageField({ label, value, onChange, token, hint }) {
   );
 }
 
+// Catálogo PDF: se sube tal cual (hasta 12 MB) y queda en la base como las fotos.
+function PdfField({ label, value, onChange, token }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef(null);
+  const upload = (file) => {
+    if (!file) return;
+    if (file.type !== 'application/pdf') { toast.error('Elige un archivo PDF'); return; }
+    if (file.size > 12 * 1024 * 1024) { toast.error('El PDF supera 12 MB. Comprímelo y vuelve a subirlo.'); return; }
+    setBusy(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const result = await apiRequest('/api/site-assets', { method: 'POST', token, body: { data_url: String(reader.result || '') } });
+        onChange(result.url);
+        toast.success(`PDF subido (${(Number(result.bytes || 0) / 1024 / 1024).toFixed(1)} MB)`);
+      } catch (err) {
+        toast.error(err.message || 'No se pudo subir el PDF');
+      } finally {
+        setBusy(false);
+        if (inputRef.current) inputRef.current.value = '';
+      }
+    };
+    reader.onerror = () => { setBusy(false); toast.error('No se pudo leer el archivo'); };
+    reader.readAsDataURL(file);
+  };
+  const href = imageSrc(value);
+  return (
+    <div className="se-field">
+      <span className="se-label">{label}<small>PDF, máx. 12 MB</small></span>
+      <div className="se-image">
+        <div className="se-image-thumb se-pdf-thumb">{href ? 'PDF' : 'Sin PDF'}</div>
+        <div className="se-image-actions">
+          <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => inputRef.current?.click()}>
+            {busy ? 'Subiendo…' : (href ? 'Reemplazar PDF' : 'Subir PDF')}
+          </button>
+          {href && <a className="btn btn-ghost btn-sm" href={href} target="_blank" rel="noopener noreferrer">Ver</a>}
+          <input ref={inputRef} type="file" accept="application/pdf" hidden onChange={(e) => upload(e.target.files?.[0])} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SelectField({ label, value, onChange, options }) {
   return (
     <Field label={label}>
@@ -173,6 +217,7 @@ function ListEditor({ label, items, onChange, fields, newItem, token, addLabel =
                 const value = item?.[field.key];
                 const set = (v) => update(index, { ...item, [field.key]: v });
                 if (field.type === 'image') return <ImageField key={field.key} label={field.label} value={value} onChange={set} token={token} />;
+                if (field.type === 'pdf') return <PdfField key={field.key} label={field.label} value={value} onChange={set} token={token} />;
                 if (field.type === 'select') return <SelectField key={field.key} label={field.label} value={value} onChange={set} options={field.options} />;
                 return <TextField key={field.key} label={field.label} value={value} onChange={set} multiline={field.type === 'textarea'} type={field.type === 'number' ? 'number' : 'text'} hint={field.hint} placeholder={field.placeholder} />;
               })}
@@ -354,6 +399,25 @@ function GeneralEditor({ content, set }) {
   );
 }
 
+function CatalogsEditor({ content, set, token }) {
+  return (
+    <>
+      <p className="se-empty">Lo que se ve en pcxind.com/#/catalogos. Al reemplazar un PDF, la portada y los textos siguen igual salvo que los cambies. Se publica junto con el resto del sitio.</p>
+      <ListEditor label="Catálogos" items={content.catalogs} onChange={(v) => set(['catalogs'], v)} token={token} max={4} addLabel="Catálogo"
+        fields={[
+          { key: 'name', label: 'Nombre' },
+          { key: 'badge', label: 'Etiqueta (línea)' },
+          { key: 'tagline', label: 'Frase' },
+          { key: 'description', label: 'Descripción', type: 'textarea' },
+          { key: 'pages', label: 'Páginas', type: 'number' },
+          { key: 'cover', label: 'Portada', type: 'image' },
+          { key: 'pdf', label: 'Catálogo PDF', type: 'pdf' }
+        ]}
+        newItem={() => ({ key: `cat-${Date.now().toString(36)}`, name: '', badge: '', tagline: '', description: '', pages: 0, cover: '', pdf: '', accent: '#dc2626' })} />
+    </>
+  );
+}
+
 // ─── Panel ──────────────────────────────────────────────────────────────────
 
 const formatDate = (value) => {
@@ -522,6 +586,10 @@ export default function SiteEditor({ token }) {
           <details className="se-section" open={openKey === 'general'} onToggle={(e) => { if (e.target.open) setOpenKey('general'); }}>
             <summary><span>General</span><small>WhatsApp · menú · pie</small></summary>
             <div className="se-section-body"><GeneralEditor content={draft} set={set} /></div>
+          </details>
+          <details className="se-section" open={openKey === 'catalogs'} onToggle={(e) => { if (e.target.open) setOpenKey('catalogs'); }}>
+            <summary><span>Catálogos PDF</span><small>página /catalogos</small></summary>
+            <div className="se-section-body"><CatalogsEditor content={draft} set={set} token={token} /></div>
           </details>
 
           {draft.sections.map((section, index) => {

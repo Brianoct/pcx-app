@@ -243,5 +243,29 @@ export const DEFAULT_HOME = {
   ],
   "footer": {
     "text": "PCX · Hecho en Bolivia · Cochabamba · Santa Cruz"
-  }
+  },
+  "catalogs": [
+    {
+      "key": "acero",
+      "name": "PCX Acero",
+      "badge": "Línea Industrial",
+      "tagline": "Precisión. Resistencia. Durabilidad.",
+      "description": "Tableros metálicos y organización para talleres, industria y trabajo pesado.",
+      "pdf": "/catalogos/acero.pdf",
+      "cover": "/catalogos/acero-cover.jpg",
+      "pages": 6,
+      "accent": "#dc2626"
+    },
+    {
+      "key": "armonia",
+      "name": "PCX Armonía",
+      "badge": "Línea Hogar",
+      "tagline": "Orden que se ve bien en casa.",
+      "description": "Tableros y accesorios de organización para el hogar, cocina y espacios pequeños.",
+      "pdf": "/catalogos/armonia.pdf",
+      "cover": "/catalogos/armonia-cover.jpg",
+      "pages": 6,
+      "accent": "#b45309"
+    }
+  ]
 };
