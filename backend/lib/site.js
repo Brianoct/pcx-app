@@ -137,7 +137,13 @@ const DEFAULT_HOME = {
       cta_label: 'Cotizar por WhatsApp'
     }
   ],
-  footer: { text: 'PCX · Hecho en Bolivia · Cochabamba · Santa Cruz' }
+  footer: { text: 'PCX · Hecho en Bolivia · Cochabamba · Santa Cruz' },
+  // Catálogos PDF de la página /catalogos. Marketing los reemplaza desde el
+  // editor; los archivos suben a site_assets como las fotos.
+  catalogs: [
+    { key: 'acero', name: 'PCX Acero', badge: 'Línea Industrial', tagline: 'Precisión. Resistencia. Durabilidad.', description: 'Tableros metálicos y organización para talleres, industria y trabajo pesado.', pdf: '/catalogos/acero.pdf', cover: '/catalogos/acero-cover.jpg', pages: 6, accent: '#dc2626' },
+    { key: 'armonia', name: 'PCX Armonía', badge: 'Línea Hogar', tagline: 'Orden que se ve bien en casa.', description: 'Tableros y accesorios de organización para el hogar, cocina y espacios pequeños.', pdf: '/catalogos/armonia.pdf', cover: '/catalogos/armonia-cover.jpg', pages: 6, accent: '#b45309' }
+  ]
 };
 
 // Limpieza del contenido que manda el editor: solo texto, números, booleanos,
@@ -201,6 +207,8 @@ const collectAssetKeys = (content) => {
 // de la última sección que la precede en el orden de fábrica.
 const ensureSections = (content) => {
   if (!content || !Array.isArray(content.sections)) return content;
+  // Contenido guardado antes de que existieran los catálogos editables.
+  if (!Array.isArray(content.catalogs)) content = { ...content, catalogs: JSON.parse(JSON.stringify(DEFAULT_HOME.catalogs)) };
   const present = new Set(content.sections.map((s) => s?.type));
   const sections = [...content.sections];
   DEFAULT_HOME.sections.forEach((def, defIndex) => {

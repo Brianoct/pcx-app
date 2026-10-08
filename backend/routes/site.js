@@ -39,6 +39,8 @@ router.get('/api/site-assets/:key/:token', async (req, res) => {
     }
     res.set('Content-Type', row.mime);
     res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    // Los PDF se abren en el navegador (no se descargan) con un nombre legible.
+    if (row.mime === 'application/pdf') res.set('Content-Disposition', `inline; filename="${String(req.query.name || 'catalogo-pcx').replace(/[^a-z0-9_-]/gi, '')}.pdf"`);
     res.send(row.data);
   } catch (err) {
     console.error('Error serving site asset:', err);
@@ -238,14 +240,27 @@ router.post('/api/site/home/reset', authenticateToken, async (req, res) => {
   }
 });
 
-// Subir una foto (data URL ya reducida en el navegador). Devuelve la URL a
-// guardar en el contenido. Las fotos que dejen de usarse se borran al publicar.
+// Subir un archivo del sitio: foto (data URL ya reducida en el navegador) o
+// catálogo PDF (hasta 12 MB). Devuelve la URL a guardar en el contenido. Lo
+// que deje de usarse se borra al publicar.
+const PDF_MAX_BYTES = 12 * 1024 * 1024;
+const decodePdfDataUrl = (dataUrl) => {
+  const match = String(dataUrl || '').match(/^data:application\/pdf;base64,([a-z0-9+/=\s]+)$/i);
+  if (!match) return null;
+  const buffer = Buffer.from(String(match[1] || '').replace(/\s+/g, ''), 'base64');
+  if (buffer.length === 0) { const e = new Error('PDF vacío.'); e.statusCode = 400; throw e; }
+  if (buffer.length > PDF_MAX_BYTES) { const e = new Error('El PDF supera 12 MB. Comprímelo (p. ej. «Reducir tamaño» en Acrobat o ilovepdf.com) y vuelve a subirlo.'); e.statusCode = 400; throw e; }
+  if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') { const e = new Error('El archivo no es un PDF válido.'); e.statusCode = 400; throw e; }
+  return { mime: 'application/pdf', buffer };
+};
+
 router.post('/api/site-assets', authenticateToken, async (req, res) => {
   const user = await ensureSiteAccess(req, res);
   if (!user) return;
   try {
-    const { mime, buffer } = decodeImageDataUrl(req.body?.data_url, { maxBytes: 2 * 1024 * 1024 });
-    const key = `img-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
+    const pdf = decodePdfDataUrl(req.body?.data_url);
+    const { mime, buffer } = pdf || decodeImageDataUrl(req.body?.data_url, { maxBytes: 2 * 1024 * 1024 });
+    const key = `${pdf ? 'pdf' : 'img'}-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
     const accessToken = crypto.randomBytes(16).toString('hex');
     await pool.query(
       'INSERT INTO site_assets (key, mime, data, access_token, updated_by, updated_at) VALUES ($1, $2, $3, $4, $5, NOW())',
@@ -255,7 +270,7 @@ router.post('/api/site-assets', authenticateToken, async (req, res) => {
   } catch (err) {
     if (err.statusCode) return res.status(err.statusCode).json({ error: err.message });
     console.error('Error uploading site asset:', err);
-    res.status(500).json({ error: 'No se pudo subir la foto' });
+    res.status(500).json({ error: 'No se pudo subir el archivo' });
   }
 });
 

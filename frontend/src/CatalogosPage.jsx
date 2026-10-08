@@ -1,41 +1,34 @@
 // Página pública de catálogos: el link que Ventas comparte por WhatsApp.
 // El cliente abre, hojea el catálogo de cada línea (PDF) y tiene el botón de
 // WhatsApp siempre a mano para pedir el suyo. Sin login, sin datos privados.
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PublicNav from './PublicNav';
+import { apiRequest } from './apiClient';
+import { DEFAULT_HOME } from './siteDefaults';
+import { imageSrc } from './siteMedia';
 
 const WHATSAPP_NUMBER = '59169618264';
 const WHATSAPP_MESSAGE = 'Hola PCX, vi su catálogo y quiero más información.';
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(WHATSAPP_MESSAGE)}`;
 
-const CATALOGS = [
-  {
-    key: 'acero',
-    name: 'PCX Acero',
-    badge: 'Línea Industrial',
-    tagline: 'Precisión. Resistencia. Durabilidad.',
-    description: 'Tableros metálicos y organización para talleres, industria y trabajo pesado.',
-    pdf: '/catalogos/acero.pdf',
-    cover: '/catalogos/acero-cover.jpg',
-    pages: 6,
-    accent: '#dc2626',
-    theme: 'is-acero'
-  },
-  {
-    key: 'armonia',
-    name: 'PCX Armonía',
-    badge: 'Línea Hogar',
-    tagline: 'Orden que se ve bien en casa.',
-    description: 'Tableros y accesorios de organización para el hogar, cocina y espacios pequeños.',
-    pdf: '/catalogos/armonia.pdf',
-    cover: '/catalogos/armonia-cover.jpg',
-    pages: 6,
-    accent: '#b45309',
-    theme: 'is-armonia'
-  }
-];
+// Los catálogos los edita Marketing en Sitio web (nombre, portada, PDF). Hasta
+// que la API responda se muestran los de fábrica.
+const THEME = { acero: 'is-acero', armonia: 'is-armonia' };
+const pdfUrl = (cat) => {
+  const src = imageSrc(cat.pdf);
+  return src.includes('/api/site-assets/') ? `${src}?name=${encodeURIComponent(`catalogo-${cat.key || 'pcx'}`)}` : src;
+};
 
 export default function CatalogosPage() {
+  const [catalogs, setCatalogs] = useState(DEFAULT_HOME.catalogs || []);
+  useEffect(() => {
+    let alive = true;
+    apiRequest('/api/site/home')
+      .then((data) => { if (alive && Array.isArray(data?.content?.catalogs)) setCatalogs(data.content.catalogs); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
   return (
     <div className="public-page catalogs-page">
       <PublicNav whatsappUrl={WHATSAPP_URL} showLogin={false} />
@@ -49,17 +42,17 @@ export default function CatalogosPage() {
         </p>
 
         <div className="catalog-grid">
-          {CATALOGS.map((cat) => (
+          {catalogs.filter((cat) => cat && (cat.pdf || cat.cover)).map((cat) => (
             <a
               key={cat.key}
-              className={`catalog-card ${cat.theme}`}
-              href={cat.pdf}
+              className={`catalog-card ${THEME[cat.key] || ''}`}
+              href={pdfUrl(cat)}
               target="_blank"
               rel="noreferrer"
             >
               <span className="catalog-cover-wrap">
                 <img
-                  src={cat.cover}
+                  src={imageSrc(cat.cover)}
                   alt={`Portada del catálogo ${cat.name}`}
                   className="catalog-cover"
                   loading="lazy"
@@ -74,7 +67,7 @@ export default function CatalogosPage() {
                   Ver catálogo
                   <span aria-hidden="true"> →</span>
                 </span>
-                <span className="catalog-card-meta">PDF · {cat.pages} páginas</span>
+                <span className="catalog-card-meta">PDF{Number(cat.pages) > 0 ? ` · ${cat.pages} páginas` : ''}</span>
               </span>
             </a>
           ))}
