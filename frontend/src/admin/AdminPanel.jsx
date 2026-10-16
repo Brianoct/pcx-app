@@ -12,6 +12,7 @@ import LoginAuditAdmin from './LoginAuditAdmin';
 import SalesAssistant from './SalesAssistant';
 import PipelineBoard from '../crm/PipelineBoard';
 import { apiRequest } from '../apiClient';
+import AdminIcon from './AdminIcons';
 
 function AdminPanel({ token, user }) {
   const location = useLocation();
@@ -44,68 +45,42 @@ function AdminPanel({ token, user }) {
       .catch(() => { if (active) { setAiEnabled(false); setAiInfo(null); } });
     return () => { active = false; };
   }, [token]);
-  const tabs = [
+  // Secciones agrupadas por lo que resuelven. Cada grupo tiene su color:
+  // el riel y el encabezado lo usan para que se vea de un vistazo dónde estás.
+  const groups = [
     {
-      key: 'usuarios',
-      label: 'Usuarios',
-      icon: 'U',
-      hint: 'Equipo, permisos, comisiones y pagos'
+      key: 'equipo',
+      label: 'Equipo y accesos',
+      color: '#7c3aed',
+      tabs: [
+        { key: 'usuarios', label: 'Usuarios', hint: 'Equipo, permisos, comisiones y pagos' },
+        { key: 'paneles', label: 'Paneles', hint: 'Tableros por área y metas de ventas' },
+        { key: 'accesos', label: 'Accesos', hint: 'Historial de logins y dispositivos' }
+      ]
     },
     {
-      key: 'productos',
-      label: 'Productos',
-      icon: 'P',
-      hint: 'Catálogo usado por cotizador'
+      key: 'costeo',
+      label: 'Catálogo y costeo',
+      color: '#ea580c',
+      tabs: [
+        { key: 'productos', label: 'Productos', hint: 'Catálogo usado por el cotizador' },
+        { key: 'estructura', label: 'Estructura', hint: 'Ruta, materiales y costo derivado' },
+        { key: 'equipos', label: 'Equipos', hint: 'Maquinaria y costo por hora' },
+        { key: 'materiales', label: 'Materiales', hint: 'Insumos y costo por unidad' }
+      ]
     },
     {
-      key: 'equipos',
-      label: 'Equipos',
-      icon: 'EQ',
-      hint: 'Maquinaria y costos base'
-    },
-    {
-      key: 'materiales',
-      label: 'Materiales',
-      icon: 'MT',
-      hint: 'Insumos y costos por unidad'
-    },
-    {
-      key: 'estructura',
-      label: 'Estructura',
-      icon: 'ES',
-      hint: 'Ruta, materiales y costo derivado'
-    },
-    {
-      key: 'destinos',
-      label: 'Destinos',
-      icon: 'DS',
-      hint: 'Clasificación de destinos de envío'
-    },
-    {
-      key: 'programas',
-      label: 'Programas',
-      icon: 'PL',
-      hint: 'Planificación: operación → misión → tarea'
-    },
-    {
-      key: 'paneles',
-      label: 'Paneles',
-      icon: 'PN',
-      hint: 'Tableros por área y metas de ventas'
-    },
-    {
-      key: 'accesos',
-      label: 'Accesos',
-      icon: 'AC',
-      hint: 'Historial de logins y dispositivos'
-    },
-    {
-      key: 'ventas_ia',
-      label: 'Ventas IA',
-      icon: 'VA',
-      hint: 'Embudo de ventas y asistente con IA'
+      key: 'operacion',
+      label: 'Operación',
+      color: '#0d9488',
+      tabs: [
+        { key: 'programas', label: 'Programas', hint: 'Planificación: operación → misión → tarea' },
+        { key: 'destinos', label: 'Destinos', hint: 'Clasificación de destinos de envío' },
+        { key: 'ventas_ia', label: 'Ventas IA', hint: 'Embudo de ventas y asistente con IA' }
+      ]
     }
   ];
+  const tabs = groups.flatMap((group) => group.tabs.map((tab) => ({ ...tab, group })));
   const activeTabMeta = tabs.find((tab) => tab.key === activeTab) || tabs[0];
 
   useEffect(() => {
@@ -123,48 +98,43 @@ function AdminPanel({ token, user }) {
 
   return (
     <div className="admin-shell">
-      <div className="admin-hero-card">
-        <div>
-          <p className="admin-hero-eyebrow">Administración PCX</p>
-          <h2 className="admin-hero-title">Centro de control</h2>
-        </div>
-        <div className="admin-active-section-badge">
-          <span>Sección activa</span>
-          <strong>{activeTabMeta.label}</strong>
-        </div>
-      </div>
-
-      <div className="admin-tabs-nav" role="tablist" aria-label="Secciones del panel admin">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.key}
-            className={`admin-tab-btn ${activeTab === tab.key ? 'active' : ''}`}
-            onClick={() => changeTab(tab.key)}
-          >
-            <span className="admin-tab-icon" aria-hidden="true">{tab.icon}</span>
-            <span className="admin-tab-content">
-              <strong>{tab.label}</strong>
-              <small>{tab.hint}</small>
-            </span>
-          </button>
+      <aside className="admin-rail" aria-label="Secciones del panel admin">
+        <p className="admin-rail-title">Centro de control</p>
+        {groups.map((group) => (
+          <div key={group.key} className="admin-rail-group" style={{ '--g': group.color }}>
+            <p className="admin-rail-group-title">{group.label}</p>
+            <div className="admin-rail-items" role="tablist" aria-label={group.label}>
+              {group.tabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
+                  className={`admin-rail-item ${activeTab === tab.key ? 'is-active' : ''}`}
+                  onClick={() => changeTab(tab.key)}
+                  title={tab.hint}
+                >
+                  <span className="admin-rail-icon"><AdminIcon name={tab.key} /></span>
+                  <span className="admin-rail-text">
+                    <strong>{tab.label}</strong>
+                    <small>{tab.hint}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
-      </div>
+      </aside>
 
-      <div className="admin-mobile-tab-select">
-        <label htmlFor="admin-tab-select">Sección</label>
-        <select
-          id="admin-tab-select"
-          value={activeTab}
-          onChange={(e) => changeTab(e.target.value)}
-        >
-          {tabs.map((tab) => (
-            <option key={tab.key} value={tab.key}>{tab.label}</option>
-          ))}
-        </select>
-      </div>
+      <section className="admin-main">
+        <header className="admin-section-head" style={{ '--g': activeTabMeta.group.color }}>
+          <span className="admin-section-icon"><AdminIcon name={activeTabMeta.key} size={28} /></span>
+          <div>
+            <p className="admin-section-eyebrow">{activeTabMeta.group.label}</p>
+            <h2 className="admin-section-title">{activeTabMeta.label}</h2>
+            <p className="admin-section-hint">{activeTabMeta.hint}</p>
+          </div>
+        </header>
 
       <div className="admin-content-shell">
         {activeTab === 'usuarios' && <UsersRolesAdmin token={token} initialView={legacyUserView} />}
@@ -201,6 +171,7 @@ function AdminPanel({ token, user }) {
           </div>
         )}
       </div>
+      </section>
     </div>
   );
 }
