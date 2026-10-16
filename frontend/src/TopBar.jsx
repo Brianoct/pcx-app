@@ -59,9 +59,12 @@ function SyncStatus() {
   );
 }
 
-function TopBar({ displayName, currentCommission, isTopSeller, onToggleSidebar }) {
+function TopBar({ displayName, roleName, currentCommission, isTopSeller, onToggleSidebar }) {
   const location = useLocation();
   const navigate = useNavigate();
+  // Marketing no cobra comisión: el chip «+0.00 Bs» solo confunde. Admin lo
+  // conserva porque sigue su propia comisión desde ahí.
+  const showCommission = String(roleName || '').trim().toLowerCase() !== 'marketing';
 
   // En Inicio la barra saluda (como un escritorio); en el resto muestra la
   // sección activa para no perder el "¿dónde estoy?".
@@ -89,16 +92,18 @@ function TopBar({ displayName, currentCommission, isTopSeller, onToggleSidebar }
       <div className="topbar-right">
         <SandboxToggle />
         <SyncStatus />
-        <button
-          type="button"
-          className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}
-          onClick={() => navigate('/')}
-          title={isTopSeller ? 'Vendedor top del mes — ver rendimiento' : 'Tu comisión del mes — ver rendimiento'}
-        >
-          {isTopSeller && <span className="commission-chip-star" aria-hidden="true">★</span>}
-          {isTopSeller && <span className="commission-chip-label">Top vendedor</span>}
-          +{(currentCommission || 0).toFixed(2)} Bs
-        </button>
+        {showCommission && (
+          <button
+            type="button"
+            className={`commission-chip ${isTopSeller ? 'is-top' : ''}`}
+            onClick={() => navigate('/')}
+            title={isTopSeller ? 'Vendedor top del mes — ver rendimiento' : 'Tu comisión del mes — ver rendimiento'}
+          >
+            {isTopSeller && <span className="commission-chip-star" aria-hidden="true">★</span>}
+            {isTopSeller && <span className="commission-chip-label">Top vendedor</span>}
+            +{(currentCommission || 0).toFixed(2)} Bs
+          </button>
+        )}
       </div>
     </header>
   );

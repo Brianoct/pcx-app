@@ -7,6 +7,7 @@ import { RouteErrorBoundary } from './ui/ErrorBoundary';
 import { NAV_ITEMS, allowsAny, getDefaultPath } from './navConfig';
 import { useAuth } from './authContext';
 import { useCommission } from './useCommission';
+import { useToast } from './ui/toastContext';
 import './index.css';
 import PublicPixels from './publicPixels';
 
@@ -19,8 +20,22 @@ const CatalogosPage = lazy(() => import('./CatalogosPage'));
 
 const routeFallback = <div className="route-loading" aria-label="Cargando">Cargando…</div>;
 
+// Una ruta sin permiso vuelve al Inicio, pero avisa: antes el salto era
+// silencioso y parecía que el enlace no funcionaba.
+let lastDeniedToastAt = 0;
 function Protected({ access, anyOf, defaultPath, children }) {
-  return allowsAny(access, anyOf) ? children : <Navigate to={defaultPath} replace />;
+  const allowed = allowsAny(access, anyOf);
+  const toast = useToast();
+  useEffect(() => {
+    if (allowed) return;
+    // Un solo aviso aunque el efecto corra dos veces (StrictMode) o la ruta
+    // se reintente enseguida.
+    const now = Date.now();
+    if (now - lastDeniedToastAt < 1500) return;
+    lastDeniedToastAt = now;
+    toast.info('No tienes acceso a esa sección');
+  }, [allowed, toast]);
+  return allowed ? children : <Navigate to={defaultPath} replace />;
 }
 
 function App() {

@@ -84,6 +84,7 @@ export default function Calendar({ token, user }) {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState('');
+  const [showAdd, setShowAdd] = useState(false);
   const [taskType, setTaskType] = useState('tarea');
   // Co-work: compañeros etiquetados en el bloque nuevo (cualquier tipo).
   const [participantIds, setParticipantIds] = useState([]);
@@ -485,10 +486,20 @@ export default function Calendar({ token, user }) {
           {!isToday && (
             <button type="button" className="btn btn-primary" onClick={() => setDate(toDateText(new Date()))}>Hoy</button>
           )}
+          <button
+            type="button"
+            className="btn btn-primary dayplan-add-toggle"
+            onClick={() => setShowAdd((v) => !v)}
+            aria-expanded={showAdd}
+          >
+            {showAdd ? 'Cerrar' : '+ Tarea'}
+          </button>
         </div>
       </div>
 
-      <div className="card dayplan-add">
+      {/* En celular el formulario se pliega detrás de «+ Tarea» para ver la
+          agenda primero; en escritorio siempre está visible (CSS). */}
+      <div className={`card dayplan-add ${showAdd ? '' : 'is-collapsed'}`}>
         <span className="dayplan-add-label">Mi tarea:</span>
         <input
           type="text"
@@ -525,9 +536,12 @@ export default function Calendar({ token, user }) {
             <option key={m} value={m}>{minuteLabel(m)}</option>
           ))}
         </select>
-        <button type="button" className="btn btn-primary" disabled={saving || !title.trim()} onClick={addTask}>
-          {saving ? '…' : '+ Agregar'}
-        </button>
+        <span className="dayplan-add-btn-wrap" title={title.trim() ? undefined : 'Escribe la tarea para agregar'}>
+          <button type="button" className="btn btn-primary" disabled={saving || !title.trim()} onClick={addTask}>
+            {saving ? '…' : '+ Agregar'}
+          </button>
+        </span>
+        {!title.trim() && <span className="dayplan-add-hint">Escribe la tarea para agregar</span>}
         {teammates.length > 0 && (
           <div className="dayplan-add-people">
             {renderParticipantPicker(participantIds, setParticipantIds)}

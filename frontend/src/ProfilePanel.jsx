@@ -287,7 +287,7 @@ export default function ProfilePanel({ token, user, onUserUpdated }) {
             aria-label="Cambiar foto"
             title="Cambiar foto"
           >
-            {uploading === 'avatar' ? '…' : '✎'}
+            {uploading === 'avatar' ? 'Subiendo…' : '✎ Cambiar foto'}
           </button>
         </div>
         <div className="profile-hero-info">

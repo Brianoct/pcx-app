@@ -94,7 +94,8 @@ export default function BonoPanel({ token, user }) {
   };
 
   const people = useMemo(() => (Array.isArray(data?.people) ? data.people : []), [data]);
-  const me = people.find((p) => p.user_id === myId) || null;
+  // El Admin no cobra bono: no se le evalúa; ve solo la vista de equipo.
+  const me = isAdmin ? null : (people.find((p) => p.user_id === myId) || null);
   const gates = data?.gates || {};
   const qualifying = people.filter((p) => p.qualifies).length;
   const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;

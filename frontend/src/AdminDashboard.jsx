@@ -676,12 +676,6 @@ function AdminDashboard({ token }) {
 
   return (
     <div className="dashboard-workspace">
-      <div className="admin-hero-card">
-        <p style={{ margin: 0, color: '#ff7f30', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Dashboard
-        </p>
-      </div>
-
       <MorningBrief token={token} />
 
       <section className="dashboard-filter-card">

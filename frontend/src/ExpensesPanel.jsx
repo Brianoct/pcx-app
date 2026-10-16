@@ -318,12 +318,6 @@ function ExpensesPanel({ token, user, role }) {
 
   return (
     <div className="dashboard-workspace">
-      <div className="admin-hero-card" style={{ padding: '16px 20px' }}>
-        <p style={{ margin: 0, color: '#ff7f30', fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-          Gastos
-        </p>
-      </div>
-
       <div className="card" style={{ marginBottom: 0 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px' }}>
           <div style={{ border: '1px solid #e7e0d8', borderRadius: '10px', padding: '12px', background: '#ffffff' }}>
