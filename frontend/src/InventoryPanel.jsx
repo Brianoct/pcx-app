@@ -462,7 +462,7 @@ function InventoryPanel({ token, role, access }) {
       <input
         type="number"
         min="1"
-        className={`inv-input inv-input-min${Number(product[store.minField] ?? 0) <= 0 ? ' is-invalid' : ''}`}
+        className={`inv-input inv-input-min${Number(product[store.minField] ?? 0) <= 0 ? ' is-unset' : ''}`}
         value={product[store.minField] ?? 0}
         onChange={(e) => handleMinChange(product.sku, store.minField, e.target.value)}
         aria-label={`Mínimo ${store.location}`}
@@ -617,7 +617,7 @@ function InventoryPanel({ token, role, access }) {
                         <input
                           type="number"
                           min="1"
-                          className={`inv-input inv-input-min${Number(product[store.minField] ?? 0) <= 0 ? ' is-invalid' : ''}`}
+                          className={`inv-input inv-input-min${Number(product[store.minField] ?? 0) <= 0 ? ' is-unset' : ''}`}
                           value={product[store.minField] ?? 0}
                           onChange={(e) => handleMinChange(product.sku, store.minField, e.target.value)}
                         />

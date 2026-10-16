@@ -39,6 +39,8 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
   const [filteredPedidos, setFilteredPedidos] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  // Los enviados ya no son trabajo pendiente: se ocultan salvo que se pidan.
+  const [showSent, setShowSent] = useState(false);
   const [vendorFilter, setVendorFilter] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -266,6 +268,8 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
 
     if (statusFilter) {
       filtered = filtered.filter(q => q.status === statusFilter);
+    } else if (!showSent) {
+      filtered = filtered.filter((q) => q.status !== 'Enviado');
     }
 
     if (warehouseFilter) {
@@ -274,7 +278,7 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
 
     setFilteredPedidos(filtered);
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, vendorFilter, warehouseFilter, pedidos]);
+  }, [searchTerm, statusFilter, vendorFilter, warehouseFilter, showSent, pedidos]);
 
   const clearFilters = () => {
     setSearchTerm('');
@@ -579,9 +583,9 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         type="button"
         className={`btn pedidos-action-btn pedidos-action-btn--prep ${compact ? 'is-compact' : ''}`}
         onClick={() => openPrep(quote)}
-        title="Lista de empaque y etiqueta de envío"
+        title={quote.status === 'Enviado' ? 'Ver la etiqueta de envío' : 'Lista de empaque y etiqueta de envío'}
       >
-        Preparar
+        {quote.status === 'Enviado' ? 'Etiqueta' : 'Preparar'}
       </button>
     </div>
   );
@@ -652,6 +656,10 @@ function PedidosPanel({ token, role, access, onStatusUpdated }) {
         >
           Limpiar filtros
         </button>
+        <label className="pedidos-show-sent" title="Los pedidos enviados ya no son trabajo pendiente; márcalo para verlos">
+          <input type="checkbox" checked={showSent} onChange={(e) => setShowSent(e.target.checked)} />
+          Mostrar enviados
+        </label>
       </div>
 
       {totalPedidos === 0 ? (

@@ -492,7 +492,101 @@ const seedSandboxData = async (client) => {
     );
   }
 
-  return { quotes: quotesInserted, customers: customerIds.length };
+  // ── Almacén y producción: que haya algo que practicar ─────────────────────
+  // Stock en ambas sedes con mínimos y máximos; cinco productos bajo mínimo en
+  // Cochabamba para que Planificación tenga necesidades y Kanban, lotes.
+  await client.query(
+    `UPDATE sandbox.products
+     SET stock_cochabamba = 20 + (abs(hashtext(sku)) % 25),
+         stock_santacruz = 15 + (abs(hashtext(sku || 'scz')) % 25),
+         min_stock_cochabamba = 10, min_stock_santacruz = 10,
+         max_stock_cochabamba = 60, max_stock_santacruz = 60
+     WHERE COALESCE(is_active, TRUE)`
+  );
+  const lowRes = await client.query(
+    `SELECT sku, name FROM sandbox.products WHERE COALESCE(is_active, TRUE) ORDER BY sku LIMIT 5`
+  );
+  // Los tres primeros reciben un lote; los otros dos quedan como necesidades
+  // sin planificar (el tablero las crea solo al detectar stock < mínimo).
+  const low = lowRes.rows;
+  if (low.length > 0) {
+    await client.query(
+      'UPDATE sandbox.products SET stock_cochabamba = 3 WHERE sku = ANY($1::text[])',
+      [low.map((p) => p.sku)]
+    );
+    // Dos lotes ya en planta (uno al día en su primer proceso, uno atrasado en
+    // el último) y uno por recibir. Las etapas se toman de la ruta real de
+    // cada producto (product_process_steps): el tablero devuelve a
+    // "planificación" cualquier tarjeta cuya etapa no esté en su ruta.
+    const lots = [
+      { pick: 'first', planned: 0, due: 3 },
+      { pick: 'last', planned: -4, due: -1 },
+      { pick: 'recepcion', planned: -6, due: -2 }
+    ];
+    const START_STAGES = new Set(['corte_laser', 'impresion_3d', 'punzonado']);
+    for (let i = 0; i < Math.min(low.length, lots.length); i += 1) {
+      const lot = lots[i];
+      const stepsRes = await client.query(
+        `SELECT process FROM sandbox.product_process_steps WHERE UPPER(sku) = $1 ORDER BY step_order`,
+        [String(low[i].sku).toUpperCase()]
+      );
+      const steps = stepsRes.rows.map((r) => r.process).filter((p) => p && p !== 'planificacion' && p !== 'recepcion');
+      const route = steps.length > 0 ? steps : ['corte_laser', 'plegado', 'lavado', 'pintado', 'embalado'];
+      const startProcess = START_STAGES.has(route[0]) ? route[0] : 'corte_laser';
+      const stage = lot.pick === 'first' ? route[0] : lot.pick === 'last' ? route[route.length - 1] : 'recepcion';
+      await client.query(
+        `INSERT INTO sandbox.production_kanban_cards
+           (sku, product_name, store_location, current_stock, min_stock, required_qty, start_process, stage, source, is_active,
+            qty_frozen, planned_date, due_date, last_moved_at)
+         VALUES ($1, $2, 'Cochabamba', 3, 10, 57, $3, $4, 'min_stock', TRUE,
+                 TRUE, CURRENT_DATE + ($5::int), CURRENT_DATE + ($6::int), NOW() - INTERVAL '1 day')
+         ON CONFLICT (sku, store_location, source) DO NOTHING`,
+        [low[i].sku, low[i].name, startProcess, stage, lot.planned, lot.due]
+      );
+    }
+  }
+
+  // ── Gastos del mes: Gastos y el brief tienen números ──────────────────────
+  const adminUser = users.find((u) => normalizeRole(u.role) === 'admin') || users[0];
+  const expenses = [
+    ['Ventas', 'Servicios', 'Internet oficina', 'Tigo', 350, true, 'monthly'],
+    ['Producción', 'Operativo', 'Pintura en polvo negra 25 kg', 'Pinturas Bolivia', 1900, false, null],
+    ['Producción', 'Operativo', 'Discos de corte', 'Ferretería Central', 240, false, null],
+    ['Marketing', 'Servicios', 'Pauta en redes', 'Meta', 600, true, 'monthly'],
+    ['Almacén', 'Logística', 'Flete a Santa Cruz', 'Trans Oriente', 480, false, null]
+  ];
+  for (let i = 0; i < expenses.length; i += 1) {
+    const [department, category, concept, vendor, amount, recurring, period] = expenses[i];
+    await client.query(
+      `INSERT INTO sandbox.department_expenses
+         (department, category, concept, vendor, amount, is_recurring, recurrence_period, expense_date, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_DATE - ($8::int), $9)`,
+      [department, category, concept, vendor, amount, recurring, period, i * 3, adminUser.id]
+    );
+  }
+
+  // ── Mejoras hechas: el registro y el bono no arrancan en cero ─────────────
+  for (let i = 0; i < Math.min(users.length, 2); i += 1) {
+    const u = users[i];
+    const area = normalizeRole(u.role).startsWith('ventas') ? 'ventas'
+      : normalizeRole(u.role).startsWith('marketing') ? 'marketing'
+        : normalizeRole(u.role).startsWith('almacen') ? 'almacen'
+          : normalizeRole(u.role).startsWith('produccion') ? 'produccion' : 'admin';
+    const title = i === 0 ? 'Plantilla de WhatsApp para cotizaciones repetidas' : 'Etiquetas con color por sede en el estante';
+    const taskRes = await client.query(
+      `INSERT INTO sandbox.day_plan_tasks (user_id, task_date, start_minute, end_minute, title, is_done, task_type)
+       VALUES ($1, CURRENT_DATE - 1, 840, 900, $2, TRUE, 'mejora') RETURNING id`,
+      [u.id, title]
+    );
+    await client.query(
+      `INSERT INTO sandbox.mejoras (day_plan_task_id, group_key, user_id, area, title, task_date, completed_at)
+       VALUES ($1, $1, $2, $3, $4, CURRENT_DATE - 1, NOW() - INTERVAL '1 day')
+       ON CONFLICT DO NOTHING`,
+      [taskRes.rows[0].id, u.id, area, title]
+    );
+  }
+
+  return { quotes: quotesInserted, customers: customerIds.length, lots: Math.min(low.length, 3), expenses: expenses.length };
 };
 
 // ── Ciclo de vida ───────────────────────────────────────────────────────────

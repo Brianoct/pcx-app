@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AuthContext } from './authContext';
 import { buildAccessForUser } from './roleAccess';
 import { apiRequest } from './apiClient';
+import { canUseSandbox, clearSandboxFlag } from './sandbox';
 
 const readJson = (key) => {
   const saved = localStorage.getItem(key);
@@ -30,12 +31,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback((newToken, userData) => {
+    // La marca de sandbox vive en el navegador: si la dejó activa un Admin en
+    // una computadora compartida, un rol sin sandbox vería todo en 403.
+    if (!canUseSandbox(userData?.role)) clearSandboxFlag();
     localStorage.setItem('token', newToken);
     setToken(newToken);
     applyUser(userData);
   }, [applyUser]);
 
   const logout = useCallback(() => {
+    clearSandboxFlag();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('role');

@@ -147,7 +147,9 @@ export default function QuoteTool({ token, user }) {
     return () => { active = false; };
   }, [token, crmOpen]);
 
-  const [almacen, setAlmacen] = useState('');
+  // Almacén por defecto: la ciudad del usuario, si es una sede (ahorra un
+  // clic y evita el «Selecciona el almacén» al guardar).
+  const [almacen, setAlmacen] = useState(() => (ALMACEN_OPTIONS.includes(String(user?.city || '').trim()) ? String(user.city).trim() : ''));
   const [shippingNotes, setShippingNotes] = useState('');
   const [currentDateTime, setCurrentDateTime] = useState('');
   const [salesUsers, setSalesUsers] = useState([]);
@@ -1606,7 +1608,7 @@ export default function QuoteTool({ token, user }) {
                 const stock = row.availableStock;
                 const stockNumber = Number(stock);
                 const stockDisplay = stock === null || stock === undefined
-                  ? 'Cargando...'
+                  ? (row.sku && almacen ? 'Cargando...' : '—')
                   : Number.isFinite(stockNumber) ? stockNumber : 'N/D';
                 const stockColor = stock === null || stock === undefined
                   ? '#78716c'
@@ -1694,7 +1696,7 @@ export default function QuoteTool({ token, user }) {
                       const stock = row.availableStock;
                       const stockNumber = Number(stock);
                       const stockDisplay = stock === null || stock === undefined
-                        ? 'Cargando...'
+                        ? (row.sku && almacen ? 'Cargando...' : '—')
                         : Number.isFinite(stockNumber) ? stockNumber : 'N/D';
                       const stockColor = stock === null || stock === undefined
                         ? '#78716c'
