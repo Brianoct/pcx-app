@@ -2,7 +2,7 @@
 // último contacto, próximo seguimiento, notas y acceso directo a WhatsApp;
 // vista Embudo (kanban) reutilizando el tablero existente. Los clientes se
 // crean/actualizan solos al cotizar; aquí se trabaja el seguimiento.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { useToast } from './ui/toastContext';
 import PipelineBoard from './crm/PipelineBoard';
@@ -56,6 +56,10 @@ export default function CrmPanel({ token }) {
   const [recencyFilter, setRecencyFilter] = useState('');
   const [cityFilter, setCityFilter] = useState('');
   const [summary, setSummary] = useState(null);
+  // Orden de la lista. Por defecto, última compra: así las tarjetas de arriba
+  // («4 compraron Acero») y las primeras filas cuentan lo mismo. El servidor
+  // manda seguimiento vencido primero; aquí se reordena en el navegador.
+  const [sortBy, setSortBy] = useState('compra');
   // 'read' = Marketing: ve, filtra y exporta; no edita etapa, seguimiento ni notas.
   const [scope, setScope] = useState('full');
   const [expandedId, setExpandedId] = useState(null);
@@ -196,6 +200,27 @@ export default function CrmPanel({ token }) {
 
   const today = todayText();
 
+  const sortedCustomers = useMemo(() => {
+    const list = [...customers];
+    const dateKey = (v) => (v ? String(v).slice(0, 10) : '');
+    const overdueOf = (c) => (dateKey(c.follow_up_at) && dateKey(c.follow_up_at) <= today ? 1 : 0);
+    if (sortBy === 'compra') {
+      list.sort((a, b) => dateKey(b.last_paid_at).localeCompare(dateKey(a.last_paid_at)) || Number(b.total_spent || 0) - Number(a.total_spent || 0));
+    } else if (sortBy === 'gasto') {
+      list.sort((a, b) => Number(b.total_spent || 0) - Number(a.total_spent || 0));
+    } else if (sortBy === 'nombre') {
+      list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es'));
+    } else {
+      // Seguimiento vencido primero: el orden del servidor, sin tocar.
+      list.sort((a, b) => overdueOf(b) - overdueOf(a));
+    }
+    return list;
+  }, [customers, sortBy, today]);
+
+  const activeTileLabel = recencyFilter === '60plus'
+    ? 'para reactivar'
+    : ({ acero: 'compraron Acero', armonia: 'compraron Armonía', both: 'ambas líneas', none: 'sin compra' })[lineFilter] || '';
+
   return (
     <div className="container cli-page">
       <div className="cli-head">
@@ -326,7 +351,17 @@ export default function CrmPanel({ token }) {
               <div className="cli-export-bar">
                 <span className="cli-muted">
                   <strong>{customers.length}</strong> cliente{customers.length === 1 ? '' : 's'} · {formatBs(customers.reduce((sum, c) => sum + Number(c.total_spent || 0), 0))} comprados
+                  {activeTileLabel && <> · mostrando <strong>{activeTileLabel}</strong></>}
                 </span>
+                <label className="cli-sort">
+                  Orden
+                  <select className="cli-filter-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Orden de la lista">
+                    <option value="compra">Última compra</option>
+                    <option value="seguimiento">Seguimiento vencido primero</option>
+                    <option value="gasto">Más comprado</option>
+                    <option value="nombre">Nombre</option>
+                  </select>
+                </label>
                 <div className="cli-export-actions">
                   <button type="button" className="btn btn-primary cli-export-btn" onClick={copyPhones} disabled={customers.length === 0}>📋 Copiar teléfonos para WhatsApp</button>
                   <button type="button" className="btn btn-secondary cli-export-btn" onClick={exportCsv} disabled={customers.length === 0}>⬇ Exportar CSV</button>
@@ -356,7 +391,7 @@ export default function CrmPanel({ token }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {customers.map((customer) => {
+                  {sortedCustomers.map((customer) => {
                     const stage = STAGE_META[customer.pipeline_stage] || STAGES[0];
                     const followUp = customer.follow_up_at ? String(customer.follow_up_at).slice(0, 10) : '';
                     const overdue = followUp && followUp < today;

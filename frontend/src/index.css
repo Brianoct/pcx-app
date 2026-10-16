@@ -6466,7 +6466,7 @@ img, video, canvas { max-width: 100%; }
   align-items: center;
   gap: 18px;
 }
-.profile-avatar-wrap { position: relative; flex: 0 0 auto; }
+.profile-avatar-wrap { position: relative; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .profile-avatar {
   width: 84px;
   height: 84px;
@@ -6480,22 +6480,21 @@ img, video, canvas { max-width: 100%; }
 }
 .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .profile-avatar-initials { color: #fff; font-size: 2rem; font-weight: 800; letter-spacing: 0.02em; }
+/* El botón va debajo del avatar: encima tapaba las iniciales. */
 .profile-avatar-edit {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 30px;
-  height: 30px;
   border-radius: 999px;
-  border: 2px solid var(--bg-secondary);
-  background: var(--accent-secondary);
-  color: #fff;
-  font-size: 0.85rem;
+  border: 1px solid var(--border, #e7e5e4);
+  background: #fff;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  white-space: nowrap;
 }
+.profile-avatar-edit:hover { background: #f5f5f4; color: var(--text-primary); }
+.profile-avatar-edit:disabled { opacity: 0.6; cursor: default; }
 .profile-hero-info { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .profile-hero-name {
   font-size: 1.3rem;
@@ -7889,9 +7888,15 @@ img, video, canvas { max-width: 100%; }
 
 .dayplan-task-actions button:hover { background: rgba(255, 255, 255, 0.45); }
 
+.dayplan-add-toggle { display: none; }
+.dayplan-add-btn-wrap { display: inline-flex; }
+.dayplan-add-hint { flex-basis: 100%; font-size: 0.78rem; color: var(--text-muted); }
+
 @media (max-width: 640px) {
   .dayplan-add { padding: 12px; }
   .dayplan-add input[type="text"] { min-width: 100%; }
+  .dayplan-add-toggle { display: inline-flex; }
+  .dayplan-add.is-collapsed { display: none; }
   .dayplan-col { flex: 1 0 140px; min-width: 140px; }
   .dayplan-meta-hint { display: none; }
 }
@@ -8956,6 +8961,8 @@ img, video, canvas { max-width: 100%; }
 /* ============ Campañas (Marketing) ============ */
 .camp-intro { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .camp-intro > div { flex: 1 1 260px; }
+.camp-summary { font-size: 1rem; font-weight: 600; color: var(--text-secondary); }
+.camp-summary strong { color: var(--text-primary); font-weight: 800; }
 
 .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
 
@@ -11092,7 +11099,9 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 .cli-tile span { font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
 .cli-tile small { font-size: 0.72rem; color: var(--text-secondary); }
 .cli-tile.is-acero strong { color: #1d4ed8; } .cli-tile.is-armonia strong { color: #c2410c; } .cli-tile.is-warn strong { color: #b45309; }
-.cli-tile.is-active { outline: 2px solid var(--primary, #dc2626); outline-offset: -1px; }
+.cli-tile.is-active { outline: 2px solid var(--primary, #dc2626); outline-offset: -1px; background: #fff5f5; }
+.cli-tile.is-active::after { content: 'filtro activo'; font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--primary, #dc2626); margin-top: 2px; }
+.cli-sort { display: inline-flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; color: var(--text-muted); }
 .cli-line-chips { align-items: center; }
 .cli-filter-label { font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-left: 4px; }
 .cli-filter-select, .cli-filter-input { min-height: 32px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; font: inherit; font-size: 0.8rem; background: #fff; color: var(--text-secondary); }

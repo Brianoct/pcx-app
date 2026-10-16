@@ -78,6 +78,9 @@ export default function CampaignsPanel({ token, role }) {
     cur.sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)));
     return { current: cur, finished: fin };
   }, [campaigns]);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const upcoming = current.filter((c) => String(c.start_date || '').slice(0, 10) > todayKey).length;
+  const pendingTasks = current.reduce((sum, c) => sum + (Array.isArray(c.tasks) ? c.tasks.filter((t) => !t.done).length : 0), 0);
 
   const openCreate = () => { setFormError(''); setForm(emptyForm()); };
   const openEdit = (campaign) => {
@@ -394,6 +397,15 @@ export default function CampaignsPanel({ token, role }) {
     <div className="container prod-page">
       <div className="card plan-intro camp-intro">
         <div>
+          {/* Resumen: antes esta tarjeta solo tenía el botón y parecía vacía. */}
+          {!loading && (
+            <p className="plan-title camp-summary">
+              <strong>{current.length}</strong> en curso
+              {upcoming > 0 && <> · <strong>{upcoming}</strong> por empezar</>}
+              {pendingTasks > 0 && <> · <strong>{pendingTasks}</strong> tarea{pendingTasks === 1 ? '' : 's'} pendiente{pendingTasks === 1 ? '' : 's'}</>}
+              {finished.length > 0 && <> · {finished.length} finalizada{finished.length === 1 ? '' : 's'}</>}
+            </p>
+          )}
           {!canEdit && myArea && (
             <p className="plan-sub">Tu área: {AREA_LABELS[myArea]}</p>
           )}

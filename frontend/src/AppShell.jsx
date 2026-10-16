@@ -45,6 +45,7 @@ function AppShell({ access, displayName, roleName, features, currentCommission, 
         <SandboxBanner />
         <TopBar
           displayName={displayName}
+          roleName={roleName}
           currentCommission={currentCommission}
           isTopSeller={isTopSeller}
           onToggleSidebar={toggleSidebar}
