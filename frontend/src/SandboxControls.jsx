@@ -12,9 +12,9 @@ export function SandboxToggle() {
       type="button"
       className="sandbox-toggle"
       onClick={() => setSandboxActive(true)}
-      title="Entrar al modo sandbox: practica con datos ficticios sin tocar el negocio real"
+      title="Entrar al modo de práctica: una copia con datos ficticios, sin tocar el negocio real. Mientras estés dentro verás una franja naranja arriba."
     >
-      🧪 Sandbox
+      🧪 Entrar a sandbox
     </button>
   );
 }

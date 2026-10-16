@@ -6097,8 +6097,6 @@ img, video, canvas { max-width: 100%; }
 }
 
 .pedidos-sound-toggle {
-  position: absolute;
-  right: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -6124,9 +6122,6 @@ img, video, canvas { max-width: 100%; }
     gap: 8px;
   }
 
-  .pedidos-sound-toggle {
-    position: static;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -11526,20 +11521,25 @@ a.public-card:hover { transform: translateY(-2px); border-color: #dc2626; }
 
 /* ── Modo sandbox ─────────────────────────────────────────────────────────── */
 
+/* Botón de ENTRADA al sandbox: gris y discreto, para que no parezca un estado
+   activo. Cuando el sandbox está activo no se muestra este botón sino la
+   franja naranja de SandboxBanner. */
 .sandbox-toggle {
   cursor: pointer;
-  color: #9a3412;
-  font-weight: 700;
-  font-size: 0.9rem;
-  background: rgba(255, 127, 48, 0.12);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  background: transparent;
   padding: 6px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 127, 48, 0.45);
+  border: 1px dashed var(--border);
   white-space: nowrap;
 }
 
 .sandbox-toggle:hover {
-  background: rgba(255, 127, 48, 0.22);
+  color: #9a3412;
+  border-color: rgba(255, 127, 48, 0.6);
+  background: rgba(255, 127, 48, 0.08);
 }
 
 .sandbox-banner {
