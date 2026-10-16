@@ -1234,10 +1234,12 @@ function QuoteHistory({ token, role, access, onStatusUpdated }) {
   const isAdmin = String(role || '').trim().toLowerCase() === 'admin';
   const auditText = (quote) => {
     if (!isAdmin || quote.created_by_name === undefined) return null;
+    // Las cotizaciones anteriores al registro de autor no tienen nada que
+    // mostrar: sin línea, en vez de «sin registro» en cada fila.
     const parts = [];
-    parts.push(`Creó: ${quote.created_by_name || 'sin registro'}`);
+    if (quote.created_by_name) parts.push(`Creó: ${quote.created_by_name}`);
     if (quote.updated_by_name) parts.push(`Editó: ${quote.updated_by_name}${quote.updated_by_at ? ` · ${formatHistoryDate(quote.updated_by_at)}` : ''}`);
-    return parts.join(' · ');
+    return parts.length ? parts.join(' · ') : null;
   };
 
   if (!canViewHistory && !canViewGlobalHistory) {

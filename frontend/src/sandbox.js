@@ -19,6 +19,11 @@ export const isSandboxActive = () => {
   }
 };
 
+// Quita la marca sin recargar (para cerrar/abrir sesión).
+export const clearSandboxFlag = () => {
+  try { localStorage.removeItem(SANDBOX_KEY); } catch { /* sin storage */ }
+};
+
 export const setSandboxActive = (on) => {
   try {
     if (on) {
