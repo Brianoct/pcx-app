@@ -350,6 +350,7 @@ export default function CrmPanel({ token }) {
                 <option value="">Todos</option>
                 {USOS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
                 <option value="none">Sin dato{summary?.sin_segmento ? ` (${summary.sin_segmento})` : ''}</option>
+                <option value="sugerido">Sugeridos por confirmar{summary?.segmento_sugeridos ? ` (${summary.segmento_sugeridos})` : ''}</option>
               </select>
               <span className="cli-filter-label">Origen</span>
               <select className="cli-filter-select" value={origenFilter} onChange={(e) => setOrigenFilter(e.target.value)} aria-label="Origen">
@@ -405,6 +406,12 @@ export default function CrmPanel({ token }) {
             )}
           </div>
 
+          {!readOnly && summary?.segmento_sugeridos > 0 && segmentoFilter !== 'sugerido' && (
+            <div className="cli-suggest-banner">
+              <span>💡 <strong>{summary.segmento_sugeridos}</strong> cliente{summary.segmento_sugeridos === 1 ? ' tiene' : 's tienen'} un segmento sugerido (por el nombre o por sus cotizaciones). Confírmalo con ✓ o cámbialo en la lista.</span>
+              <button type="button" className="btn btn-secondary cli-mini-btn" onClick={() => setSegmentoFilter('sugerido')}>Revisar</button>
+            </div>
+          )}
           {!loaded ? (
             <p className="dashboard-muted">Cargando clientes…</p>
           ) : customers.length === 0 ? (
@@ -451,7 +458,7 @@ export default function CrmPanel({ token }) {
                         onStageChange={(value) => patchCustomer(customer, { pipeline_stage: value })}
                         onFollowUpChange={(value) => patchCustomer(customer, { follow_up_at: value || null }, value ? 'Seguimiento agendado' : 'Seguimiento quitado')}
                         onAddNote={() => addNote(customer)}
-                        onSegmentoChange={(value) => patchCustomer(customer, { segmento: value || null }, value ? 'Segmento guardado' : 'Segmento quitado')}
+                        onSegmentoChange={(value) => patchCustomer(customer, { segmento: value || null }, value ? (customer.segmento === value && customer.segmento_auto ? 'Segmento confirmado' : 'Segmento guardado') : 'Segmento quitado')}
                         onOrigenChange={(value) => patchCustomer(customer, { origen: value || null }, value ? 'Origen guardado' : 'Origen quitado')}
                       />
                     );
@@ -503,12 +510,15 @@ function FragmentRow({ customer, stage, followUp, overdue, lastContact, isExpand
         <td className="cli-nowrap">{customer.ciudad || customer.provincia || customer.department || '—'}</td>
         <td className="cli-nowrap">
           {readOnly ? (
-            customer.segmento ? <span className={`cli-seg-chip ${customer.segmento_auto ? 'is-auto' : ''}`} title={customer.segmento_auto ? 'Derivado de sus cotizaciones' : 'Confirmado'}>{usoLabel(customer.segmento)}</span> : <span className="cli-line-chip is-none">sin dato</span>
+            customer.segmento ? <span className={`cli-seg-chip ${customer.segmento_auto ? 'is-auto' : ''}`} title={customer.segmento_auto ? `Sugerido por ${customer.segmento_fuente === 'nombre' ? 'el nombre' : 'sus cotizaciones'}` : 'Confirmado'}>{usoLabel(customer.segmento)}</span> : <span className="cli-line-chip is-none">sin dato</span>
           ) : (
-            <select className={`cli-seg-select ${customer.segmento ? (customer.segmento_auto ? 'is-auto' : 'is-set') : 'is-empty'}`} value={customer.segmento || ''} onChange={(e) => onSegmentoChange(e.target.value)} title={customer.segmento_auto && customer.segmento ? 'Derivado de sus cotizaciones; elige para confirmar' : 'Dónde usa el tablero'}>
+            <select className={`cli-seg-select ${customer.segmento ? (customer.segmento_auto ? 'is-auto' : 'is-set') : 'is-empty'}`} value={customer.segmento || ''} onChange={(e) => onSegmentoChange(e.target.value)} title={customer.segmento_auto && customer.segmento ? `Sugerido por ${customer.segmento_fuente === 'nombre' ? 'el nombre' : 'sus cotizaciones'}; elige o confirma con ✓` : 'Dónde usa el tablero'}>
               <option value="">sin dato</option>
               {USOS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
             </select>
+          )}
+          {!readOnly && customer.segmento && customer.segmento_auto && (
+            <button type="button" className="cli-seg-confirm" onClick={() => onSegmentoChange(customer.segmento)} title={`Sugerido por ${customer.segmento_fuente === 'nombre' ? 'el nombre' : 'sus cotizaciones'} · confirmar`}>✓</button>
           )}
           {customer.last_uso_detalle && <small className="cli-seg-detail" title={customer.last_uso_detalle}>{customer.last_uso_detalle}</small>}
         </td>

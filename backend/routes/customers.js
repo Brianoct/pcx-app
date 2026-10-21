@@ -118,6 +118,7 @@ const buildCustomerFilters = (query = {}) => {
   // Segmento (dónde usa el tablero) y origen (cómo nos conoció); 'none' = sin dato.
   const segmento = String(query.segmento || '').trim().toLowerCase();
   if (segmento === 'none') where.push('c.segmento IS NULL');
+  else if (segmento === 'sugerido') where.push('c.segmento IS NOT NULL AND c.segmento_auto = TRUE');
   else if (normalizeUso(segmento)) { params.push(segmento); where.push(`c.segmento = $${params.length}`); }
   const origen = String(query.origen || '').trim().toLowerCase();
   if (origen === 'none') where.push('c.origen IS NULL');
@@ -157,7 +158,8 @@ router.get('/api/customers', authenticateToken, async (req, res) => {
                 COUNT(*) FILTER (WHERE ${LINE_FILTERS.both})::int AS both,
                 COUNT(*) FILTER (WHERE ${RECENCY_FILTERS['60plus']})::int AS reactivar,
                 COUNT(*) FILTER (WHERE segmento IS NULL)::int AS sin_segmento,
-                COUNT(*) FILTER (WHERE origen IS NULL)::int AS sin_origen
+                COUNT(*) FILTER (WHERE origen IS NULL)::int AS sin_origen,
+                COUNT(*) FILTER (WHERE segmento IS NOT NULL AND segmento_auto = TRUE)::int AS segmento_sugeridos
          FROM (${CUSTOMER_LIST_SELECT}) x`
       )
     ]);
@@ -172,7 +174,8 @@ router.get('/api/customers', authenticateToken, async (req, res) => {
         both: Number(summaryRes.rows[0]?.both || 0),
         reactivar: Number(summaryRes.rows[0]?.reactivar || 0),
         sin_segmento: Number(summaryRes.rows[0]?.sin_segmento || 0),
-        sin_origen: Number(summaryRes.rows[0]?.sin_origen || 0)
+        sin_origen: Number(summaryRes.rows[0]?.sin_origen || 0),
+        segmento_sugeridos: Number(summaryRes.rows[0]?.segmento_sugeridos || 0)
       }
     });
   } catch (err) {
@@ -419,6 +422,7 @@ const parseCustomerPayload = (body = {}, { partial = false } = {}) => {
     out.segmento = seg;
     // Lo fijó una persona: deja de derivarse de las cotizaciones.
     out.segmento_auto = false;
+    out.segmento_fuente = seg ? 'manual' : null;
   }
   if (has('origen')) {
     const ori = body.origen === null || body.origen === '' ? null : normalizeOrigen(body.origen);

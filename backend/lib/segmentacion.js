@@ -76,7 +76,7 @@ const applySegmentationFromQuote = async ({ phoneNormalized, origen, origenDetal
       );
     }
     await pool.query(
-      `UPDATE customers c SET segmento = s.uso, updated_at = NOW()
+      `UPDATE customers c SET segmento = s.uso, segmento_fuente = 'cotizaciones', updated_at = NOW()
        FROM (
          SELECT q.uso
          FROM quotes q

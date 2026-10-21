@@ -44,6 +44,7 @@ const buildCustomerRow = (row = {}) => ({
   pipeline_stage: row.pipeline_stage || 'contactado',
   segmento: row.segmento || null,
   segmento_auto: row.segmento_auto !== false,
+  segmento_fuente: row.segmento_fuente || null,
   origen: row.origen || null,
   origen_detalle: row.origen_detalle || null,
   last_uso: row.last_uso !== undefined ? (row.last_uso || null) : undefined,
