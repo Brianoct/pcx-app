@@ -12785,3 +12785,17 @@ button.vc-kpi {
 .cli-seg-detail { display: block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7rem; color: var(--text-muted); }
 .quote-uso-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 @media (max-width: 640px) { .quote-uso-row { grid-template-columns: 1fr; } }
+
+/* Estadísticas: ventas por uso y por origen */
+.seg-card { margin-top: 16px; }
+.seg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.seg-sub { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
+.seg-period { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.seg-range { display: inline-flex; align-items: center; gap: 6px; }
+.seg-range input { font: inherit; font-size: 0.85rem; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-input); }
+.seg-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.seg-col-title { font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 4px 0 8px; }
+.seg-list li.is-sin-dato .dashboard-bar-fill { background: #d6d3d1; }
+.seg-list li.is-sin-dato strong { color: var(--text-muted); }
+.seg-meta { display: block; font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
+.seg-total { display: flex; justify-content: space-between; padding-top: 8px; margin-top: 4px; border-top: 1px solid var(--border); font-size: 0.85rem; list-style: none; }
