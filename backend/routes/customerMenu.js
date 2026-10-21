@@ -457,8 +457,8 @@ router.post('/api/public/menu/:shareToken/order', publicOrderLimiter, async (req
       `INSERT INTO quotes (
         user_id, customer_name, customer_phone, department, provincia, shipping_notes,
         alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent, line_items, subtotal,
-        total, status, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW())
+        total, status, created_at, origen, origen_detalle
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), 'whatsapp', 'catálogo compartido')
       RETURNING id, created_at`,
       [
         seller.id,

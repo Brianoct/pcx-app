@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { apiRequest } from './apiClient';
+import { ORIGENES, USOS } from './segmentacion';
 import { clearDraftState, useDraftState } from './useDraftState';
 import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
@@ -48,6 +49,17 @@ export default function QuoteTool({ token, user }) {
   const [alternativePhone, setAlternativePhone] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  // Segmentación: dónde se usará el tablero (por pedido) y cómo nos conoció
+  // (una vez por cliente). knownCustomer = ficha encontrada por teléfono.
+  const [uso, setUso] = useState('');
+  const [usoDetalle, setUsoDetalle] = useState('');
+  const [origen, setOrigen] = useState('');
+  const [knownCustomer, setKnownCustomer] = useState(null);
+  const [origenAuto, setOrigenAuto] = useState('');
+  const phoneDigitsForLookup = String(customerPhone || '').replace(/\D/g, '');
+  // Se pregunta el origen solo la primera vez: teléfono nuevo, o cliente sin
+  // origen guardado. Las cotizaciones del inbox de WhatsApp lo traen solo.
+  const needsOrigen = phoneDigitsForLookup.length >= 7 && !(knownCustomer && knownCustomer.origen);
   const [department, setDepartment] = useState('');
   // Destino canonico (catalogo geografico): {id, municipio, provincia, departamento}.
   const [destino, setDestino] = useState(null);
@@ -271,6 +283,7 @@ export default function QuoteTool({ token, user }) {
     const digits = String(customerPhone || '').replace(/\D/g, '');
     if (!token || digits.length < 7) {
       setCustomerCoupon(null);
+      setKnownCustomer(null);
       return undefined;
     }
     let active = true;
@@ -278,6 +291,20 @@ export default function QuoteTool({ token, user }) {
       apiRequest(`/api/promos/coupon-for-customer?phone=${encodeURIComponent(digits)}`, { token })
         .then((data) => { if (active) setCustomerCoupon(data?.coupon || null); })
         .catch(() => { if (active) setCustomerCoupon(null); });
+      // Cliente conocido: precarga dónde usó el tablero la última vez y su
+      // origen, así el pedido repetido no pide nada.
+      apiRequest(`/api/customers?search=${encodeURIComponent(digits)}&limit=3`, { token })
+        .then((data) => {
+          if (!active) return;
+          const match = (data?.customers || []).find((c) => String(c.phone || '').replace(/\D/g, '') === digits) || null;
+          setKnownCustomer(match);
+          if (match) {
+            setUso((prev) => prev || match.last_uso || match.segmento || '');
+            setUsoDetalle((prev) => prev || match.last_uso_detalle || '');
+            setOrigen((prev) => prev || match.origen || '');
+          }
+        })
+        .catch(() => { if (active) setKnownCustomer(null); });
     }, 400);
     return () => { active = false; clearTimeout(timer); };
   }, [token, customerPhone]);
@@ -641,7 +668,8 @@ export default function QuoteTool({ token, user }) {
       const prefill = JSON.parse(raw);
       if (prefill?.customerName) setCustomerName(String(prefill.customerName).slice(0, 80));
       if (prefill?.customerPhone) setCustomerPhone(String(prefill.customerPhone).slice(0, 40));
-      if (prefill?.conversationId) setWhatsappConversationId(Number(prefill.conversationId));
+      if (prefill?.conversationId) { setWhatsappConversationId(Number(prefill.conversationId)); setOrigenAuto('whatsapp'); setOrigen((prev) => prev || 'whatsapp'); }
+      if (prefill?.origen) { setOrigenAuto(String(prefill.origen)); setOrigen((prev) => prev || String(prefill.origen)); }
       // GPS del chat de WhatsApp: llega listo para cotizar el envío local.
       if (prefill?.gps) setDeliveryInput(String(prefill.gps).slice(0, 120));
     } catch {
@@ -704,6 +732,8 @@ export default function QuoteTool({ token, user }) {
   const saveBlockers = useMemo(() => {
     const blockers = [];
     if (!customerName.trim() || !customerPhone.trim()) blockers.push('Completa el nombre y celular del cliente.');
+    if (!uso) blockers.push('Indica dónde se usará el tablero.');
+    if (needsOrigen && !origen) blockers.push('Indica cómo nos conoció el cliente.');
     if (!almacen) blockers.push('Selecciona el almacén.');
     if (rows.length === 0) blockers.push('Agrega al menos un producto.');
     if (rows.length > 0 && !rows.every((r) => r.sku && r.unitPrice > 0 && r.qty > 0)) {
@@ -723,7 +753,7 @@ export default function QuoteTool({ token, user }) {
     }
     if (requiresSellerAssignment && !assignedSellerId) blockers.push('Asigna el vendedor.');
     return blockers;
-  }, [customerName, customerPhone, almacen, rows, destino, destFallback, department, useAlternativeName, alternativeName, alternativePhone, requiresSellerAssignment, assignedSellerId]);
+  }, [customerName, customerPhone, almacen, rows, destino, destFallback, department, useAlternativeName, alternativeName, alternativePhone, requiresSellerAssignment, assignedSellerId, uso, origen, needsOrigen]);
 
   const canSave = saveBlockers.length === 0;
 
@@ -742,6 +772,11 @@ export default function QuoteTool({ token, user }) {
     setAlternativeName('');
     setAlternativePhone('');
     setCustomerName('');
+    setUso('');
+    setUsoDetalle('');
+    setOrigen('');
+    setOrigenAuto('');
+    setKnownCustomer(null);
     setCustomerPhone('');
     setDepartment('');
     setDestino(null);
@@ -858,6 +893,10 @@ export default function QuoteTool({ token, user }) {
     const payload = {
       customer_name: customerName,
       customer_phone: customerPhone,
+      uso: uso || null,
+      uso_detalle: usoDetalle.trim() || null,
+      origen: origen || null,
+      origen_detalle: origenAuto && origen === origenAuto ? (origenAuto === 'whatsapp' ? 'inbox WhatsApp' : 'automático') : null,
       department: destino ? destino.departamento : (destFallback ? department : null),
       provincia: destino ? destino.provincia : null,
       ciudad: destino ? destino.municipio : (fallbackCiudad.trim() || null),
@@ -1152,6 +1191,49 @@ export default function QuoteTool({ token, user }) {
                 <div className="form-counter limit">{customerPhone.length}/40</div>
               )}
             </div>
+
+            <div>
+              <label className="form-label">¿Dónde se usará?</label>
+              <div className="quote-uso-row">
+                <select
+                  className="form-select"
+                  value={uso}
+                  onChange={(e) => setUso(e.target.value)}
+                  aria-label="Dónde se usará el tablero"
+                >
+                  <option value="">Elegir…</option>
+                  {USOS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+                </select>
+                <input
+                  type="text"
+                  className="form-input"
+                  maxLength={120}
+                  placeholder="Detalle (ej. taller de motos)"
+                  value={usoDetalle}
+                  onChange={(e) => setUsoDetalle(e.target.value)}
+                  aria-label="Detalle del uso"
+                />
+              </div>
+              {knownCustomer && (knownCustomer.last_uso || knownCustomer.segmento) && (
+                <div className="form-hint">Cliente conocido · última vez: {(USOS.find((u) => u.key === (knownCustomer.last_uso || knownCustomer.segmento)) || {}).label}</div>
+              )}
+            </div>
+
+            {needsOrigen && (
+              <div>
+                <label className="form-label">¿Cómo nos conoció?</label>
+                <select
+                  className="form-select"
+                  value={origen}
+                  onChange={(e) => setOrigen(e.target.value)}
+                  aria-label="Cómo nos conoció"
+                >
+                  <option value="">Elegir…</option>
+                  {ORIGENES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </select>
+                <div className="form-hint">{origenAuto ? 'Detectado automáticamente; puedes corregirlo.' : 'Se pregunta solo la primera vez.'}</div>
+              </div>
+            )}
 
             <div>
               <div className="form-label quote-label-row">

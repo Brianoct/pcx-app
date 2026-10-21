@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
 import { useToast } from './ui/toastContext';
 import PipelineBoard from './crm/PipelineBoard';
+import { API_BASE } from './apiClient';
+import { ORIGENES, USOS, origenLabel, usoLabel } from './segmentacion';
 
 const STAGES = [
   { key: 'contactado', label: 'Contactado', cls: 'is-contactado' },
@@ -55,6 +57,9 @@ export default function CrmPanel({ token }) {
   const [lineFilter, setLineFilter] = useState('');
   const [recencyFilter, setRecencyFilter] = useState('');
   const [cityFilter, setCityFilter] = useState('');
+  // Segmento (dónde usa el tablero) y origen (cómo nos conoció). 'none' = sin dato.
+  const [segmentoFilter, setSegmentoFilter] = useState('');
+  const [origenFilter, setOrigenFilter] = useState('');
   const [summary, setSummary] = useState(null);
   // Orden de la lista. Por defecto, última compra: así las tarjetas de arriba
   // («4 compraron Acero») y las primeras filas cuentan lo mismo. El servidor
@@ -65,7 +70,7 @@ export default function CrmPanel({ token }) {
   const [expandedId, setExpandedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', ciudad: '', follow_up_at: '' });
+  const [form, setForm] = useState({ name: '', phone: '', ciudad: '', follow_up_at: '', segmento: '', origen: '' });
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -77,6 +82,8 @@ export default function CrmPanel({ token }) {
       if (lineFilter) params.set('line', lineFilter);
       if (recencyFilter) params.set('recency', recencyFilter);
       if (cityFilter.trim()) params.set('city', cityFilter.trim());
+      if (segmentoFilter) params.set('segmento', segmentoFilter);
+      if (origenFilter) params.set('origen', origenFilter);
       params.set('limit', '500');
       const data = await apiRequest(`/api/customers?${params.toString()}`, { token });
       setCustomers(Array.isArray(data?.customers) ? data.customers : []);
@@ -88,7 +95,7 @@ export default function CrmPanel({ token }) {
       toast.error(err.message || 'No se pudieron cargar clientes');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, search, stageFilter, dueOnly, lineFilter, recencyFilter, cityFilter]);
+  }, [token, search, stageFilter, dueOnly, lineFilter, recencyFilter, cityFilter, segmentoFilter, origenFilter]);
 
   useEffect(() => {
     const timer = setTimeout(load, (search || cityFilter) ? 300 : 0);
@@ -108,27 +115,33 @@ export default function CrmPanel({ token }) {
       toast.error('No se pudo copiar. Usa Exportar CSV.');
     }
   };
-  const exportCsv = () => {
-    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const head = ['Cliente', 'Teléfono', 'Ciudad', 'Líneas', 'Última compra', 'Compras', 'Total Bs', 'Acero Bs', 'Armonía Bs', 'Etapa', 'Atiende'];
-    const rows = customers.map((c) => [
-      c.name, c.phone || '', c.ciudad || c.provincia || c.department || '',
-      (c.lines_bought || []).map((l) => (l === 'acero' ? 'Acero' : 'Armonía')).join(' + '),
-      c.last_paid_at ? String(c.last_paid_at).slice(0, 10) : '', c.paid_count || 0,
-      Math.round(Number(c.total_spent || 0)), Math.round(Number(c.acero_total || 0)), Math.round(Number(c.armonia_total || 0)),
-      STAGE_META[c.pipeline_stage]?.label || c.pipeline_stage, c.owner_name || ''
-    ]);
-    const csv = [head, ...rows].map((r) => r.map(esc).join(',')).join('\r\n');
-    const blob = new Blob([`\ufeff${csv}`], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `clientes-${todayText()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast.success(`CSV con ${customers.length} clientes`);
+  // Exporta TODAS las filas que cumplen los filtros (el servidor arma el CSV).
+  const exportCsv = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set('search', search.trim());
+      if (stageFilter) params.set('stage', stageFilter);
+      if (dueOnly) params.set('due', '1');
+      if (lineFilter) params.set('line', lineFilter);
+      if (recencyFilter) params.set('recency', recencyFilter);
+      if (cityFilter.trim()) params.set('city', cityFilter.trim());
+      if (segmentoFilter) params.set('segmento', segmentoFilter);
+      if (origenFilter) params.set('origen', origenFilter);
+      const res = await fetch(`${API_BASE}/api/customers/export.csv?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) throw new Error('No se pudo exportar');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clientes-${todayText()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success('CSV exportado con todos los clientes del filtro');
+    } catch (err) {
+      toast.error(err.message || 'No se pudo exportar');
+    }
   };
 
   const fetchDetail = async (customerId) => {
@@ -184,11 +197,13 @@ export default function CrmPanel({ token }) {
           name: form.name.trim(),
           phone: form.phone.trim() || null,
           ciudad: form.ciudad.trim() || null,
-          follow_up_at: form.follow_up_at || null
+          follow_up_at: form.follow_up_at || null,
+          segmento: form.segmento || null,
+          origen: form.origen || null
         }
       });
       toast.success('Cliente creado');
-      setForm({ name: '', phone: '', ciudad: '', follow_up_at: '' });
+      setForm({ name: '', phone: '', ciudad: '', follow_up_at: '', segmento: '', origen: '' });
       setShowForm(false);
       load();
     } catch (err) {
@@ -254,6 +269,14 @@ export default function CrmPanel({ token }) {
             onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <input type="text" maxLength={120} placeholder="Ciudad" value={form.ciudad}
             onChange={(e) => setForm({ ...form, ciudad: e.target.value })} />
+          <select className="cli-filter-select" value={form.segmento} onChange={(e) => setForm({ ...form, segmento: e.target.value })} aria-label="Segmento">
+            <option value="">¿Dónde usa el tablero?</option>
+            {USOS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+          </select>
+          <select className="cli-filter-select" value={form.origen} onChange={(e) => setForm({ ...form, origen: e.target.value })} aria-label="Origen">
+            <option value="">¿Cómo nos conoció?</option>
+            {ORIGENES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
           <label className="cli-form-date">Seguimiento
             <input type="date" value={form.follow_up_at} onChange={(e) => setForm({ ...form, follow_up_at: e.target.value })} />
           </label>
@@ -322,6 +345,18 @@ export default function CrmPanel({ token }) {
                 <option value="90">Últimos 90 días</option>
                 <option value="60plus">Hace 60+ días (reactivar)</option>
               </select>
+              <span className="cli-filter-label">Segmento</span>
+              <select className="cli-filter-select" value={segmentoFilter} onChange={(e) => setSegmentoFilter(e.target.value)} aria-label="Segmento">
+                <option value="">Todos</option>
+                {USOS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+                <option value="none">Sin dato{summary?.sin_segmento ? ` (${summary.sin_segmento})` : ''}</option>
+              </select>
+              <span className="cli-filter-label">Origen</span>
+              <select className="cli-filter-select" value={origenFilter} onChange={(e) => setOrigenFilter(e.target.value)} aria-label="Origen">
+                <option value="">Todos</option>
+                {ORIGENES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                <option value="none">Sin dato{summary?.sin_origen ? ` (${summary.sin_origen})` : ''}</option>
+              </select>
               <input
                 type="text"
                 className="cli-filter-input"
@@ -382,6 +417,8 @@ export default function CrmPanel({ token }) {
                     <th>Cliente</th>
                     <th>Teléfono</th>
                     <th>Ciudad</th>
+                    <th>Segmento</th>
+                    <th>Origen</th>
                     <th>Líneas</th>
                     <th>Estado</th>
                     <th>Última compra</th>
@@ -414,6 +451,8 @@ export default function CrmPanel({ token }) {
                         onStageChange={(value) => patchCustomer(customer, { pipeline_stage: value })}
                         onFollowUpChange={(value) => patchCustomer(customer, { follow_up_at: value || null }, value ? 'Seguimiento agendado' : 'Seguimiento quitado')}
                         onAddNote={() => addNote(customer)}
+                        onSegmentoChange={(value) => patchCustomer(customer, { segmento: value || null }, value ? 'Segmento guardado' : 'Segmento quitado')}
+                        onOrigenChange={(value) => patchCustomer(customer, { origen: value || null }, value ? 'Origen guardado' : 'Origen quitado')}
                       />
                     );
                   })}
@@ -442,9 +481,9 @@ const recencyChip = (lastPaidAt) => {
   return <span className={`cli-recency ${cls}`}>{days <= 0 ? 'hoy' : `hace ${days} d`}</span>;
 };
 
-function FragmentRow({ customer, stage, followUp, overdue, lastContact, isExpanded, detail, readOnly, onToggle, onStageChange, onFollowUpChange, onAddNote }) {
+function FragmentRow({ customer, stage, followUp, overdue, lastContact, isExpanded, detail, readOnly, onToggle, onStageChange, onFollowUpChange, onAddNote, onSegmentoChange, onOrigenChange }) {
   const phoneDigits = String(customer.phone || '').replace(/\D/g, '');
-  const colSpan = readOnly ? 7 : 9;
+  const colSpan = readOnly ? 9 : 11;
   return (
     <>
       <tr className={`cli-row ${overdue && !readOnly ? 'is-overdue' : ''}`}>
@@ -462,6 +501,27 @@ function FragmentRow({ customer, stage, followUp, overdue, lastContact, isExpand
           ) : '—'}
         </td>
         <td className="cli-nowrap">{customer.ciudad || customer.provincia || customer.department || '—'}</td>
+        <td className="cli-nowrap">
+          {readOnly ? (
+            customer.segmento ? <span className={`cli-seg-chip ${customer.segmento_auto ? 'is-auto' : ''}`} title={customer.segmento_auto ? 'Derivado de sus cotizaciones' : 'Confirmado'}>{usoLabel(customer.segmento)}</span> : <span className="cli-line-chip is-none">sin dato</span>
+          ) : (
+            <select className={`cli-seg-select ${customer.segmento ? (customer.segmento_auto ? 'is-auto' : 'is-set') : 'is-empty'}`} value={customer.segmento || ''} onChange={(e) => onSegmentoChange(e.target.value)} title={customer.segmento_auto && customer.segmento ? 'Derivado de sus cotizaciones; elige para confirmar' : 'Dónde usa el tablero'}>
+              <option value="">sin dato</option>
+              {USOS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+            </select>
+          )}
+          {customer.last_uso_detalle && <small className="cli-seg-detail" title={customer.last_uso_detalle}>{customer.last_uso_detalle}</small>}
+        </td>
+        <td className="cli-nowrap">
+          {readOnly ? (
+            customer.origen ? <span className="cli-seg-chip">{origenLabel(customer.origen)}</span> : <span className="cli-line-chip is-none">sin dato</span>
+          ) : (
+            <select className={`cli-seg-select ${customer.origen ? 'is-set' : 'is-empty'}`} value={customer.origen || ''} onChange={(e) => onOrigenChange(e.target.value)} title={customer.origen_detalle || 'Cómo nos conoció'}>
+              <option value="">sin dato</option>
+              {ORIGENES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          )}
+        </td>
         <td><LineChips lines={customer.lines_bought} /></td>
         <td>
           {readOnly ? (

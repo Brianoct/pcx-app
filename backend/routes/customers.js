@@ -1,5 +1,6 @@
 const express = require('express');
 const { pool } = require('../db');
+const { normalizeOrigen, normalizeUso, trimDetalle, USOS, ORIGENES } = require('../lib/segmentacion');
 const { authenticateToken } = require('../lib/authMiddleware');
 const { CUSTOMER_PIPELINE_STAGES, buildCustomerRow, normalizeCustomerPhone, normalizePipelineStage, trimOrNull } = require('../lib/customers');
 const { ROLE_KEYS, normalizeRole, sanitizePanelAccess } = require('../lib/rbac');
@@ -40,7 +41,7 @@ const QUOTES_BY_PHONE_JOIN = `regexp_replace(COALESCE(q.customer_phone, ''), '\\
       AND c.phone_normalized IS NOT NULL AND c.phone_normalized <> ''`;
 
 const CUSTOMER_LIST_SELECT = `
-  SELECT c.*, s.quotes_count, s.total_spent, s.last_quote_at, s.last_store_location,
+  SELECT c.*, s.quotes_count, s.total_spent, s.last_quote_at, s.last_store_location, s.last_uso, s.last_uso_detalle,
          s.paid_count, s.last_paid_at, l.acero_total, l.armonia_total, l.acero_items, l.armonia_items,
          COALESCE(NULLIF(TRIM(owner.display_name), ''), split_part(owner.email, '@', 1)) AS owner_name
   FROM customers c
@@ -50,6 +51,8 @@ const CUSTOMER_LIST_SELECT = `
            COALESCE(SUM(CASE WHEN q.status IN ('Pagado', 'Embalado', 'Enviado') THEN q.total ELSE 0 END), 0) AS total_spent,
            MAX(q.created_at) AS last_quote_at,
            (array_agg(q.store_location ORDER BY q.created_at DESC))[1] AS last_store_location,
+           (array_agg(q.uso ORDER BY q.created_at DESC) FILTER (WHERE q.uso IS NOT NULL))[1] AS last_uso,
+           (array_agg(q.uso_detalle ORDER BY q.created_at DESC) FILTER (WHERE q.uso IS NOT NULL))[1] AS last_uso_detalle,
            COUNT(*) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado'))::int AS paid_count,
            MAX(q.created_at) FILTER (WHERE q.status IN ('Pagado', 'Embalado', 'Enviado')) AS last_paid_at
     FROM quotes q
@@ -84,41 +87,54 @@ const RECENCY_FILTERS = {
   '60plus': "last_paid_at IS NOT NULL AND last_paid_at < NOW() - INTERVAL '60 days'"
 };
 
+// Filtros de la lista (también los usa la exportación CSV).
+const buildCustomerFilters = (query = {}) => {
+  const params = [];
+  const where = [];
+  const search = String(query.search || '').trim();
+  if (search) {
+    params.push(`%${search.toLowerCase()}%`);
+    const nameIdx = params.length;
+    const phoneDigits = normalizeCustomerPhone(search);
+    if (phoneDigits) {
+      params.push(`%${phoneDigits}%`);
+      where.push(`(LOWER(c.name) LIKE $${nameIdx} OR c.phone_normalized LIKE $${params.length})`);
+    } else {
+      where.push(`LOWER(c.name) LIKE $${nameIdx}`);
+    }
+  }
+  const stage = String(query.stage || '').trim().toLowerCase();
+  if (stage && CUSTOMER_PIPELINE_STAGES.includes(stage)) {
+    params.push(stage);
+    where.push(`c.pipeline_stage = $${params.length}`);
+  }
+  if (String(query.due || '') === '1') {
+    where.push("c.follow_up_at IS NOT NULL AND c.follow_up_at <= (NOW() AT TIME ZONE 'America/La_Paz')::date");
+  }
+  const line = String(query.line || '').trim().toLowerCase();
+  if (LINE_FILTERS[line]) where.push(`(${LINE_FILTERS[line]})`);
+  const recency = String(query.recency || '').trim().toLowerCase();
+  if (RECENCY_FILTERS[recency]) where.push(`(${RECENCY_FILTERS[recency]})`);
+  // Segmento (dónde usa el tablero) y origen (cómo nos conoció); 'none' = sin dato.
+  const segmento = String(query.segmento || '').trim().toLowerCase();
+  if (segmento === 'none') where.push('c.segmento IS NULL');
+  else if (normalizeUso(segmento)) { params.push(segmento); where.push(`c.segmento = $${params.length}`); }
+  const origen = String(query.origen || '').trim().toLowerCase();
+  if (origen === 'none') where.push('c.origen IS NULL');
+  else if (normalizeOrigen(origen)) { params.push(origen); where.push(`c.origen = $${params.length}`); }
+  const city = String(query.city || '').trim();
+  if (city) {
+    params.push(`%${city.toLowerCase()}%`);
+    where.push(`(LOWER(COALESCE(c.ciudad, '')) LIKE $${params.length} OR LOWER(COALESCE(c.department, '')) LIKE $${params.length} OR LOWER(COALESCE(c.provincia, '')) LIKE $${params.length})`);
+  }
+  return { params, where };
+};
+
 router.get('/api/customers', authenticateToken, async (req, res) => {
   const userContext = await ensureCrmAccess(req, res);
   if (!userContext) return;
   try {
-    const params = [];
-    const where = [];
-    const search = String(req.query.search || '').trim();
-    if (search) {
-      params.push(`%${search.toLowerCase()}%`);
-      const nameIdx = params.length;
-      const phoneDigits = normalizeCustomerPhone(search);
-      if (phoneDigits) {
-        params.push(`%${phoneDigits}%`);
-        where.push(`(LOWER(c.name) LIKE $${nameIdx} OR c.phone_normalized LIKE $${params.length})`);
-      } else {
-        where.push(`LOWER(c.name) LIKE $${nameIdx}`);
-      }
-    }
-    const stage = String(req.query.stage || '').trim().toLowerCase();
-    if (stage && CUSTOMER_PIPELINE_STAGES.includes(stage)) {
-      params.push(stage);
-      where.push(`c.pipeline_stage = $${params.length}`);
-    }
-    if (String(req.query.due || '') === '1') {
-      where.push("c.follow_up_at IS NOT NULL AND c.follow_up_at <= (NOW() AT TIME ZONE 'America/La_Paz')::date");
-    }
-    const line = String(req.query.line || '').trim().toLowerCase();
-    if (LINE_FILTERS[line]) where.push(`(${LINE_FILTERS[line]})`);
-    const recency = String(req.query.recency || '').trim().toLowerCase();
-    if (RECENCY_FILTERS[recency]) where.push(`(${RECENCY_FILTERS[recency]})`);
-    const city = String(req.query.city || '').trim();
-    if (city) {
-      params.push(`%${city.toLowerCase()}%`);
-      where.push(`(LOWER(COALESCE(c.ciudad, '')) LIKE $${params.length} OR LOWER(COALESCE(c.department, '')) LIKE $${params.length} OR LOWER(COALESCE(c.provincia, '')) LIKE $${params.length})`);
-    }
+    const { params, where } = buildCustomerFilters(req.query);
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 1000);
     const result = await pool.query(
       `${CUSTOMER_LIST_SELECT}
@@ -139,7 +155,9 @@ router.get('/api/customers', authenticateToken, async (req, res) => {
                 COUNT(*) FILTER (WHERE ${LINE_FILTERS.acero})::int AS acero,
                 COUNT(*) FILTER (WHERE ${LINE_FILTERS.armonia})::int AS armonia,
                 COUNT(*) FILTER (WHERE ${LINE_FILTERS.both})::int AS both,
-                COUNT(*) FILTER (WHERE ${RECENCY_FILTERS['60plus']})::int AS reactivar
+                COUNT(*) FILTER (WHERE ${RECENCY_FILTERS['60plus']})::int AS reactivar,
+                COUNT(*) FILTER (WHERE segmento IS NULL)::int AS sin_segmento,
+                COUNT(*) FILTER (WHERE origen IS NULL)::int AS sin_origen
          FROM (${CUSTOMER_LIST_SELECT}) x`
       )
     ]);
@@ -152,7 +170,9 @@ router.get('/api/customers', authenticateToken, async (req, res) => {
         acero: Number(summaryRes.rows[0]?.acero || 0),
         armonia: Number(summaryRes.rows[0]?.armonia || 0),
         both: Number(summaryRes.rows[0]?.both || 0),
-        reactivar: Number(summaryRes.rows[0]?.reactivar || 0)
+        reactivar: Number(summaryRes.rows[0]?.reactivar || 0),
+        sin_segmento: Number(summaryRes.rows[0]?.sin_segmento || 0),
+        sin_origen: Number(summaryRes.rows[0]?.sin_origen || 0)
       }
     });
   } catch (err) {
@@ -168,6 +188,45 @@ const OPEN_STAGES = ['contactado', 'cotizado', 'negociando'];
 
 // Board data: every open deal, plus this month's won/lost. Registered BEFORE
 // /api/customers/:id so "pipeline" is not parsed as an id.
+
+// Exportación completa (todas las filas que cumplen los filtros, sin tope).
+router.get('/api/customers/export.csv', authenticateToken, async (req, res) => {
+  const userContext = await ensureCrmAccess(req, res);
+  if (!userContext) return;
+  try {
+    const { params, where } = buildCustomerFilters(req.query);
+    const result = await pool.query(
+      `${CUSTOMER_LIST_SELECT}
+       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+       ORDER BY s.last_paid_at DESC NULLS LAST, c.name ASC`,
+      params
+    );
+    const usoLabel = (k) => (USOS.find((u) => u.key === k) || {}).label || '';
+    const origenLabel = (k) => (ORIGENES.find((o) => o.key === k) || {}).label || '';
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const head = ['Cliente', 'Teléfono', 'Ciudad', 'Segmento', 'Detalle de uso', 'Origen', 'Detalle de origen', 'Líneas', 'Última compra', 'Compras', 'Total Bs', 'Acero Bs', 'Armonía Bs', 'Etapa', 'Atiende'];
+    const lines = [head.map(esc).join(',')];
+    for (const raw of result.rows) {
+      const c = buildCustomerRow(raw);
+      lines.push([
+        c.name, c.phone || '', c.ciudad || c.provincia || c.department || '',
+        usoLabel(c.segmento), c.last_uso_detalle || '', origenLabel(c.origen), c.origen_detalle || '',
+        (c.lines_bought || []).map((l) => (l === 'acero' ? 'Acero' : 'Armonía')).join(' + '),
+        c.last_paid_at ? String(c.last_paid_at).slice(0, 10) : '', c.paid_count || 0,
+        Math.round(Number(c.total_spent || 0)), Math.round(Number(c.acero_total || 0)), Math.round(Number(c.armonia_total || 0)),
+        c.pipeline_stage, c.owner_name || ''
+      ].map(esc).join(','));
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', `attachment; filename="clientes-${today}.csv"`);
+    res.send(`﻿${lines.join('\r\n')}`);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo exportar' });
+  }
+});
+
 router.get('/api/customers/pipeline', authenticateToken, async (req, res) => {
   const userContext = await ensureCrmAccess(req, res);
   if (!userContext) return;
@@ -354,6 +413,19 @@ const parseCustomerPayload = (body = {}, { partial = false } = {}) => {
   }
   if (has('follow_up_note')) out.follow_up_note = trimOrNull(body.follow_up_note, 300);
   if (has('lost_reason')) out.lost_reason = trimOrNull(body.lost_reason, 200);
+  if (has('segmento')) {
+    const seg = body.segmento === null || body.segmento === '' ? null : normalizeUso(body.segmento);
+    if (body.segmento && !seg) throw createHttpError(400, 'Segmento inválido');
+    out.segmento = seg;
+    // Lo fijó una persona: deja de derivarse de las cotizaciones.
+    out.segmento_auto = false;
+  }
+  if (has('origen')) {
+    const ori = body.origen === null || body.origen === '' ? null : normalizeOrigen(body.origen);
+    if (body.origen && !ori) throw createHttpError(400, 'Origen inválido');
+    out.origen = ori;
+  }
+  if (has('origen_detalle')) out.origen_detalle = trimDetalle(body.origen_detalle);
   if (has('assigned_user_id')) {
     if (body.assigned_user_id === null || body.assigned_user_id === '') {
       out.assigned_user_id = null;
@@ -383,14 +455,16 @@ router.post('/api/customers', authenticateToken, async (req, res) => {
       }
     }
     const result = await pool.query(
-      `INSERT INTO customers (name, phone, phone_normalized, email, department, provincia, ciudad, address, assigned_vendor, pipeline_stage, follow_up_at, follow_up_note, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, 'contactado'), $11, $12, $13)
+      `INSERT INTO customers (name, phone, phone_normalized, email, department, provincia, ciudad, address, assigned_vendor, pipeline_stage, follow_up_at, follow_up_note, created_by,
+                              segmento, segmento_auto, origen, origen_detalle)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, 'contactado'), $11, $12, $13, $14, $15, $16, $17)
        RETURNING *`,
       [
         data.name, data.phone, data.phone_normalized, data.email || null,
         data.department || null, data.provincia || null, data.ciudad || null, data.address || null,
         data.assigned_vendor || null, data.pipeline_stage || null,
-        data.follow_up_at || null, data.follow_up_note || null, req.user.id
+        data.follow_up_at || null, data.follow_up_note || null, req.user.id,
+        data.segmento || null, data.segmento ? false : true, data.origen || null, data.origen_detalle || null
       ]
     );
     res.status(201).json({ message: 'Cliente creado', customer: buildCustomerRow(result.rows[0]) });
