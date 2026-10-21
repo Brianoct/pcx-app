@@ -12774,3 +12774,14 @@ button.vc-kpi {
   .home-tile img { width: 52px; height: 52px; }
   .home-ask { flex-direction: row; }
 }
+
+/* Clientes: segmento (dónde usa el tablero) y origen (cómo nos conoció) */
+.cli-seg-select { font: inherit; font-size: 0.78rem; font-weight: 700; padding: 3px 6px; border-radius: 999px; border: 1px solid var(--border); background: #fff; color: var(--text-primary); max-width: 160px; }
+.cli-seg-select.is-empty { color: var(--text-muted); border-style: dashed; }
+.cli-seg-select.is-auto { border-color: #f59e0b; background: #fffbeb; color: #92400e; }
+.cli-seg-select.is-set { border-color: #c7d2fe; background: #eef2ff; color: #3730a3; }
+.cli-seg-chip { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 800; background: #eef2ff; color: #3730a3; white-space: nowrap; }
+.cli-seg-chip.is-auto { background: #fffbeb; color: #92400e; }
+.cli-seg-detail { display: block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7rem; color: var(--text-muted); }
+.quote-uso-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+@media (max-width: 640px) { .quote-uso-row { grid-template-columns: 1fr; } }

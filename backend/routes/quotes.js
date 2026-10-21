@@ -5,6 +5,7 @@ const { getPedidosAccessScope } = require('../lib/inventory');
 const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_METHODS, QUOTE_SAVE_IDEMPOTENCY_TTL_MS, QUOTE_STATUSES, deductStockForQuote, effectiveGiftItems, getQuoteSaveIdempotencyCacheKey, giftItemsFingerprint, lineItemsFingerprint, normalizeDeliveryFields, normalizeGiftItems, normalizeQuotePaymentMethod, parseAndNormalizeQuoteRows, pruneQuoteSaveIdempotencyCache, quoteSaveIdempotencyCache, resolveGiftItemsForQuote, resolveGiftSelectionForQuote } = require('../lib/quotes');
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { findCustomerOwnerByPhone, markCustomerWonByPhone, upsertCustomerFromQuote } = require('../lib/customers');
+const { applySegmentationFromQuote, parseQuoteSegmentation } = require('../lib/segmentacion');
 const { applyPromosToNewQuote, refreshAccessoryDiscountSnapshot, refreshCodeAggregate, syncPromoTicketsForQuote, validateCouponForRedemption } = require('../lib/promos');
 const { resolveGeoDestination } = require('../lib/geo');
 const { loadUserContext, resolveUserDisplayName } = require('../lib/users');
@@ -24,7 +25,7 @@ const assertQuoteMutationPermission = async (client, quoteId, reqUserId, userCon
   }
 
   const quoteRes = await client.query(
-    `SELECT id, user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes,
+    `SELECT id, user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes, uso, uso_detalle, origen, origen_detalle, campaign_id,
             alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
             coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items, payment_method, payment_cash_bs,
             line_items, subtotal, total, status, delivery_fee_bs, delivery_label, delivery_gps, promos
@@ -148,6 +149,14 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
   const normalizedStatus = String(status || 'Cotizado').trim();
   if (!QUOTE_STATUSES.includes(normalizedStatus)) {
     return res.status(400).json({ error: `Estado inválido. Usa: ${QUOTE_STATUSES.join(', ')}` });
+  }
+
+  // Dónde se usará el tablero y cómo nos conoció (segmentación).
+  let segmentation;
+  try {
+    segmentation = parseQuoteSegmentation(req.body || {});
+  } catch (err) {
+    return res.status(err.statusCode || 400).json({ error: err.message });
   }
 
   if (!customer_name || !customer_phone || !store_location || !venta_type) {
@@ -291,8 +300,10 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
         user_id, customer_name, customer_phone, department, provincia, ciudad, dest_geo_id, shipping_notes,
         alternative_name, alternative_phone, store_location, vendor, venta_type, discount_percent,
         coupon_code, coupon_discount_percent, gift_name, gift_sku, gift_qty, gift_items, line_items, subtotal, total, status,
-        delivery_fee_bs, delivery_label, delivery_gps, created_by_user_id, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, NOW())
+        delivery_fee_bs, delivery_label, delivery_gps, created_by_user_id, created_at,
+        uso, uso_detalle, origen, origen_detalle, campaign_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, NOW(),
+        $29, $30, $31, $32, $33)
       RETURNING id`,
       [
         quoteOwnerId,
@@ -323,7 +334,12 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
         deliveryFields.label,
         deliveryFields.gps,
         // Auditoría: quién estaba logueado (aunque la venta se asigne a otro).
-        req.user.id
+        req.user.id,
+        segmentation.uso,
+        segmentation.uso_detalle,
+        segmentation.origen,
+        segmentation.origen_detalle,
+        segmentation.campaign_id
       ]
     );
 
@@ -364,6 +380,11 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
       ciudad: destino.ciudad,
       vendor: vendorDisplayName,
       userId: req.user.id
+    });
+    await applySegmentationFromQuote({
+      phoneNormalized: String(customer_phone || '').replace(/\D/g, ''),
+      origen: segmentation.origen,
+      origenDetalle: segmentation.origen_detalle
     });
 
     // Si la cotización nace ya cobrada (o trae cupón), dejar el canje y los
@@ -443,7 +464,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
       : '';
 
     if (isTeamView) {
-      query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
+      query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes, q.uso, q.uso_detalle, q.origen, q.origen_detalle, q.campaign_id,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
@@ -456,7 +477,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
       params = [];
     } else if (access.pedidos_individual && !access.historial_individual && !pedidosScope.isGlobal) {
       // Pedidos individual: scope by assigned city/store.
-      query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
+      query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes, q.uso, q.uso_detalle, q.origen, q.origen_detalle, q.campaign_id,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
@@ -470,7 +491,7 @@ router.get('/api/quotes', authenticateToken, async (req, res) => {
       params = [pedidosScope.city];
     } else {
       // Historial individual: own quotes only.
-      query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes,
+      query = `SELECT q.id, q.user_id, q.customer_name, q.customer_phone, q.department, q.provincia, q.shipping_notes, q.uso, q.uso_detalle, q.origen, q.origen_detalle, q.campaign_id,
                       q.alternative_name, q.alternative_phone,
                       q.store_location, q.vendor, q.venta_type, q.discount_percent, q.line_items, q.subtotal,
                       q.total, q.status, q.payment_method, q.payment_cash_bs,
@@ -955,6 +976,14 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
     ? req.body
     : {};
   const hasBodyField = (field) => Object.prototype.hasOwnProperty.call(requestBody, field);
+  let segmentationEdit = null;
+  if (hasBodyField('uso') || hasBodyField('origen') || hasBodyField('uso_detalle') || hasBodyField('campaign_id')) {
+    try {
+      segmentationEdit = parseQuoteSegmentation(requestBody);
+    } catch (err) {
+      return res.status(err.statusCode || 400).json({ error: err.message });
+    }
+  }
   const {
     customer_name,
     customer_phone,
@@ -1206,7 +1235,12 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
            delivery_label = $27,
            delivery_gps = $28,
            updated_by_user_id = $29,
-           updated_by_at = NOW()
+           updated_by_at = NOW(),
+           uso = COALESCE($30, uso),
+           uso_detalle = CASE WHEN $30 IS NULL THEN uso_detalle ELSE $31 END,
+           origen = COALESCE($32, origen),
+           origen_detalle = CASE WHEN $32 IS NULL THEN origen_detalle ELSE $33 END,
+           campaign_id = COALESCE($34, campaign_id)
       WHERE id = $22`,
       [
         customer_name,
@@ -1237,7 +1271,12 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
         deliveryFieldsUpdate ? deliveryFieldsUpdate.fee : (currentQuote.delivery_fee_bs ?? null),
         deliveryFieldsUpdate ? deliveryFieldsUpdate.label : (currentQuote.delivery_label || null),
         deliveryFieldsUpdate ? deliveryFieldsUpdate.gps : (currentQuote.delivery_gps || null),
-        req.user.id
+        req.user.id,
+        segmentationEdit?.uso ?? null,
+        segmentationEdit?.uso_detalle ?? null,
+        segmentationEdit?.origen ?? null,
+        segmentationEdit?.origen_detalle ?? null,
+        segmentationEdit?.campaign_id ?? null
       ]
     );
 
@@ -1259,6 +1298,11 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
       ciudad: destinoEdit.ciudad,
       vendor: nextVendorName,
       userId: req.user.id
+    });
+    await applySegmentationFromQuote({
+      phoneNormalized: String(customer_phone || '').replace(/\D/g, ''),
+      origen: segmentationEdit?.origen || null,
+      origenDetalle: segmentationEdit?.origen_detalle || null
     });
 
     // El total pudo cambiar: recalcular tickets de sorteo (no bloqueante).
