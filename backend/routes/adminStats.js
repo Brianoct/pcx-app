@@ -7,6 +7,90 @@ const { parseVariantSku } = require('../lib/kanban');
 const { COMPLETED_STATUSES, REPORTING_TIMEZONE, buildDateFilter, buildReportingCreatedAtExpr } = require('../lib/reporting');
 
 const router = express.Router();
+const { ORIGENES, USOS } = require('../lib/segmentacion');
+
+// ─── VENTAS POR USO Y POR ORIGEN ────────────────────────────────────────────
+// Periodo: ?month&year (igual que el resto de Estadísticas), ?range=12m
+// (últimos 12 meses) o ?from&to (AAAA-MM-DD). Mismos estados que «Total
+// ventas» para que los totales cuadren.
+const SALES_STATUSES = ['Pagado', 'Embalado', 'Enviado'];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const buildSegmentationPeriod = (query = {}) => {
+  const createdAt = buildReportingCreatedAtExpr('q');
+  const range = String(query.range || '').trim();
+  if (range === '12m') {
+    return { sql: ` AND ${createdAt} >= date_trunc('month', timezone('${REPORTING_TIMEZONE}', NOW())) - INTERVAL '11 months'`, params: [], label: 'Últimos 12 meses' };
+  }
+  const from = String(query.from || '').trim();
+  const to = String(query.to || '').trim();
+  if (from || to) {
+    const validDate = (d) => DATE_RE.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+    if ((from && !validDate(from)) || (to && !validDate(to))) return { error: 'Fechas inválidas (AAAA-MM-DD)' };
+    if (from && to && from > to) return { error: 'La fecha «desde» es posterior a «hasta»' };
+    const params = [];
+    const clauses = [];
+    if (from) { params.push(from); clauses.push(`${createdAt} >= $${params.length}::date`); }
+    if (to) { params.push(to); clauses.push(`${createdAt} < ($${params.length}::date + INTERVAL '1 day')`); }
+    return { sql: ` AND ${clauses.join(' AND ')}`, params, label: `${from || '…'} → ${to || '…'}` };
+  }
+  const monthFilter = buildDateFilter(query.month, query.year, 'q', 1);
+  if (monthFilter.error) return monthFilter;
+  return { ...monthFilter, label: query.month ? `${query.month}/${query.year}` : 'Todo' };
+};
+
+router.get('/api/admin/stats/segmentacion', authenticateToken, requireRole(['admin']), async (req, res) => {
+  const period = buildSegmentationPeriod(req.query);
+  if (period.error) return res.status(400).json({ error: period.error });
+  const statusList = SALES_STATUSES.map((s) => `'${s}'`).join(', ');
+  // Unidades: suma de qty de line_items. Origen: el de la cotización o, si no
+  // tiene, el guardado en el cliente (teléfono).
+  const base = `
+    FROM quotes q
+    LEFT JOIN customers c ON c.phone_normalized = regexp_replace(COALESCE(q.customer_phone, ''), '\\D', '', 'g')
+      AND c.phone_normalized IS NOT NULL AND c.phone_normalized <> ''
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(COALESCE((li->>'qty')::numeric, 0)), 0) AS units
+      FROM jsonb_array_elements(CASE WHEN jsonb_typeof(q.line_items) = 'array' THEN q.line_items ELSE '[]'::jsonb END) li
+    ) u ON TRUE
+    WHERE q.status IN (${statusList}) ${period.sql}`;
+  try {
+    const [usoRes, origenRes, totalRes] = await Promise.all([
+      pool.query(`SELECT q.uso AS key, COUNT(*)::int AS order_count, COALESCE(SUM(q.total), 0) AS total_sales, COALESCE(SUM(u.units), 0) AS units ${base} GROUP BY q.uso`, period.params),
+      pool.query(`SELECT COALESCE(q.origen, c.origen) AS key, COUNT(*)::int AS order_count, COALESCE(SUM(q.total), 0) AS total_sales, COALESCE(SUM(u.units), 0) AS units ${base} GROUP BY COALESCE(q.origen, c.origen)`, period.params),
+      pool.query(`SELECT COUNT(*)::int AS order_count, COALESCE(SUM(q.total), 0) AS total_sales, COALESCE(SUM(u.units), 0) AS units ${base}`, period.params)
+    ]);
+    const total = {
+      order_count: Number(totalRes.rows[0]?.order_count || 0),
+      total_sales: Number(totalRes.rows[0]?.total_sales || 0),
+      units: Number(totalRes.rows[0]?.units || 0)
+    };
+    const shape = (rows, catalog) => rows
+      .map((r) => {
+        const key = r.key || 'sin_dato';
+        const label = key === 'sin_dato' ? 'Sin dato' : (catalog.find((c) => c.key === key) || {}).label || key;
+        const sales = Number(r.total_sales || 0);
+        return {
+          key,
+          label,
+          order_count: Number(r.order_count || 0),
+          total_sales: sales,
+          units: Number(r.units || 0),
+          pct: total.total_sales > 0 ? Math.round((sales / total.total_sales) * 1000) / 10 : 0
+        };
+      })
+      .sort((a, b) => (a.key === 'sin_dato') - (b.key === 'sin_dato') || b.total_sales - a.total_sales);
+    res.json({
+      period: { label: period.label },
+      total,
+      by_uso: shape(usoRes.rows, USOS),
+      by_origen: shape(origenRes.rows, ORIGENES)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo calcular ventas por uso y origen' });
+  }
+});
 
 // Bases whose color mix Brian wants to watch on Estadísticas. Add more here to
 // track their color breakdown too — the response builds one section per base.

@@ -6,6 +6,7 @@ import BoliviaSalesMap from './BoliviaSalesMap';
 import MorningBrief from './MorningBrief';
 import RentabilidadCard from './RentabilidadCard';
 import LineStatsCard from './LineStatsCard';
+import SegmentacionCard from './SegmentacionCard';
 
 const getNiceAxisMax = (value) => {
   if (!Number.isFinite(value) || value <= 0) return 100;
@@ -735,6 +736,10 @@ function AdminDashboard({ token }) {
           });
         })}
       </div>
+
+      {(cardGroup === 'todos' || cardGroup === 'ventas') && (
+        <SegmentacionCard token={token} month={selectedMonth} year={selectedYear} />
+      )}
 
       {(cardGroup === 'todos' || cardGroup === 'productos') && (
         <>
