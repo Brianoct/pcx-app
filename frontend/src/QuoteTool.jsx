@@ -1,17 +1,28 @@
-// QuoteTool.jsx
+// QuoteTool.jsx — Cotizar.
+//
+// Distribución: a la izquierda se ARMA (cliente, destino y buscador de
+// productos) y a la derecha queda la COTIZACIÓN (líneas, descuento, total y
+// guardar), siempre a la vista. En pantallas angostas todo va en una columna
+// y el total con el botón de guardar quedan pegados abajo.
 import { useState, useEffect, useMemo, useRef } from 'react';
 import logo from './assets/logo.png';
 import { generateModernQuotePdf } from './quotePdf';
 import { apiRequest } from './apiClient';
-import { ORIGENES, USOS } from './segmentacion';
+import { ORIGENES } from './segmentacion';
 import { clearDraftState, useDraftState } from './useDraftState';
 import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
-import QuoteCatalogPicker from './QuoteCatalogPicker';
+import QuotePicker, { QtyStepper } from './QuotePicker';
 import CustomerHub, { CustomerSearchField } from './crm/CustomerHub';
 import { looksLikeMapsLink, parseGpsInput } from './gps';
 
 const PRODUCTS_VIEW_STORAGE_KEY = 'pcx.quoteProductsView';
+const ALMACEN_STORAGE_KEY = 'pcx.quoteAlmacen';
+const WIDE_LAYOUT_QUERY = '(min-width: 1240px)';
+const MAX_LINE_QTY = 9999;
+
+const ALMACEN_OPTIONS = ['Cochabamba', 'Santa Cruz'];
+const DEPARTAMENTOS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'];
 
 const clampNumber = (value, min, max) => {
   const numeric = Number(value);
@@ -19,8 +30,60 @@ const clampNumber = (value, min, max) => {
   return Math.min(max, Math.max(min, numeric));
 };
 
+const normalizeSku = (value) => String(value || '').trim().toUpperCase();
+const sameText = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 
-const ALMACEN_OPTIONS = ['Cochabamba', 'Santa Cruz'];
+// Ids de línea únicos aunque se agreguen varios productos en el mismo ms.
+let rowSequence = 0;
+const nextRowId = () => {
+  rowSequence = (rowSequence + 1) % 1000;
+  return Date.now() * 1000 + rowSequence;
+};
+
+// Fecha de la proforma («24 de noviembre de 2026, 22:57»), sin el día de la semana.
+const quoteDateText = () => {
+  const formatted = new Intl.DateTimeFormat('es-BO', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false
+  }).format(new Date());
+  const parts = formatted.split(', ');
+  return parts.length > 1 ? parts.slice(1).join(', ') : formatted.charAt(0).toUpperCase() + formatted.slice(1);
+};
+
+// Borradores viejos traían filas vacías (la lista de selects) o el mismo
+// producto en dos filas: se limpian y se juntan por código.
+const sanitizeDraftRows = (draftRows) => {
+  const merged = new Map();
+  for (const raw of Array.isArray(draftRows) ? draftRows : []) {
+    const sku = normalizeSku(raw?.sku);
+    if (!sku) continue;
+    const qty = Math.min(MAX_LINE_QTY, Math.max(1, Number.parseInt(raw.qty, 10) || 1));
+    const unitPrice = Number(raw.unitPrice) || 0;
+    const previous = merged.get(sku);
+    if (previous) {
+      const nextQty = Math.min(MAX_LINE_QTY, previous.qty + qty);
+      merged.set(sku, { ...previous, qty: nextQty, lineTotal: previous.unitPrice * nextQty });
+      continue;
+    }
+    merged.set(sku, {
+      id: nextRowId(),
+      sku,
+      skuDisplay: String(raw.skuDisplay || sku),
+      qty,
+      unitPrice,
+      lineTotal: unitPrice * qty,
+      isCombo: Boolean(raw.isCombo),
+      comboItems: raw.isCombo && Array.isArray(raw.comboItems) ? raw.comboItems : undefined
+    });
+  }
+  return [...merged.values()];
+};
+
+const readViewport = () => ({
+  isMobile: typeof window !== 'undefined' ? window.innerWidth <= 768 : false,
+  isWide: typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia(WIDE_LAYOUT_QUERY).matches
+    : false
+});
 
 export default function QuoteTool({ token, user }) {
   const toast = useToast();
@@ -33,7 +96,9 @@ export default function QuoteTool({ token, user }) {
   const draftStorageKey = `pcx.quoteDraft.v2:${userDraftSuffix}`;
   const [draft, setDraft] = useDraftState(draftStorageKey, null);
 
-
+  // Solo líneas reales: { id, sku, skuDisplay, qty, unitPrice, lineTotal,
+  // isCombo, comboItems }. El stock no se guarda en la fila: se deriva del
+  // mapa de stock del almacén elegido.
   const [rows, setRows] = useState([]);
   const [ventaType, setVentaType] = useState('sf');
   const [discountMode, setDiscountMode] = useState('percent');
@@ -49,21 +114,25 @@ export default function QuoteTool({ token, user }) {
   const [alternativePhone, setAlternativePhone] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  // Segmentación: dónde se usará el tablero (por pedido) y cómo nos conoció
-  // (una vez por cliente). knownCustomer = ficha encontrada por teléfono.
-  const [uso, setUso] = useState('');
-  const [usoDetalle, setUsoDetalle] = useState('');
+  // Segmentación: cómo nos conoció (una vez por cliente). Dónde usa el
+  // tablero ya no se pregunta aquí: vive en la ficha del cliente (Clientes).
+  // knownCustomer = ficha encontrada por teléfono.
   const [origen, setOrigen] = useState('');
   const [knownCustomer, setKnownCustomer] = useState(null);
   const [origenAuto, setOrigenAuto] = useState('');
-  // Atajos: campos opcionales plegados, cobro al guardar, último pedido del
-  // cliente para repetirlo y la tarjeta de «guardada» con sus acciones.
-  const [showUsoDetalle, setShowUsoDetalle] = useState(false);
-  const [showNotes, setShowNotes] = useState(false);
+  // Secciones plegadas: opciones de envío y negociación de descuento.
+  const [showShipping, setShowShipping] = useState(false);
+  const shippingAutoOpenedRef = useRef(false);
+  const [showDiscount, setShowDiscount] = useState(false);
   const [payMethod, setPayMethod] = useState('QR');
   const [lastOrder, setLastOrder] = useState(null);
   const [pendingItems, setPendingItems] = useState(null);
   const [savedInfo, setSavedInfo] = useState(null);
+  // Atajos del vendedor: sus productos y destinos más cotizados.
+  const [shortcuts, setShortcuts] = useState({ products: [], destinations: [] });
+  // Stock de todo el catálogo en el almacén elegido (una sola consulta).
+  const [stockState, setStockState] = useState({ store: '', stock: null });
+  const [refreshTick, setRefreshTick] = useState(0);
   const phoneDigitsForLookup = String(customerPhone || '').replace(/\D/g, '');
   // Se pregunta el origen solo la primera vez: teléfono nuevo, o cliente sin
   // origen guardado. Las cotizaciones del inbox de WhatsApp lo traen solo.
@@ -92,36 +161,143 @@ export default function QuoteTool({ token, user }) {
   // El servidor decide qué aplica al guardar; esto es el aviso para el vendedor.
   const [activePromos, setActivePromos] = useState([]);
 
+  // Almacén por defecto: la ciudad del usuario, si es una sede (ahorra un
+  // clic y evita el «Selecciona el almacén» al guardar). Quien no tiene sede
+  // (Admin, vendedor de otra ciudad) arranca con el último que usó aquí.
+  const [almacen, setAlmacen] = useState(() => {
+    const city = String(user?.city || '').trim();
+    if (ALMACEN_OPTIONS.includes(city)) return city;
+    try {
+      const saved = localStorage.getItem(ALMACEN_STORAGE_KEY);
+      return ALMACEN_OPTIONS.includes(saved) ? saved : '';
+    } catch {
+      return '';
+    }
+  });
+  const [shippingNotes, setShippingNotes] = useState('');
+  const [salesUsers, setSalesUsers] = useState([]);
+  const [assignedSellerId, setAssignedSellerId] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  // When set, the quote came from a WhatsApp conversation and the PDF is
+  // sent back into that thread after saving.
+  const [whatsappConversationId, setWhatsappConversationId] = useState(null);
+
+  // Envío local: el vendedor pega el GPS que mandó el cliente (o llega solo
+  // desde el chat de WhatsApp) y el servidor lo cotiza con los anillos que
+  // configuró Almacén. El cargo se suma DESPUÉS del descuento negociado.
+  const [deliveryInput, setDeliveryInput] = useState('');
+  const [deliveryQuote, setDeliveryQuote] = useState(null);
+  const [deliveryIncluded, setDeliveryIncluded] = useState(true);
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
+  const isSavingRef = useRef(false);
+  const restoredDraftKeyRef = useRef('');
+  const [draftNotice, setDraftNotice] = useState('');
+  const { enqueue } = useOutbox();
+  const [viewport, setViewport] = useState(readViewport);
+  const { isMobile, isWide } = viewport;
+  // Alto visible del área de contenido: limita la cotización fija de la
+  // derecha y la lista de productos para que nada quede fuera de pantalla.
+  const [scrollportHeight, setScrollportHeight] = useState(0);
+  // Lista compacta o catálogo con fotos; ambas editan las mismas líneas. La
+  // preferencia se guarda por dispositivo.
+  const [pickerView, setPickerView] = useState(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(PRODUCTS_VIEW_STORAGE_KEY) : null;
+    return saved === 'catalogo' ? 'catalogo' : 'lista';
+  });
+  const pageRef = useRef(null);
+  const ticketRef = useRef(null);
+  const nameInputRef = useRef(null);
+  const phoneInputRef = useRef(null);
+  const destInputRef = useRef(null);
+  const pickerInputRef = useRef(null);
+  // Estado del destino leído desde callbacks asíncronos (autocompletar al
+  // reconocer al cliente sin pisar lo que el vendedor ya escribió).
+  const destStateRef = useRef({ destino: null, destFallback: false, destQuery: '' });
+  destStateRef.current = { destino, destFallback, destQuery };
+
+  const normalizedRole = String(user?.role || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  const isSalesRole = normalizedRole === 'ventas'
+    || normalizedRole === 'ventas lider'
+    || normalizedRole === 'sales'
+    || normalizedRole === 'vendedor';
+  const requiresSellerAssignment = !isSalesRole;
+
+  const focusPicker = () => {
+    if (isMobile) return;
+    window.setTimeout(() => pickerInputRef.current?.focus(), 0);
+  };
+
+  const chooseDestino = (result) => {
+    setDestino(result);
+    setDestFallback(false);
+    setDestQuery('');
+    setDestOpen(false);
+    focusPicker();
+  };
+
+  // Lo que la app ya sabe del cliente: su último pedido (para repetirlo) y el
+  // destino de su cotización más reciente. Sin `forceDestination` solo llena
+  // el destino si el vendedor todavía no escribió uno.
+  const loadCustomerExtras = async (customer, { forceDestination = false, isActive = () => true } = {}) => {
+    let extras = null;
+    try {
+      extras = await apiRequest(`/api/customers/${customer.id}/last-order`, { token });
+    } catch {
+      extras = null;
+    }
+    if (!isActive()) return;
+    setLastOrder(extras?.order || null);
+
+    const current = destStateRef.current;
+    const destinationFree = !current.destino && !current.destFallback && !current.destQuery.trim();
+    if (!forceDestination && !destinationFree) return;
+
+    if (extras?.destino?.id) {
+      setDestino(extras.destino);
+      setDestFallback(false);
+      setDestQuery('');
+      return;
+    }
+    // Sin cotización previa con destino del catálogo: se intenta con el texto
+    // guardado en la ficha. Un único resultado se selecciona solo.
+    const ciudad = String(customer.ciudad || '').trim();
+    const provincia = String(customer.provincia || '').trim();
+    const savedDest = ciudad || provincia;
+    if (savedDest) {
+      try {
+        const data = await apiRequest(`/api/geo/search?q=${encodeURIComponent(savedDest)}`, { token });
+        if (!isActive()) return;
+        const results = Array.isArray(data?.results) ? data.results : [];
+        const exact = results.filter((r) => sameText(r.municipio, ciudad) && (!provincia || sameText(r.provincia, provincia)));
+        const pick = exact.length === 1 ? exact[0] : (results.length === 1 ? results[0] : null);
+        if (pick) {
+          setDestino(pick);
+          setDestFallback(false);
+          setDestQuery('');
+        } else if (forceDestination) {
+          setDestQuery(savedDest);
+        }
+      } catch {
+        if (forceDestination && isActive()) setDestQuery(savedDest);
+      }
+    } else if (customer.department && forceDestination) {
+      setDestFallback(true);
+      setDepartment(customer.department);
+    }
+  };
+
   // Picking a customer (from autocomplete or the hub) fills the quote form —
   // the whole point: never re-type customer data.
   const applyCustomer = (customer) => {
     if (!customer) return;
     setCustomerName(String(customer.name || '').slice(0, 80));
     setCustomerPhone(String(customer.phone || '').slice(0, 40));
-    // Destino: intenta matchear lo guardado contra el catalogo; si hay un
-    // unico resultado se auto-selecciona (cliente recurrente = cero clics).
-    const savedDest = String(customer.provincia || '').trim();
-    if (savedDest) {
-      apiRequest(`/api/geo/search?q=${encodeURIComponent(savedDest)}`, { token })
-        .then((data) => {
-          const results = Array.isArray(data?.results) ? data.results : [];
-          if (results.length === 1) {
-            setDestino(results[0]);
-            setDestFallback(false);
-            setDestQuery('');
-          } else {
-            setDestQuery(savedDest);
-          }
-        })
-        .catch(() => setDestQuery(savedDest));
-    } else if (customer.department) {
-      setDestFallback(true);
-      setDepartment(customer.department);
-    }
     // Cartera: preselect the rep who owns this customer and repeat the
     // almacén of their last quote — the seller only confirms.
     if (customer.assigned_user_id) setAssignedSellerId(String(customer.assigned_user_id));
     if (ALMACEN_OPTIONS.includes(customer.last_store_location)) setAlmacen(customer.last_store_location);
+    // Destino: el de su última cotización (cliente recurrente = cero clics).
+    loadCustomerExtras(customer, { forceDestination: true });
   };
 
   // Typeahead de destinos (250ms de debounce; minimo 2 letras).
@@ -167,45 +343,6 @@ export default function QuoteTool({ token, user }) {
     return () => { active = false; };
   }, [token, crmOpen]);
 
-  // Almacén por defecto: la ciudad del usuario, si es una sede (ahorra un
-  // clic y evita el «Selecciona el almacén» al guardar).
-  const [almacen, setAlmacen] = useState(() => (ALMACEN_OPTIONS.includes(String(user?.city || '').trim()) ? String(user.city).trim() : ''));
-  const [shippingNotes, setShippingNotes] = useState('');
-  const [currentDateTime, setCurrentDateTime] = useState('');
-  const [salesUsers, setSalesUsers] = useState([]);
-  const [assignedSellerId, setAssignedSellerId] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  // When set, the quote came from a WhatsApp conversation and the PDF is
-  // sent back into that thread after saving.
-  const [whatsappConversationId, setWhatsappConversationId] = useState(null);
-
-  // Envío local: el vendedor pega el GPS que mandó el cliente (o llega solo
-  // desde el chat de WhatsApp) y el servidor lo cotiza con los anillos que
-  // configuró Almacén. El cargo se suma DESPUÉS del descuento negociado.
-  const [deliveryInput, setDeliveryInput] = useState('');
-  const [deliveryQuote, setDeliveryQuote] = useState(null);
-  const [deliveryIncluded, setDeliveryIncluded] = useState(true);
-  const [deliveryLoading, setDeliveryLoading] = useState(false);
-  const isSavingRef = useRef(false);
-  const restoredDraftKeyRef = useRef('');
-  const [draftNotice, setDraftNotice] = useState('');
-  const { enqueue } = useOutbox();
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
-  );
-  // Pilot: sellers can quote from the classic line list or the visual catalog.
-  // Both views edit the same rows; the preference persists per device.
-  const [productsView, setProductsView] = useState(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem(PRODUCTS_VIEW_STORAGE_KEY) : null;
-    return saved === 'catalogo' ? 'catalogo' : 'lista';
-  });
-  const normalizedRole = String(user?.role || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-  const isSalesRole = normalizedRole === 'ventas'
-    || normalizedRole === 'ventas lider'
-    || normalizedRole === 'sales'
-    || normalizedRole === 'vendedor';
-  const requiresSellerAssignment = !isSalesRole;
-
   const formatSkuNameLabel = (skuValue, nameValue) => {
     const sku = String(skuValue || '').trim().toUpperCase();
     const name = String(nameValue || '').trim();
@@ -217,10 +354,28 @@ export default function QuoteTool({ token, user }) {
     }
     return sku || name || 'Producto';
   };
+
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    const onResize = () => setViewport((prev) => {
+      const next = readViewport();
+      return prev.isMobile === next.isMobile && prev.isWide === next.isWide ? prev : next;
+    });
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    const scroller = pageRef.current ? pageRef.current.closest('.shell-content') : null;
+    if (!scroller) return undefined;
+    const measure = () => setScrollportHeight(scroller.clientHeight || 0);
+    measure();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(scroller);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -248,24 +403,64 @@ export default function QuoteTool({ token, user }) {
     fetchCombos();
   }, [token]);
 
+  // Atajos: productos y destinos que este vendedor cotiza más. Se refrescan
+  // después de cada cotización guardada.
   useEffect(() => {
-    if (rows.length === 0) {
-      addRow();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!token) return undefined;
+    let active = true;
+    apiRequest('/api/quote-shortcuts', { token })
+      .then((data) => {
+        if (!active) return;
+        setShortcuts({
+          products: (Array.isArray(data?.top_products) ? data.top_products : []).map((entry) => normalizeSku(entry?.sku)).filter(Boolean),
+          destinations: (Array.isArray(data?.top_destinations) ? data.top_destinations : []).filter((entry) => entry && entry.id)
+        });
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [token, refreshTick]);
 
+  // Recuerda el almacén elegido en este dispositivo. Sin almacén no hay
+  // stock que mostrar ni se puede guardar: las opciones de envío se abren
+  // solas (una vez) para que se elija.
   useEffect(() => {
-    const updateDateTime = () => {
-      const now = new Date();
-      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
-      const formatter = new Intl.DateTimeFormat('es-BO', options);
-      const formatted = formatter.format(now);
-      setCurrentDateTime(formatted.charAt(0).toUpperCase() + formatted.slice(1));
+    if (!almacen) {
+      if (!shippingAutoOpenedRef.current) {
+        shippingAutoOpenedRef.current = true;
+        setShowShipping(true);
+      }
+      return;
+    }
+    try {
+      localStorage.setItem(ALMACEN_STORAGE_KEY, almacen);
+    } catch {
+      // sin storage: la preferencia no se guarda
+    }
+  }, [almacen]);
+
+  // Stock del almacén elegido, de todo el catálogo en una consulta. Si falla
+  // no se muestra stock ni se bloquea nada (el servidor valida al cobrar).
+  useEffect(() => {
+    if (!token || !almacen) return undefined;
+    let active = true;
+    apiRequest(`/api/stock/map?store_location=${encodeURIComponent(almacen)}`, { token })
+      .then((data) => {
+        if (active) setStockState({ store: almacen, stock: data && typeof data.stock === 'object' ? data.stock : null });
+      })
+      .catch(() => { if (active) setStockState({ store: almacen, stock: null }); });
+    return () => { active = false; };
+  }, [token, almacen, refreshTick]);
+
+  // Al volver a la pestaña después de un rato se refresca el stock.
+  useEffect(() => {
+    let lastRefresh = Date.now();
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastRefresh < 60000) return;
+      lastRefresh = Date.now();
+      setRefreshTick((prev) => prev + 1);
     };
-    updateDateTime();
-    const interval = setInterval(updateDateTime, 60000);
-    return () => clearInterval(interval);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   useEffect(() => {
@@ -285,8 +480,9 @@ export default function QuoteTool({ token, user }) {
     fetchSalesUsers();
   }, [token, requiresSellerAssignment]);
 
-  // Cupón personal del cliente (motor de promos): al escribir el teléfono,
-  // Cotizar avisa si ese cliente tiene un cupón activo para canjear.
+  // Al escribir el teléfono: cupón personal del cliente (motor de promos) y,
+  // si el cliente ya existe, se completa solo lo que falte (nombre, origen,
+  // destino de su última cotización y su último pedido para repetirlo).
   useEffect(() => {
     const digits = String(customerPhone || '').replace(/\D/g, '');
     if (!token || digits.length < 7) {
@@ -300,25 +496,24 @@ export default function QuoteTool({ token, user }) {
       apiRequest(`/api/promos/coupon-for-customer?phone=${encodeURIComponent(digits)}`, { token })
         .then((data) => { if (active) setCustomerCoupon(data?.coupon || null); })
         .catch(() => { if (active) setCustomerCoupon(null); });
-      // Cliente conocido: precarga dónde usó el tablero la última vez y su
-      // origen, así el pedido repetido no pide nada.
       apiRequest(`/api/customers?search=${encodeURIComponent(digits)}&limit=3`, { token })
         .then((data) => {
           if (!active) return;
           const match = (data?.customers || []).find((c) => String(c.phone || '').replace(/\D/g, '') === digits) || null;
           setKnownCustomer(match);
-          if (match) {
-            apiRequest(`/api/customers/${match.id}/last-order`, { token })
-              .then((res) => { if (active) setLastOrder(res?.order || null); })
-              .catch(() => { if (active) setLastOrder(null); });
-            setUso((prev) => prev || match.last_uso || match.segmento || '');
-            setUsoDetalle((prev) => prev || match.last_uso_detalle || '');
-            setOrigen((prev) => prev || match.origen || '');
+          if (!match) {
+            setLastOrder(null);
+            return;
           }
+          setOrigen((prev) => prev || match.origen || '');
+          setCustomerName((prev) => (prev.trim() ? prev : String(match.name || '').slice(0, 80)));
+          if (match.assigned_user_id) setAssignedSellerId(String(match.assigned_user_id));
+          loadCustomerExtras(match, { isActive: () => active });
         })
         .catch(() => { if (active) setKnownCustomer(null); });
     }, 400);
     return () => { active = false; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, customerPhone]);
 
   const promoGroupOf = (promo) => String(promo?.config?.exclusion_group || '').trim().toLowerCase();
@@ -336,9 +531,9 @@ export default function QuoteTool({ token, user }) {
     });
   };
 
-  const allItems = [
+  const allItems = useMemo(() => [
     ...products.map((p) => ({ ...p, displayName: p.name })),
-    ...combos.map(combo => ({
+    ...combos.map((combo) => ({
       sku: `COMBO_${combo.id}`,
       displayName: `${combo.name} (Combo)`,
       name: combo.name,
@@ -350,9 +545,10 @@ export default function QuoteTool({ token, user }) {
       comboId: combo.id,
       items: combo.items || []
     }))
-  ];
+  ], [products, combos]);
+  const itemBySku = useMemo(() => new Map(allItems.map((item) => [normalizeSku(item.sku), item])), [allItems]);
 
-  const findItem = (sku) => allItems.find(item => item.sku === sku);
+  const findItem = (sku) => itemBySku.get(normalizeSku(sku)) || allItems.find((item) => item.sku === sku);
   // Single source for line pricing: respects the Con/Sin Factura toggle and
   // falls back to the other price only when the chosen one doesn't exist
   // (same rules as the edit flow in QuoteHistory).
@@ -369,20 +565,6 @@ export default function QuoteTool({ token, user }) {
     return String(product?.name || '').trim();
   };
 
-  const fetchStock = async (sku, store) => {
-    if (!sku || !store || sku.startsWith('COMBO_')) return null;
-    try {
-      const data = await apiRequest(
-        `/api/stock?sku=${encodeURIComponent(sku)}&store_location=${encodeURIComponent(store)}`,
-        { token }
-      );
-      return data.stock;
-    } catch (err) {
-      console.error('Error fetching stock:', err);
-      return null;
-    }
-  };
-
   const getNormalizedComboItems = (entry) => {
     const fromEntry = Array.isArray(entry?.comboItems)
       ? entry.comboItems
@@ -395,81 +577,99 @@ export default function QuoteTool({ token, user }) {
       .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
   };
 
-  const fetchComboAvailableStock = async (entry, store) => {
-    if (!store) return null;
-    const comboItems = getNormalizedComboItems(entry);
-    if (comboItems.length === 0) return null;
-    const stockBySku = await Promise.all(
-      comboItems.map(async (comboItem) => {
-        const stock = await fetchStock(comboItem.sku, store);
-        return { comboItem, stock };
-      })
-    );
-    let minAvailable = Number.POSITIVE_INFINITY;
-    for (const { comboItem, stock } of stockBySku) {
-      if (!Number.isFinite(Number(stock))) return null;
-      const possibleCombos = Math.floor(Number(stock) / comboItem.quantity);
-      minAvailable = Math.min(minAvailable, possibleCombos);
+  // Disponibilidad en el almacén elegido. null = todavía no se sabe (sin
+  // almacén o sin respuesta): nunca se trata como «hay 0». Un combo alcanza
+  // para tantas unidades como permita su componente más escaso.
+  const stockMap = stockState.store === almacen ? stockState.stock : null;
+  const stockFor = (entry) => {
+    if (!almacen || !stockMap || !entry) return null;
+    const sku = normalizeSku(entry.sku);
+    if (!sku) return null;
+    const readStock = (code) => {
+      const value = stockMap[code];
+      if (value === null || value === undefined) return null;
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : null;
+    };
+    if (entry.isCombo || sku.startsWith('COMBO_')) {
+      const comboItems = getNormalizedComboItems(Array.isArray(entry.comboItems) || Array.isArray(entry.items) ? entry : findItem(sku));
+      if (comboItems.length === 0) return null;
+      let minAvailable = Number.POSITIVE_INFINITY;
+      for (const comboItem of comboItems) {
+        const componentStock = readStock(comboItem.sku);
+        if (componentStock === null) return null;
+        minAvailable = Math.min(minAvailable, Math.floor(componentStock / comboItem.quantity));
+      }
+      return Number.isFinite(minAvailable) ? Math.max(0, minAvailable) : null;
     }
-    return Number.isFinite(minAvailable) ? Math.max(0, minAvailable) : null;
+    return readStock(sku);
   };
 
-  const handleProductSelect = async (rowId, selectedSku) => {
-    const item = findItem(selectedSku);
-    let availableStock = null;
-    if (item && almacen) {
-      availableStock = item.isCombo
-        ? await fetchComboAvailableStock(item, almacen)
-        : await fetchStock(selectedSku, almacen);
-    }
-
+  const buildRow = (item, qty) => {
     const unitPrice = unitPriceFor(item);
-    // Functional update: the awaits above mean `rows` may be stale by now
-    // (e.g. the seller already picked a product on another line).
-    setRows(prev => prev.map(row =>
-      row.id === rowId ? {
-        ...row,
-        sku: selectedSku,
-        skuDisplay: item ? item.displayName : selectedSku,
-        unitPrice,
-        lineTotal: unitPrice * (row.qty || 0),
-        availableStock,
-        isCombo: item?.isCombo || false,
-        comboItems: item?.isCombo ? item.items : undefined
-      } : row
-    ));
+    return {
+      id: nextRowId(),
+      sku: normalizeSku(item.sku),
+      skuDisplay: item.displayName,
+      qty,
+      unitPrice,
+      lineTotal: unitPrice * qty,
+      isCombo: Boolean(item.isCombo),
+      comboItems: item.isCombo ? item.items : undefined
+    };
   };
 
-  const handleQtyChange = (rowId, newQty) => {
-    const qty = newQty === '' ? '' : Math.max(1, parseInt(newQty) || 1);
-    setRows(rows.map(row =>
-      row.id === rowId ? { ...row, qty, lineTotal: (row.unitPrice || 0) * (qty || 0) } : row
-    ));
+  // Fija la cantidad de un producto (0 lo quita). Lo usan los steppers del
+  // buscador y de la cotización.
+  const setItemQty = (skuValue, qtyValue) => {
+    const sku = normalizeSku(skuValue);
+    if (!sku) return;
+    const nextQty = Math.min(MAX_LINE_QTY, Math.max(0, Number.parseInt(qtyValue, 10) || 0));
+    setRows((prev) => {
+      if (nextQty === 0) return prev.filter((row) => normalizeSku(row.sku) !== sku);
+      if (prev.some((row) => normalizeSku(row.sku) === sku)) {
+        return prev.map((row) => (
+          normalizeSku(row.sku) === sku ? { ...row, qty: nextQty, lineTotal: (row.unitPrice || 0) * nextQty } : row
+        ));
+      }
+      const item = findItem(sku);
+      return item ? [...prev, buildRow(item, nextQty)] : prev;
+    });
   };
+
+  // Suma unidades de un producto (un toque en la lista, un chip o Enter).
+  const addItem = (skuValue, delta = 1) => {
+    const sku = normalizeSku(skuValue);
+    const amount = Math.max(1, Number.parseInt(delta, 10) || 1);
+    if (!sku) return;
+    setRows((prev) => {
+      const existing = prev.find((row) => normalizeSku(row.sku) === sku);
+      if (existing) {
+        const nextQty = Math.min(MAX_LINE_QTY, (Number(existing.qty) || 0) + amount);
+        return prev.map((row) => (
+          normalizeSku(row.sku) === sku ? { ...row, qty: nextQty, lineTotal: (row.unitPrice || 0) * nextQty } : row
+        ));
+      }
+      const item = findItem(sku);
+      return item ? [...prev, buildRow(item, Math.min(MAX_LINE_QTY, amount))] : prev;
+    });
+  };
+
+  const removeRow = (rowId) => setRows((prev) => prev.filter((row) => row.id !== rowId));
 
   // Carga líneas a partir de [{ sku, qty }] (repetir pedido). Los productos
   // que ya no existen se saltan y se avisa.
-  const loadRowsFromItems = async (items = []) => {
-    const built = [];
+  const loadRowsFromItems = (items = []) => {
+    const quantities = new Map();
     const missing = [];
     for (const it of items) {
-      const sku = String(it?.sku || '').trim().toUpperCase();
+      const sku = normalizeSku(it?.sku);
+      if (!sku) continue;
+      if (!findItem(sku)) { missing.push(sku); continue; }
       const qty = Math.max(1, Number.parseInt(it?.qty, 10) || 1);
-      const item = findItem(sku);
-      if (!item) { if (sku) missing.push(sku); continue; }
-      const unitPrice = unitPriceFor(item);
-      built.push({
-        id: Date.now() + built.length,
-        sku,
-        skuDisplay: item.displayName,
-        qty,
-        unitPrice,
-        lineTotal: unitPrice * qty,
-        availableStock: null,
-        isCombo: item.isCombo || false,
-        comboItems: item.isCombo ? item.items : undefined
-      });
+      quantities.set(sku, Math.min(MAX_LINE_QTY, (quantities.get(sku) || 0) + qty));
     }
+    const built = [...quantities].map(([sku, qty]) => buildRow(findItem(sku), qty));
     if (built.length === 0) {
       toast.error('Los productos de ese pedido ya no están en el catálogo.');
       return;
@@ -477,13 +677,6 @@ export default function QuoteTool({ token, user }) {
     setRows(built);
     if (missing.length > 0) toast.info(`No se cargaron (ya no están en catálogo): ${missing.join(', ')}`);
     else toast.success(`Pedido cargado: ${built.length} producto${built.length === 1 ? '' : 's'}. Revisa cantidades y precios.`);
-    if (almacen) {
-      for (const row of built) {
-        const item = findItem(row.sku);
-        const availableStock = item?.isCombo ? await fetchComboAvailableStock(item, almacen) : await fetchStock(row.sku, almacen);
-        setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, availableStock } : r)));
-      }
-    }
   };
 
   // Pedido a repetir que llegó desde Historial: espera a que cargue el catálogo.
@@ -494,72 +687,12 @@ export default function QuoteTool({ token, user }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingItems, products.length]);
 
-  const addRow = () => {
-    const newRow = { id: Date.now(), sku: '', skuDisplay: '', qty: 1, unitPrice: 0, lineTotal: 0, availableStock: null, isCombo: false };
-    setRows([...rows, newRow]);
-  };
-
-  const switchProductsView = (view) => {
-    setProductsView(view);
+  const switchPickerView = (view) => {
+    setPickerView(view);
     try {
       localStorage.setItem(PRODUCTS_VIEW_STORAGE_KEY, view);
     } catch {
       // storage unavailable; preference just won't persist
-    }
-    if (view === 'lista') {
-      setRows((prev) => (prev.length === 0 ? [{ id: Date.now(), sku: '', skuDisplay: '', qty: 1, unitPrice: 0, lineTotal: 0, availableStock: null, isCombo: false }] : prev));
-    }
-  };
-
-  // Catalog view: set the absolute quantity for a SKU on the shared rows state.
-  const setCatalogQty = async (sku, qty) => {
-    const normalizedSku = String(sku || '').trim().toUpperCase();
-    if (!normalizedSku) return;
-    const nextQty = Math.max(0, Number.parseInt(qty, 10) || 0);
-
-    if (nextQty === 0) {
-      setRows((prev) => prev.filter((row) => String(row.sku || '').trim().toUpperCase() !== normalizedSku));
-      return;
-    }
-
-    const existing = rows.find((row) => String(row.sku || '').trim().toUpperCase() === normalizedSku);
-    if (existing) {
-      setRows((prev) => prev.map((row) =>
-        String(row.sku || '').trim().toUpperCase() === normalizedSku
-          ? { ...row, qty: nextQty, lineTotal: (row.unitPrice || 0) * nextQty }
-          : row
-      ));
-      return;
-    }
-
-    const item = findItem(normalizedSku);
-    if (!item) return;
-    const unitPrice = unitPriceFor(item);
-    const newRow = {
-      id: Date.now(),
-      sku: normalizedSku,
-      skuDisplay: item.displayName,
-      qty: nextQty,
-      unitPrice,
-      lineTotal: unitPrice * nextQty,
-      availableStock: null,
-      isCombo: item.isCombo || false,
-      comboItems: item.isCombo ? item.items : undefined
-    };
-    // Drop placeholder rows from the list view so they don't block saving.
-    setRows((prev) => [...prev.filter((row) => row.sku), newRow]);
-
-    if (almacen) {
-      const availableStock = item.isCombo
-        ? await fetchComboAvailableStock(item, almacen)
-        : await fetchStock(normalizedSku, almacen);
-      setRows((prev) => prev.map((row) => (row.id === newRow.id ? { ...row, availableStock } : row)));
-    }
-  };
-
-  const confirmAndDeleteRow = (id) => {
-    if (window.confirm('¿Eliminar esta línea?')) {
-      setRows(rows.filter(r => r.id !== id));
     }
   };
 
@@ -646,39 +779,32 @@ export default function QuoteTool({ token, user }) {
     }
   };
 
+  // Precios al día: al cambiar Con/Sin factura y también cuando llega el
+  // catálogo (un borrador de ayer no debe guardar el precio de ayer).
   useEffect(() => {
-    setRows(prev => prev.map(row => {
-      if (!row.sku) return row;
-      const item = findItem(row.sku);
-      if (!item) return row;
-      const newPrice = unitPriceFor(item);
-      return { ...row, unitPrice: newPrice, lineTotal: newPrice * (row.qty || 0) };
-    }));
-  }, [ventaType]);
-
-  useEffect(() => {
-    if (!almacen) return;
-    const refreshStock = async () => {
-      for (const row of rows) {
-        if (row.sku) {
-          const stock = row.isCombo
-            ? await fetchComboAvailableStock(row, almacen)
-            : await fetchStock(row.sku, almacen);
-          setRows(prev => prev.map(r =>
-            r.id === row.id ? { ...r, availableStock: stock } : r
-          ));
-        }
-      }
-    };
-    refreshStock();
-  }, [almacen]);
+    setRows((prev) => {
+      let changed = false;
+      const next = prev.map((row) => {
+        if (!row.sku) return row;
+        const item = findItem(row.sku);
+        if (!item) return row;
+        const newPrice = unitPriceFor(item);
+        const lineTotal = newPrice * (Number(row.qty) || 0);
+        if (newPrice === row.unitPrice && lineTotal === row.lineTotal) return row;
+        changed = true;
+        return { ...row, unitPrice: newPrice, lineTotal };
+      });
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ventaType, allItems]);
 
   useEffect(() => {
     if (restoredDraftKeyRef.current === draftStorageKey) return;
     restoredDraftKeyRef.current = draftStorageKey;
     if (!draft || !draft.values || !draft.hasContent) return;
     const values = draft.values;
-    if (Array.isArray(values.rows)) setRows(values.rows);
+    if (Array.isArray(values.rows)) setRows(sanitizeDraftRows(values.rows));
     if (values.ventaType) setVentaType(values.ventaType);
     if (typeof values.discountMode === 'string') {
       setDiscountMode(['percent', 'amount', 'target'].includes(values.discountMode) ? values.discountMode : 'percent');
@@ -704,7 +830,7 @@ export default function QuoteTool({ token, user }) {
     if (typeof values.shippingNotes === 'string') setShippingNotes(values.shippingNotes);
     if (typeof values.assignedSellerId === 'string') setAssignedSellerId(values.assignedSellerId);
     if (typeof values.selectedCouponCode === 'string') setSelectedCouponCode(values.selectedCouponCode);
-    setDraftNotice('Se recuperó un borrador local.');
+    setDraftNotice('Se recuperó un borrador que no llegaste a guardar.');
   }, [draftStorageKey, draft]);
 
   useEffect(() => {
@@ -730,8 +856,12 @@ export default function QuoteTool({ token, user }) {
       if (prefill?.conversationId) { setWhatsappConversationId(Number(prefill.conversationId)); setOrigenAuto('whatsapp'); setOrigen((prev) => prev || 'whatsapp'); }
       if (Array.isArray(prefill?.items) && prefill.items.length > 0) setPendingItems(prefill.items);
       if (prefill?.origen) { setOrigenAuto(String(prefill.origen)); setOrigen((prev) => prev || String(prefill.origen)); }
-      // GPS del chat de WhatsApp: llega listo para cotizar el envío local.
-      if (prefill?.gps) setDeliveryInput(String(prefill.gps).slice(0, 120));
+      // GPS del chat de WhatsApp: llega listo para cotizar el envío local,
+      // así que las opciones de envío se abren solas.
+      if (prefill?.gps) {
+        setDeliveryInput(String(prefill.gps).slice(0, 120));
+        setShowShipping(true);
+      }
     } catch {
       // malformed prefill; start the quote empty
     }
@@ -740,7 +870,7 @@ export default function QuoteTool({ token, user }) {
   useEffect(() => {
     const hasContent =
       Boolean(customerName || customerPhone || department || destino || destQuery || fallbackCiudad || shippingNotes || alternativeName || alternativePhone)
-      || rows.some((r) => r?.sku || Number(r?.qty || 0) > 0);
+      || rows.length > 0;
 
     setDraft({
       hasContent,
@@ -765,6 +895,7 @@ export default function QuoteTool({ token, user }) {
         assignedSellerId
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     rows,
     ventaType,
@@ -787,36 +918,33 @@ export default function QuoteTool({ token, user }) {
     assignedSellerId
   ]);
 
-  // Mirrors every canSave condition with a human explanation, so the disabled
-  // save button can say WHY instead of just ghosting (it read as a bug).
-  const saveBlockers = useMemo(() => {
+  // Mirrors every canSave condition with a human explanation, so the save
+  // button can say WHY instead of just ghosting (it read as a bug).
+  const saveBlockers = (() => {
     const blockers = [];
     if (!customerName.trim() || !customerPhone.trim()) blockers.push('Completa el nombre y celular del cliente.');
-    if (!uso) blockers.push('Indica dónde se usará el tablero.');
     if (needsOrigen && !origen) blockers.push('Indica cómo nos conoció el cliente.');
-    if (!almacen) blockers.push('Selecciona el almacén.');
-    if (rows.length === 0) blockers.push('Agrega al menos un producto.');
-    if (rows.length > 0 && !rows.every((r) => r.sku && r.unitPrice > 0 && r.qty > 0)) {
-      blockers.push('Hay líneas sin producto, precio o cantidad.');
-    }
-    for (const r of rows) {
-      // Sin almacén o sin stock consultado todavía no hay nada que comparar
-      // (Number(null) es 0 y antes salía «hay 0» por error).
-      if (!almacen || r.availableStock === null || r.availableStock === undefined) continue;
-      const availableStock = Number(r.availableStock);
-      if (!Number.isFinite(availableStock)) continue;
-      if (Number(r.qty || 0) > availableStock) {
-        blockers.push(`Stock insuficiente para ${r.skuDisplay || r.sku}: pediste ${Number(r.qty || 0)} y hay ${availableStock} en ${almacen || 'el almacén'}.`);
-      }
-    }
     if (!destino && !destFallback) blockers.push('Selecciona el destino de envío.');
     if (destFallback && !department) blockers.push('Selecciona el departamento del destino.');
+    if (!almacen) blockers.push('Selecciona el almacén (en Envío).');
+    if (rows.length === 0) blockers.push('Agrega al menos un producto.');
+    if (rows.length > 0 && !rows.every((r) => r.sku && r.unitPrice > 0 && r.qty > 0)) {
+      blockers.push('Hay líneas sin precio o cantidad.');
+    }
+    for (const r of rows) {
+      // Sin almacén o sin stock consultado todavía no hay nada que comparar.
+      const availableStock = stockFor(r);
+      if (availableStock === null) continue;
+      if (Number(r.qty || 0) > availableStock) {
+        blockers.push(`Stock insuficiente para ${r.skuDisplay || r.sku}: pediste ${Number(r.qty || 0)} y hay ${availableStock} en ${almacen}.`);
+      }
+    }
     if (useAlternativeName && (!alternativeName.trim() || !alternativePhone.trim())) {
-      blockers.push('Completa el nombre y celular alternativos del recibidor.');
+      blockers.push('Completa el nombre y celular de quien recibe (en Envío).');
     }
     if (requiresSellerAssignment && !assignedSellerId) blockers.push('Asigna el vendedor.');
     return blockers;
-  }, [customerName, customerPhone, almacen, rows, destino, destFallback, department, useAlternativeName, alternativeName, alternativePhone, requiresSellerAssignment, assignedSellerId, uso, origen, needsOrigen]);
+  })();
 
   const canSave = saveBlockers.length === 0;
 
@@ -835,8 +963,6 @@ export default function QuoteTool({ token, user }) {
     setAlternativeName('');
     setAlternativePhone('');
     setCustomerName('');
-    setUso('');
-    setUsoDetalle('');
     setOrigen('');
     setOrigenAuto('');
     setKnownCustomer(null);
@@ -849,8 +975,8 @@ export default function QuoteTool({ token, user }) {
     // El almacén se conserva: casi siempre se cotiza del mismo, y dejarlo
     // vacío mostraba «Stock insuficiente… hay 0» en la segunda cotización.
     setShippingNotes('');
-    setShowNotes(false);
-    setShowUsoDetalle(false);
+    setShowShipping(false);
+    setShowDiscount(false);
     setLastOrder(null);
     if (requiresSellerAssignment && Array.isArray(salesUsers) && salesUsers.length > 0) {
       setAssignedSellerId(String(salesUsers[0].id));
@@ -860,22 +986,18 @@ export default function QuoteTool({ token, user }) {
     clearDraftState(draftStorageKey);
   };
 
+  const discardDraft = () => {
+    resetQuoteForm();
+    setDraftNotice('');
+  };
+
   const saveAndGeneratePDF = async ({ paid = false } = {}) => {
     if (isSavingRef.current) return;
     if (!canSave) {
-      toast.error('Completa todos los campos obligatorios del cliente y verifica que todas las líneas tengan producto y cantidad.');
-      return;
-    }
-    const insufficientStockRows = rows.filter((row) => {
-      if (row.availableStock === null || row.availableStock === undefined) return false;
-      const availableStock = Number(row.availableStock);
-      if (!Number.isFinite(availableStock)) return false;
-      return Number(row.qty || 0) > availableStock;
-    });
-    if (insufficientStockRows.length > 0) {
-      const first = insufficientStockRows[0];
-      const label = first.skuDisplay || first.sku || 'producto';
-      toast.error(`Stock insuficiente para ${label}. Disponible: ${Number(first.availableStock || 0)}.`);
+      // El botón siempre responde: dice exactamente qué falta y abre la
+      // sección plegada si el dato está ahí.
+      toast.error(saveBlockers[0] || 'Completa los datos de la cotización.');
+      if (!almacen || (useAlternativeName && (!alternativeName.trim() || !alternativePhone.trim()))) setShowShipping(true);
       return;
     }
     isSavingRef.current = true;
@@ -898,6 +1020,7 @@ export default function QuoteTool({ token, user }) {
       return {
         ...row,
         sku: resolvedSku,
+        availableStock: stockFor(row),
         displayName: formatSkuNameLabel(resolvedSku, resolvedName)
       };
     });
@@ -961,8 +1084,6 @@ export default function QuoteTool({ token, user }) {
     const payload = {
       customer_name: customerName,
       customer_phone: customerPhone,
-      uso: uso || null,
-      uso_detalle: usoDetalle.trim() || null,
       origen: origen || null,
       origen_detalle: origenAuto && origen === origenAuto ? (origenAuto === 'whatsapp' ? 'inbox WhatsApp' : 'automático') : null,
       department: destino ? destino.departamento : (destFallback ? department : null),
@@ -1053,8 +1174,7 @@ export default function QuoteTool({ token, user }) {
       if (cuponPromo?.code) {
         toast.info(`🎫 Cupón ${cuponPromo.code} (${cuponPromo.discount_percent}%) para la próxima compra, impreso en la proforma.`);
       }
-      const dateParts = currentDateTime?.split(', ') || [];
-      const dateText = dateParts.length > 1 ? dateParts.slice(1).join(', ') : currentDateTime;
+      const dateText = quoteDateText();
       const safeCustomerName = String(customerName || 'sin_nombre').trim().replace(/\s+/g, '_');
       const pdfFilename = quoteNumber
         ? `cotizacion_${quoteNumber}_${safeCustomerName}.pdf`
@@ -1134,8 +1254,15 @@ export default function QuoteTool({ token, user }) {
         setSavedInfo({ quoteNumber, customerName, customerPhone, total: grandTotal, paid, filename: pdfFilename, blob: null });
       }
       setWhatsappConversationId(null);
+      setDraftNotice('');
       resetQuoteForm();
-      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Stock y atajos al día para la siguiente cotización.
+      setRefreshTick((prev) => prev + 1);
+      // La tarjeta de «guardada» queda arriba: se sube para que se vea.
+      if (pageRef.current && typeof pageRef.current.scrollIntoView === 'function') {
+        pageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      if (!isMobile) window.setTimeout(() => nameInputRef.current?.focus(), 0);
     } catch (err) {
       console.error('Error completo al guardar:', err);
       if (err?.status === 401 || /token inv[aá]lido/i.test(String(err?.message || ''))) {
@@ -1172,7 +1299,6 @@ export default function QuoteTool({ token, user }) {
     }
   };
 
-  const selectedItemsCount = rows.filter((row) => row.sku).length;
   const totalUnits = rows.reduce((sum, row) => sum + (Number(row.qty) || 0), 0);
   const discountPercentFieldValue = subtotal > 0 ? effectiveDiscountPercent.toFixed(2) : '0.00';
   const discountAmountFieldValue = discountAmountApplied.toFixed(2);
@@ -1207,6 +1333,7 @@ export default function QuoteTool({ token, user }) {
   const discountFieldProps = (field) => ({
     type: 'text',
     inputMode: 'decimal',
+    className: discountMode === field ? 'is-mode' : '',
     value: discountDraft.field === field ? discountDraft.text : DISCOUNT_FIELD_VALUES[field],
     onFocus: (e) => { setDiscountDraft({ field, text: DISCOUNT_FIELD_VALUES[field] }); e.target.select(); },
     onChange: (e) => {
@@ -1222,8 +1349,78 @@ export default function QuoteTool({ token, user }) {
     setDiscountInput(0);
   };
 
+  // ── Piezas de la pantalla ────────────────────────────────────────────────
+  const hasDiscount = discountAmountApplied > 0.004;
+  const hasAnyContent = rows.length > 0 || Boolean(customerName.trim() || customerPhone.trim());
+  const showBlockers = !canSave && hasAnyContent;
+  const totalLabel = deliveryFee > 0 ? 'Total con envío' : 'Total';
+  const countLabel = rows.length === 0
+    ? 'sin productos'
+    : `${rows.length} producto${rows.length === 1 ? '' : 's'} · ${totalUnits} unid.`;
+
+  const shippingBits = [];
+  if (shippingNotes.trim()) shippingBits.push('con notas');
+  if (useAlternativeName) shippingBits.push(alternativeName.trim() ? `recibe ${alternativeName.trim()}` : 'recibe otra persona');
+  if (deliveryFee > 0) shippingBits.push(`envío local ${deliveryFee.toFixed(2)} Bs`);
+  else if (deliveryQuote && !deliveryQuote.in_range) shippingBits.push('envío local fuera de cobertura');
+  const shippingSummary = [almacen ? `Sale de ${almacen}` : 'Elige el almacén', ...shippingBits].join(' · ');
+
+  const quickDestinations = !destino && !destFallback && !destQuery.trim() ? shortcuts.destinations.slice(0, isMobile ? 2 : 3) : [];
+
+  const scrollToTicket = () => {
+    if (ticketRef.current && typeof ticketRef.current.scrollIntoView === 'function') {
+      ticketRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  // Total + botón principal. En pantalla ancha va al pie de la cotización; en
+  // angosta, en la barra pegada abajo (y el total lleva a ver el detalle).
+  const totalAndSave = (
+    <>
+      <div className="qt-total-row">
+        {isWide ? (
+          <div className="qt-total">
+            <small>{totalLabel} · {countLabel}</small>
+            <strong>{grandTotal.toFixed(2)} Bs</strong>
+          </div>
+        ) : (
+          <button type="button" className="qt-total" onClick={scrollToTicket} title="Ver el detalle de la cotización">
+            <small>{totalLabel} · {countLabel}</small>
+            <strong>{grandTotal.toFixed(2)} Bs</strong>
+          </button>
+        )}
+        <button
+          type="button"
+          className={`btn btn-primary qt-save ${canSave ? '' : 'is-blocked'}`}
+          disabled={isSaving}
+          onClick={() => saveAndGeneratePDF()}
+          title="Guardar y generar PDF (Ctrl + Enter)"
+        >
+          {isSaving ? 'Guardando…' : 'Guardar y generar PDF'}
+        </button>
+      </div>
+      {showBlockers && !isWide && (
+        <div className="qt-blocker-hint">
+          Falta: {saveBlockers[0]}{saveBlockers.length > 1 ? ` (+${saveBlockers.length - 1} más)` : ''}
+        </div>
+      )}
+    </>
+  );
+
+  const pageStyle = scrollportHeight > 0 ? { '--qt-vh': `${scrollportHeight}px` } : undefined;
+
   return (
-    <div className="container">
+    <div
+      className={`container qt-page ${pickerView === 'catalogo' ? 'is-photos' : 'is-list'}`}
+      ref={pageRef}
+      style={pageStyle}
+      onKeyDown={(e) => {
+        // Ctrl/⌘ + Enter guarda desde cualquier campo de la cotización.
+        if (crmOpen || !(e.ctrlKey || e.metaKey) || e.key !== 'Enter') return;
+        e.preventDefault();
+        saveAndGeneratePDF();
+      }}
+    >
       {savedInfo && (
         <div className="quote-saved-card" role="status">
           <div>
@@ -1242,23 +1439,12 @@ export default function QuoteTool({ token, user }) {
         </div>
       )}
       {whatsappConversationId && (
-        <div style={{
-          marginBottom: '12px',
-          padding: '10px 12px',
-          borderRadius: '8px',
-          border: '1px solid rgba(37, 211, 102, 0.5)',
-          background: 'rgba(209, 250, 229, 0.55)',
-          color: '#047857',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 10
-        }}>
+        <div className="qt-note is-wa">
           <span>Cotizando desde WhatsApp: al guardar, el PDF se enviará al chat del cliente.</span>
           <button
             type="button"
+            className="qt-note-close"
             onClick={() => setWhatsappConversationId(null)}
-            style={{ background: 'transparent', border: 'none', color: '#047857', fontWeight: 800, cursor: 'pointer' }}
             aria-label="No enviar al chat"
             title="No enviar al chat"
           >
@@ -1267,256 +1453,569 @@ export default function QuoteTool({ token, user }) {
         </div>
       )}
       {draftNotice && (
-        <div style={{
-          marginBottom: '12px',
-          padding: '10px 12px',
-          borderRadius: '8px',
-          border: '1px solid #0ea5e9',
-          background: 'rgba(224, 242, 254, 0.2)',
-          color: '#0369a1'
-        }}>
-          {draftNotice}
+        <div className="qt-note is-draft">
+          <span>{draftNotice}</span>
+          <button type="button" className="qt-link-btn" onClick={discardDraft}>Descartar y empezar de cero</button>
+          <button type="button" className="qt-note-close" onClick={() => setDraftNotice('')} aria-label="Cerrar aviso">✕</button>
         </div>
       )}
-      <header style={{ textAlign: 'center', marginBottom: '14px' }}>
-        {currentDateTime && (
-          <div style={{ color: '#78716c', fontSize: '1.1rem', fontWeight: '500' }}>
-            {currentDateTime}
-          </div>
-        )}
-      </header>
 
-      {(
-        <div className="card quote-client-card">
-          <div className="quote-client-head">
-            <h3 className="quote-section-title">1. Cliente</h3>
-            <span className="crm-quote-hint">Escribe el nombre y elige un cliente guardado.</span>
-            <button type="button" className="btn btn-secondary crm-open-btn" onClick={() => setCrmOpen(true)}>
-              Clientes
-              {crmFollowUpsDue > 0 && <span className="crm-due-badge">{crmFollowUpsDue}</span>}
-            </button>
-          </div>
-
-          <div className="quote-client-grid">
-            <div>
-              <label className="form-label">Cliente</label>
-              <CustomerSearchField
-                token={token}
-                value={customerName}
-                onChange={setCustomerName}
-                onPick={applyCustomer}
-                placeholder="Nombre del cliente"
-                maxLength={80}
-                className="form-input"
-              />
-              {customerName.length >= 70 && (
-                <div className="form-counter limit">{customerName.length}/80</div>
+      <div className="qt-layout">
+        <div className="qt-main">
+          {/* ── Cliente y envío ─────────────────────────────────────────── */}
+          <section className="card qt-card qt-client" aria-label="Cliente y envío">
+            <div className="qt-card-head">
+              <h3 className="qt-title">Cliente</h3>
+              {knownCustomer && (
+                <span className="qt-known">
+                  ✓ Cliente guardado{knownCustomer.quotes_count > 0 ? ` · ${knownCustomer.quotes_count} cotiz.` : ''}
+                </span>
               )}
+              <button type="button" className="qt-crm-btn" onClick={() => setCrmOpen(true)}>
+                Clientes
+                {crmFollowUpsDue > 0 && <span className="crm-due-badge">{crmFollowUpsDue}</span>}
+              </button>
             </div>
 
-            <div>
-              <label className="form-label">Teléfono</label>
-              <input
-                type="tel"
-                maxLength={40}
-                placeholder="Ej: 77778888"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                className="form-input"
-              />
-              {customerPhone.length >= 36 && (
-                <div className="form-counter limit">{customerPhone.length}/40</div>
-              )}
-            </div>
-
-            <div>
-              <label className="form-label">¿Dónde se usará?</label>
-              <div className="quote-uso-row">
-                <select
-                  className="form-select"
-                  value={uso}
-                  onChange={(e) => setUso(e.target.value)}
-                  aria-label="Dónde se usará el tablero"
-                >
-                  <option value="">Elegir…</option>
-                  {USOS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
-                </select>
-                {(showUsoDetalle || usoDetalle) ? (
-                  <input
-                    type="text"
-                    className="form-input"
-                    maxLength={120}
-                    placeholder="Detalle (ej. taller de motos)"
-                    value={usoDetalle}
-                    onChange={(e) => setUsoDetalle(e.target.value)}
-                    aria-label="Detalle del uso"
-                  />
-                ) : (
-                  <button type="button" className="quote-more-link" onClick={() => setShowUsoDetalle(true)}>+ detalle</button>
+            <div className="qt-client-grid">
+              <div className="qt-field">
+                <label className="qt-label is-plain" htmlFor="qt-customer-name">Nombre</label>
+                <CustomerSearchField
+                  token={token}
+                  value={customerName}
+                  onChange={setCustomerName}
+                  onPick={applyCustomer}
+                  placeholder="Nombre del cliente"
+                  maxLength={80}
+                  className="form-input"
+                  inputRef={nameInputRef}
+                  onEnter={() => phoneInputRef.current?.focus()}
+                  ariaLabel="Nombre del cliente"
+                  inputId="qt-customer-name"
+                />
+                {customerName.length >= 70 && (
+                  <div className="form-counter limit">{customerName.length}/80</div>
                 )}
               </div>
-              {lastOrder && rows.filter((r) => r.sku).length === 0 && (
-                <button type="button" className="quote-repeat-btn" onClick={() => loadRowsFromItems(lastOrder.items)}>
-                  ↻ Repetir su último pedido · {lastOrder.items.length} producto{lastOrder.items.length === 1 ? '' : 's'} · {Number(lastOrder.total || 0).toFixed(0)} Bs
-                </button>
-              )}
-              {knownCustomer && (knownCustomer.last_uso || knownCustomer.segmento) && (
-                <div className="form-hint">Cliente conocido · última vez: {(USOS.find((u) => u.key === (knownCustomer.last_uso || knownCustomer.segmento)) || {}).label}</div>
-              )}
-            </div>
 
-            {needsOrigen && (
-              <div>
-                <label className="form-label">¿Cómo nos conoció?</label>
-                <select
-                  className="form-select"
-                  value={origen}
-                  onChange={(e) => setOrigen(e.target.value)}
-                  aria-label="Cómo nos conoció"
-                >
-                  <option value="">Elegir…</option>
-                  {ORIGENES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
-                </select>
-                <div className="form-hint">{origenAuto ? 'Detectado automáticamente; puedes corregirlo.' : 'Se pregunta solo la primera vez.'}</div>
-              </div>
-            )}
-
-            <div>
-              <div className="form-label quote-label-row">
-                <span>Destino de envío</span>
-                <button
-                  type="button"
-                  className="quote-dest-toggle"
-                  onClick={() => {
-                    setDestFallback((prev) => !prev);
-                    setDestino(null);
-                    setDestQuery('');
-                    setDestOpen(false);
+              <div className="qt-field">
+                <label className="qt-label is-plain" htmlFor="qt-customer-phone">Teléfono</label>
+                <input
+                  id="qt-customer-phone"
+                  ref={phoneInputRef}
+                  type="tel"
+                  maxLength={40}
+                  placeholder={isMobile ? 'Teléfono, ej. 77778888' : 'Teléfono'}
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.ctrlKey || e.metaKey) return;
+                    e.preventDefault();
+                    if (!destino && !destFallback) destInputRef.current?.focus();
+                    else pickerInputRef.current?.focus();
                   }}
-                >
-                  {destFallback ? '← Buscar en la lista' : '¿No está en la lista?'}
-                </button>
+                  className="form-input"
+                  aria-label="Teléfono del cliente"
+                  autoComplete="off"
+                />
+                {customerPhone.length >= 36 && (
+                  <div className="form-counter limit">{customerPhone.length}/40</div>
+                )}
               </div>
-              {destFallback ? (
-                <div className="quote-dest-fallback">
-                  <input
-                    type="text"
-                    maxLength={80}
-                    placeholder="Ciudad / localidad"
-                    value={fallbackCiudad}
-                    onChange={(e) => setFallbackCiudad(e.target.value)}
-                    className="form-input"
-                  />
-                  <select
-                    value={department}
-                    onChange={(e) => setDepartment(e.target.value)}
-                    className="form-select"
-                  >
-                    <option value="" disabled>Departamento</option>
-                    <option value="Beni">Beni</option>
-                    <option value="Chuquisaca">Chuquisaca</option>
-                    <option value="Cochabamba">Cochabamba</option>
-                    <option value="La Paz">La Paz</option>
-                    <option value="Oruro">Oruro</option>
-                    <option value="Pando">Pando</option>
-                    <option value="Potosí">Potosí</option>
-                    <option value="Santa Cruz">Santa Cruz</option>
-                    <option value="Tarija">Tarija</option>
-                  </select>
-                </div>
-              ) : destino ? (
-                <div className="quote-dest-chip">
-                  <span>
-                    📍 <strong>{destino.municipio}</strong>
-                    {' · Prov. '}{destino.provincia}{' · '}{destino.departamento}
-                  </span>
+
+              <div className="qt-field qt-field-dest">
+                <label className="qt-label is-plain" htmlFor="qt-dest">Destino de envío</label>
+                {destFallback ? (
+                  <div className="quote-dest-fallback qt-dest-fallback">
+                    <input
+                      type="text"
+                      maxLength={80}
+                      placeholder="Ciudad / localidad"
+                      value={fallbackCiudad}
+                      onChange={(e) => setFallbackCiudad(e.target.value)}
+                      className="form-input"
+                      aria-label="Ciudad o localidad de destino"
+                    />
+                    <select
+                      value={department}
+                      onChange={(e) => setDepartment(e.target.value)}
+                      className="form-select"
+                      aria-label="Departamento de destino"
+                    >
+                      <option value="" disabled>Departamento</option>
+                      {DEPARTAMENTOS.map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </div>
+                ) : destino ? (
+                  <div className="quote-dest-chip">
+                    <span title={`${destino.municipio} · Prov. ${destino.provincia} · ${destino.departamento}`}>
+                      📍 <strong>{destino.municipio}</strong>
+                      {destino.provincia && !sameText(destino.provincia, destino.municipio) ? ` · Prov. ${destino.provincia}` : ''}
+                      {' · '}{destino.departamento}
+                    </span>
+                    <button
+                      type="button"
+                      className="quote-dest-clear"
+                      title="Cambiar destino"
+                      aria-label="Cambiar destino"
+                      onClick={() => {
+                        setDestino(null);
+                        setDestQuery('');
+                        window.setTimeout(() => destInputRef.current?.focus(), 0);
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <div className="quote-dest-search">
+                    <input
+                      id="qt-dest"
+                      ref={destInputRef}
+                      type="text"
+                      placeholder="Ciudad de destino…"
+                      value={destQuery}
+                      onChange={(e) => { setDestQuery(e.target.value); setDestOpen(true); }}
+                      onFocus={() => setDestOpen(true)}
+                      onBlur={() => setTimeout(() => setDestOpen(false), 150)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' || e.ctrlKey || e.metaKey) return;
+                        e.preventDefault();
+                        if (destResults.length > 0) chooseDestino(destResults[0]);
+                      }}
+                      className="form-input"
+                      aria-label="Destino de envío"
+                      autoComplete="off"
+                    />
+                    {destOpen && destResults.length > 0 && (
+                      <ul className="quote-dest-results">
+                        {destResults.map((result) => (
+                          <li key={result.id}>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => chooseDestino(result)}
+                            >
+                              <strong>{result.municipio}</strong>
+                              <span>{result.provincia} · {result.departamento}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {destOpen && destQuery.trim().length >= 2 && destResults.length === 0 && (
+                      <div className="quote-dest-empty">Sin resultados. Usa «Otro destino».</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {!destino && (
+                <div className="qt-dest-extra">
+                  {quickDestinations.map((dest) => (
+                    <button
+                      key={dest.id}
+                      type="button"
+                      className="qt-dest-chip"
+                      onClick={() => chooseDestino(dest)}
+                      title={`${dest.municipio} · Prov. ${dest.provincia} · ${dest.departamento}`}
+                    >
+                      {dest.municipio}
+                    </button>
+                  ))}
                   <button
                     type="button"
-                    className="quote-dest-clear"
-                    title="Cambiar destino"
-                    onClick={() => { setDestino(null); setDestQuery(''); }}
+                    className="quote-dest-toggle"
+                    onClick={() => {
+                      setDestFallback((prev) => !prev);
+                      setDestino(null);
+                      setDestQuery('');
+                      setDestOpen(false);
+                    }}
                   >
-                    ✕
+                    {destFallback ? '← Buscar en la lista' : 'Otro destino'}
                   </button>
                 </div>
-              ) : (
-                <div className="quote-dest-search">
-                  <input
-                    type="text"
-                    placeholder="Escribe la ciudad… ej. Quillacollo"
-                    value={destQuery}
-                    onChange={(e) => { setDestQuery(e.target.value); setDestOpen(true); }}
-                    onFocus={() => setDestOpen(true)}
-                    onBlur={() => setTimeout(() => setDestOpen(false), 150)}
-                    className="form-input"
-                    autoComplete="off"
-                  />
-                  {destOpen && destResults.length > 0 && (
-                    <ul className="quote-dest-results">
-                      {destResults.map((result) => (
-                        <li key={result.id}>
-                          <button
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => {
-                              setDestino(result);
-                              setDestQuery('');
-                              setDestOpen(false);
-                            }}
-                          >
-                            <strong>{result.municipio}</strong>
-                            <span>{result.provincia} · {result.departamento}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {destOpen && destQuery.trim().length >= 2 && destResults.length === 0 && (
-                    <div className="quote-dest-empty">Sin resultados — usa "¿No está en la lista?"</div>
-                  )}
+              )}
+
+              {needsOrigen && (
+                <div className="qt-field">
+                  <label className="qt-label is-compact" htmlFor="qt-origen">¿Cómo nos conoció?</label>
+                  <select
+                    id="qt-origen"
+                    className="form-select"
+                    value={origen}
+                    onChange={(e) => setOrigen(e.target.value)}
+                    aria-label="Cómo nos conoció"
+                    title="Se pregunta solo la primera vez que cotizas a este cliente"
+                  >
+                    <option value="">{isMobile ? '¿Cómo nos conoció?' : 'Elegir…'}</option>
+                    {ORIGENES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                  </select>
+                  {origenAuto && <div className="qt-hint">Detectado automáticamente; puedes corregirlo.</div>}
+                </div>
+              )}
+
+              {requiresSellerAssignment && (
+                <div className="qt-field">
+                  <label className="qt-label" htmlFor="qt-seller">Vendedor asignado (comisión)</label>
+                  <select
+                    id="qt-seller"
+                    value={assignedSellerId}
+                    onChange={(e) => setAssignedSellerId(e.target.value)}
+                    className="form-select"
+                  >
+                    <option value="" disabled>Seleccionar vendedor</option>
+                    {salesUsers.map((seller) => (
+                      <option key={seller.id} value={seller.id}>
+                        {(seller.display_name || String(seller.email || '').split('@')[0] || 'Vendedor')} ({seller.role})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
             </div>
 
-            <div>
-              <label className="form-label">Almacén</label>
-              <select
-                value={almacen}
-                onChange={(e) => setAlmacen(e.target.value)}
-                className="form-select"
+            {/* Envío: plegado en una línea; lo de todos los días (destino) queda arriba. */}
+            <div className="qt-ship">
+              <button
+                type="button"
+                className="qt-ship-toggle"
+                onClick={() => setShowShipping((prev) => !prev)}
+                aria-expanded={showShipping}
+                aria-controls="qt-ship-panel"
               >
-                <option value="" disabled>Almacén</option>
-                {ALMACEN_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
+                <span className="qt-ship-icon" aria-hidden="true">🚚</span>
+                <span className="qt-ship-text"><strong>Envío</strong>{shippingSummary}</span>
+                <span className="qt-ship-more">{showShipping ? 'Ocultar ▴' : 'Opciones ▾'}</span>
+              </button>
+
+              {showShipping && (
+                <div className="qt-ship-panel" id="qt-ship-panel">
+                  <div className="qt-field">
+                    <label className="qt-label" htmlFor="qt-almacen">Almacén de salida</label>
+                    <select
+                      id="qt-almacen"
+                      value={almacen}
+                      onChange={(e) => setAlmacen(e.target.value)}
+                      className="form-select"
+                    >
+                      <option value="" disabled>Almacén</option>
+                      {ALMACEN_OPTIONS.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="qt-field">
+                    <label className="qt-label" htmlFor="qt-notes">Notas de envío (opcional)</label>
+                    <input
+                      id="qt-notes"
+                      type="text"
+                      maxLength={120}
+                      placeholder="Instrucciones, referencias..."
+                      value={shippingNotes}
+                      onChange={(e) => setShippingNotes(e.target.value)}
+                      className="form-input"
+                    />
+                    {shippingNotes.length >= 110 && (
+                      <div className="form-counter limit">{shippingNotes.length}/120</div>
+                    )}
+                  </div>
+
+                  <div className="qt-ship-alt">
+                    <label className="form-check-label">
+                      <input type="checkbox" checked={useAlternativeName} onChange={(e) => setUseAlternativeName(e.target.checked)} />
+                      Enviar a nombre diferente
+                    </label>
+                    {useAlternativeName && (
+                      <div className="quote-altname-inputs">
+                        <input
+                          type="text"
+                          maxLength={80}
+                          placeholder="Nombre alternativo para envío"
+                          value={alternativeName}
+                          onChange={(e) => setAlternativeName(e.target.value)}
+                          className="form-input"
+                        />
+                        <input
+                          type="tel"
+                          maxLength={40}
+                          placeholder="Teléfono alternativo para envío"
+                          value={alternativePhone}
+                          onChange={(e) => setAlternativePhone(e.target.value)}
+                          className="form-input"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="quote-delivery-cell">
+                    <div className="quote-delivery-head">
+                      <span className="quote-delivery-title">🛵 Envío local (GPS del cliente)</span>
+                      <span className="quote-delivery-hint">✅ Lo seguro: pega «lat, lng» — ej. -17.4066, -66.1450</span>
+                    </div>
+                    <div className="quote-delivery-row">
+                      <input
+                        type="text"
+                        maxLength={200}
+                        placeholder="-17.4066, -66.1450 (o un link de Maps)"
+                        value={deliveryInput}
+                        onChange={(e) => setDeliveryInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); requestDeliveryQuote(deliveryInput); }
+                        }}
+                        className="form-input"
+                        aria-label="Ubicación GPS del cliente"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary quote-delivery-btn"
+                        disabled={deliveryLoading || !deliveryInput.trim()}
+                        onClick={() => requestDeliveryQuote(deliveryInput)}
+                      >
+                        {deliveryLoading ? 'Calculando…' : 'Cotizar envío'}
+                      </button>
+                    </div>
+                    {deliveryQuote && (
+                      deliveryQuote.in_range ? (
+                        <div className="quote-delivery-result is-ok">
+                          <span>
+                            ✅ {deliveryQuote.city} · {deliveryQuote.distance_km} km del almacén →{' '}
+                            <strong>{Number(deliveryQuote.price_bs).toFixed(2)} Bs</strong>
+                          </span>
+                          {deliveryQuote.maps_url && (
+                            <a href={deliveryQuote.maps_url} target="_blank" rel="noopener noreferrer" className="quote-delivery-verify">
+                              📍 verificar punto ↗
+                            </a>
+                          )}
+                          <label className="quote-delivery-include">
+                            <input
+                              type="checkbox"
+                              checked={deliveryIncluded}
+                              onChange={(e) => setDeliveryIncluded(e.target.checked)}
+                            />
+                            Sumar al total
+                          </label>
+                        </div>
+                      ) : (
+                        <div className="quote-delivery-result is-out">
+                          <span>⚠️ {deliveryQuote.message || 'Fuera de cobertura: cotizar manual'}</span>
+                          {deliveryQuote.maps_url && (
+                            <a href={deliveryQuote.maps_url} target="_blank" rel="noopener noreferrer" className="quote-delivery-verify">
+                              📍 ver el punto leído ↗
+                            </a>
+                          )}
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* ── Buscador de productos ───────────────────────────────────── */}
+          <section className="card qt-card qt-picker-card" aria-label="Agregar productos">
+            <QuotePicker
+              items={allItems}
+              rows={rows}
+              priceFor={unitPriceFor}
+              stockFor={stockFor}
+              onSetQty={setItemQty}
+              onAdd={addItem}
+              topSkus={shortcuts.products}
+              view={pickerView}
+              onViewChange={switchPickerView}
+              isMobile={isMobile}
+              inputRef={pickerInputRef}
+            />
+          </section>
+        </div>
+
+        {/* ── La cotización ───────────────────────────────────────────── */}
+        <aside className="qt-side">
+          <section className="card qt-card qt-ticket" ref={ticketRef} aria-label="Cotización">
+            <div className="qt-card-head">
+              <h3 className="qt-title">Cotización</h3>
+              <div className="qt-seg" role="group" aria-label="Tipo de venta">
+                <button type="button" className={ventaType === 'sf' ? 'active' : ''} onClick={() => setVentaType('sf')}>Sin factura</button>
+                <button type="button" className={ventaType === 'cf' ? 'active' : ''} onClick={() => setVentaType('cf')}>Con factura</button>
+              </div>
             </div>
 
-            {requiresSellerAssignment && (
-              <div>
-                <label className="form-label">
-                  Vendedor asignado (comisión)
-                </label>
-                <select
-                  value={assignedSellerId}
-                  onChange={(e) => setAssignedSellerId(e.target.value)}
-                  className="form-select"
-                >
-                  <option value="" disabled>Seleccionar vendedor</option>
-                  {salesUsers.map((seller) => (
-                    <option key={seller.id} value={seller.id}>
-                      {(seller.display_name || String(seller.email || '').split('@')[0] || 'Vendedor')} ({seller.role})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <div className="qt-ticket-body">
+              {rows.length === 0 ? (
+                <div className="qt-empty">
+                  <span>Aún no hay productos. Búscalos o toca uno de los más cotizados.</span>
+                  {lastOrder && (
+                    <button type="button" className="quote-repeat-btn" onClick={() => loadRowsFromItems(lastOrder.items)}>
+                      ↻ Repetir su último pedido · {lastOrder.items.length} producto{lastOrder.items.length === 1 ? '' : 's'} · {Number(lastOrder.total || 0).toFixed(0)} Bs
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <ul className="qt-lines">
+                  {rows.map((row) => {
+                    const stock = stockFor(row);
+                    const over = stock !== null && Number(row.qty || 0) > stock;
+                    const label = row.skuDisplay || row.sku;
+                    return (
+                      <li key={row.id} className={`qt-line ${over ? 'is-over' : ''}`}>
+                        <div className="qt-line-main">
+                          <span className="qt-line-name" title={label}>{label}</span>
+                          <span className="qt-line-meta">
+                            {row.isCombo ? 'Combo · ' : ''}{(row.unitPrice || 0).toFixed(2)} Bs c/u
+                            {stock !== null && !over ? ` · disp. ${stock}` : ''}
+                          </span>
+                          {over && (
+                            <span className="qt-line-warn">
+                              {stock <= 0 ? `Sin stock en ${almacen}` : `Solo hay ${stock} en ${almacen}`}
+                            </span>
+                          )}
+                        </div>
+                        <QtyStepper qty={row.qty} onChange={(next) => setItemQty(row.sku, next)} label={label} size="sm" />
+                        <span className="qt-line-total">{(row.lineTotal || 0).toFixed(2)}</span>
+                        <button type="button" className="qt-line-del" onClick={() => removeRow(row.id)} aria-label={`Quitar ${label}`} title="Quitar">✕</button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
 
-            {(customerCoupon || selectedCouponCode) && (
-              <div>
-                <label className="form-label">Cupón del cliente</label>
-                {selectedCouponCode ? (
-                  <div className="quote-coupon-chip is-applied">
+              {activePromos.length > 0 && (
+                <div className="quote-promo-chips qt-promos">
+                  {activePromos.length > 1 && (
+                    <div
+                      className="quote-promo-picker-hint"
+                      title="Las promos del mismo grupo no se combinan: marcar una desmarca la otra."
+                    >
+                      {activePromos.length} promos vigentes: marca las que se lleva esta venta.
+                    </div>
+                  )}
+                  {activePromos.map((promo) => {
+                    const config = promo.config || {};
+                    const minTotal = Number(config.min_total || 0);
+                    const reachesMin = minTotal <= 0 || total >= minTotal;
+                    const isSelected = selectedPromoIds.includes(promo.id);
+                    const applyControl = (label) => (
+                      <label
+                        className="quote-promo-apply"
+                        title="Solo las promos marcadas se imprimen en la proforma y aplican a esta venta"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => togglePromo(promo, e.target.checked)}
+                        />
+                        {label}
+                      </label>
+                    );
+                    if (promo.tool === 'envio_gratis') {
+                      return (
+                        <div key={promo.id} className={`quote-promo-chip ${isSelected ? 'is-selected' : ''} ${isSelected && reachesMin ? 'is-earned' : ''}`}>
+                          🚚 <strong>{promo.name}</strong>
+                          {minTotal > 0 && ` · desde ${minTotal} Bs`}
+                          {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
+                          {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
+                          {applyControl('Aplicar')}
+                          {isSelected && reachesMin && total > 0 && ' ✓'}
+                        </div>
+                      );
+                    }
+                    if (promo.tool === 'cupon') {
+                      return (
+                        <div key={promo.id} className={`quote-promo-chip is-cupon ${isSelected ? 'is-selected' : ''} ${isSelected && reachesMin && total > 0 ? 'is-earned' : ''}`}>
+                          🎫 <strong>{promo.name}</strong>
+                          {` · esta compra gana un cupón del ${Number(config.discount_percent || 0)}% para la próxima`}
+                          {minTotal > 0 && ` (desde ${minTotal} Bs)`}
+                          {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
+                          {applyControl('Aplicar')}
+                          {isSelected && reachesMin && total > 0 && ' ✓'}
+                        </div>
+                      );
+                    }
+                    if (promo.tool === 'regalo') {
+                      const gifts = Array.isArray(promo.gift_products) ? promo.gift_products : [];
+                      const earned = reachesMin && total > 0;
+                      const isChoiceMode = config.gift_mode === 'eleccion';
+                      const chosenSku = giftChoiceByPromo[promo.id] || gifts[0]?.sku || '';
+                      const bundleLabel = isChoiceMode
+                        ? `el cliente elige 1 de ${gifts.length} regalos`
+                        : gifts.map((gift) => `${gift.qty}× ${gift.name}`).join(' + ');
+                      return (
+                        <div key={promo.id} className={`quote-promo-chip is-regalo ${isSelected ? 'is-selected' : ''} ${isSelected && earned ? 'is-earned' : ''}`}>
+                          🎁 <strong>{promo.name}</strong>
+                          {bundleLabel && ` · ${isChoiceMode ? '' : 'incluye '}${bundleLabel}`}
+                          {minTotal > 0 && ` · desde ${minTotal} Bs`}
+                          {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
+                          {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
+                          {gifts.length > 0 && applyControl('Incluir regalo')}
+                          {isChoiceMode && isSelected && gifts.length > 0 && (
+                            <select
+                              className="quote-gift-select"
+                              value={chosenSku}
+                              onChange={(e) => setGiftChoiceByPromo((prev) => ({ ...prev, [promo.id]: e.target.value }))}
+                              title="Regalo que se lleva este cliente"
+                            >
+                              {gifts.map((gift) => (
+                                <option key={gift.sku} value={gift.sku}>
+                                  {gift.qty > 1 ? `${gift.qty}× ` : ''}{gift.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {isSelected && earned && gifts.length > 0 && ' ✓'}
+                        </div>
+                      );
+                    }
+                    if (promo.tool === 'descuento_accesorios') {
+                      const pct = Number(config.discount_percent || 0);
+                      const chipDiscount = Math.round(accessoriesSubtotal * pct) / 100;
+                      const earned = isSelected && reachesMin && accessoriesSubtotal > 0;
+                      return (
+                        <div key={promo.id} className={`quote-promo-chip is-dcto-acc ${isSelected ? 'is-selected' : ''} ${earned ? 'is-earned' : ''}`}>
+                          🔩 <strong>{promo.name}</strong>
+                          {` · ${pct}% de descuento en todos los accesorios`}
+                          {minTotal > 0 && ` · desde ${minTotal} Bs`}
+                          {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
+                          {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
+                          {reachesMin && total > 0 && accessoriesSubtotal <= 0 && ' — la orden aún no tiene accesorios'}
+                          {reachesMin && chipDiscount > 0 && ` — descuenta ${chipDiscount.toFixed(2)} Bs`}
+                          {applyControl('Aplicar')}
+                          {earned && ' ✓'}
+                        </div>
+                      );
+                    }
+                    if (promo.tool === 'sorteo') {
+                      const perTicket = Number(config.bs_per_ticket || 0);
+                      const cap = Math.max(1, Number(config.max_tickets || 5));
+                      const earned = !reachesMin || total <= 0
+                        ? 0
+                        : (perTicket > 0 ? Math.max(1, Math.min(cap, Math.floor(total / perTicket))) : 1);
+                      return (
+                        <div key={promo.id} className={`quote-promo-chip is-sorteo ${isSelected ? 'is-selected' : ''} ${isSelected && earned > 0 ? 'is-earned' : ''}`}>
+                          🎟️ <strong>{promo.name}</strong>
+                          {minTotal > 0 && ` · participa desde ${minTotal} Bs`}
+                          {perTicket > 0 && ` · 1 ticket por cada ${perTicket} Bs`}
+                          {earned > 0 && isSelected
+                            ? ` — este pedido gana ${earned} ticket${earned > 1 ? 's' : ''} 🎉`
+                            : (minTotal > 0 && total > 0 && !reachesMin ? ` — faltan ${(minTotal - total).toFixed(0)} Bs` : '')}
+                          {applyControl('Aplicar')}
+                        </div>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+              )}
+
+            </div>
+
+            <div className="qt-ticket-foot">
+              {(customerCoupon || selectedCouponCode) && (
+                selectedCouponCode ? (
+                  <div className="quote-coupon-chip is-applied qt-coupon">
                     🎫 <strong>{selectedCouponCode}</strong> aplicado
                     {customerCoupon?.code === selectedCouponCode && customerCoupon?.discount_percent
                       ? ` (${customerCoupon.discount_percent}% dcto)` : ''}
@@ -1533,7 +2032,7 @@ export default function QuoteTool({ token, user }) {
                     </button>
                   </div>
                 ) : (
-                  <div className="quote-coupon-chip">
+                  <div className="quote-coupon-chip qt-coupon">
                     🎫 Este cliente tiene el cupón <strong>{customerCoupon.code}</strong> ({customerCoupon.discount_percent}% dcto
                     {customerCoupon.expires_on ? ` · vence ${customerCoupon.expires_on.split('-').reverse().join('/')}` : ''})
                     <button
@@ -1548,599 +2047,83 @@ export default function QuoteTool({ token, user }) {
                       Aplicar
                     </button>
                   </div>
-                )}
-              </div>
-            )}
-
-            {(showNotes || shippingNotes) ? (
-              <div>
-                <label className="form-label">Notas de envío (opcional)</label>
-                <input
-                  type="text"
-                  maxLength={120}
-                  placeholder="Instrucciones, referencias..."
-                  value={shippingNotes}
-                  onChange={(e) => setShippingNotes(e.target.value)}
-                  className="form-input"
-                />
-                {shippingNotes.length >= 110 && (
-                  <div className="form-counter limit">{shippingNotes.length}/120</div>
-                )}
-              </div>
-            ) : (
-              <div className="quote-more-wrap">
-                <button type="button" className="quote-more-link" onClick={() => setShowNotes(true)}>+ Agregar notas de envío</button>
-              </div>
-            )}
-
-            <div className="quote-altname-cell">
-              <label className="form-check-label">
-                <input type="checkbox" checked={useAlternativeName} onChange={(e) => setUseAlternativeName(e.target.checked)} />
-                Enviar a nombre diferente
-              </label>
-              {useAlternativeName && (
-                <div className="quote-altname-inputs">
-                  <input
-                    type="text"
-                    maxLength={80}
-                    placeholder="Nombre alternativo para envío"
-                    value={alternativeName}
-                    onChange={(e) => setAlternativeName(e.target.value)}
-                    className="form-input"
-                  />
-                  <input
-                    type="tel"
-                    maxLength={40}
-                    placeholder="Teléfono alternativo para envío"
-                    value={alternativePhone}
-                    onChange={(e) => setAlternativePhone(e.target.value)}
-                    className="form-input"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="quote-delivery-cell">
-              <div className="quote-delivery-head">
-                <span className="quote-delivery-title">🛵 Envío local (GPS del cliente)</span>
-                <span className="quote-delivery-hint">✅ Lo seguro: pega «lat, lng» — ej. -17.4066, -66.1450</span>
-              </div>
-              <div className="quote-delivery-row">
-                <input
-                  type="text"
-                  maxLength={200}
-                  placeholder="-17.4066, -66.1450 (o un link de Maps)"
-                  value={deliveryInput}
-                  onChange={(e) => setDeliveryInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); requestDeliveryQuote(deliveryInput); } }}
-                  className="form-input"
-                />
-                <button
-                  type="button"
-                  className="btn btn-secondary quote-delivery-btn"
-                  disabled={deliveryLoading || !deliveryInput.trim()}
-                  onClick={() => requestDeliveryQuote(deliveryInput)}
-                >
-                  {deliveryLoading ? 'Calculando…' : 'Cotizar envío'}
-                </button>
-              </div>
-              {deliveryQuote && (
-                deliveryQuote.in_range ? (
-                  <div className="quote-delivery-result is-ok">
-                    <span>
-                      ✅ {deliveryQuote.city} · {deliveryQuote.distance_km} km del almacén →{' '}
-                      <strong>{Number(deliveryQuote.price_bs).toFixed(2)} Bs</strong>
-                    </span>
-                    {deliveryQuote.maps_url && (
-                      <a href={deliveryQuote.maps_url} target="_blank" rel="noopener noreferrer" className="quote-delivery-verify">
-                        📍 verificar punto ↗
-                      </a>
-                    )}
-                    <label className="quote-delivery-include">
-                      <input
-                        type="checkbox"
-                        checked={deliveryIncluded}
-                        onChange={(e) => setDeliveryIncluded(e.target.checked)}
-                      />
-                      Sumar al total
-                    </label>
-                  </div>
-                ) : (
-                  <div className="quote-delivery-result is-out">
-                    <span>⚠️ {deliveryQuote.message || 'Fuera de cobertura: cotizar manual'}</span>
-                    {deliveryQuote.maps_url && (
-                      <a href={deliveryQuote.maps_url} target="_blank" rel="noopener noreferrer" className="quote-delivery-verify">
-                        📍 ver el punto leído ↗
-                      </a>
-                    )}
-                  </div>
                 )
               )}
-            </div>
-          </div>
-        </div>
-      )}
 
-      {(
-        <div className="card quote-products-card">
-          <h3 className="quote-section-title">2. Productos</h3>
-          {activePromos.length > 0 && (
-            <div className="quote-promo-chips">
-              {activePromos.length > 1 && (
-                <div className="quote-promo-picker-hint">
-                  Hay {activePromos.length} promos vigentes — marca las que se lleva esta venta.
-                  Las del mismo grupo no se combinan: marcar una desmarca la otra.
-                </div>
-              )}
-              {activePromos.map((promo) => {
-                const config = promo.config || {};
-                const minTotal = Number(config.min_total || 0);
-                const reachesMin = minTotal <= 0 || total >= minTotal;
-                const isSelected = selectedPromoIds.includes(promo.id);
-                const applyControl = (label) => (
-                  <label
-                    className="quote-promo-apply"
-                    title="Solo las promos marcadas se imprimen en la proforma y aplican a esta venta"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={(e) => togglePromo(promo, e.target.checked)}
-                    />
-                    {label}
-                  </label>
-                );
-                if (promo.tool === 'envio_gratis') {
-                  return (
-                    <div key={promo.id} className={`quote-promo-chip ${isSelected ? 'is-selected' : ''} ${isSelected && reachesMin ? 'is-earned' : ''}`}>
-                      🚚 <strong>{promo.name}</strong>
-                      {minTotal > 0 && ` · desde ${minTotal} Bs`}
-                      {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
-                      {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
-                      {applyControl('Aplicar')}
-                      {isSelected && reachesMin && total > 0 && ' ✓'}
-                    </div>
-                  );
-                }
-                if (promo.tool === 'cupon') {
-                  return (
-                    <div key={promo.id} className={`quote-promo-chip is-cupon ${isSelected ? 'is-selected' : ''} ${isSelected && reachesMin && total > 0 ? 'is-earned' : ''}`}>
-                      🎫 <strong>{promo.name}</strong>
-                      {` · esta compra gana un cupón del ${Number(config.discount_percent || 0)}% para la próxima`}
-                      {minTotal > 0 && ` (desde ${minTotal} Bs)`}
-                      {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
-                      {applyControl('Aplicar')}
-                      {isSelected && reachesMin && total > 0 && ' ✓'}
-                    </div>
-                  );
-                }
-                if (promo.tool === 'regalo') {
-                  const gifts = Array.isArray(promo.gift_products) ? promo.gift_products : [];
-                  const earned = reachesMin && total > 0;
-                  const isChoiceMode = config.gift_mode === 'eleccion';
-                  const chosenSku = giftChoiceByPromo[promo.id] || gifts[0]?.sku || '';
-                  const bundleLabel = isChoiceMode
-                    ? `el cliente elige 1 de ${gifts.length} regalos`
-                    : gifts.map((gift) => `${gift.qty}× ${gift.name}`).join(' + ');
-                  return (
-                    <div key={promo.id} className={`quote-promo-chip is-regalo ${isSelected ? 'is-selected' : ''} ${isSelected && earned ? 'is-earned' : ''}`}>
-                      🎁 <strong>{promo.name}</strong>
-                      {bundleLabel && ` · ${isChoiceMode ? '' : 'incluye '}${bundleLabel}`}
-                      {minTotal > 0 && ` · desde ${minTotal} Bs`}
-                      {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
-                      {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
-                      {gifts.length > 0 && applyControl('Incluir regalo')}
-                      {isChoiceMode && isSelected && gifts.length > 0 && (
-                        <select
-                          className="quote-gift-select"
-                          value={chosenSku}
-                          onChange={(e) => setGiftChoiceByPromo((prev) => ({ ...prev, [promo.id]: e.target.value }))}
-                          title="Regalo que se lleva este cliente"
-                        >
-                          {gifts.map((gift) => (
-                            <option key={gift.sku} value={gift.sku}>
-                              {gift.qty > 1 ? `${gift.qty}× ` : ''}{gift.name}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      {isSelected && earned && gifts.length > 0 && ' ✓'}
-                    </div>
-                  );
-                }
-                if (promo.tool === 'descuento_accesorios') {
-                  const pct = Number(config.discount_percent || 0);
-                  const chipDiscount = Math.round(accessoriesSubtotal * pct) / 100;
-                  const earned = isSelected && reachesMin && accessoriesSubtotal > 0;
-                  return (
-                    <div key={promo.id} className={`quote-promo-chip is-dcto-acc ${isSelected ? 'is-selected' : ''} ${earned ? 'is-earned' : ''}`}>
-                      🔩 <strong>{promo.name}</strong>
-                      {` · ${pct}% de descuento en todos los accesorios`}
-                      {minTotal > 0 && ` · desde ${minTotal} Bs`}
-                      {promo.ends_on && ` · hasta ${promo.ends_on.split('-').reverse().join('/')}`}
-                      {minTotal > 0 && !reachesMin && total > 0 && ` — faltan ${(minTotal - total).toFixed(0)} Bs`}
-                      {reachesMin && total > 0 && accessoriesSubtotal <= 0 && ' — la orden aún no tiene accesorios'}
-                      {reachesMin && chipDiscount > 0 && ` — descuenta ${chipDiscount.toFixed(2)} Bs`}
-                      {applyControl('Aplicar')}
-                      {earned && ' ✓'}
-                    </div>
-                  );
-                }
-                if (promo.tool === 'sorteo') {
-                  const perTicket = Number(config.bs_per_ticket || 0);
-                  const cap = Math.max(1, Number(config.max_tickets || 5));
-                  const earned = !reachesMin || total <= 0
-                    ? 0
-                    : (perTicket > 0 ? Math.max(1, Math.min(cap, Math.floor(total / perTicket))) : 1);
-                  return (
-                    <div key={promo.id} className={`quote-promo-chip is-sorteo ${isSelected ? 'is-selected' : ''} ${isSelected && earned > 0 ? 'is-earned' : ''}`}>
-                      🎟️ <strong>{promo.name}</strong>
-                      {minTotal > 0 && ` · participa desde ${minTotal} Bs`}
-                      {perTicket > 0 && ` · 1 ticket por cada ${perTicket} Bs`}
-                      {earned > 0 && isSelected
-                        ? ` — este pedido gana ${earned} ticket${earned > 1 ? 's' : ''} 🎉`
-                        : (minTotal > 0 && total > 0 && !reachesMin ? ` — faltan ${(minTotal - total).toFixed(0)} Bs` : '')}
-                      {applyControl('Aplicar')}
-                    </div>
-                  );
-                }
-                return null;
-              })}
-            </div>
-          )}
-          <div className="quote-products-toolbar">
-            <div className="quote-sale-type-group">
-              <button
-                type="button"
-                className={`quote-sale-type-btn ${ventaType === 'sf' ? 'active' : ''}`}
-                onClick={() => setVentaType('sf')}
-              >
-                Sin Factura
-              </button>
-              <button
-                type="button"
-                className={`quote-sale-type-btn ${ventaType === 'cf' ? 'active' : ''}`}
-                onClick={() => setVentaType('cf')}
-              >
-                Con Factura
-              </button>
-            </div>
-            <div className="quote-sale-type-group" role="tablist" aria-label="Vista de productos">
-              <button
-                type="button"
-                className={`quote-sale-type-btn ${productsView === 'lista' ? 'active' : ''}`}
-                onClick={() => switchProductsView('lista')}
-              >
-                Lista
-              </button>
-              <button
-                type="button"
-                className={`quote-sale-type-btn ${productsView === 'catalogo' ? 'active' : ''}`}
-                onClick={() => switchProductsView('catalogo')}
-              >
-                Catálogo
-              </button>
-            </div>
-          </div>
-
-          <div className="quote-products-meta">
-            <span>Líneas: <strong>{rows.length}</strong></span>
-            <span>Productos: <strong>{selectedItemsCount}</strong></span>
-            <span>Unidades: <strong>{totalUnits}</strong></span>
-          </div>
-
-          {productsView === 'catalogo' ? (
-            <QuoteCatalogPicker
-              items={allItems}
-              rows={rows}
-              ventaType={ventaType}
-              onSetQty={setCatalogQty}
-            />
-          ) : isMobile ? (
-            <div className="mobile-cards-list" style={{ marginBottom: '20px' }}>
-              {rows.map((row) => {
-                const stock = row.availableStock;
-                const stockNumber = Number(stock);
-                const stockDisplay = stock === null || stock === undefined
-                  ? (row.sku && almacen ? 'Cargando...' : '—')
-                  : Number.isFinite(stockNumber) ? stockNumber : 'N/D';
-                const stockColor = stock === null || stock === undefined
-                  ? '#78716c'
-                  : (Number.isFinite(stockNumber) && stockNumber > 0 ? '#047857' : '#ef4444');
-
-                return (
-                  <div key={row.id} className="mobile-card">
-                    <div className="mobile-card-header">
-                      <span className="mobile-card-id">Línea #{rows.indexOf(row) + 1}</span>
-                      <span className="mobile-card-total">{(row.lineTotal || 0).toFixed(2)} Bs</span>
-                    </div>
-
-                    <div className="mobile-card-body">
-                      <div>
-                        <label className="mobile-card-label">Producto / Combo</label>
-                        <select
-                          value={row.sku || ''}
-                          onChange={(e) => handleProductSelect(row.id, e.target.value)}
-                          className="mobile-select"
-                          style={{ width: '100%', marginTop: '6px' }}
-                        >
-                          <option value="">Seleccionar producto / combo...</option>
-                          {allItems.map((item) => (
-                            <option key={item.sku} value={item.sku}>
-                              {item.displayName}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Cantidad</span>
-                        <input
-                          type="number"
-                          min="1"
-                          value={row.qty}
-                          onChange={(e) => handleQtyChange(row.id, e.target.value)}
-                          className="mobile-select"
-                          style={{ width: '90px', textAlign: 'center', flex: '0 0 90px' }}
-                        />
-                      </div>
-
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Disponibilidad</span>
-                        <span style={{ color: stockColor, fontWeight: 700 }}>{stockDisplay}</span>
-                      </div>
-
-                      <div className="mobile-card-row">
-                        <span className="mobile-card-label">Precio unitario</span>
-                        <span>{(row.unitPrice || 0).toFixed(2)} Bs</span>
-                      </div>
-                    </div>
-
-                    <div className="mobile-card-actions">
-                      <button className="btn btn-danger" onClick={() => confirmAndDeleteRow(row.id)}>
-                        Eliminar línea
-                      </button>
-                    </div>
+              <div className="qt-totals">
+                {(hasDiscount || accessoryDiscountBs > 0 || deliveryFee > 0) && (
+                  <div className="qt-total-line">
+                    <span>Subtotal</span>
+                    <strong>{subtotal.toFixed(2)} Bs</strong>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
-                <thead>
-                  <tr style={{ background: '#f5f1ec' }}>
-                    <th style={{ padding: '12px', textAlign: 'left' }}>Producto / Combo</th>
-                    <th style={{ padding: '12px', width: '80px' }}>Cant.</th>
-                    <th style={{ padding: '12px', width: '80px', textAlign: 'center' }}>Disp.</th>
-                    <th style={{ padding: '12px', width: '100px', textAlign: 'right' }}>Unit.</th>
-                    <th style={{ padding: '12px', width: '120px', textAlign: 'right' }}>Subt.</th>
-                    <th style={{ padding: '12px', width: '60px' }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '40px', color: '#78716c' }}>
-                        Agrega líneas arriba
-                      </td>
-                    </tr>
-                  ) : (
-                    rows.map((row) => {
-                      const stock = row.availableStock;
-                      const stockNumber = Number(stock);
-                      const stockDisplay = stock === null || stock === undefined
-                        ? (row.sku && almacen ? 'Cargando...' : '—')
-                        : Number.isFinite(stockNumber) ? stockNumber : 'N/D';
-                      const stockColor = stock === null || stock === undefined
-                        ? '#78716c'
-                        : (Number.isFinite(stockNumber) && stockNumber > 0 ? '#047857' : '#ef4444');
-
-                      return (
-                        <tr key={row.id} style={{ borderBottom: '1px solid #e7e0d8' }}>
-                          <td style={{ padding: '12px' }}>
-                            <select
-                              value={row.sku || ''}
-                              onChange={(e) => handleProductSelect(row.id, e.target.value)}
-                              className="form-select"
-                            >
-                              <option value="">Seleccionar producto / combo...</option>
-                              {allItems.map(item => (
-                                <option key={item.sku} value={item.sku}>
-                                  {item.displayName}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td style={{ padding: '12px' }}>
-                            <input
-                              type="number"
-                              min="1"
-                              value={row.qty}
-                              onChange={(e) => handleQtyChange(row.id, e.target.value)}
-                              className="form-input"
-                              style={{ textAlign: 'center' }}
-                            />
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'center', color: stockColor, fontWeight: '600' }}>
-                            {stockDisplay}
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'right' }}>
-                            {(row.unitPrice || 0).toFixed(2)}
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>
-                            {(row.lineTotal || 0).toFixed(2)}
-                          </td>
-                          <td style={{ padding: '12px', textAlign: 'center' }}>
-                            <button
-                              onClick={() => confirmAndDeleteRow(row.id)}
-                              style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '1.4rem', cursor: 'pointer' }}
-                            >
-                              ×
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {productsView === 'lista' && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-6px', marginBottom: '16px' }}>
-              <button
-                type="button"
-                onClick={addRow}
-                className="btn btn-secondary"
-              >
-                + Agregar línea
-              </button>
-            </div>
-          )}
-
-          {/* Summary - negotiation friendly discount controls */}
-          <div className="quote-summary-panel" style={{
-            position: 'sticky',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: '#ffffff',
-            padding: '16px',
-            borderTop: '1px solid #e7e0d8',
-            boxShadow: '0 -4px 12px rgba(0,0,0,0.4)',
-            zIndex: 10
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-              <div>
-                <small style={{ color: '#78716c' }}>Subtotal</small>
-                <div style={{ fontSize: '1.4rem', fontWeight: '600' }}>{subtotal.toFixed(2)} Bs</div>
-              </div>
-
-              <div style={{ display: 'grid', gap: '8px', flex: '1 1 320px', minWidth: '280px' }}>
-                <small style={{ color: '#78716c' }}>Negociación de descuento</small>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(132px, 1fr))', gap: '8px' }}>
-                  <label style={{ display: 'grid', gap: '4px' }}>
-                    <span style={{ color: '#78716c', fontSize: '0.78rem' }}>Descuento %</span>
-                    <input
-                      {...discountFieldProps('percent')}
-                      style={{
-                        width: '100%',
-                        padding: '8px',
-                        background: '#ffffff',
-                        color: '#292524',
-                        border: `1px solid ${discountMode === 'percent' ? '#e11d48' : '#e7e0d8'}`,
-                        borderRadius: '6px'
-                      }}
-                    />
-                  </label>
-                  <label style={{ display: 'grid', gap: '4px' }}>
-                    <span style={{ color: '#78716c', fontSize: '0.78rem' }}>Descuento Bs</span>
-                    <input
-                      {...discountFieldProps('amount')}
-                      style={{
-                        width: '100%',
-                        padding: '8px',
-                        background: '#ffffff',
-                        color: '#292524',
-                        border: `1px solid ${discountMode === 'amount' ? '#e11d48' : '#e7e0d8'}`,
-                        borderRadius: '6px'
-                      }}
-                    />
-                  </label>
-                  <label style={{ display: 'grid', gap: '4px' }}>
-                    <span style={{ color: '#78716c', fontSize: '0.78rem' }}>Total objetivo Bs</span>
-                    <input
-                      {...discountFieldProps('target')}
-                      style={{
-                        width: '100%',
-                        padding: '8px',
-                        background: '#ffffff',
-                        color: '#292524',
-                        border: `1px solid ${discountMode === 'target' ? '#e11d48' : '#e7e0d8'}`,
-                        borderRadius: '6px'
-                      }}
-                    />
-                  </label>
-                </div>
-                <span style={{ color: '#e11d48', fontWeight: '600', fontSize: '0.88rem' }}>
-                  Descuento aplicado: {discountAmountApplied.toFixed(2)} Bs ({effectiveDiscountPercent.toFixed(2)}%)
-                </span>
-                <div>
+                )}
+                <div className={`qt-total-line ${hasDiscount ? 'is-discount' : ''}`}>
                   <button
                     type="button"
-                    onClick={clearDiscounts}
-                    className="btn btn-secondary"
-                    style={{ minHeight: '34px', padding: '6px 12px', fontSize: '0.84rem' }}
+                    className="qt-link-btn"
+                    onClick={() => setShowDiscount((prev) => !prev)}
+                    aria-expanded={showDiscount}
+                    aria-controls="qt-discount-editor"
                   >
-                    Limpiar descuento
+                    {hasDiscount ? 'Descuento' : '+ Descuento'} {showDiscount ? '▴' : '▾'}
                   </button>
+                  {hasDiscount && (
+                    <strong>−{discountAmountApplied.toFixed(2)} Bs ({effectiveDiscountPercent.toFixed(1)}%)</strong>
+                  )}
                 </div>
-              </div>
-
-              <div>
-                <small style={{ color: '#78716c' }}>{deliveryFee > 0 ? 'Total con envío' : 'Total negociado'}</small>
-                <div style={{ fontSize: '1.6rem', fontWeight: 'bold', color: '#e11d48' }}>
-                  {grandTotal.toFixed(2)} Bs
-                </div>
+                {showDiscount && (
+                  <div className="qt-discount-editor" id="qt-discount-editor">
+                    <label>Descuento %<input {...discountFieldProps('percent')} aria-label="Descuento en porcentaje" /></label>
+                    <label>Descuento Bs<input {...discountFieldProps('amount')} aria-label="Descuento en bolivianos" /></label>
+                    <label>Total objetivo Bs<input {...discountFieldProps('target')} aria-label="Total objetivo en bolivianos" /></label>
+                    {hasDiscount && (
+                      <button type="button" className="qt-link-btn qt-discount-clear" onClick={clearDiscounts}>Quitar descuento</button>
+                    )}
+                  </div>
+                )}
                 {accessoryDiscountBs > 0 && (
-                  <small style={{ color: '#0f766e', display: 'block', fontWeight: 600 }}>
-                    promo accesorios −{accessoryDiscountBs.toFixed(2)} Bs ({accessoryPromoPercent}%)
-                  </small>
+                  <div className="qt-total-line is-promo">
+                    <span>Promo accesorios ({accessoryPromoPercent}%)</span>
+                    <strong>−{accessoryDiscountBs.toFixed(2)} Bs</strong>
+                  </div>
                 )}
                 {deliveryFee > 0 && (
-                  <small style={{ color: '#78716c' }}>
-                    incluye envío local {deliveryFee.toFixed(2)} Bs
-                  </small>
+                  <div className="qt-total-line">
+                    <span>Envío local</span>
+                    <strong>+{deliveryFee.toFixed(2)} Bs</strong>
+                  </div>
                 )}
               </div>
-            </div>
-
-            <button
-              type="button"
-              disabled={!canSave || isSaving}
-              onClick={() => saveAndGeneratePDF()}
-              className="btn btn-primary"
-              style={{
-                width: '100%',
-                marginTop: '16px',
-                fontSize: '1.1rem',
-                fontWeight: '600',
-                opacity: canSave && !isSaving ? 1 : 0.6,
-                cursor: canSave && !isSaving ? 'pointer' : 'not-allowed'
-              }}
-            >
-              {isSaving ? 'Guardando...' : 'Guardar y generar PDF'}
-            </button>
-
-            {/* Venta de mostrador: guardar ya cobrada, sin pasar por Historial. */}
-            <div className="quote-paid-row">
-              <button
-                type="button"
-                className="btn quote-paid-btn"
-                disabled={!canSave || isSaving}
-                onClick={() => saveAndGeneratePDF({ paid: true })}
-              >
-                💵 Guardar como pagado
-              </button>
-              <select className="form-select quote-paid-method" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} aria-label="Método de pago">
-                <option value="QR">QR</option>
-                <option value="Efectivo">Efectivo</option>
-              </select>
-            </div>
-
-            {!canSave && (
-              <div className="quote-save-blockers">
-                <strong>Para guardar falta:</strong>
-                <ul>
-                  {saveBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
-                </ul>
+              {isWide && totalAndSave}
+              {/* Venta de mostrador: guardar ya cobrada, sin pasar por Historial. */}
+              <div className="qt-paid-row">
+                <button
+                  type="button"
+                  className={`btn qt-paid-btn ${canSave ? '' : 'is-blocked'}`}
+                  disabled={isSaving}
+                  onClick={() => saveAndGeneratePDF({ paid: true })}
+                >
+                  💵 Guardar como pagado
+                </button>
+                <select className="form-select qt-paid-method" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} aria-label="Método de pago">
+                  <option value="QR">QR</option>
+                  <option value="Efectivo">Efectivo</option>
+                </select>
               </div>
-            )}
-          </div>
-        </div>
-      )}
+              {showBlockers && (
+                <div className="quote-save-blockers">
+                  <strong>Para guardar falta:</strong>
+                  <ul>
+                    {saveBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      {!isWide && <div className="qt-savebar">{totalAndSave}</div>}
 
       <CustomerHub
         token={token}

@@ -26,11 +26,16 @@ const shortDate = (value) => {
 const isDue = (customer) => Boolean(customer?.follow_up_at) && customer.follow_up_at <= new Date().toISOString().slice(0, 10);
 
 // ─── Autocomplete input: type a name, pick an existing customer ──────────────
-export function CustomerSearchField({ token, value, onChange, onPick, placeholder, maxLength, className }) {
+export function CustomerSearchField({ token, value, onChange, onPick, placeholder, maxLength, className, inputRef, onEnter, ariaLabel, inputId }) {
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const timer = useRef(null);
   const boxRef = useRef(null);
+  const localInputRef = useRef(null);
+  const setInputRefs = (element) => {
+    localInputRef.current = element;
+    if (inputRef) inputRef.current = element;
+  };
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -53,7 +58,9 @@ export function CustomerSearchField({ token, value, onChange, onPick, placeholde
       try {
         const data = await apiRequest(`/api/customers?search=${encodeURIComponent(term)}&limit=6`, { token });
         setSuggestions(Array.isArray(data?.customers) ? data.customers : []);
-        setOpen(true);
+        // Solo se despliega si el vendedor sigue en el campo: si ya pasó al
+        // teléfono, la lista llegaría tarde y taparía los campos de abajo.
+        setOpen(document.activeElement === localInputRef.current);
       } catch {
         setSuggestions([]);
       }
@@ -70,6 +77,20 @@ export function CustomerSearchField({ token, value, onChange, onPick, placeholde
         value={value}
         onChange={(e) => handleChange(e.target.value)}
         onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
+        onBlur={() => window.setTimeout(() => {
+          if (document.activeElement !== localInputRef.current) setOpen(false);
+        }, 150)}
+        onKeyDown={(e) => {
+          // Enter pasa al siguiente campo (Cotizar encadena nombre → teléfono).
+          if (e.key === 'Enter' && onEnter && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            setOpen(false);
+            onEnter();
+          }
+        }}
+        ref={setInputRefs}
+        id={inputId}
+        aria-label={ariaLabel}
         autoComplete="off"
       />
       {open && suggestions.length > 0 && (
@@ -79,6 +100,7 @@ export function CustomerSearchField({ token, value, onChange, onPick, placeholde
               key={customer.id}
               type="button"
               className="crm-suggestion"
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => { setOpen(false); setSuggestions([]); onPick(customer); }}
             >
               <span className="crm-suggestion-name">{customer.name}</span>

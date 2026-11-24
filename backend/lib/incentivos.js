@@ -208,26 +208,26 @@ const metricCobro = async ({ start, next }, rule) => {
 };
 
 // El origen se pregunta una vez por cliente: vale el de la cotización o el
-// que ya tiene la ficha del cliente.
+// que ya tiene la ficha del cliente. (El uso dejó de pedirse en Cotizar: se
+// registra en la ficha del cliente y ya no cuenta para esta regla.)
 const metricDatos = async ({ start, next }) => {
   const res = await pool.query(
     `SELECT q.user_id,
             COUNT(*)::int AS total,
             COUNT(*) FILTER (
-              WHERE NULLIF(TRIM(q.uso), '') IS NOT NULL
-                AND (NULLIF(TRIM(q.origen), '') IS NOT NULL OR EXISTS (
-                  SELECT 1 FROM customers cu
-                  WHERE NULLIF(TRIM(cu.origen), '') IS NOT NULL
-                    AND ${digits8('cu.phone_normalized')} = ${digits8('q.customer_phone')}
-                    AND LENGTH(${digits8('q.customer_phone')}) >= 7
-                ))
+              WHERE NULLIF(TRIM(q.origen), '') IS NOT NULL OR EXISTS (
+                SELECT 1 FROM customers cu
+                WHERE NULLIF(TRIM(cu.origen), '') IS NOT NULL
+                  AND ${digits8('cu.phone_normalized')} = ${digits8('q.customer_phone')}
+                  AND LENGTH(${digits8('q.customer_phone')}) >= 7
+              )
             )::int AS done
      FROM quotes q
      WHERE q.created_at >= $1::timestamp AND q.created_at < $2::timestamp AND q.user_id IS NOT NULL
      GROUP BY q.user_id`,
     [start, next]
   );
-  return byUser(res.rows, (r) => ({ done: r.done, total: r.total, detail: `${r.done} de ${r.total} cotizaciones con uso y origen` }));
+  return byUser(res.rows, (r) => ({ done: r.done, total: r.total, detail: `${r.done} de ${r.total} cotizaciones con origen del cliente` }));
 };
 
 const METRICS = {
