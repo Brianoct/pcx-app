@@ -492,6 +492,18 @@ const seedSandboxData = async (client) => {
     );
   }
 
+  // ── Libro de comisiones: las cotizaciones sembradas ya cobradas cuentan en
+  // el mes en que se crearon (igual que el backfill de la migración).
+  await client.query(
+    `INSERT INTO sandbox.commission_entries (quote_id, kind, user_id, store_location, total, reason, created_at)
+     SELECT q.id, k.kind, q.user_id, q.store_location, COALESCE(q.total, 0), 'historico', q.created_at
+     FROM sandbox.quotes q
+     JOIN (VALUES ('venta'), ('envio')) AS k(kind)
+       ON (k.kind = 'venta' AND q.status IN ('Pagado', 'Embalado', 'Enviado')) OR (k.kind = 'envio' AND q.status = 'Enviado')
+     WHERE NOT EXISTS (SELECT 1 FROM sandbox.commission_entries e WHERE e.quote_id = q.id AND e.kind = k.kind)`
+  );
+  await client.query(`UPDATE sandbox.quotes SET paid_at = created_at WHERE paid_at IS NULL AND status IN ('Pagado', 'Embalado', 'Enviado')`);
+
   // ── Almacén y producción: que haya algo que practicar ─────────────────────
   // Stock en ambas sedes con mínimos y máximos; cinco productos bajo mínimo en
   // Cochabamba para que Planificación tenga necesidades y Kanban, lotes.

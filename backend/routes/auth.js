@@ -90,7 +90,10 @@ router.post('/api/login', loginLimiter, async (req, res) => {
         panel_access: tokenUser.panel_access
       },
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      // 7 días: con 24 h la sesión vencía a media jornada y el vendedor no
+      // podía guardar hasta volver a ingresar. La baja de un usuario corta el
+      // acceso al instante igual (authenticateToken revisa is_active).
+      { expiresIn: '7d' }
     );
 
     res.json({

@@ -319,6 +319,35 @@ router.get('/api/customers/pipeline', authenticateToken, async (req, res) => {
   }
 });
 
+// Último pedido del cliente (para «Repetir su último pedido» en Cotizar):
+// la venta cobrada más reciente o, si no hay, la última cotización.
+router.get('/api/customers/:id/last-order', authenticateToken, async (req, res) => {
+  const userContext = await ensureCrmAccess(req, res);
+  if (!userContext) return;
+  try {
+    const customerId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(customerId) || customerId <= 0) return res.status(400).json({ error: 'ID de cliente inválido' });
+    const result = await pool.query(
+      `SELECT q.id, q.created_at, q.total, q.status, q.line_items
+       FROM customers c
+       JOIN quotes q ON ${QUOTES_BY_PHONE_JOIN}
+       WHERE c.id = $1
+       ORDER BY (q.status IN ('Pagado', 'Embalado', 'Enviado')) DESC, q.created_at DESC
+       LIMIT 1`,
+      [customerId]
+    );
+    if (result.rowCount === 0) return res.json({ order: null });
+    const row = result.rows[0];
+    const items = (Array.isArray(row.line_items) ? row.line_items : [])
+      .filter((li) => li && li.sku && !li.isIndented)
+      .map((li) => ({ sku: String(li.sku).trim().toUpperCase(), qty: Math.max(1, Number.parseInt(li.qty, 10) || 1), name: li.displayName || li.skuDisplay || li.sku }));
+    res.json({ order: items.length ? { quote_id: Number(row.id), created_at: row.created_at, total: Number(row.total || 0), status: row.status, items } : null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cargar el último pedido' });
+  }
+});
+
 router.get('/api/customers/:id', authenticateToken, async (req, res) => {
   const userContext = await ensureCrmAccess(req, res);
   if (!userContext) return;

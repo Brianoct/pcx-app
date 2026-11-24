@@ -5,6 +5,7 @@ import { canAccessPanel } from './roleAccess';
 import { apiRequest } from './apiClient';
 import { useOutbox } from './OutboxProvider';
 import { useToast } from './ui/toastContext';
+import { useNavigate } from 'react-router-dom';
 const QUOTE_STATUS_OPTIONS = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
 const STORE_OPTIONS = ['Cochabamba', 'Santa Cruz'];
 const DEPARTMENT_OPTIONS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'];
@@ -17,6 +18,23 @@ const PAYMENT_METHOD_OPTIONS = [
 const PAYMENT_ALLOWED_STATUSES = ['Pagado', 'Embalado', 'Enviado'];
 
 function QuoteHistory({ token, role, access, onStatusUpdated }) {
+  const navigate = useNavigate();
+  const canQuote = canAccessPanel(access, 'cotizar');
+  // Repetir: abre Cotizar con el mismo cliente y las mismas líneas (el
+  // precio y el stock se toman de hoy, no de la cotización vieja).
+  const repeatQuote = (quote) => {
+    const items = (Array.isArray(quote?.line_items) ? quote.line_items : [])
+      .filter((li) => li && li.sku && !li.isIndented)
+      .map((li) => ({ sku: li.sku, qty: li.qty }));
+    try {
+      sessionStorage.setItem('pcx.quotePrefill', JSON.stringify({
+        customerName: quote.customer_name,
+        customerPhone: quote.customer_phone,
+        items
+      }));
+    } catch { /* sin storage: se abre Cotizar vacío */ }
+    navigate('/cotizar');
+  };
   const toast = useToast();
   const { enqueueWrite, isWriteIntentError } = useOutbox();
   const [quotes, setQuotes] = useState([]);
@@ -1601,6 +1619,16 @@ function QuoteHistory({ token, role, access, onStatusUpdated }) {
                           >
                             Ver PDF
                           </button>
+                          {canQuote && (
+                            <button
+                              type="button"
+                              onClick={() => repeatQuote(quote)}
+                              className="btn history-pdf-btn history-repeat-btn"
+                              title="Abrir Cotizar con el mismo cliente y los mismos productos"
+                            >
+                              ↻ Repetir
+                            </button>
+                          )}
                           {canMutateQuotes && (
                             <div className="quote-actions-menu" ref={openActionsMenuId === quote.id ? actionsMenuRef : null}>
                               <button

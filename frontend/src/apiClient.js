@@ -107,6 +107,11 @@ export async function apiRequest(path, options = {}) {
         const err = new Error(toErrorMessage(payload, `Error HTTP ${res.status}`));
         err.status = res.status;
         err.payload = payload;
+        // Sesión vencida o inválida: se avisa a la app para volver al login
+        // en vez de dejar todas las pantallas fallando con «Token inválido».
+        if (token && (res.status === 401 || (res.status === 403 && /token inv[aá]lido/i.test(err.message)))) {
+          try { window.dispatchEvent(new CustomEvent('pcx:session-expired')); } catch { /* sin window */ }
+        }
         const canRetryStatus = (
           attempt < maxRetries
           && RETRYABLE_METHODS.has(methodUpper)
