@@ -12826,3 +12826,61 @@ button.vc-kpi {
 .quote-more-wrap { display: flex; align-items: flex-end; padding-bottom: 12px; }
 .quote-uso-row .quote-more-link { align-self: center; }
 .quote-repeat-btn { margin-top: 8px; width: 100%; min-height: 40px; padding: 8px 12px; border-radius: 10px; border: 1px dashed var(--accent-secondary); background: #eff6ff; color: #1d4ed8; font-weight: 700; font-size: 0.86rem; cursor: pointer; text-align: left; }
+
+/* ── Incentivos de ventas por esfuerzo (simulación, solo Admin) ─────────── */
+.incent-banner { background: #fffbeb; border: 1px dashed #f59e0b; color: #92400e; border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 14px; }
+.incent-sub { margin: 4px 0 0; font-size: 0.82rem; color: var(--text-secondary); max-width: 68ch; }
+.incent-title { margin: 20px 0 10px; font-size: 0.78rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+.incent-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 14px; }
+.incent-kpi { background: #fafaf9; border: 1px solid #e7e5e4; border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
+.incent-kpi span { font-size: 0.74rem; color: var(--text-muted); font-weight: 700; }
+.incent-kpi strong { font-size: 1.15rem; }
+.incent-kpi small { font-size: 0.72rem; color: var(--text-muted); }
+.incent-kpi.is-extra { background: #ecfdf5; border-color: #a7f3d0; }
+.incent-kpi.is-extra strong { color: #047857; }
+.incent-rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+.incent-rule { border: 1px solid #e7e5e4; border-radius: 12px; padding: 12px 14px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
+.incent-rule.is-off { opacity: 0.55; background: #fafaf9; }
+.incent-rule-head { display: flex; align-items: center; gap: 8px; font-weight: 800; cursor: pointer; }
+.incent-rule-head input { width: 18px; height: 18px; }
+.incent-rule-desc { margin: 0; font-size: 0.78rem; color: var(--text-secondary); flex: 1; }
+.incent-rule-fields, .incent-settings { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.incent-rule-fields label, .incent-settings label { display: flex; flex-direction: column; gap: 3px; font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }
+.incent-input { display: inline-flex; align-items: center; gap: 6px; }
+.incent-input input { width: 74px; min-height: 36px; padding: 4px 8px; border: 1px solid #d6d3d1; border-radius: 8px; font: inherit; font-weight: 700; color: var(--text-primary); background: #fff; }
+.incent-input em { font-style: normal; font-weight: 600; color: var(--text-secondary); font-size: 0.76rem; }
+.incent-settings { margin-top: 12px; padding: 12px 14px; background: #fafaf9; border-radius: 12px; }
+.incent-max { font-size: 0.78rem; color: var(--text-secondary); flex: 1; min-width: 180px; padding-bottom: 8px; }
+.incent-ok { color: #047857; font-size: 0.82rem; margin: 8px 0 0; }
+.incent-error { color: #b91c1c; font-size: 0.82rem; margin: 8px 0 0; }
+.incent-people { display: flex; flex-direction: column; gap: 12px; }
+.incent-person { border: 1px solid #e7e5e4; border-radius: 14px; padding: 12px 14px; background: #fff; }
+.incent-person-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 10px; }
+.incent-person-name { font-weight: 800; font-size: 1rem; }
+.incent-person-role { font-size: 0.74rem; color: var(--text-muted); }
+.incent-person-money { display: flex; gap: 8px 16px; flex-wrap: wrap; font-size: 0.8rem; color: var(--text-secondary); align-items: baseline; }
+.incent-person-money strong { color: var(--text-primary); }
+.incent-plus strong { color: #047857; }
+.incent-total { background: #ecfdf5; border-radius: 999px; padding: 3px 12px; }
+.incent-total strong { color: #047857; font-size: 0.95rem; }
+.incent-items { display: flex; flex-direction: column; gap: 4px; }
+.incent-item { display: grid; grid-template-columns: 22px minmax(150px, 1.2fr) 130px minmax(160px, 2fr) 56px; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 8px; font-size: 0.8rem; background: #fafaf9; }
+.incent-item.is-green { background: #ecfdf5; }
+.incent-item.is-red { background: #fef2f2; }
+.incent-item-icon { font-weight: 900; text-align: center; }
+.incent-item.is-green .incent-item-icon { color: #047857; }
+.incent-item.is-red .incent-item-icon { color: #b91c1c; }
+.incent-item-label { font-weight: 700; }
+.incent-item-value { font-weight: 800; }
+.incent-item-value small { font-weight: 600; color: var(--text-muted); }
+.incent-item-detail { color: var(--text-secondary); font-size: 0.76rem; }
+.incent-item-bump { text-align: right; font-weight: 800; color: #78716c; }
+.incent-item.is-green .incent-item-bump { color: #047857; }
+.incent-person-foot { margin-top: 8px; font-size: 0.74rem; color: var(--text-muted); }
+.incent-note { margin: 16px 0 0; font-size: 0.76rem; color: var(--text-muted); max-width: 80ch; }
+@media (max-width: 720px) {
+  .incent-item { grid-template-columns: 22px 1fr auto; }
+  .incent-item-detail { grid-column: 2 / -1; }
+  .incent-item-bump { grid-column: 3; grid-row: 1; }
+  .incent-item-value { grid-column: 2; }
+}

@@ -3,6 +3,7 @@ import UserManagement from './UserManagement';
 import RoleConfiguration from './RoleConfiguration';
 import CommissionConfig from './CommissionConfig';
 import PayrollPanel from './PayrollPanel';
+import IncentivosPanel from './IncentivosPanel';
 import CareersAdmin from './CareersAdmin';
 
 // Everything about people lives in one hub: the team itself, what each role
@@ -13,6 +14,7 @@ const VIEWS = [
   { key: 'permisos', label: 'Permisos por rol', hint: 'Qué paneles ve cada rol' },
   { key: 'comisiones', label: 'Comisiones', hint: 'Reglas y control de calidad' },
   { key: 'pagos', label: 'Pagos', hint: 'QR para el cierre de mes' },
+  { key: 'incentivos', label: 'Incentivos', hint: 'Simulación, no se paga' },
   { key: 'convocatorias', label: 'Convocatorias', hint: 'Puestos en la página pública' }
 ];
 
@@ -86,6 +88,8 @@ function UsersRolesAdmin({ token, initialView }) {
           <PayrollPanel token={token} />
         </>
       )}
+
+      {view === 'incentivos' && <IncentivosPanel token={token} />}
 
       {view === 'convocatorias' && (
         <>
