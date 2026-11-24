@@ -42,6 +42,7 @@ const routers = [
   require('./routes/dayplan'),
   require('./routes/mejoras'),
   require('./routes/bono'),
+  require('./routes/incentivos'),
   require('./routes/planning'),
   require('./routes/areaPanels'),
   require('./routes/overview'),
