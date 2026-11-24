@@ -73,6 +73,17 @@ export function AuthProvider({ children }) {
     };
   }, [token, applyUser, logout]);
 
+  // Cualquier petición que el servidor rechace por sesión vencida cierra la
+  // sesión y deja un aviso para la pantalla de ingreso.
+  useEffect(() => {
+    const onExpired = () => {
+      try { sessionStorage.setItem('pcx.sessionExpired', '1'); } catch { /* sin storage */ }
+      logout();
+    };
+    window.addEventListener('pcx:session-expired', onExpired);
+    return () => window.removeEventListener('pcx:session-expired', onExpired);
+  }, [logout]);
+
   const effectiveAccess = useMemo(() => buildAccessForUser(role, access), [role, access]);
 
   const displayName = useMemo(() => {

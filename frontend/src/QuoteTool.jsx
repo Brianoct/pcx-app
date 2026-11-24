@@ -56,6 +56,14 @@ export default function QuoteTool({ token, user }) {
   const [origen, setOrigen] = useState('');
   const [knownCustomer, setKnownCustomer] = useState(null);
   const [origenAuto, setOrigenAuto] = useState('');
+  // Atajos: campos opcionales plegados, cobro al guardar, último pedido del
+  // cliente para repetirlo y la tarjeta de «guardada» con sus acciones.
+  const [showUsoDetalle, setShowUsoDetalle] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [payMethod, setPayMethod] = useState('QR');
+  const [lastOrder, setLastOrder] = useState(null);
+  const [pendingItems, setPendingItems] = useState(null);
+  const [savedInfo, setSavedInfo] = useState(null);
   const phoneDigitsForLookup = String(customerPhone || '').replace(/\D/g, '');
   // Se pregunta el origen solo la primera vez: teléfono nuevo, o cliente sin
   // origen guardado. Las cotizaciones del inbox de WhatsApp lo traen solo.
@@ -284,6 +292,7 @@ export default function QuoteTool({ token, user }) {
     if (!token || digits.length < 7) {
       setCustomerCoupon(null);
       setKnownCustomer(null);
+      setLastOrder(null);
       return undefined;
     }
     let active = true;
@@ -299,6 +308,9 @@ export default function QuoteTool({ token, user }) {
           const match = (data?.customers || []).find((c) => String(c.phone || '').replace(/\D/g, '') === digits) || null;
           setKnownCustomer(match);
           if (match) {
+            apiRequest(`/api/customers/${match.id}/last-order`, { token })
+              .then((res) => { if (active) setLastOrder(res?.order || null); })
+              .catch(() => { if (active) setLastOrder(null); });
             setUso((prev) => prev || match.last_uso || match.segmento || '');
             setUsoDetalle((prev) => prev || match.last_uso_detalle || '');
             setOrigen((prev) => prev || match.origen || '');
@@ -434,6 +446,53 @@ export default function QuoteTool({ token, user }) {
       row.id === rowId ? { ...row, qty, lineTotal: (row.unitPrice || 0) * (qty || 0) } : row
     ));
   };
+
+  // Carga líneas a partir de [{ sku, qty }] (repetir pedido). Los productos
+  // que ya no existen se saltan y se avisa.
+  const loadRowsFromItems = async (items = []) => {
+    const built = [];
+    const missing = [];
+    for (const it of items) {
+      const sku = String(it?.sku || '').trim().toUpperCase();
+      const qty = Math.max(1, Number.parseInt(it?.qty, 10) || 1);
+      const item = findItem(sku);
+      if (!item) { if (sku) missing.push(sku); continue; }
+      const unitPrice = unitPriceFor(item);
+      built.push({
+        id: Date.now() + built.length,
+        sku,
+        skuDisplay: item.displayName,
+        qty,
+        unitPrice,
+        lineTotal: unitPrice * qty,
+        availableStock: null,
+        isCombo: item.isCombo || false,
+        comboItems: item.isCombo ? item.items : undefined
+      });
+    }
+    if (built.length === 0) {
+      toast.error('Los productos de ese pedido ya no están en el catálogo.');
+      return;
+    }
+    setRows(built);
+    if (missing.length > 0) toast.info(`No se cargaron (ya no están en catálogo): ${missing.join(', ')}`);
+    else toast.success(`Pedido cargado: ${built.length} producto${built.length === 1 ? '' : 's'}. Revisa cantidades y precios.`);
+    if (almacen) {
+      for (const row of built) {
+        const item = findItem(row.sku);
+        const availableStock = item?.isCombo ? await fetchComboAvailableStock(item, almacen) : await fetchStock(row.sku, almacen);
+        setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, availableStock } : r)));
+      }
+    }
+  };
+
+  // Pedido a repetir que llegó desde Historial: espera a que cargue el catálogo.
+  useEffect(() => {
+    if (!pendingItems || products.length === 0) return;
+    loadRowsFromItems(pendingItems);
+    setPendingItems(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingItems, products.length]);
 
   const addRow = () => {
     const newRow = { id: Date.now(), sku: '', skuDisplay: '', qty: 1, unitPrice: 0, lineTotal: 0, availableStock: null, isCombo: false };
@@ -641,7 +700,7 @@ export default function QuoteTool({ token, user }) {
     if (typeof values.destQuery === 'string') setDestQuery(values.destQuery);
     if (typeof values.destFallback === 'boolean') setDestFallback(values.destFallback);
     if (typeof values.fallbackCiudad === 'string') setFallbackCiudad(values.fallbackCiudad);
-    if (typeof values.almacen === 'string') setAlmacen(values.almacen);
+    if (typeof values.almacen === 'string' && values.almacen) setAlmacen(values.almacen);
     if (typeof values.shippingNotes === 'string') setShippingNotes(values.shippingNotes);
     if (typeof values.assignedSellerId === 'string') setAssignedSellerId(values.assignedSellerId);
     if (typeof values.selectedCouponCode === 'string') setSelectedCouponCode(values.selectedCouponCode);
@@ -669,6 +728,7 @@ export default function QuoteTool({ token, user }) {
       if (prefill?.customerName) setCustomerName(String(prefill.customerName).slice(0, 80));
       if (prefill?.customerPhone) setCustomerPhone(String(prefill.customerPhone).slice(0, 40));
       if (prefill?.conversationId) { setWhatsappConversationId(Number(prefill.conversationId)); setOrigenAuto('whatsapp'); setOrigen((prev) => prev || 'whatsapp'); }
+      if (Array.isArray(prefill?.items) && prefill.items.length > 0) setPendingItems(prefill.items);
       if (prefill?.origen) { setOrigenAuto(String(prefill.origen)); setOrigen((prev) => prev || String(prefill.origen)); }
       // GPS del chat de WhatsApp: llega listo para cotizar el envío local.
       if (prefill?.gps) setDeliveryInput(String(prefill.gps).slice(0, 120));
@@ -740,6 +800,9 @@ export default function QuoteTool({ token, user }) {
       blockers.push('Hay líneas sin producto, precio o cantidad.');
     }
     for (const r of rows) {
+      // Sin almacén o sin stock consultado todavía no hay nada que comparar
+      // (Number(null) es 0 y antes salía «hay 0» por error).
+      if (!almacen || r.availableStock === null || r.availableStock === undefined) continue;
       const availableStock = Number(r.availableStock);
       if (!Number.isFinite(availableStock)) continue;
       if (Number(r.qty || 0) > availableStock) {
@@ -783,8 +846,12 @@ export default function QuoteTool({ token, user }) {
     setDestQuery('');
     setDestFallback(false);
     setFallbackCiudad('');
-    setAlmacen('');
+    // El almacén se conserva: casi siempre se cotiza del mismo, y dejarlo
+    // vacío mostraba «Stock insuficiente… hay 0» en la segunda cotización.
     setShippingNotes('');
+    setShowNotes(false);
+    setShowUsoDetalle(false);
+    setLastOrder(null);
     if (requiresSellerAssignment && Array.isArray(salesUsers) && salesUsers.length > 0) {
       setAssignedSellerId(String(salesUsers[0].id));
     } else {
@@ -793,13 +860,14 @@ export default function QuoteTool({ token, user }) {
     clearDraftState(draftStorageKey);
   };
 
-  const saveAndGeneratePDF = async () => {
+  const saveAndGeneratePDF = async ({ paid = false } = {}) => {
     if (isSavingRef.current) return;
     if (!canSave) {
       toast.error('Completa todos los campos obligatorios del cliente y verifica que todas las líneas tengan producto y cantidad.');
       return;
     }
     const insufficientStockRows = rows.filter((row) => {
+      if (row.availableStock === null || row.availableStock === undefined) return false;
       const availableStock = Number(row.availableStock);
       if (!Number.isFinite(availableStock)) return false;
       return Number(row.qty || 0) > availableStock;
@@ -917,7 +985,9 @@ export default function QuoteTool({ token, user }) {
       delivery_gps: deliveryFee > 0 ? (deliveryQuote?.gps || null) : null,
       rows: rowsWithDisplay,
       subtotal,
-      total: grandTotal
+      total: grandTotal,
+      // «Guardar como pagado»: nace cobrada (descuenta stock y entra a comisión).
+      ...(paid ? { status: 'Pagado' } : {})
     };
 
     try {
@@ -961,6 +1031,14 @@ export default function QuoteTool({ token, user }) {
       }
 
       const quoteNumber = savedData?.id || savedData?.quote?.id || null;
+      if (paid && quoteNumber) {
+        try {
+          await apiRequest(`/api/quotes/${quoteNumber}/payment-method`, { method: 'PATCH', token, body: { payment_method: payMethod } });
+        } catch (payErr) {
+          console.error('No se pudo guardar el método de pago:', payErr);
+          toast.info('Venta guardada como pagada; el método de pago se puede marcar en Historial.');
+        }
+      }
       // Cartera: the backend may have credited the sale to the customer's rep.
       if (savedData?.assigned_to) {
         toast.info(`Cliente de cartera: la venta se asignó a ${savedData.assigned_to}.`);
@@ -1041,14 +1119,56 @@ export default function QuoteTool({ token, user }) {
         toast.success('Cotización guardada y PDF generado');
       }
 
+      // Tarjeta de «guardada»: compartir el PDF o escribir al cliente sin salir.
+      try {
+        setSavedInfo({
+          quoteNumber,
+          customerName,
+          customerPhone,
+          total: grandTotal,
+          paid,
+          filename: pdfFilename,
+          blob: pdfDoc ? pdfDoc.output('blob') : null
+        });
+      } catch {
+        setSavedInfo({ quoteNumber, customerName, customerPhone, total: grandTotal, paid, filename: pdfFilename, blob: null });
+      }
       setWhatsappConversationId(null);
       resetQuoteForm();
+      if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error('Error completo al guardar:', err);
-      toast.error('Error al guardar: ' + (err.message || 'Error desconocido'));
+      if (err?.status === 401 || /token inv[aá]lido/i.test(String(err?.message || ''))) {
+        toast.error('Tu sesión venció. Vuelve a ingresar; lo que escribiste queda guardado como borrador.');
+      } else {
+        toast.error('Error al guardar: ' + (err.message || 'Error desconocido'));
+      }
     } finally {
       isSavingRef.current = false;
       setIsSaving(false);
+    }
+  };
+
+  // Tarjeta de «guardada»: enlace de WhatsApp al cliente y compartir el PDF.
+  const savedWaUrl = (() => {
+    if (!savedInfo) return '';
+    let digits = String(savedInfo.customerPhone || '').replace(/\D/g, '');
+    if (digits.length === 8) digits = `591${digits}`;
+    if (digits.length < 10) return '';
+    const text = `Hola ${String(savedInfo.customerName || '').split(' ')[0]}, te envío tu cotización${savedInfo.quoteNumber ? ` #${savedInfo.quoteNumber}` : ''} de PCX por ${Number(savedInfo.total || 0).toFixed(2)} Bs. Cualquier consulta me avisas.`;
+    return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+  })();
+  const sharePdf = async () => {
+    if (!savedInfo?.blob) return;
+    try {
+      const file = new File([savedInfo.blob], savedInfo.filename || 'cotizacion.pdf', { type: 'application/pdf' });
+      if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+        toast.info('Este dispositivo no permite compartir archivos. El PDF ya está en tus descargas.');
+        return;
+      }
+      await navigator.share({ files: [file], title: savedInfo.filename, text: `Cotización PCX${savedInfo.quoteNumber ? ` #${savedInfo.quoteNumber}` : ''}` });
+    } catch (shareErr) {
+      if (shareErr?.name !== 'AbortError') toast.info('No se pudo compartir. El PDF ya está en tus descargas.');
     }
   };
 
@@ -1104,6 +1224,23 @@ export default function QuoteTool({ token, user }) {
 
   return (
     <div className="container">
+      {savedInfo && (
+        <div className="quote-saved-card" role="status">
+          <div>
+            <strong>✅ {savedInfo.paid ? 'Venta' : 'Cotización'}{savedInfo.quoteNumber ? ` #${savedInfo.quoteNumber}` : ''} guardada{savedInfo.paid ? ' como pagada' : ''}</strong>
+            <span>{savedInfo.customerName} · {Number(savedInfo.total || 0).toFixed(2)} Bs · el PDF ya se descargó</span>
+          </div>
+          <div className="quote-saved-actions">
+            {savedInfo.blob && typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+              <button type="button" className="btn btn-primary" onClick={sharePdf}>📤 Compartir PDF</button>
+            )}
+            {savedWaUrl && (
+              <a className="btn btn-secondary" href={savedWaUrl} target="_blank" rel="noopener noreferrer">💬 WhatsApp al cliente</a>
+            )}
+            <button type="button" className="btn btn-secondary" onClick={() => setSavedInfo(null)}>Cerrar</button>
+          </div>
+        </div>
+      )}
       {whatsappConversationId && (
         <div style={{
           marginBottom: '12px',
@@ -1204,16 +1341,25 @@ export default function QuoteTool({ token, user }) {
                   <option value="">Elegir…</option>
                   {USOS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
                 </select>
-                <input
-                  type="text"
-                  className="form-input"
-                  maxLength={120}
-                  placeholder="Detalle (ej. taller de motos)"
-                  value={usoDetalle}
-                  onChange={(e) => setUsoDetalle(e.target.value)}
-                  aria-label="Detalle del uso"
-                />
+                {(showUsoDetalle || usoDetalle) ? (
+                  <input
+                    type="text"
+                    className="form-input"
+                    maxLength={120}
+                    placeholder="Detalle (ej. taller de motos)"
+                    value={usoDetalle}
+                    onChange={(e) => setUsoDetalle(e.target.value)}
+                    aria-label="Detalle del uso"
+                  />
+                ) : (
+                  <button type="button" className="quote-more-link" onClick={() => setShowUsoDetalle(true)}>+ detalle</button>
+                )}
               </div>
+              {lastOrder && rows.filter((r) => r.sku).length === 0 && (
+                <button type="button" className="quote-repeat-btn" onClick={() => loadRowsFromItems(lastOrder.items)}>
+                  ↻ Repetir su último pedido · {lastOrder.items.length} producto{lastOrder.items.length === 1 ? '' : 's'} · {Number(lastOrder.total || 0).toFixed(0)} Bs
+                </button>
+              )}
               {knownCustomer && (knownCustomer.last_uso || knownCustomer.segmento) && (
                 <div className="form-hint">Cliente conocido · última vez: {(USOS.find((u) => u.key === (knownCustomer.last_uso || knownCustomer.segmento)) || {}).label}</div>
               )}
@@ -1406,20 +1552,26 @@ export default function QuoteTool({ token, user }) {
               </div>
             )}
 
-            <div>
-              <label className="form-label">Notas de envío (opcional)</label>
-              <input
-                type="text"
-                maxLength={120}
-                placeholder="Instrucciones, referencias..."
-                value={shippingNotes}
-                onChange={(e) => setShippingNotes(e.target.value)}
-                className="form-input"
-              />
-              {shippingNotes.length >= 110 && (
-                <div className="form-counter limit">{shippingNotes.length}/120</div>
-              )}
-            </div>
+            {(showNotes || shippingNotes) ? (
+              <div>
+                <label className="form-label">Notas de envío (opcional)</label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  placeholder="Instrucciones, referencias..."
+                  value={shippingNotes}
+                  onChange={(e) => setShippingNotes(e.target.value)}
+                  className="form-input"
+                />
+                {shippingNotes.length >= 110 && (
+                  <div className="form-counter limit">{shippingNotes.length}/120</div>
+                )}
+              </div>
+            ) : (
+              <div className="quote-more-wrap">
+                <button type="button" className="quote-more-link" onClick={() => setShowNotes(true)}>+ Agregar notas de envío</button>
+              </div>
+            )}
 
             <div className="quote-altname-cell">
               <label className="form-check-label">
@@ -1948,7 +2100,7 @@ export default function QuoteTool({ token, user }) {
             <button
               type="button"
               disabled={!canSave || isSaving}
-              onClick={saveAndGeneratePDF}
+              onClick={() => saveAndGeneratePDF()}
               className="btn btn-primary"
               style={{
                 width: '100%',
@@ -1961,6 +2113,22 @@ export default function QuoteTool({ token, user }) {
             >
               {isSaving ? 'Guardando...' : 'Guardar y generar PDF'}
             </button>
+
+            {/* Venta de mostrador: guardar ya cobrada, sin pasar por Historial. */}
+            <div className="quote-paid-row">
+              <button
+                type="button"
+                className="btn quote-paid-btn"
+                disabled={!canSave || isSaving}
+                onClick={() => saveAndGeneratePDF({ paid: true })}
+              >
+                💵 Guardar como pagado
+              </button>
+              <select className="form-select quote-paid-method" value={payMethod} onChange={(e) => setPayMethod(e.target.value)} aria-label="Método de pago">
+                <option value="QR">QR</option>
+                <option value="Efectivo">Efectivo</option>
+              </select>
+            </div>
 
             {!canSave && (
               <div className="quote-save-blockers">

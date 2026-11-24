@@ -20,7 +20,15 @@ function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => {
+    try {
+      if (sessionStorage.getItem('pcx.sessionExpired') === '1') {
+        sessionStorage.removeItem('pcx.sessionExpired');
+        return 'Tu sesión venció. Ingresa de nuevo; tu cotización en curso quedó guardada como borrador.';
+      }
+    } catch { /* sin storage */ }
+    return '';
+  });
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e) => {
