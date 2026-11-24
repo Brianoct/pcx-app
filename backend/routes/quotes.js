@@ -6,6 +6,7 @@ const { FINALIZED_QUOTE_STATUSES, QUOTE_PAYMENT_ALLOWED_STATUSES, QUOTE_PAYMENT_
 const { ROLE_KEYS, canAccessPanel, normalizeRole, normalizeText, sanitizePanelAccess } = require('../lib/rbac');
 const { findCustomerOwnerByPhone, markCustomerWonByPhone, upsertCustomerFromQuote } = require('../lib/customers');
 const { applySegmentationFromQuote, parseQuoteSegmentation } = require('../lib/segmentacion');
+const { syncCommissionLedger } = require('../lib/commissionLedger');
 const { applyPromosToNewQuote, refreshAccessoryDiscountSnapshot, refreshCodeAggregate, syncPromoTicketsForQuote, validateCouponForRedemption } = require('../lib/promos');
 const { resolveGeoDestination } = require('../lib/geo');
 const { loadUserContext, resolveUserDisplayName } = require('../lib/users');
@@ -368,6 +369,9 @@ router.post('/api/quotes', authenticateToken, async (req, res) => {
     if (FINALIZED_QUOTE_STATUSES.includes(normalizedStatus)) {
       await deductStockForQuote(client, quoteId, store_location, lineItemsWithDisplay, giftSelection);
     }
+
+    // Comisión: si nace cobrada, entra al libro en el mes abierto.
+    await syncCommissionLedger(client, quoteId);
 
     await client.query('COMMIT');
 
@@ -866,6 +870,9 @@ router.patch('/api/quotes/:id/status', authenticateToken, async (req, res) => {
       [status, req.params.id, req.user.id]
     );
 
+    // Comisión: cobro, envío o reverso según el nuevo estado.
+    await syncCommissionLedger(client, req.params.id);
+
     await client.query('COMMIT');
 
     // Venta cobrada → el trato pasa a Ganado en el Embudo (no bloqueante).
@@ -1287,6 +1294,9 @@ router.put('/api/quotes/:id', authenticateToken, async (req, res) => {
       await client.query('UPDATE quotes SET promos = $1 WHERE id = $2', [JSON.stringify(refreshedPromos), quoteId]);
     }
 
+    // Comisión: si cambió el total, el vendedor o el estado, el libro se ajusta.
+    await syncCommissionLedger(client, quoteId);
+
     await client.query('COMMIT');
 
     // CRM: corrected name/phone on edit also refreshes the customer book.
@@ -1360,6 +1370,8 @@ router.delete('/api/quotes/:id', authenticateToken, async (req, res) => {
       'SELECT DISTINCT code_id FROM promo_code_quotes WHERE quote_id = $1',
       [quoteId]
     );
+    // Comisión: borrar una venta cobrada la revierte en el mes abierto.
+    await syncCommissionLedger(client, quoteId, { deleted: true });
     await client.query('DELETE FROM quotes WHERE id = $1', [quoteId]);
     for (const row of affectedCodesRes.rows) {
       await refreshCodeAggregate(client, row.code_id);

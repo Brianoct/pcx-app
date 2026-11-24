@@ -8,6 +8,10 @@ const { ROLE_KEYS, normalizeRole, sanitizePanelAccess } = require('../lib/rbac')
 const { COMPLETED_STATUSES, buildDateFilter, buildReportingCreatedAtExpr } = require('../lib/reporting');
 const { loadUserContext } = require('../lib/users');
 
+const { KIND_SALE, KIND_SHIPMENT, PAID_STATUSES, getClosure, listClosures } = require('../lib/commissionLedger');
+// La comisión se calcula sobre el libro (commission_entries), no sobre quotes.
+const COMMISSION_SALE_KINDS = [KIND_SALE];
+
 const router = express.Router();
 
 // ─── Performance ────────────────────────────────────────────────────────────
@@ -90,6 +94,22 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
   if (almacenDateFilter.error) return res.status(400).json({ error: almacenDateFilter.error });
 
   try {
+    // Mes cerrado: se devuelve lo que quedó en la foto del cierre.
+    const closedMonth = Number.parseInt(month, 10);
+    const closedYear = Number.parseInt(year, 10);
+    if (Number.isInteger(closedMonth) && Number.isInteger(closedYear)) {
+      const closure = await getClosure(closedYear, closedMonth);
+      if (closure) {
+        const mine = (closure.snapshot?.users || []).find((u) => Number(u.user_id) === Number(req.user.id));
+        return res.json({
+          commission: Number(mine?.commission || 0),
+          isTopSeller: Boolean(mine?.is_top_seller),
+          topSellerEmail: null,
+          closed: true,
+          breakdown: { role: req.user.role, rate: null, source: `${mine?.source || 'Sin comisión'} · mes cerrado` }
+        });
+      }
+    }
     const commissionSettings = await loadCommissionSettings();
     const rateVentasLider = Number(commissionSettings.ventas_lider_percent || 0) / 100;
     const rateVentasTop = Number(commissionSettings.ventas_top_percent || 0) / 100;
@@ -104,9 +124,9 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
     // of this (the per-piece QC commission was retired).
     const allSalesRes = await pool.query(
       `SELECT COALESCE(SUM(q.total), 0) AS total_sales
-       FROM quotes q
-       WHERE q.status = ANY($1::text[])${allSalesDateFilter.sql}`,
-      [COMPLETED_STATUSES, ...allSalesDateFilter.params]
+       FROM commission_entries q
+       WHERE q.kind = ANY($1::text[])${allSalesDateFilter.sql}`,
+      [COMMISSION_SALE_KINDS, ...allSalesDateFilter.params]
     );
     const allSales = Number(allSalesRes.rows[0]?.total_sales || 0);
 
@@ -142,12 +162,12 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
       // Ventas Lider: configurable % on own sales + all users with exactly Ventas role.
       const teamSalesRes = await pool.query(
         `SELECT COALESCE(SUM(q.total), 0) AS total_sales
-         FROM quotes q
+         FROM commission_entries q
          JOIN users u ON u.id = q.user_id
-         WHERE q.status = ANY($1::text[])
+         WHERE q.kind = ANY($1::text[])
            AND u.is_active = TRUE
            AND (LOWER(u.role) = $2 OR u.id = $3)${teamDateFilter.sql}`,
-        [COMPLETED_STATUSES, ROLE_KEYS.ventas, req.user.id, ...teamDateFilter.params]
+        [COMMISSION_SALE_KINDS, ROLE_KEYS.ventas, req.user.id, ...teamDateFilter.params]
       );
       const teamSales = Number(teamSalesRes.rows[0]?.total_sales || 0);
       return res.json({
@@ -166,10 +186,10 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
     if (isSalesSeller) {
       const ownSalesRes = await pool.query(
         `SELECT COALESCE(SUM(q.total), 0) AS total_sales
-         FROM quotes q
+         FROM commission_entries q
          WHERE q.user_id = $1
-           AND q.status = ANY($2::text[])${ownDateFilter.sql}`,
-        [req.user.id, COMPLETED_STATUSES, ...ownDateFilter.params]
+           AND q.kind = ANY($2::text[])${ownDateFilter.sql}`,
+        [req.user.id, COMMISSION_SALE_KINDS, ...ownDateFilter.params]
       );
       const ownSales = Number(ownSalesRes.rows[0]?.total_sales || 0);
 
@@ -179,15 +199,15 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
            u.email AS email,
            COALESCE(SUM(q.total), 0) AS total_sales
          FROM users u
-         LEFT JOIN quotes q
+         LEFT JOIN commission_entries q
            ON q.user_id = u.id
-           AND q.status = ANY($1::text[])${allSalesDateFilter.sql}
+           AND q.kind = ANY($1::text[])${allSalesDateFilter.sql}
          WHERE LOWER(u.role) IN ('ventas', 'sales', 'vendedor')
            AND u.is_active = TRUE
          GROUP BY u.id, u.email
          ORDER BY total_sales DESC, u.id ASC
          LIMIT 1`,
-        [COMPLETED_STATUSES, ...allSalesDateFilter.params]
+        [COMMISSION_SALE_KINDS, ...allSalesDateFilter.params]
       );
 
       const topSeller = rankingRes.rows[0] || null;
@@ -212,12 +232,12 @@ router.get('/api/commission/current', authenticateToken, async (req, res) => {
       const localStore = cityScope?.canonical || userContext.city || '';
       const localSalesRes = await pool.query(
         `SELECT COALESCE(SUM(q.total), 0) AS total_sales
-         FROM quotes q
-         WHERE q.status = $1
+         FROM commission_entries q
+         WHERE q.kind = $1
            AND LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '[^a-z0-9]+', '', 'g'))
                LIKE '%' || LOWER(REGEXP_REPLACE($2::text, '[^a-z0-9]+', '', 'g')) || '%'
            ${almacenDateFilter.sql}`,
-        ['Enviado', localStore, ...almacenDateFilter.params]
+        [KIND_SHIPMENT, localStore, ...almacenDateFilter.params]
       );
       const localSales = Number(localSalesRes.rows[0]?.total_sales || 0);
       return res.json({
@@ -279,6 +299,69 @@ router.get('/api/admin/team-commissions', authenticateToken, async (req, res) =>
   }
 });
 
+// ─── Cierre de mes de comisiones (admin) ────────────────────────────────────
+// Cerrar guarda la foto de lo que le toca a cada persona; desde ahí ese mes no
+// se mueve y todo cobro, reverso o ajuste posterior cae en el mes abierto.
+const parsePeriod = (body = {}) => {
+  const month = Number.parseInt(body.month, 10);
+  const year = Number.parseInt(body.year, 10);
+  if (!Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(year) || year < 2000 || year > 3000) return null;
+  return { month, year };
+};
+
+router.get('/api/admin/commission-closures', authenticateToken, async (req, res) => {
+  if (normalizeRole(req.user.role || '') !== ROLE_KEYS.admin) return res.status(403).json({ error: 'Solo administradores' });
+  try {
+    res.json({ closures: await listClosures() });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudieron cargar los cierres' });
+  }
+});
+
+router.post('/api/admin/commission-closures', authenticateToken, async (req, res) => {
+  if (normalizeRole(req.user.role || '') !== ROLE_KEYS.admin) return res.status(403).json({ error: 'Solo administradores' });
+  const period = parsePeriod(req.body);
+  if (!period) return res.status(400).json({ error: 'Mes o año inválido' });
+  try {
+    const nowRes = await pool.query(
+      `SELECT EXTRACT(YEAR FROM timezone('America/La_Paz', NOW()))::int AS y, EXTRACT(MONTH FROM timezone('America/La_Paz', NOW()))::int AS m`
+    );
+    const { y, m } = nowRes.rows[0];
+    if (period.year > y || (period.year === y && period.month > m)) {
+      return res.status(400).json({ error: 'No se puede cerrar un mes futuro' });
+    }
+    if (await getClosure(period.year, period.month)) return res.status(409).json({ error: 'Ese mes ya está cerrado' });
+    const live = await computeTeamCommissions(period.month, period.year, { live: true });
+    if (live?.error) return res.status(400).json({ error: live.error });
+    await pool.query(
+      `INSERT INTO commission_closures (period_year, period_month, snapshot, closed_by) VALUES ($1, $2, $3::jsonb, $4)`,
+      [period.year, period.month, JSON.stringify({ users: live.users, all_sales: live.all_sales }), req.user.id]
+    );
+    res.status(201).json(await computeTeamCommissions(period.month, period.year));
+  } catch (err) {
+    if (err?.code === '23505') return res.status(409).json({ error: 'Ese mes ya está cerrado' });
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo cerrar el mes' });
+  }
+});
+
+// Reabrir: por si se cerró por error. Lo que ya se pasó al mes siguiente se
+// queda ahí; el mes vuelve a calcularse en vivo.
+router.delete('/api/admin/commission-closures', authenticateToken, async (req, res) => {
+  if (normalizeRole(req.user.role || '') !== ROLE_KEYS.admin) return res.status(403).json({ error: 'Solo administradores' });
+  const period = parsePeriod(req.query);
+  if (!period) return res.status(400).json({ error: 'Mes o año inválido' });
+  try {
+    const del = await pool.query('DELETE FROM commission_closures WHERE period_year = $1 AND period_month = $2', [period.year, period.month]);
+    if (del.rowCount === 0) return res.status(404).json({ error: 'Ese mes no está cerrado' });
+    res.json(await computeTeamCommissions(period.month, period.year));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo reabrir el mes' });
+  }
+});
+
 // ─── Current user commission orders (debug/details) ─────────────────────────
 router.get('/api/commission/current/orders', authenticateToken, async (req, res) => {
   const { month, year } = req.query;
@@ -301,15 +384,17 @@ router.get('/api/commission/current/orders', authenticateToken, async (req, res)
       const cityScope = resolveInventoryScopeByCity(userContext.city || '');
       const localStore = cityScope?.canonical || userContext.city || '';
       const result = await pool.query(
-        `SELECT q.id, q.created_at, q.customer_name, q.total, q.status, q.store_location, q.user_id, u.email AS seller_email
-         FROM quotes q
+        `SELECT q.quote_id AS id, q.created_at, qq.created_at AS quote_created_at, qq.customer_name, q.total, qq.status, q.reason,
+                q.store_location, q.user_id, u.email AS seller_email
+         FROM commission_entries q
+         LEFT JOIN quotes qq ON qq.id = q.quote_id
          LEFT JOIN users u ON u.id = q.user_id
-         WHERE q.status = $1
+         WHERE q.kind = $1
            AND LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '[^a-z0-9]+', '', 'g'))
                LIKE '%' || LOWER(REGEXP_REPLACE($2::text, '[^a-z0-9]+', '', 'g')) || '%'
            ${almacenDateFilter.sql}
          ORDER BY q.created_at DESC, q.id DESC`,
-        ['Enviado', localStore, ...almacenDateFilter.params]
+        [KIND_SHIPMENT, localStore, ...almacenDateFilter.params]
       );
       const totalSales = result.rows.reduce((acc, row) => acc + Number(row.total || 0), 0);
       return res.json({
@@ -333,20 +418,22 @@ router.get('/api/commission/current/orders', authenticateToken, async (req, res)
       if (ownDateFilter.error) return res.status(400).json({ error: ownDateFilter.error });
 
       const result = await pool.query(
-        `SELECT q.id, q.created_at, q.customer_name, q.total, q.status, q.store_location, q.user_id, u.email AS seller_email
-         FROM quotes q
+        `SELECT q.quote_id AS id, q.created_at, qq.created_at AS quote_created_at, qq.customer_name, q.total, qq.status, q.reason,
+                q.store_location, q.user_id, u.email AS seller_email
+         FROM commission_entries q
+         LEFT JOIN quotes qq ON qq.id = q.quote_id
          LEFT JOIN users u ON u.id = q.user_id
          WHERE q.user_id = $1
-           AND q.status = ANY($2::text[])${ownDateFilter.sql}
+           AND q.kind = ANY($2::text[])${ownDateFilter.sql}
          ORDER BY q.created_at DESC, q.id DESC`,
-        [req.user.id, COMPLETED_STATUSES, ...ownDateFilter.params]
+        [req.user.id, COMMISSION_SALE_KINDS, ...ownDateFilter.params]
       );
       const totalSales = result.rows.reduce((acc, row) => acc + Number(row.total || 0), 0);
       return res.json({
         role: req.user.role,
         criteria: {
           user_id: req.user.id,
-          statuses: COMPLETED_STATUSES,
+          statuses: PAID_STATUSES,
           month: month !== undefined ? Number.parseInt(month, 10) : null,
           year: year !== undefined ? Number.parseInt(year, 10) : null
         },
@@ -362,20 +449,22 @@ router.get('/api/commission/current/orders', authenticateToken, async (req, res)
       if (teamDateFilter.error) return res.status(400).json({ error: teamDateFilter.error });
 
       const result = await pool.query(
-        `SELECT q.id, q.created_at, q.customer_name, q.total, q.status, q.store_location, q.user_id, u.email AS seller_email
-         FROM quotes q
+        `SELECT q.quote_id AS id, q.created_at, qq.created_at AS quote_created_at, qq.customer_name, q.total, qq.status, q.reason,
+                q.store_location, q.user_id, u.email AS seller_email
+         FROM commission_entries q
+         LEFT JOIN quotes qq ON qq.id = q.quote_id
          JOIN users u ON u.id = q.user_id
-         WHERE q.status = ANY($1::text[])
+         WHERE q.kind = ANY($1::text[])
            AND u.is_active = TRUE
            AND (LOWER(u.role) = $2 OR u.id = $3)${teamDateFilter.sql}
          ORDER BY q.created_at DESC, q.id DESC`,
-        [COMPLETED_STATUSES, ROLE_KEYS.ventas, req.user.id, ...teamDateFilter.params]
+        [COMMISSION_SALE_KINDS, ROLE_KEYS.ventas, req.user.id, ...teamDateFilter.params]
       );
       const totalSales = result.rows.reduce((acc, row) => acc + Number(row.total || 0), 0);
       return res.json({
         role: req.user.role,
         criteria: {
-          statuses: COMPLETED_STATUSES,
+          statuses: PAID_STATUSES,
           team_role: ROLE_KEYS.ventas,
           include_own_user_id: req.user.id,
           month: month !== undefined ? Number.parseInt(month, 10) : null,
@@ -393,18 +482,20 @@ router.get('/api/commission/current/orders', authenticateToken, async (req, res)
       if (allSalesDateFilter.error) return res.status(400).json({ error: allSalesDateFilter.error });
 
       const result = await pool.query(
-        `SELECT q.id, q.created_at, q.customer_name, q.total, q.status, q.store_location, q.user_id, u.email AS seller_email
-         FROM quotes q
+        `SELECT q.quote_id AS id, q.created_at, qq.created_at AS quote_created_at, qq.customer_name, q.total, qq.status, q.reason,
+                q.store_location, q.user_id, u.email AS seller_email
+         FROM commission_entries q
+         LEFT JOIN quotes qq ON qq.id = q.quote_id
          LEFT JOIN users u ON u.id = q.user_id
-         WHERE q.status = ANY($1::text[])${allSalesDateFilter.sql}
+         WHERE q.kind = ANY($1::text[])${allSalesDateFilter.sql}
          ORDER BY q.created_at DESC, q.id DESC`,
-        [COMPLETED_STATUSES, ...allSalesDateFilter.params]
+        [COMMISSION_SALE_KINDS, ...allSalesDateFilter.params]
       );
       const totalSales = result.rows.reduce((acc, row) => acc + Number(row.total || 0), 0);
       return res.json({
         role: req.user.role,
         criteria: {
-          statuses: COMPLETED_STATUSES,
+          statuses: PAID_STATUSES,
           month: month !== undefined ? Number.parseInt(month, 10) : null,
           year: year !== undefined ? Number.parseInt(year, 10) : null
         },
@@ -469,17 +560,17 @@ router.get('/api/ventas/comisiones', authenticateToken, async (req, res) => {
     const result = await pool.query(
       `SELECT u.id AS user_id, u.email, u.display_name, u.role,
               to_char(date_trunc('month', ${createdExpr}), 'YYYY-MM') AS month_start,
-              COUNT(q.id) AS closed_count,
+              COUNT(DISTINCT q.quote_id) FILTER (WHERE q.total > 0) AS closed_count,
               COALESCE(SUM(q.total), 0) AS total_sales
        FROM users u
-       LEFT JOIN quotes q ON q.user_id = u.id
-         AND q.status = ANY($1::text[])
+       LEFT JOIN commission_entries q ON q.user_id = u.id
+         AND q.kind = ANY($1::text[])
          AND date_trunc('month', ${createdExpr}) >= $2::date
          AND date_trunc('month', ${createdExpr}) < $3::date
        WHERE u.is_active = TRUE
          AND (u.role ILIKE '%ventas%' OR u.role ILIKE '%sales%' OR u.role ILIKE '%vendedor%')
        GROUP BY u.id, u.email, u.display_name, u.role, month_start`,
-      [COMPLETED_STATUSES, toDateStr(windowStart), toDateStr(windowEnd)]
+      [COMMISSION_SALE_KINDS, toDateStr(windowStart), toDateStr(windowEnd)]
     );
 
     const settings = await loadCommissionSettings();

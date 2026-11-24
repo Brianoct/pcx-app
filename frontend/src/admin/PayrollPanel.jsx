@@ -23,6 +23,10 @@ function PayrollPanel({ token }) {
   const [zoom, setZoom] = useState(null);
   const now = new Date();
   const [period, setPeriod] = useState({ month: now.getMonth() + 1, year: now.getFullYear() });
+  // Cierre de mes: { closed, closed_at, closed_by } del periodo elegido.
+  const [closure, setClosure] = useState({ closed: false });
+  const [closing, setClosing] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -39,6 +43,7 @@ function PayrollPanel({ token }) {
         setCommissions(new Map(
           (commissionsData?.users || []).map((row) => [Number(row.user_id), row])
         ));
+        setClosure({ closed: Boolean(commissionsData?.closed), closed_at: commissionsData?.closed_at || null, closed_by: commissionsData?.closed_by || null });
       } catch (err) {
         if (active) setError(err.message || 'No se pudieron cargar los usuarios');
       } finally {
@@ -46,7 +51,7 @@ function PayrollPanel({ token }) {
       }
     })();
     return () => { active = false; };
-  }, [token, period.month, period.year]);
+  }, [token, period.month, period.year, reloadKey]);
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -70,6 +75,25 @@ function PayrollPanel({ token }) {
       const d = new Date(prev.year, prev.month - 1 + delta, 1);
       return { month: d.getMonth() + 1, year: d.getFullYear() };
     });
+  };
+
+  const isFuture = period.year > now.getFullYear() || (period.year === now.getFullYear() && period.month > now.getMonth() + 1);
+  const toggleClosure = async () => {
+    const closingNow = !closure.closed;
+    const ok = window.confirm(closingNow
+      ? `¿Cerrar las comisiones de ${monthLabel}?\n\nLos montos quedan fijos. Todo lo que se cobre, se revierta o se corrija después se sumará o restará en el siguiente mes abierto.`
+      : `¿Reabrir ${monthLabel}? El mes volverá a calcularse en vivo. Lo que ya pasó al mes siguiente se queda ahí.`);
+    if (!ok) return;
+    setClosing(true);
+    try {
+      if (closingNow) await apiRequest('/api/admin/commission-closures', { method: 'POST', token, body: period });
+      else await apiRequest(`/api/admin/commission-closures?month=${period.month}&year=${period.year}`, { method: 'DELETE', token });
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      window.alert(err.message || 'No se pudo cambiar el cierre');
+    } finally {
+      setClosing(false);
+    }
   };
 
   if (loading) return <div className="card" style={{ color: '#78716c' }}>Cargando datos de pago…</div>;
@@ -101,9 +125,20 @@ function PayrollPanel({ token }) {
         </div>
       </div>
 
-      <div className="payroll-total">
-        Comisiones de {monthLabel}: <strong>{money(totalCommissions)}</strong>
+      <div className={`payroll-total ${closure.closed ? 'is-closed' : ''}`}>
+        <span>
+          Comisiones de {monthLabel}: <strong>{money(totalCommissions)}</strong>
+          {closure.closed
+            ? <span className="payroll-closed-pill">🔒 Mes cerrado{closure.closed_at ? ` el ${new Date(closure.closed_at).toLocaleDateString('es-BO')}` : ''}{closure.closed_by ? ` por ${closure.closed_by}` : ''}</span>
+            : <span className="payroll-open-pill">Mes abierto · cuenta lo cobrado en el mes</span>}
+        </span>
+        {!isFuture && (
+          <button type="button" className={`btn ${closure.closed ? 'btn-secondary' : 'btn-primary'} payroll-close-btn`} onClick={toggleClosure} disabled={closing}>
+            {closing ? '…' : closure.closed ? 'Reabrir mes' : 'Cerrar mes'}
+          </button>
+        )}
       </div>
+      <p className="payroll-rule">La comisión se cuenta por la fecha de cobro (cuando el pedido pasa a Pagado), no por la fecha de la cotización. Almacén cuenta por la fecha de envío. Después del cierre, cobros tardíos, reversos y correcciones entran al mes siguiente.</p>
 
       <div className="payroll-grid">
         {rows.map((u) => {

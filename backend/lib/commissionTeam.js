@@ -2,14 +2,32 @@ const { pool } = require('../db');
 const { loadCommissionSettings } = require('./commission');
 const { resolveInventoryScopeByCity } = require('./inventory');
 const { ROLE_KEYS, normalizeRole } = require('./rbac');
-const { COMPLETED_STATUSES, buildDateFilter } = require('./reporting');
+const { buildDateFilter } = require('./reporting');
+const { KIND_SALE, KIND_SHIPMENT, getClosure } = require('./commissionLedger');
 
 // Month-end payroll view: every active user's commission for the period,
 // computed with the SAME per-role rules as /api/commission/current (the
 // personal nav box). Any change to the rules there must be mirrored here.
-const computeTeamCommissions = async (month, year) => {
+// Lee del libro de comisiones (por fecha de cobro). Un mes cerrado devuelve
+// la foto guardada al cerrar, salvo { live: true } (lo usa el propio cierre).
+const computeTeamCommissions = async (month, year, { live = false } = {}) => {
   const dateFilter = buildDateFilter(month, year, 'q', 2);
   if (dateFilter.error) return { error: dateFilter.error };
+
+  const monthNum = Number.parseInt(month, 10);
+  const yearNum = Number.parseInt(year, 10);
+  if (!live && Number.isInteger(monthNum) && Number.isInteger(yearNum)) {
+    const closure = await getClosure(yearNum, monthNum);
+    if (closure) {
+      return {
+        users: closure.snapshot?.users || [],
+        all_sales: Number(closure.snapshot?.all_sales || 0),
+        closed: true,
+        closed_at: closure.closed_at,
+        closed_by: closure.closed_by_name || null
+      };
+    }
+  }
 
   const settings = await loadCommissionSettings();
   const rateVentasLider = Number(settings.ventas_lider_percent || 0) / 100;
@@ -32,10 +50,10 @@ const computeTeamCommissions = async (month, year) => {
   // Completed sales per user in the period (one pass for everyone).
   const perUserRes = await pool.query(
     `SELECT q.user_id, COALESCE(SUM(q.total), 0) AS total_sales
-     FROM quotes q
-     WHERE q.status = ANY($1::text[])${dateFilter.sql}
+     FROM commission_entries q
+     WHERE q.kind = ANY($1::text[])${dateFilter.sql}
      GROUP BY q.user_id`,
-    [COMPLETED_STATUSES, ...dateFilter.params]
+    [[KIND_SALE], ...dateFilter.params]
   );
   const salesByUser = new Map(
     perUserRes.rows.map((row) => [Number(row.user_id), Number(row.total_sales || 0)])
@@ -75,12 +93,12 @@ const computeTeamCommissions = async (month, year) => {
   for (const city of almacenCities.keys()) {
     const localRes = await pool.query(
       `SELECT COALESCE(SUM(q.total), 0) AS total_sales
-       FROM quotes q
-       WHERE q.status = $1
+       FROM commission_entries q
+       WHERE q.kind = $1
          AND LOWER(REGEXP_REPLACE(COALESCE(q.store_location, ''), '[^a-z0-9]+', '', 'g'))
              LIKE '%' || LOWER(REGEXP_REPLACE($2::text, '[^a-z0-9]+', '', 'g')) || '%'
          ${almacenFilter.sql}`,
-      ['Enviado', city, ...almacenFilter.params]
+      [KIND_SHIPMENT, city, ...almacenFilter.params]
     );
     almacenCities.set(city, Number(localRes.rows[0]?.total_sales || 0));
   }
@@ -134,7 +152,7 @@ const computeTeamCommissions = async (month, year) => {
     };
   });
 
-  return { users: results, all_sales: Math.round(allSales * 100) / 100 };
+  return { users: results, all_sales: Math.round(allSales * 100) / 100, closed: false };
 };
 
 module.exports = { computeTeamCommissions };
