@@ -12903,22 +12903,12 @@ body:has(.qt-savebar) .toast-viewport { bottom: calc(96px + env(safe-area-inset-
   .qt-ticket-body { flex: 1 1 auto; min-height: 60px; overflow-y: auto; margin-right: -8px; padding-right: 8px; }
   .qt-ticket-foot { flex: 0 0 auto; }
 
-  /* Vista lista: la pantalla completa es la cotización, sin scroll de página
-     (como una caja). Los avisos de arriba ocupan lo suyo y el resto se
-     reparte: la lista de productos y las líneas se desplazan por dentro. */
-  .container.qt-page.is-list { display: flex; flex-direction: column; height: var(--qt-vh, calc(100dvh - 68px)); min-height: 620px; }
-  .qt-page.is-list .qt-layout { flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
-  .qt-page.is-list .qt-main { display: flex; flex-direction: column; min-height: 0; }
-  .qt-page.is-list .qt-main > .qt-client { flex: 0 0 auto; }
-  .qt-page.is-list .qt-picker-card { flex: 1 1 auto; min-height: 300px; display: flex; flex-direction: column; }
-  .qt-page.is-list .qt-picker { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-  .qt-page.is-list .qt-prod-list { flex: 1 1 auto; min-height: 0; max-height: none; }
-  .qt-page.is-list .qt-side { display: flex; align-items: flex-start; min-height: 0; }
-  .qt-page.is-list .qt-ticket { max-height: 100%; }
-
-  /* Vista con fotos: la página fluye; la cotización y el buscador quedan fijos. */
-  .qt-page.is-photos .qt-side { position: sticky; top: 12px; display: flex; max-height: calc(var(--qt-vh, 100dvh) - 24px); }
-  .qt-page.is-photos .qt-picker-head { position: sticky; top: 0; z-index: 5; margin: -14px -16px 0; padding: 14px 16px 8px; background: #fff; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  /* La página se desplaza normal (lista o fotos). La cotización de la derecha
+     y el buscador quedan fijos y acompañan mientras se eligen productos. */
+  .qt-side { position: sticky; top: 12px; display: flex; max-height: calc(var(--qt-vh, 100dvh) - 24px); }
+  .qt-picker-head { position: sticky; top: 0; z-index: 5; margin: -14px -16px 0; padding: 14px 16px 8px; background: #fff; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .qt-prod-list { max-height: none; overflow: visible; }
+  .qt-prod-section { position: static; }
 }
 
 /* ── Inicio público: dos formas de comprar + Cyber Monday ───────────────── */
