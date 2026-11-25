@@ -22,6 +22,7 @@ const WIDE_LAYOUT_QUERY = '(min-width: 1240px)';
 const MAX_LINE_QTY = 9999;
 
 const ALMACEN_OPTIONS = ['Cochabamba', 'Santa Cruz'];
+const ORIGEN_KEYS = new Set(ORIGENES.map((o) => o.key));
 const DEPARTAMENTOS = ['Beni', 'Chuquisaca', 'Cochabamba', 'La Paz', 'Oruro', 'Pando', 'Potosí', 'Santa Cruz', 'Tarija'];
 
 const clampNumber = (value, min, max) => {
@@ -114,10 +115,11 @@ export default function QuoteTool({ token, user }) {
   const [alternativePhone, setAlternativePhone] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  // Segmentación: cómo nos conoció (una vez por cliente). Dónde usa el
-  // tablero ya no se pregunta aquí: vive en la ficha del cliente (Clientes).
+  // Segmentación: Cotizar ya no pregunta dónde se usará el tablero ni cómo
+  // nos conoció el cliente; ambos datos viven en su ficha (Clientes). Solo se
+  // registra el origen cuando se sabe sin preguntar (origenAuto: la
+  // cotización nació en el inbox de WhatsApp).
   // knownCustomer = ficha encontrada por teléfono.
-  const [origen, setOrigen] = useState('');
   const [knownCustomer, setKnownCustomer] = useState(null);
   const [origenAuto, setOrigenAuto] = useState('');
   // Secciones plegadas: opciones de envío y negociación de descuento.
@@ -133,10 +135,6 @@ export default function QuoteTool({ token, user }) {
   // Stock de todo el catálogo en el almacén elegido (una sola consulta).
   const [stockState, setStockState] = useState({ store: '', stock: null });
   const [refreshTick, setRefreshTick] = useState(0);
-  const phoneDigitsForLookup = String(customerPhone || '').replace(/\D/g, '');
-  // Se pregunta el origen solo la primera vez: teléfono nuevo, o cliente sin
-  // origen guardado. Las cotizaciones del inbox de WhatsApp lo traen solo.
-  const needsOrigen = phoneDigitsForLookup.length >= 7 && !(knownCustomer && knownCustomer.origen);
   const [department, setDepartment] = useState('');
   // Destino canonico (catalogo geografico): {id, municipio, provincia, departamento}.
   const [destino, setDestino] = useState(null);
@@ -481,8 +479,8 @@ export default function QuoteTool({ token, user }) {
   }, [token, requiresSellerAssignment]);
 
   // Al escribir el teléfono: cupón personal del cliente (motor de promos) y,
-  // si el cliente ya existe, se completa solo lo que falte (nombre, origen,
-  // destino de su última cotización y su último pedido para repetirlo).
+  // si el cliente ya existe, se completa solo lo que falte (nombre, destino
+  // de su última cotización y su último pedido para repetirlo).
   useEffect(() => {
     const digits = String(customerPhone || '').replace(/\D/g, '');
     if (!token || digits.length < 7) {
@@ -505,7 +503,6 @@ export default function QuoteTool({ token, user }) {
             setLastOrder(null);
             return;
           }
-          setOrigen((prev) => prev || match.origen || '');
           setCustomerName((prev) => (prev.trim() ? prev : String(match.name || '').slice(0, 80)));
           if (match.assigned_user_id) setAssignedSellerId(String(match.assigned_user_id));
           loadCustomerExtras(match, { isActive: () => active });
@@ -853,9 +850,11 @@ export default function QuoteTool({ token, user }) {
       const prefill = JSON.parse(raw);
       if (prefill?.customerName) setCustomerName(String(prefill.customerName).slice(0, 80));
       if (prefill?.customerPhone) setCustomerPhone(String(prefill.customerPhone).slice(0, 40));
-      if (prefill?.conversationId) { setWhatsappConversationId(Number(prefill.conversationId)); setOrigenAuto('whatsapp'); setOrigen((prev) => prev || 'whatsapp'); }
+      if (prefill?.conversationId) { setWhatsappConversationId(Number(prefill.conversationId)); setOrigenAuto('whatsapp'); }
       if (Array.isArray(prefill?.items) && prefill.items.length > 0) setPendingItems(prefill.items);
-      if (prefill?.origen) { setOrigenAuto(String(prefill.origen)); setOrigen((prev) => prev || String(prefill.origen)); }
+      // Solo un origen válido: ya no hay campo donde corregirlo y el servidor
+      // rechazaría la cotización entera por un valor desconocido.
+      if (prefill?.origen && ORIGEN_KEYS.has(String(prefill.origen))) setOrigenAuto(String(prefill.origen));
       // GPS del chat de WhatsApp: llega listo para cotizar el envío local,
       // así que las opciones de envío se abren solas.
       if (prefill?.gps) {
@@ -923,7 +922,6 @@ export default function QuoteTool({ token, user }) {
   const saveBlockers = (() => {
     const blockers = [];
     if (!customerName.trim() || !customerPhone.trim()) blockers.push('Completa el nombre y celular del cliente.');
-    if (needsOrigen && !origen) blockers.push('Indica cómo nos conoció el cliente.');
     if (!destino && !destFallback) blockers.push('Selecciona el destino de envío.');
     if (destFallback && !department) blockers.push('Selecciona el departamento del destino.');
     if (!almacen) blockers.push('Selecciona el almacén (en Envío).');
@@ -963,7 +961,6 @@ export default function QuoteTool({ token, user }) {
     setAlternativeName('');
     setAlternativePhone('');
     setCustomerName('');
-    setOrigen('');
     setOrigenAuto('');
     setKnownCustomer(null);
     setCustomerPhone('');
@@ -1084,8 +1081,10 @@ export default function QuoteTool({ token, user }) {
     const payload = {
       customer_name: customerName,
       customer_phone: customerPhone,
-      origen: origen || null,
-      origen_detalle: origenAuto && origen === origenAuto ? (origenAuto === 'whatsapp' ? 'inbox WhatsApp' : 'automático') : null,
+      // Origen: solo el que se conoce sin preguntar. El resto se registra en
+      // la ficha del cliente.
+      origen: origenAuto || null,
+      origen_detalle: origenAuto ? (origenAuto === 'whatsapp' ? 'inbox WhatsApp' : 'automático') : null,
       department: destino ? destino.departamento : (destFallback ? department : null),
       provincia: destino ? destino.provincia : null,
       ciudad: destino ? destino.municipio : (fallbackCiudad.trim() || null),
@@ -1635,24 +1634,6 @@ export default function QuoteTool({ token, user }) {
                   >
                     {destFallback ? '← Buscar en la lista' : 'Otro destino'}
                   </button>
-                </div>
-              )}
-
-              {needsOrigen && (
-                <div className="qt-field">
-                  <label className="qt-label is-compact" htmlFor="qt-origen">¿Cómo nos conoció?</label>
-                  <select
-                    id="qt-origen"
-                    className="form-select"
-                    value={origen}
-                    onChange={(e) => setOrigen(e.target.value)}
-                    aria-label="Cómo nos conoció"
-                    title="Se pregunta solo la primera vez que cotizas a este cliente"
-                  >
-                    <option value="">{isMobile ? '¿Cómo nos conoció?' : 'Elegir…'}</option>
-                    {ORIGENES.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
-                  </select>
-                  {origenAuto && <div className="qt-hint">Detectado automáticamente; puedes corregirlo.</div>}
                 </div>
               )}
 

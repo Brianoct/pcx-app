@@ -66,7 +66,7 @@ export default function SegmentacionCard({ token, month, year }) {
       <div className="seg-head">
         <div>
           <h3>Ventas por uso y por origen</h3>
-          <p className="seg-sub">Dónde usa el tablero el cliente (su segmento en Clientes) y cómo nos conoció · {periodLabel}{data ? ` · ${formatBs(data.total.total_sales)} en ${data.total.order_count} pedidos` : ''}</p>
+          <p className="seg-sub">Dónde usa el tablero y cómo nos conoció cada cliente (se registran en Clientes) · {periodLabel}{data ? ` · ${formatBs(data.total.total_sales)} en ${data.total.order_count} pedidos` : ''}</p>
         </div>
         <div className="seg-period" role="tablist" aria-label="Periodo">
           <button type="button" className={`dashboard-group-tab${mode === 'mes' ? ' is-active' : ''}`} onClick={() => setMode('mes')}>Mes del selector</button>
