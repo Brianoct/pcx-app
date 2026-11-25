@@ -5,19 +5,28 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from './apiClient';
 import QuoteCatalogPicker from './QuoteCatalogPicker';
+import { applyPercent } from './cyberMonday';
 
 const formatBs = (value) => `Bs ${Number(value || 0).toLocaleString('es-BO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
-const buildOrderMessage = ({ intro, lines, total }) => {
+// `percent` > 0: el pedido lo armó el cliente solo durante Cyber Monday. El
+// mensaje lo dice para que Ventas aplique ese descuento al cotizar.
+const buildOrderMessage = ({ intro, lines, total, percent = 0 }) => {
   const parts = [String(intro || 'Hola PCX, quiero hacer este pedido:').trim(), ''];
   for (const line of lines) {
     parts.push(`• ${line.qty} × ${line.name} — ${formatBs(line.qty * line.price)}`);
   }
-  parts.push('', `Total referencial: ${formatBs(total)}`);
+  if (percent > 0) {
+    parts.push('', `Subtotal: ${formatBs(total)}`);
+    parts.push(`Cyber Monday, pedido armado por mí en la web: ${percent}% de descuento`);
+    parts.push(`Total referencial: ${formatBs(applyPercent(total, percent))}`);
+  } else {
+    parts.push('', `Total referencial: ${formatBs(total)}`);
+  }
   return parts.join('\n');
 };
 
-export default function PublicQuote({ section, whatsapp, preview = false }) {
+export default function PublicQuote({ section, whatsapp, preview = false, campaign = null }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState('');
   const [qtyBySku, setQtyBySku] = useState({});
@@ -55,7 +64,8 @@ export default function PublicQuote({ section, whatsapp, preview = false }) {
   };
 
   const number = String(whatsapp?.number || '').replace(/\D/g, '');
-  const message = buildOrderMessage({ intro: section.message_intro, lines, total });
+  const percent = campaign?.live ? Number(campaign.selfPercent || 0) : 0;
+  const message = buildOrderMessage({ intro: section.message_intro, lines, total, percent });
   const waUrl = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 
   return (
@@ -64,6 +74,12 @@ export default function PublicQuote({ section, whatsapp, preview = false }) {
         <h2>{section.title}</h2>
         {section.subtitle && <p>{section.subtitle}</p>}
       </div>
+
+      {percent > 0 && (
+        <p className="lp-cm-quote-note">
+          <strong>Cyber Monday: {percent}% de descuento</strong> en el pedido que armes y envíes aquí. Se aplica sobre el total al confirmar.
+        </p>
+      )}
 
       {error && <p className="lp-quote-error">{error}</p>}
       {!items && !error && <p className="lp-quote-loading">Cargando productos…</p>}
@@ -81,7 +97,14 @@ export default function PublicQuote({ section, whatsapp, preview = false }) {
             <span className="lp-quote-hint">Agrega productos para armar tu pedido.</span>
           ) : (
             <>
-              <strong>{units} {units === 1 ? 'unidad' : 'unidades'} · {formatBs(total)}</strong>
+              {percent > 0 ? (
+                <strong>
+                  {units} {units === 1 ? 'unidad' : 'unidades'} · <s className="lp-cm-was">{formatBs(total)}</s> {formatBs(applyPercent(total, percent))}
+                  <span className="lp-cm-tag">−{percent}%</span>
+                </strong>
+              ) : (
+                <strong>{units} {units === 1 ? 'unidad' : 'unidades'} · {formatBs(total)}</strong>
+              )}
               <ul className="lp-quote-lines">
                 {lines.map((line) => (
                   <li key={line.sku}>

@@ -11,12 +11,84 @@ import { apiRequest } from './apiClient';
 import { DEFAULT_HOME } from './siteDefaults';
 import { imageSrc, videoEmbedUrl } from './siteMedia';
 import PublicQuote from './PublicQuote';
+import { getCampaign } from './cyberMonday';
 
 const waUrl = (whatsapp) => {
   const number = String(whatsapp?.number || '').replace(/\D/g, '');
   const message = String(whatsapp?.message || '');
   return `https://wa.me/${number}${message ? `?text=${encodeURIComponent(message)}` : ''}`;
 };
+
+const waLink = (whatsapp, message) => {
+  const number = String(whatsapp?.number || '').replace(/\D/g, '');
+  return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+};
+
+const assistedMessage = (campaign) => (campaign.live
+  ? `Hola PCX, quiero que un asesor me ayude con mi pedido de Cyber Monday (${campaign.assistedPercent}% de descuento con asesor).`
+  : 'Hola PCX, quiero que un asesor me ayude a armar mi pedido.');
+
+// Franja superior: anuncia la oferta antes de que empiece y mientras dura.
+function CampaignStrip({ campaign }) {
+  if (campaign.phase === 'after') return null;
+  return (
+    <div className={`lp-cm-strip ${campaign.live ? 'is-live' : ''}`} role="note">
+      {campaign.live
+        ? <><strong>Cyber Monday</strong> · {campaign.selfPercent}% armando tu pedido aquí · {campaign.assistedPercent}% con un asesor · hasta el miércoles 2 de diciembre</>
+        : <><strong>Cyber Monday</strong> · {campaign.datesLabel} · hasta {campaign.selfPercent}% de descuento</>}
+    </div>
+  );
+}
+
+// Las dos formas de comprar: con un asesor por WhatsApp o armando el pedido
+// uno mismo. Es lo primero que ve el visitante.
+function Doors({ campaign, content, preview }) {
+  const goToQuote = () => document.getElementById('cotizar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  return (
+    <section className="lp-cm" id="comprar">
+      <div className="lp-cm-head">
+        <p className="lp-eyebrow">{campaign.live ? `Cyber Monday · ${campaign.datesLabel}` : 'Tableros organizadores PCX'}</p>
+        <h2 className="lp-cm-title">Compra tu tablero como prefieras.</h2>
+        <p className="lp-cm-sub">
+          {campaign.live
+            ? `Arma tu pedido aquí y llévate ${campaign.selfPercent}% de descuento, o pídele ayuda a un asesor y llévate ${campaign.assistedPercent}%.`
+            : 'Te ayuda un asesor por WhatsApp, o armas tu pedido tú mismo y lo envías a ventas.'}
+          {' '}En los dos casos confirmamos envío y forma de pago antes de cobrar.
+        </p>
+      </div>
+      <div className="lp-cm-doors">
+        <article className="lp-cm-door">
+          {campaign.live && <span className="lp-cm-badge is-soft">{campaign.assistedPercent}% de descuento</span>}
+          <h3>Que un asesor me ayude</h3>
+          <p>Cuéntanos qué quieres ordenar y te armamos el pedido.</p>
+          <ul>
+            <li>Te recomienda medida, color y accesorios</li>
+            <li>Te envía la cotización lista</li>
+          </ul>
+          <a
+            className="lp-btn lp-cm-btn-wa"
+            data-tt-event="Contact"
+            href={preview ? undefined : waLink(content.whatsapp, assistedMessage(campaign))}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Hablar por WhatsApp
+          </a>
+        </article>
+        <article className="lp-cm-door is-main">
+          {campaign.live && <span className="lp-cm-badge">{campaign.selfPercent}% de descuento</span>}
+          <h3>Armar mi pedido</h3>
+          <p>Mira los productos con precio, elige y envía el pedido a ventas.</p>
+          <ul>
+            <li>Precios a la vista</li>
+            <li>Eliges tableros y accesorios a tu ritmo</li>
+          </ul>
+          <button type="button" className="lp-btn lp-cm-btn-main" onClick={goToQuote}>Ver productos</button>
+        </article>
+      </div>
+    </section>
+  );
+}
 
 const Stars = ({ count }) => (
   <span className="lp-stars" aria-label={`${count} estrellas`}>{'★'.repeat(Math.max(0, Math.min(5, Number(count) || 5)))}</span>
@@ -248,7 +320,7 @@ function Closing({ section, whatsappUrl }) {
   );
 }
 
-const Quote = ({ section, content, preview }) => <PublicQuote section={section} whatsapp={content.whatsapp} preview={preview} />;
+const Quote = ({ section, content, preview, campaign }) => <PublicQuote section={section} whatsapp={content.whatsapp} preview={preview} campaign={campaign} />;
 
 const SECTION_COMPONENTS = {
   hero: Hero,
@@ -264,15 +336,19 @@ const SECTION_COMPONENTS = {
 // Render puro del contenido: lo usa la página pública y también la vista
 // previa del editor de Marketing (con el borrador en vez de lo publicado).
 export function LandingContent({ content, preview = false }) {
-  const whatsappUrl = waUrl(content.whatsapp);
+  const campaign = useMemo(() => getCampaign(), []);
+  // Durante la oferta, todo botón genérico de WhatsApp es la vía con asesor.
+  const whatsappUrl = campaign.live ? waLink(content.whatsapp, assistedMessage(campaign)) : waUrl(content.whatsapp);
   const sections = (content.sections || []).filter((s) => s && s.enabled !== false);
   return (
     <div className="lp">
+      <CampaignStrip campaign={campaign} />
       <PublicNav dark links={content.nav} whatsappUrl={whatsappUrl} ctaLabel="Cotizar por WhatsApp" showLogin={false} />
       <main>
+        <Doors campaign={campaign} content={content} preview={preview} />
         {sections.map((section, i) => {
           const Component = SECTION_COMPONENTS[section.type];
-          return Component ? <Component key={`${section.type}-${i}`} section={section} content={content} whatsappUrl={whatsappUrl} preview={preview} /> : null;
+          return Component ? <Component key={`${section.type}-${i}`} section={section} content={content} whatsappUrl={whatsappUrl} preview={preview} campaign={campaign} /> : null;
         })}
       </main>
       <footer className="lp-footer">
