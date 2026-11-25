@@ -12948,3 +12948,26 @@ body:has(.qt-savebar) .toast-viewport { bottom: calc(96px + env(safe-area-inset-
 .lp-cm-head .lp-eyebrow { margin-bottom: 12px; }
 /* En teléfono va primero la puerta con el descuento mayor. */
 @media (max-width: 640px) { .lp-cm-door.is-main { order: -1; } }
+
+/* ── Inicio público: cómo elegir + envíos y pagos ───────────────────────── */
+.lp-sell { max-width: 1120px; margin: 0 auto; padding: clamp(32px, 6vw, 64px) 20px; }
+.lp-sell-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.lp-sell-card { background: #fff; border: 1px solid var(--lp-line); border-radius: 16px; padding: 22px; }
+.lp-sell-card h3 { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; }
+.lp-sell-card p { margin: 0; color: #57534e; line-height: 1.5; }
+.lp-sell-sizes { margin: 16px 0; background: #1c1917; color: #fff; border-radius: 16px; padding: 24px; }
+.lp-sell-sizes h3 { margin: 0 0 12px; font-size: 1.2rem; font-weight: 800; }
+.lp-sell-sizes dl { margin: 0; display: grid; gap: 10px; }
+.lp-sell-sizes dl > div { display: grid; grid-template-columns: minmax(130px, 220px) minmax(0, 1fr); gap: 4px 16px; }
+.lp-sell-sizes dt { font-weight: 700; color: #fdba74; }
+.lp-sell-sizes dd { margin: 0; }
+.lp-info-list { margin: 0 auto; max-width: 820px; display: grid; gap: 0; }
+.lp-info-list > div { padding: 16px 0; border-bottom: 1px solid var(--lp-line); }
+.lp-info-list dt { font-weight: 800; font-size: 1.05rem; }
+.lp-info-list dd { margin: 4px 0 0; color: #57534e; line-height: 1.55; }
+.lp-info-places { max-width: 820px; margin: 20px auto 0; font-size: 0.95rem; color: #44403c; line-height: 1.6; }
+.lp-info-places a { color: var(--lp-red-dark); font-weight: 700; }
+@media (max-width: 560px) { .lp-sell-sizes dl > div { grid-template-columns: 1fr; } }
+/* El menú queda fijo arriba: los títulos no deben quedar tapados al saltar. */
+.lp main > section { scroll-margin-top: 96px; }
+.lp .lp-info-places { max-width: 820px; margin: 22px auto 0; }
