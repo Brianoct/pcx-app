@@ -93,8 +93,8 @@ function Doors({ campaign, content, preview }) {
 // ── Lo que el cliente necesita saber para decidir ─────────────────────────
 // Datos del negocio (no del editor del sitio): si cambian, se cambian aquí.
 const GUIDE_LINES = [
-  { name: 'PCX Acero', text: 'Para herramientas: talleres, garajes y fábricas.' },
-  { name: 'PCX Armonía', text: 'Para ordenar la casa o la oficina. No está pensada para herramientas.' }
+  { name: 'PCX Acero', text: 'Para herramientas: talleres mecánicos, garajes, carpinterías y fábricas.' },
+  { name: 'PCX Armonía', text: 'Para la casa y la oficina: escritorio y home office, cocina, entrada con llaves y bolsos, manualidades y costura, cuarto de los niños, baño y lavandería.' }
 ];
 const GUIDE_SIZES = [
   { place: 'Garaje de casa', pick: '1 tablero grande (94x95 cm) o 2 medianos (61x95 cm)' },
