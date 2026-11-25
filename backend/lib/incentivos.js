@@ -207,9 +207,10 @@ const metricCobro = async ({ start, next }, rule) => {
   return byUser(res.rows, (r) => ({ done: r.done, total: r.total, detail: `${r.done} de ${r.total} ventas cobradas en ${days} días o menos` }));
 };
 
-// El origen se pregunta una vez por cliente: vale el de la cotización o el
-// que ya tiene la ficha del cliente. (El uso dejó de pedirse en Cotizar: se
-// registra en la ficha del cliente y ya no cuenta para esta regla.)
+// Origen del cliente («cómo nos conoció»): vale el de la cotización o el de
+// la ficha del cliente. Cotizar ya no pregunta ni el uso ni el origen, así
+// que la regla nace apagada: el origen se llena en Clientes o llega solo
+// desde el inbox de WhatsApp, y eso no mide esfuerzo al cotizar.
 const metricDatos = async ({ start, next }) => {
   const res = await pool.query(
     `SELECT q.user_id,

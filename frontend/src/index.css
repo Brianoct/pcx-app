@@ -12725,7 +12725,6 @@ button.vc-kpi {
 .qt-client .quote-dest-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qt-label { display: block; margin-bottom: 4px; font-size: 0.76rem; font-weight: 600; color: #78716c; }
 .qt-label.is-plain { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.qt-hint { margin-top: 3px; font-size: 0.72rem; color: #a8a29e; }
 .qt-client .form-counter { margin-bottom: 0; }
 .qt-dest-fallback { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
 .qt-dest-extra { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: -4px; min-height: 24px; }
@@ -12887,7 +12886,6 @@ body:has(.qt-savebar) .toast-viewport { bottom: calc(96px + env(safe-area-inset-
 
 @media (max-width: 560px) {
   .qt-client-grid { grid-template-columns: 1fr; gap: 8px; }
-  .qt-label.is-compact { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .qt-card-head { margin-bottom: 8px; }
   .qt-dest-chip { max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; line-height: 20px; }
   .qt-ship-panel { grid-template-columns: 1fr; }
