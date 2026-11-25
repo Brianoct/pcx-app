@@ -39,6 +39,34 @@ router.get('/api/stock', authenticateToken, async (req, res) => {
   }
 });
 
+// ─── Stock de todo el catálogo en un almacén ───────────────────────────────
+// Cotizar lo pide una sola vez por almacén: así el vendedor ve la
+// disponibilidad ANTES de agregar el producto y no hay una consulta por línea.
+const STOCK_MAP_FIELDS = new Map([
+  ['Cochabamba', 'stock_cochabamba'],
+  ['Santa Cruz', 'stock_santacruz'],
+  ['Lima', 'stock_lima']
+]);
+router.get('/api/stock/map', authenticateToken, async (req, res) => {
+  const storeLocation = String(req.query.store_location || '');
+  // Map (no un objeto literal): un nombre como «constructor» no debe pasar.
+  const warehouseField = STOCK_MAP_FIELDS.get(storeLocation);
+  if (!warehouseField) return res.status(400).json({ error: 'Almacén no válido' });
+
+  try {
+    const result = await pool.query(`SELECT UPPER(sku) AS sku, ${warehouseField} AS stock FROM products`);
+    const stock = {};
+    for (const row of result.rows) {
+      const value = row.stock === null || row.stock === undefined ? null : Number(row.stock);
+      stock[row.sku] = Number.isFinite(value) ? value : null;
+    }
+    res.json({ store_location: storeLocation, stock });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Error al obtener stock' });
+  }
+});
+
 // ─── UPDATE stock for a specific SKU in a warehouse ────────────────────────
 router.patch('/api/products/:sku/stock', authenticateToken, requireRole(['Almacen Lider', 'Almacen', 'Admin']), async (req, res) => {
   const userContext = await loadUserContext(req.user.id);

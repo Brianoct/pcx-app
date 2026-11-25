@@ -54,9 +54,13 @@ router.get('/api/admin/stats/segmentacion', authenticateToken, requireRole(['adm
       FROM jsonb_array_elements(CASE WHEN jsonb_typeof(q.line_items) = 'array' THEN q.line_items ELSE '[]'::jsonb END) li
     ) u ON TRUE
     WHERE q.status IN (${statusList}) ${period.sql}`;
+  // Uso: el de la cotización (histórico) o, desde que Cotizar ya no lo
+  // pregunta, el segmento de la ficha del cliente. Un segmento solo sugerido
+  // por el nombre no cuenta hasta que alguien lo confirme en Clientes.
+  const usoExpr = `COALESCE(q.uso, CASE WHEN c.segmento_auto IS NOT TRUE OR c.segmento_fuente = 'cotizaciones' THEN c.segmento END)`;
   try {
     const [usoRes, origenRes, totalRes] = await Promise.all([
-      pool.query(`SELECT q.uso AS key, COUNT(*)::int AS order_count, COALESCE(SUM(q.total), 0) AS total_sales, COALESCE(SUM(u.units), 0) AS units ${base} GROUP BY q.uso`, period.params),
+      pool.query(`SELECT ${usoExpr} AS key, COUNT(*)::int AS order_count, COALESCE(SUM(q.total), 0) AS total_sales, COALESCE(SUM(u.units), 0) AS units ${base} GROUP BY ${usoExpr}`, period.params),
       pool.query(`SELECT COALESCE(q.origen, c.origen) AS key, COUNT(*)::int AS order_count, COALESCE(SUM(q.total), 0) AS total_sales, COALESCE(SUM(u.units), 0) AS units ${base} GROUP BY COALESCE(q.origen, c.origen)`, period.params),
       pool.query(`SELECT COUNT(*)::int AS order_count, COALESCE(SUM(q.total), 0) AS total_sales, COALESCE(SUM(u.units), 0) AS units ${base}`, period.params)
     ]);
