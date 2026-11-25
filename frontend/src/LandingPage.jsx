@@ -90,138 +90,107 @@ function Doors({ campaign, content, preview }) {
   );
 }
 
-const Stars = ({ count }) => (
-  <span className="lp-stars" aria-label={`${count} estrellas`}>{'★'.repeat(Math.max(0, Math.min(5, Number(count) || 5)))}</span>
-);
+// ── Lo que el cliente necesita saber para decidir ─────────────────────────
+// Datos del negocio (no del editor del sitio): si cambian, se cambian aquí.
+const GUIDE_LINES = [
+  { name: 'PCX Acero', text: 'Para herramientas: talleres, garajes y fábricas.' },
+  { name: 'PCX Armonía', text: 'Para ordenar la casa o la oficina. No está pensada para herramientas.' }
+];
+const GUIDE_SIZES = [
+  { place: 'Garaje de casa', pick: '1 tablero grande (94x95 cm) o 2 medianos (61x95 cm)' },
+  { place: 'Taller pequeño', pick: '2 tableros grandes (94x95 cm)' },
+  { place: 'Escobas, trapeadores, trapos o mochilas', pick: 'El tablero angosto (10x99 cm)' }
+];
+const GUIDE_FACTS = [
+  { title: 'Se montan uno al lado del otro', text: 'Puedes cubrir toda una pared y ampliar más adelante.' },
+  { title: 'Cada tablero soporta de 30 a 40 kg', text: 'Acero al carbono con pintura electrostática.' },
+  { title: 'No incluye tornillos ni tarugos', text: 'Dependen del tipo de pared. Los consigues en cualquier ferretería.' }
+];
+const INFO_ITEMS = [
+  { q: '¿Hacen envíos?', a: 'A toda Bolivia. La mayoría llega al día siguiente. El envío lo paga el cliente y suele costar entre 40 y 60 Bs.' },
+  { q: '¿Puedo recoger o pedir entrega en mi ciudad?', a: 'En Cochabamba y Santa Cruz puedes recoger tu pedido o pedir entrega dentro de la ciudad, que cuesta entre 30 y 65 Bs.' },
+  { q: '¿Cómo pago?', a: 'Con QR o en efectivo. El pago se hace antes del envío.' },
+  { q: '¿Dan factura?', a: 'Sí, si la pides. Los precios de la página son sin factura; con factura el precio cambia y te lo confirmamos al cotizar.' },
+  { q: '¿Y si algo llega dañado?', a: 'Te enviamos la pieza nueva.' }
+];
 
-function Hero({ section, whatsappUrl }) {
+function Guide() {
   return (
-    <section className="lp-hero" id="top">
-      <div className="lp-hero-copy">
-        {section.eyebrow && <p className="lp-eyebrow">{section.eyebrow}</p>}
-        <h1 className="lp-hero-title">
-          {section.title} {section.highlight && <span className="lp-accent">{section.highlight}</span>}
-        </h1>
-        {section.body && <p className="lp-hero-body">{section.body}</p>}
-        {Array.isArray(section.bullets) && section.bullets.length > 0 && (
-          <ul className="lp-hero-bullets">
-            {section.bullets.map((b, i) => (
-              <li key={i}><span className="lp-bullet-icon" aria-hidden="true">{b.icon}</span>{b.text}</li>
-            ))}
-          </ul>
-        )}
-        <a className="lp-btn lp-btn-wa" href={whatsappUrl} target="_blank" rel="noopener noreferrer">
-          Cotizar por WhatsApp
-        </a>
+    <section className="lp-sell" id="elegir">
+      <div className="lp-section-head">
+        <h2>Cómo elegir</h2>
+        <p>Lo que necesitas saber antes de comprar.</p>
       </div>
-      <div className="lp-hero-lines">
-        {(section.lines || []).map((line, i) => (
-          <Link key={i} to="/catalogos" className="lp-hero-line" style={{ backgroundImage: `url(${imageSrc(line.image)})` }}>
-            <span className="lp-hero-line-name">{line.name}</span>
-            <span className="lp-hero-line-tag">{line.tagline}</span>
-          </Link>
+      <div className="lp-sell-grid is-two">
+        {GUIDE_LINES.map((line) => (
+          <article key={line.name} className="lp-sell-card">
+            <h3>{line.name}</h3>
+            <p>{line.text}</p>
+          </article>
+        ))}
+      </div>
+      <div className="lp-sell-sizes">
+        <h3>¿Qué tamaño necesito?</h3>
+        <dl>
+          {GUIDE_SIZES.map((row) => (
+            <div key={row.place}><dt>{row.place}</dt><dd>{row.pick}</dd></div>
+          ))}
+        </dl>
+      </div>
+      <div className="lp-sell-grid">
+        {GUIDE_FACTS.map((fact) => (
+          <article key={fact.title} className="lp-sell-card">
+            <h3>{fact.title}</h3>
+            <p>{fact.text}</p>
+          </article>
         ))}
       </div>
     </section>
   );
 }
 
-function Facts({ section }) {
-  const { prices = {}, materials = {}, stores = {} } = section;
+function Info({ stores }) {
+  const places = (stores?.items || []).filter((store) => store && store.city);
   return (
-    <section className="lp-facts" id="tiendas">
-      <div className="lp-facts-grid">
-        <article className="lp-card">
-          <h2 className="lp-card-title">{prices.title}</h2>
-          {prices.subtitle && <p className="lp-card-sub">{prices.subtitle}</p>}
-          <div className="lp-price-cards">
-            {(prices.cards || []).map((card, i) => (
-              <div key={i} className="lp-price-card">
-                {card.image && <img src={imageSrc(card.image)} alt={card.name} loading="lazy" />}
-                <strong>{card.name}</strong>
-                <span>{card.range}</span>
-              </div>
-            ))}
-          </div>
-          {prices.note && <p className="lp-note">{prices.note}</p>}
-        </article>
-
-        <article className="lp-card">
-          <h2 className="lp-card-title">{materials.title}</h2>
-          <ul className="lp-check-list">
-            {(materials.items || []).map((item, i) => <li key={i}>{item}</li>)}
-          </ul>
-          {Array.isArray(materials.images) && materials.images.filter(Boolean).length > 0 && (
-            <div className="lp-material-images">
-              {materials.images.filter(Boolean).map((img, i) => <img key={i} src={imageSrc(img)} alt="" loading="lazy" />)}
-            </div>
-          )}
-        </article>
-
-        <article className="lp-card">
-          <h2 className="lp-card-title">{stores.title}</h2>
-          {stores.subtitle && <p className="lp-card-sub">{stores.subtitle}</p>}
-          <ul className="lp-store-list">
-            {(stores.items || []).map((store, i) => (
-              <li key={i}>
-                {store.image && <img src={imageSrc(store.image)} alt={store.city} loading="lazy" />}
-                <div>
-                  <strong>{store.city}</strong>
-                  {store.kind && <em>{store.kind}</em>}
-                  {store.address && <span>{store.address}</span>}
-                  {store.maps && <a className="lp-store-map" href={store.maps} target="_blank" rel="noopener noreferrer">Cómo llegar en Google Maps →</a>}
-                </div>
-              </li>
-            ))}
-          </ul>
-          {(stores.note_title || stores.note) && (
-            <p className="lp-note lp-note-strong">
-              {stores.note_title && <strong>{stores.note_title}</strong>}
-              {stores.note && <span>{stores.note}</span>}
-            </p>
-          )}
-        </article>
-      </div>
-    </section>
-  );
-}
-
-function Combos({ section }) {
-  const custom = section.custom || {};
-  return (
-    <section className="lp-combos" id="combos">
+    <section className="lp-sell" id="info">
       <div className="lp-section-head">
-        <h2>{section.title}</h2>
-        {section.subtitle && <p>{section.subtitle}</p>}
+        <h2>Envíos, pagos y entregas</h2>
       </div>
-      <div className="lp-combos-grid">
-        <div className="lp-combo-items">
-          {(section.items || []).map((item, i) => (
-            <article key={i} className="lp-combo">
-              {item.image && <img src={imageSrc(item.image)} alt={item.name} loading="lazy" />}
-              <div className="lp-combo-text">
-                <strong>{item.name}</strong>
-                {item.desc && <span>{item.desc}</span>}
-                {item.price && <em>{item.price}</em>}
-              </div>
-            </article>
+      <dl className="lp-info-list">
+        {INFO_ITEMS.map((item) => (
+          <div key={item.q}><dt>{item.q}</dt><dd>{item.a}</dd></div>
+        ))}
+      </dl>
+      {places.length > 0 && (
+        <p className="lp-info-places" id="tiendas">
+          <strong>Dónde estamos:</strong>{' '}
+          {places.map((store, i) => (
+            <span key={i}>
+              {i > 0 && ' · '}
+              {store.maps
+                ? <a href={store.maps} target="_blank" rel="noopener noreferrer">{store.city}</a>
+                : store.city}
+              {store.address ? `, ${store.address}` : ''}
+            </span>
           ))}
-        </div>
-        <article className="lp-custom">
-          {section.image && <img src={imageSrc(section.image)} alt="" loading="lazy" />}
-          <div className="lp-custom-text">
-            <h3>{custom.title}</h3>
-            {custom.body && <p>{custom.body}</p>}
-            {custom.cta_label && (String(custom.cta_to || '').startsWith('/')
-              ? <Link className="lp-btn lp-btn-outline" to={custom.cta_to}>{custom.cta_label}</Link>
-              : <button type="button" className="lp-btn lp-btn-outline" onClick={() => document.getElementById(custom.cta_to || 'cotizar')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>{custom.cta_label}</button>
-            )}
-          </div>
-        </article>
-      </div>
+        </p>
+      )}
     </section>
   );
 }
+
+// Menú corto: solo lo que ayuda a comprar.
+const SELL_NAV = [
+  { label: 'Productos', target: 'cotizar' },
+  { label: 'Cómo elegir', target: 'elegir' },
+  { label: 'Talleres reales', target: 'galeria' },
+  { label: 'Envíos y pagos', target: 'info' },
+  { label: 'Contacto', to: '/contacto' }
+];
+
+const Stars = ({ count }) => (
+  <span className="lp-stars" aria-label={`${count} estrellas`}>{'★'.repeat(Math.max(0, Math.min(5, Number(count) || 5)))}</span>
+);
 
 function Video({ section }) {
   const embed = videoEmbedUrl(section.url);
@@ -299,39 +268,7 @@ function Testimonials({ section }) {
   );
 }
 
-function Closing({ section, whatsappUrl }) {
-  return (
-    <section className="lp-closing" id="contacto-cta">
-      {section.tagline && <p className="lp-closing-tagline">{section.tagline}</p>}
-      {Array.isArray(section.perks) && section.perks.length > 0 && (
-        <ul className="lp-perks">
-          {section.perks.map((p, i) => (
-            <li key={i}><span className="lp-bullet-icon" aria-hidden="true">{p.icon}</span>{p.text}</li>
-          ))}
-        </ul>
-      )}
-      <div className="lp-closing-cta">
-        <h2>{section.cta_title}</h2>
-        <a className="lp-btn lp-btn-wa" href={whatsappUrl} target="_blank" rel="noopener noreferrer">
-          {section.cta_label || 'Cotizar por WhatsApp'}
-        </a>
-      </div>
-    </section>
-  );
-}
-
 const Quote = ({ section, content, preview, campaign }) => <PublicQuote section={section} whatsapp={content.whatsapp} preview={preview} campaign={campaign} />;
-
-const SECTION_COMPONENTS = {
-  hero: Hero,
-  facts: Facts,
-  combos: Combos,
-  quote: Quote,
-  video: Video,
-  gallery: Gallery,
-  testimonials: Testimonials,
-  closing: Closing
-};
 
 // Render puro del contenido: lo usa la página pública y también la vista
 // previa del editor de Marketing (con el borrador en vez de lo publicado).
@@ -339,17 +276,34 @@ export function LandingContent({ content, preview = false }) {
   const campaign = useMemo(() => getCampaign(), []);
   // Durante la oferta, todo botón genérico de WhatsApp es la vía con asesor.
   const whatsappUrl = campaign.live ? waLink(content.whatsapp, assistedMessage(campaign)) : waUrl(content.whatsapp);
-  const sections = (content.sections || []).filter((s) => s && s.enabled !== false);
+  // El inicio vende: dos puertas, catálogo, cómo elegir, talleres reales,
+  // envíos y pagos, y testimonios. Del contenido que edita Marketing se usan
+  // solo esas secciones; el resto (portada, rangos de precio, cierre) ya no
+  // se muestra.
+  const enabled = (content.sections || []).filter((s) => s && s.enabled !== false);
+  const pick = (type) => enabled.find((s) => s.type === type) || null;
+  const quote = pick('quote');
+  const video = pick('video');
+  const gallery = pick('gallery');
+  const testimonialsRaw = pick('testimonials');
+  const testimonials = testimonialsRaw ? { ...testimonialsRaw, items: (testimonialsRaw.items || []).slice(0, 3) } : null;
+  const stores = pick('facts')?.stores || null;
+  // La galería no se dibuja sin fotos: su enlace del menú tampoco.
+  const hasGallery = Boolean(gallery && (gallery.items || []).some((it) => it.before || it.after || it.image));
+  const navLinks = SELL_NAV.filter((link) => link.target !== 'galeria' || hasGallery);
+  const shared = { content, whatsappUrl, preview, campaign };
   return (
     <div className="lp">
       <CampaignStrip campaign={campaign} />
-      <PublicNav dark links={content.nav} whatsappUrl={whatsappUrl} ctaLabel="Cotizar por WhatsApp" showLogin={false} />
+      <PublicNav dark links={navLinks} whatsappUrl={whatsappUrl} ctaLabel="Cotizar por WhatsApp" showLogin={false} />
       <main>
         <Doors campaign={campaign} content={content} preview={preview} />
-        {sections.map((section, i) => {
-          const Component = SECTION_COMPONENTS[section.type];
-          return Component ? <Component key={`${section.type}-${i}`} section={section} content={content} whatsappUrl={whatsappUrl} preview={preview} campaign={campaign} /> : null;
-        })}
+        {quote && <Quote section={quote} {...shared} />}
+        <Guide />
+        {video && <Video section={video} {...shared} />}
+        {gallery && <Gallery section={gallery} {...shared} />}
+        <Info stores={stores} />
+        {testimonials && <Testimonials section={testimonials} {...shared} />}
       </main>
       <footer className="lp-footer">
         <span>{content.footer?.text || 'PCX · Hecho en Bolivia'}</span>
