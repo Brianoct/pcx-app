@@ -6,6 +6,8 @@
 // comprar, sin descuento. El descuento lo aplica Ventas al cotizar: el mensaje
 // de WhatsApp dice cuál corresponde.
 export const CYBER_MONDAY = {
+  // La franja de anuncio aparece sola el domingo 29, un día antes.
+  teaserAt: Date.parse('2026-11-29T04:00:00Z'),
   startsAt: Date.parse('2026-11-30T04:00:00Z'),
   endsAt: Date.parse('2026-12-03T04:00:00Z'),
   selfPercent: 20,
@@ -31,7 +33,9 @@ export const cyberPhase = (now = Date.now(), override = readOverride()) => {
 
 export const getCampaign = (now = Date.now(), override = readOverride()) => {
   const phase = cyberPhase(now, override);
-  return { ...CYBER_MONDAY, phase, live: phase === 'live' };
+  // Antes del domingo no se anuncia nada (salvo al revisar con ?cyber=before).
+  const teaser = phase === 'before' && (override === 'before' || now >= CYBER_MONDAY.teaserAt);
+  return { ...CYBER_MONDAY, phase, live: phase === 'live', teaser };
 };
 
 export const applyPercent = (amount, percent) => Math.round(Number(amount || 0) * (100 - percent)) / 100;

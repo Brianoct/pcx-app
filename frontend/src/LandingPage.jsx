@@ -30,7 +30,7 @@ const assistedMessage = (campaign) => (campaign.live
 
 // Franja superior: anuncia la oferta antes de que empiece y mientras dura.
 function CampaignStrip({ campaign }) {
-  if (campaign.phase === 'after') return null;
+  if (!campaign.live && !campaign.teaser) return null;
   return (
     <div className={`lp-cm-strip ${campaign.live ? 'is-live' : ''}`} role="note">
       {campaign.live
