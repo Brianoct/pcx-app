@@ -20,11 +20,24 @@ describe('cyberPhase', () => {
 
 describe('franja de anuncio', () => {
   it('no aparece antes del domingo 29 y sí desde ese día', () => {
-    expect(getCampaign(at('2026-11-26T15:00:00Z'), '').teaser).toBe(false);
+    expect(getCampaign(at('2026-11-25T15:00:00Z'), '').teaser).toBe(false);
     expect(getCampaign(at('2026-11-29T03:59:59Z'), '').teaser).toBe(false);
-    expect(getCampaign(at('2026-11-29T04:00:00Z'), '').teaser).toBe(true);
+    expect(getCampaign(at('2026-11-29T04:00:00Z'), '').key).toBe('bf');
     expect(getCampaign(at('2026-11-30T04:00:00Z'), '').teaser).toBe(false);
     expect(getCampaign(at('2026-11-26T15:00:00Z'), 'before').teaser).toBe(true);
+  });
+});
+
+describe('Black Friday', () => {
+  it('va del jueves 26 al domingo 29 con 15% parejo', () => {
+    const bf = getCampaign(at('2026-11-26T15:00:00Z'), '');
+    expect([bf.key, bf.live, bf.selfPercent, bf.assistedPercent]).toEqual(['bf', true, 15, 15]);
+    expect(getCampaign(at('2026-11-30T03:59:59Z'), '').key).toBe('bf');
+    expect(getCampaign(at('2026-11-26T03:59:59Z'), '').key).toBe('cm');
+  });
+  it('el lunes 30 pasa a Cyber Monday', () => {
+    const cm = getCampaign(at('2026-11-30T04:00:00Z'), '');
+    expect([cm.key, cm.live, cm.selfPercent, cm.assistedPercent]).toEqual(['cm', true, 20, 15]);
   });
 });
 
