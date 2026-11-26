@@ -30,6 +30,8 @@ const assistedMessage = (campaign) => (campaign.live
 
 // Franja superior: anuncia la oferta antes de que empiece y mientras dura.
 function CampaignStrip({ campaign }) {
+  // Black Friday tiene su propio banner grande debajo del menú.
+  if (campaign.key === 'bf') return null;
   if (!campaign.live && !campaign.teaser) return null;
   const samePercent = campaign.selfPercent === campaign.assistedPercent;
   return (
@@ -40,6 +42,40 @@ function CampaignStrip({ campaign }) {
           ? <><strong>{campaign.name}</strong> · {campaign.selfPercent}% de descuento en todos los productos · {campaign.endsLabel}</>
           : <><strong>{campaign.name}</strong> · {campaign.selfPercent}% armando tu pedido aquí · {campaign.assistedPercent}% con un asesor · {campaign.endsLabel}</>}
     </div>
+  );
+}
+
+// Banner de Black Friday: bloque grande de campaña, lo primero de la página.
+// Reemplaza a la franja delgada mientras dura la promoción.
+function PromoBanner({ campaign, content, preview }) {
+  if (!campaign.live || campaign.key !== 'bf') return null;
+  const goToQuote = () => document.getElementById('cotizar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  return (
+    <section className="lp-bf" aria-label="Promoción Black Friday">
+      <div className="lp-bf-inner">
+        <div className="lp-bf-brand">
+          <span className="lp-bf-tag">Oferta especial</span>
+          <p className="lp-bf-title"><span>Black</span><span>Friday</span></p>
+        </div>
+        <div className="lp-bf-offer">
+          <p className="lp-bf-percent">{campaign.selfPercent}%<small>de descuento</small></p>
+          <p className="lp-bf-line">En todos los productos</p>
+          <p className="lp-bf-dates">Hasta el domingo 29 de noviembre</p>
+          <div className="lp-bf-actions">
+            <button type="button" className="lp-bf-btn is-main" onClick={goToQuote}>Ver productos</button>
+            <a
+              className="lp-bf-btn"
+              data-tt-event="Contact"
+              href={preview ? undefined : waLink(content.whatsapp, assistedMessage(campaign))}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Hablar con un asesor
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -302,6 +338,7 @@ export function LandingContent({ content, preview = false }) {
       <CampaignStrip campaign={campaign} />
       <PublicNav dark links={navLinks} whatsappUrl={whatsappUrl} ctaLabel="Cotizar por WhatsApp" showLogin={false} />
       <main>
+        <PromoBanner campaign={campaign} content={content} preview={preview} />
         <Doors campaign={campaign} content={content} preview={preview} />
         {quote && <Quote section={quote} {...shared} />}
         <Guide />
