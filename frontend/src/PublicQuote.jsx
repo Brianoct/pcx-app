@@ -11,14 +11,14 @@ const formatBs = (value) => `Bs ${Number(value || 0).toLocaleString('es-BO', { m
 
 // `percent` > 0: el pedido lo armó el cliente solo durante Cyber Monday. El
 // mensaje lo dice para que Ventas aplique ese descuento al cotizar.
-const buildOrderMessage = ({ intro, lines, total, percent = 0 }) => {
+const buildOrderMessage = ({ intro, lines, total, percent = 0, promo = 'Cyber Monday' }) => {
   const parts = [String(intro || 'Hola PCX, quiero hacer este pedido:').trim(), ''];
   for (const line of lines) {
     parts.push(`• ${line.qty} × ${line.name} — ${formatBs(line.qty * line.price)}`);
   }
   if (percent > 0) {
     parts.push('', `Subtotal: ${formatBs(total)}`);
-    parts.push(`Cyber Monday, pedido armado por mí en la web: ${percent}% de descuento`);
+    parts.push(`${promo}, pedido armado por mí en la web: ${percent}% de descuento`);
     parts.push(`Total referencial: ${formatBs(applyPercent(total, percent))}`);
   } else {
     parts.push('', `Total referencial: ${formatBs(total)}`);
@@ -65,7 +65,7 @@ export default function PublicQuote({ section, whatsapp, preview = false, campai
 
   const number = String(whatsapp?.number || '').replace(/\D/g, '');
   const percent = campaign?.live ? Number(campaign.selfPercent || 0) : 0;
-  const message = buildOrderMessage({ intro: section.message_intro, lines, total, percent });
+  const message = buildOrderMessage({ intro: section.message_intro, lines, total, percent, promo: campaign?.name });
   const waUrl = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 
   return (
@@ -77,7 +77,7 @@ export default function PublicQuote({ section, whatsapp, preview = false, campai
 
       {percent > 0 && (
         <p className="lp-cm-quote-note">
-          <strong>Cyber Monday: {percent}% de descuento</strong> en el pedido que armes y envíes aquí. Se aplica sobre el total al confirmar.
+          <strong>{campaign.name}: {percent}% de descuento</strong> en el pedido que armes y envíes aquí. Se aplica sobre el total al confirmar.
         </p>
       )}
 

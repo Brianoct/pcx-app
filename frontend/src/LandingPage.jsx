@@ -25,17 +25,20 @@ const waLink = (whatsapp, message) => {
 };
 
 const assistedMessage = (campaign) => (campaign.live
-  ? `Hola PCX, quiero que un asesor me ayude con mi pedido de Cyber Monday (${campaign.assistedPercent}% de descuento con asesor).`
+  ? `Hola PCX, quiero que un asesor me ayude con mi pedido de ${campaign.name} (${campaign.assistedPercent}% de descuento${campaign.selfPercent === campaign.assistedPercent ? '' : ' con asesor'}).`
   : 'Hola PCX, quiero que un asesor me ayude a armar mi pedido.');
 
 // Franja superior: anuncia la oferta antes de que empiece y mientras dura.
 function CampaignStrip({ campaign }) {
   if (!campaign.live && !campaign.teaser) return null;
+  const samePercent = campaign.selfPercent === campaign.assistedPercent;
   return (
-    <div className={`lp-cm-strip ${campaign.live ? 'is-live' : ''}`} role="note">
-      {campaign.live
-        ? <><strong>Cyber Monday</strong> · {campaign.selfPercent}% armando tu pedido aquí · {campaign.assistedPercent}% con un asesor · hasta el miércoles 2 de diciembre</>
-        : <><strong>Cyber Monday</strong> · {campaign.datesLabel} · hasta {campaign.selfPercent}% de descuento</>}
+    <div className={`lp-cm-strip ${campaign.live ? 'is-live' : ''} ${campaign.key === 'bf' ? 'is-bf' : ''}`} role="note">
+      {!campaign.live
+        ? <><strong>{campaign.name}</strong> · {campaign.datesLabel} · hasta {campaign.selfPercent}% de descuento</>
+        : samePercent
+          ? <><strong>{campaign.name}</strong> · {campaign.selfPercent}% de descuento en todos los productos · {campaign.endsLabel}</>
+          : <><strong>{campaign.name}</strong> · {campaign.selfPercent}% armando tu pedido aquí · {campaign.assistedPercent}% con un asesor · {campaign.endsLabel}</>}
     </div>
   );
 }
@@ -47,11 +50,13 @@ function Doors({ campaign, content, preview }) {
   return (
     <section className="lp-cm" id="comprar">
       <div className="lp-cm-head">
-        <p className="lp-eyebrow">{campaign.live ? `Cyber Monday · ${campaign.datesLabel}` : 'Tableros organizadores PCX'}</p>
+        <p className="lp-eyebrow">{campaign.live ? `${campaign.name} · ${campaign.datesLabel}` : 'Tableros organizadores PCX'}</p>
         <h2 className="lp-cm-title">Compra tu tablero como prefieras.</h2>
         <p className="lp-cm-sub">
           {campaign.live
-            ? `Arma tu pedido aquí y llévate ${campaign.selfPercent}% de descuento, o pídele ayuda a un asesor y llévate ${campaign.assistedPercent}%.`
+            ? (campaign.selfPercent === campaign.assistedPercent
+              ? `${campaign.selfPercent}% de descuento en todos los productos, armes tu pedido aquí o con ayuda de un asesor.`
+              : `Arma tu pedido aquí y llévate ${campaign.selfPercent}% de descuento, o pídele ayuda a un asesor y llévate ${campaign.assistedPercent}%.`)
             : 'Te ayuda un asesor por WhatsApp, o armas tu pedido tú mismo y lo envías a ventas.'}
           {' '}En los dos casos confirmamos envío y forma de pago antes de cobrar.
         </p>

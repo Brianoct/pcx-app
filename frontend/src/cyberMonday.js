@@ -15,12 +15,21 @@ export const CYBER_MONDAY = {
   datesLabel: 'del lunes 30 de noviembre al miércoles 2 de diciembre'
 };
 
-// Para revisar la página antes de la fecha: ?cyber=live, ?cyber=before o
-// ?cyber=after en la dirección.
+// Black Friday 2026: 15 % en todos los productos, con o sin asesor, del jueves
+// 26 al domingo 29 de noviembre (hora de Bolivia). Mientras dura, manda sobre
+// el anuncio de Cyber Monday; el lunes 30 empieza Cyber Monday.
+export const BLACK_FRIDAY = {
+  startsAt: Date.parse('2026-11-26T04:00:00Z'),
+  endsAt: Date.parse('2026-11-30T04:00:00Z'),
+  percent: 15
+};
+
+// Para revisar la página antes de la fecha: ?cyber=live, ?cyber=before,
+// ?cyber=after o ?cyber=bf (Black Friday) en la dirección.
 const readOverride = () => {
   if (typeof window === 'undefined') return '';
   const text = `${window.location.search || ''}&${String(window.location.hash || '').split('?')[1] || ''}`;
-  const match = text.match(/(?:^|[?&])cyber=(live|before|after)\b/);
+  const match = text.match(/(?:^|[?&])cyber=(live|before|after|bf)\b/);
   return match ? match[1] : '';
 };
 
@@ -32,10 +41,17 @@ export const cyberPhase = (now = Date.now(), override = readOverride()) => {
 };
 
 export const getCampaign = (now = Date.now(), override = readOverride()) => {
+  if (override === 'bf' || (!override && now >= BLACK_FRIDAY.startsAt && now < BLACK_FRIDAY.endsAt)) {
+    return {
+      key: 'bf', name: 'Black Friday', phase: 'live', live: true, teaser: false,
+      selfPercent: BLACK_FRIDAY.percent, assistedPercent: BLACK_FRIDAY.percent,
+      datesLabel: 'hasta el domingo 29 de noviembre', endsLabel: 'hasta el domingo 29 de noviembre'
+    };
+  }
   const phase = cyberPhase(now, override);
   // Antes del domingo no se anuncia nada (salvo al revisar con ?cyber=before).
   const teaser = phase === 'before' && (override === 'before' || now >= CYBER_MONDAY.teaserAt);
-  return { ...CYBER_MONDAY, phase, live: phase === 'live', teaser };
+  return { ...CYBER_MONDAY, key: 'cm', name: 'Cyber Monday', endsLabel: 'hasta el miércoles 2 de diciembre', phase, live: phase === 'live', teaser };
 };
 
 export const applyPercent = (amount, percent) => Math.round(Number(amount || 0) * (100 - percent)) / 100;
