@@ -15,6 +15,7 @@ import { useToast } from './ui/toastContext';
 import QuotePicker, { QtyStepper } from './QuotePicker';
 import CustomerHub, { CustomerSearchField } from './crm/CustomerHub';
 import { looksLikeMapsLink, parseGpsInput } from './gps';
+import { colorLabel, variantKey } from './productVariants';
 
 const PRODUCTS_VIEW_STORAGE_KEY = 'pcx.quoteProductsView';
 const ALMACEN_STORAGE_KEY = 'pcx.quoteAlmacen';
@@ -612,7 +613,8 @@ export default function QuoteTool({ token, user }) {
       unitPrice,
       lineTotal: unitPrice * qty,
       isCombo: Boolean(item.isCombo),
-      comboItems: item.isCombo ? item.items : undefined
+      // Copia propia: el vendedor puede cambiar el color de cada componente.
+      comboItems: item.isCombo ? (item.items || []).map((comboItem) => ({ sku: normalizeSku(comboItem.sku), quantity: comboItem.quantity })) : undefined
     };
   };
 
@@ -650,6 +652,35 @@ export default function QuoteTool({ token, user }) {
       const item = findItem(sku);
       return item ? [...prev, buildRow(item, Math.min(MAX_LINE_QTY, amount))] : prev;
     });
+  };
+
+  // Colores disponibles de un producto: él mismo y sus variantes de color.
+  const variantsBySku = useMemo(() => {
+    const groups = new Map();
+    for (const product of products) {
+      const key = variantKey(product);
+      if (!key) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(product);
+    }
+    const map = new Map();
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+      const options = group.map((product) => ({ sku: normalizeSku(product.sku), label: colorLabel(product) }));
+      for (const product of group) map.set(normalizeSku(product.sku), options);
+    }
+    return map;
+  }, [products]);
+
+  // Cambia el color de un componente del combo (otra variante del mismo producto).
+  const setComboColor = (rowId, index, nextSku) => {
+    setRows((prev) => prev.map((row) => {
+      if (row.id !== rowId || !Array.isArray(row.comboItems)) return row;
+      return {
+        ...row,
+        comboItems: row.comboItems.map((comboItem, i) => (i === index ? { sku: normalizeSku(nextSku), quantity: comboItem.quantity } : comboItem))
+      };
+    }));
   };
 
   const removeRow = (rowId) => setRows((prev) => prev.filter((row) => row.id !== rowId));
@@ -1853,6 +1884,30 @@ export default function QuoteTool({ token, user }) {
                             <span className="qt-line-warn">
                               {stock <= 0 ? `Sin stock en ${almacen}` : `Solo hay ${stock} en ${almacen}`}
                             </span>
+                          )}
+                          {row.isCombo && Array.isArray(row.comboItems) && row.comboItems.length > 0 && (
+                            <ul className="qt-combo-parts">
+                              {row.comboItems.map((comboItem, index) => {
+                                const partSku = normalizeSku(comboItem.sku);
+                                const options = variantsBySku.get(partSku);
+                                const partName = getProductNameBySku(partSku) || partSku;
+                                return (
+                                  <li key={`${index}-${partSku}`}>
+                                    <span>{comboItem.quantity} × {partName}</span>
+                                    {options && (
+                                      <select
+                                        className="qt-combo-color"
+                                        value={partSku}
+                                        onChange={(e) => setComboColor(row.id, index, e.target.value)}
+                                        aria-label={`Color de ${partName}`}
+                                      >
+                                        {options.map((option) => <option key={option.sku} value={option.sku}>{option.label}</option>)}
+                                      </select>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
                           )}
                         </div>
                         <QtyStepper qty={row.qty} onChange={(next) => setItemQty(row.sku, next)} label={label} size="sm" />
