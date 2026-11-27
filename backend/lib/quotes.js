@@ -1,4 +1,5 @@
 const { normalizeText } = require('./rbac');
+const { applyComboColorChoices } = require('./productVariants');
 const { createHttpError } = require('./util');
 
 const QUOTE_STATUSES = ['Cotizado', 'Confirmado', 'Pagado', 'Embalado', 'Enviado'];
@@ -338,7 +339,17 @@ async function deductStockForQuote(client, quoteId, storeLocation, lineItems, gi
         }))
         .filter((comboItem) => comboItem.sku && Number.isInteger(comboItem.quantity) && comboItem.quantity > 0);
       if (normalizedFromDb.length > 0) {
-        return normalizedFromDb;
+        // Colores elegidos al cotizar: vale lo que viene en la línea solo si
+        // es el mismo combo con variantes de color (se valida aquí).
+        const chosen = Array.isArray(row?.comboItems) ? row.comboItems : [];
+        if (chosen.length === 0) return normalizedFromDb;
+        const skus = [...new Set([...normalizedFromDb, ...chosen].map((item) => String(item?.sku || '').trim().toUpperCase()).filter(Boolean))];
+        const productsRes = await client.query(
+          'SELECT UPPER(sku) AS sku, name, product_type, attributes FROM products WHERE UPPER(sku) = ANY($1::text[])',
+          [skus]
+        );
+        const productBySku = new Map(productsRes.rows.map((product) => [product.sku, product]));
+        return applyComboColorChoices(normalizedFromDb, chosen, productBySku);
       }
       throw new Error(`Combo COMBO_${comboId} no tiene productos configurados`);
     }

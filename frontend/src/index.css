@@ -12990,3 +12990,9 @@ body:has(.qt-savebar) .toast-viewport { bottom: calc(96px + env(safe-area-inset-
   .lp-bf-offer { padding-left: 0; }
   .lp-bf-btn { flex: 1 1 100%; }
 }
+/* Cotizar: componentes de un combo con su color */
+.qt-combo-parts { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
+.qt-combo-parts li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 0.76rem; color: #57534e; }
+.qt-combo-parts li > span { min-width: 0; overflow-wrap: anywhere; }
+.qt-combo-color { flex: 0 0 auto; min-height: 30px; max-width: 150px; padding: 2px 6px; border: 1px solid #d6cdc2; border-radius: 8px; background: #fff; color: var(--text-primary); font: inherit; font-size: 0.78rem; font-weight: 700; }
+@media (pointer: coarse) { .qt-combo-color { min-height: 38px; } }
